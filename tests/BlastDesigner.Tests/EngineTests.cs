@@ -1,0 +1,440 @@
+using BlastDesigner.Domain;
+using BlastDesigner.Domain.Geometry;
+using BlastDesigner.Domain.Model;
+using BlastDesigner.Engine;
+using BlastDesigner.IO;
+using BlastDesigner.Rendering;
+
+namespace BlastDesigner.Tests;
+
+public class GeometryTests
+{
+    [Fact]
+    public void HoleDirection_VerticalPointsDown()
+    {
+        var d = GeoMath.HoleDirection(0, 0);
+        Assert.Equal(-1, d.Z, 6);
+    }
+
+    [Fact]
+    public void HoleDirection_AngledLeansTowardsBearing()
+    {
+        var d = GeoMath.HoleDirection(90, 30);
+        Assert.True(d.X > 0.49 && d.X < 0.51);
+        Assert.Equal(-Math.Cos(30 * GeoMath.Deg), d.Z, 6);
+    }
+
+    [Fact]
+    public void SetToe_RecoversAngleBearingAndLength()
+    {
+        var h = new Hole { Collar = new Vec3(100, 100, 50), Angle = 20, Bearing = 135, Length = 12 };
+        var toe = h.DesignToe;
+        var copy = new Hole { Collar = h.Collar };
+        copy.SetToe(toe);
+        Assert.Equal(20, copy.Angle, 6);
+        Assert.Equal(135, copy.Bearing, 6);
+        Assert.Equal(12, copy.Length, 6);
+    }
+
+    [Fact]
+    public void PolygonAreaAndContainment()
+    {
+        var sq = new[] { new Vec3(0, 0, 0), new Vec3(10, 0, 0), new Vec3(10, 10, 0), new Vec3(0, 10, 0) };
+        Assert.Equal(100, GeoMath.Area(sq), 6);
+        Assert.True(GeoMath.PointInPolygon(sq, 5, 5));
+        Assert.False(GeoMath.PointInPolygon(sq, 15, 5));
+        var bigger = GeoMath.OffsetPolygon(sq, 1);
+        Assert.Equal(144, GeoMath.Area(bigger), 3);
+    }
+
+    [Fact]
+    public void ClipPolyline_KeepsInsidePart()
+    {
+        var sq = new[] { new Vec3(0, 0, 0), new Vec3(10, 0, 0), new Vec3(10, 10, 0), new Vec3(0, 10, 0) };
+        var pieces = GeoMath.ClipPolylineToPolygon(new[] { new Vec3(-5, 5, 0), new Vec3(15, 5, 0) }, sq);
+        Assert.Single(pieces);
+        Assert.Equal(10, GeoMath.Length(pieces[0]), 6);
+    }
+}
+
+public class DesignTests
+{
+    private static readonly Vec3[] Square = { new(0, 0, 100), new(40, 0, 100), new(40, 40, 100), new(0, 40, 100) };
+
+    [Fact]
+    public void FillPolygon_RectangularPatternCountsHoles()
+    {
+        var holes = HoleDesign.FillPolygon(Square, new PatternParameters { Burden = 4, Spacing = 5, Pattern = PatternType.Rectangular }, new HoleParameters { BenchHeight = 10, Subdrill = 1 }, out var rows);
+        Assert.Equal(10, rows.Count);
+        Assert.Equal(80, holes.Count);
+        Assert.All(holes, h => Assert.Equal(11, h.Length, 6));
+        Assert.All(holes, h => Assert.True(GeoMath.PointInPolygon(Square, h.Collar.X, h.Collar.Y)));
+    }
+
+    [Fact]
+    public void FillPolygon_StaggeredOffsetsAlternateRows()
+    {
+        HoleDesign.FillPolygon(Square, new PatternParameters { Burden = 4, Spacing = 5, Pattern = PatternType.Staggered }, new HoleParameters(), out var rows);
+        Assert.True(rows.Count >= 2);
+    }
+
+    [Fact]
+    public void AngledHoleLengthReachesGrade()
+    {
+        var h = HoleDesign.CreateHole(new Vec3(0, 0, 100), new HoleParameters { Angle = 20, BenchHeight = 10, Subdrill = 1 });
+        Assert.Equal(89, h.DesignToe.Z, 6);
+    }
+
+    [Fact]
+    public void Duplicates_AreFoundAndRelabelled()
+    {
+        var holes = new List<Hole>
+        {
+            new() { Label = "1", Collar = new Vec3(0, 0, 0) },
+            new() { Label = "1", Collar = new Vec3(0.1, 0, 0) },
+            new() { Label = "2", Collar = new Vec3(5, 0, 0) }
+        };
+        Assert.Single(HoleDesign.FindDuplicates(holes, 0.2));
+        Assert.Equal(1, HoleDesign.RelabelDuplicates(holes));
+        Assert.Equal(3, holes.Select(h => h.Label).Distinct().Count());
+    }
+
+    [Fact]
+    public void AutoRows_GroupsByOrientation()
+    {
+        var holes = HoleDesign.FillPolygon(Square, new PatternParameters { Burden = 4, Spacing = 5, Pattern = PatternType.Rectangular }, new HoleParameters(), out _);
+        var rows = HoleDesign.AutoRows(holes, 0, 2);
+        Assert.Equal(10, rows.Count);
+    }
+}
+
+public class ChargingTests
+{
+    [Fact]
+    public void ApplyRule_BuildsColumnWithStemmingAndPrimer()
+    {
+        var p = BlastProject.CreateNew();
+        var h = p.Add(new Hole { Collar = new Vec3(0, 0, 0), Length = 11, Diameter = 102 });
+        Assert.Equal(1, Charging.ApplyRules(p, new[] { h }));
+        Assert.Equal(2, h.Decks.Count);
+        Assert.Equal(3, Charging.TopStemming(p, h), 6);
+        var anfo = p.Products.First(x => x.Name == "ANFO");
+        var expected = Math.PI * 0.051 * 0.051 * 8 * anfo.Density * 1000 + 0.4;
+        Assert.Equal(expected, Charging.ExplosiveMass(p, h), 3);
+        Assert.Single(Charging.Primers(h));
+        Assert.Empty(Charging.Validate(p, h));
+    }
+
+    [Fact]
+    public void AdaptColumn_KeepsStemmingAndStretchesMainDeck()
+    {
+        var p = BlastProject.CreateNew();
+        var h = p.Add(new Hole { Length = 11 });
+        Charging.ApplyRules(p, new[] { h });
+        var longer = Charging.AdaptColumn(p, h.Decks, 11, 13);
+        Assert.Equal(3, longer.Where(d => d.Top > 0).Min(d => d.Top), 6);
+        Assert.Equal(13, longer.Max(d => d.Bottom), 6);
+        Assert.Equal(12.5, longer.SelectMany(d => d.Primers).Single().Depth, 6);
+        var shorter = Charging.AdaptColumn(p, h.Decks, 11, 9);
+        Assert.Equal(9, shorter.Max(d => d.Bottom), 6);
+        Assert.Equal(3, shorter.Where(d => d.Top == 0).Single().Bottom, 6);
+    }
+
+    [Fact]
+    public void RuleFromColumn_ReappliesAndAdaptsLikeAdaptColumn()
+    {
+        var p = BlastProject.CreateNew();
+        Guid Id(string name) => p.Products.First(x => x.Name == name).Id;
+        Primer Pr(double depth) => new() { Depth = depth, BoosterId = p.Products.First(x => x.Kind == ProductKind.Booster).Id, DetonatorId = p.Products.First(x => x.IsDetonator).Id };
+        var column = new List<Deck>
+        {
+            new() { Top = 0, Bottom = 2.5, ProductId = Id("Crushed aggregate") },
+            new() { Top = 2.5, Bottom = 7, ProductId = Id("ANFO"), Primers = { Pr(6.6) } },
+            new() { Top = 7, Bottom = 8, ProductId = Id("Drill cuttings") },
+            new() { Top = 8, Bottom = 11, ProductId = Id("Bulk emulsion"), Primers = { Pr(10.5), Pr(9) } }
+        };
+        // The rule goes through the project's JSON like the rules reference does.
+        var rule = ProjectJson.DeepClone(Charging.RuleFromColumn(p, column, "Saved"));
+        Assert.Equal(2.5, rule.StemmingLength, 6);
+        Assert.Equal(0, rule.Decks.Single(t => t.ProductId == Id("ANFO")).Length);
+
+        foreach (var length in new[] { 11.0, 14.0, 9.5 })
+        {
+            var h = new Hole { Length = length, Diameter = 102 };
+            Charging.ApplyRule(p, h, rule);
+            var expected = Charging.AdaptColumn(p, column, 11, length);
+            Assert.Equal(expected.Count, h.Decks.Count);
+            for (int i = 0; i < expected.Count; i++)
+            {
+                Assert.Equal(expected[i].ProductId, h.Decks[i].ProductId);
+                Assert.Equal(expected[i].Top, h.Decks[i].Top, 6);
+                Assert.Equal(expected[i].Bottom, h.Decks[i].Bottom, 6);
+                Assert.Equal(expected[i].Primers.Select(x => Math.Round(x.Depth, 6)).OrderBy(x => x), h.Decks[i].Primers.Select(x => Math.Round(x.Depth, 6)).OrderBy(x => x));
+            }
+        }
+    }
+
+    [Fact]
+    public void JoinLikeDecks_MergesAdjacentSameProduct()
+    {
+        var id = Guid.NewGuid();
+        var h = new Hole { Length = 10, Decks = { new Deck { Top = 3, Bottom = 6, ProductId = id }, new Deck { Top = 6, Bottom = 10, ProductId = id } } };
+        Charging.JoinLikeDecks(new[] { h });
+        Assert.Single(h.Decks);
+        Assert.Equal(7, h.Decks[0].Length, 6);
+    }
+}
+
+public class TimingTests
+{
+    private static (BlastProject P, List<Hole> Holes, InitiationPoint Ip) Row(int n)
+    {
+        var p = BlastProject.CreateNew();
+        var holes = Enumerable.Range(0, n).Select(i => p.Add(new Hole { Label = (i + 1).ToString(), Collar = new Vec3(i * 5, 0, 0), Length = 10 })).ToList();
+        var ip = p.Add(new InitiationPoint { Position = new Vec3(-5, 0, 0) });
+        Charging.ApplyRules(p, holes);
+        return (p, holes, ip);
+    }
+
+    [Fact]
+    public void Solve_PropagatesSurfaceDelaysAndAddsInholeDelay()
+    {
+        var (p, holes, ip) = Row(4);
+        var c17 = p.Products.First(x => x.DelayMs == 17 && x.Kind == ProductKind.SurfaceConnector);
+        Timing.Connect(p, ip.Id, holes[0].Id, null, 0);
+        for (int i = 1; i < holes.Count; i++) Timing.Connect(p, holes[i - 1].Id, holes[i].Id, c17);
+        Timing.Solve(p);
+        Assert.Equal(new double?[] { 0, 17, 34, 51 }, holes.Select(h => h.SurfaceTimeMs).ToArray());
+        Assert.Equal(500 + 51, holes[3].FiringTimeMs);
+        Assert.Equal(new int?[] { 1, 2, 3, 4 }, holes.Select(h => h.FiringSequence).ToArray());
+    }
+
+    [Fact]
+    public void Solve_TakesEarliestPath()
+    {
+        var (p, holes, ip) = Row(3);
+        var c17 = p.Products.First(x => x.DelayMs == 17);
+        var c109 = p.Products.First(x => x.DelayMs == 109);
+        Timing.Connect(p, ip.Id, holes[0].Id, null, 0);
+        Timing.Connect(p, holes[0].Id, holes[1].Id, c17);
+        Timing.Connect(p, holes[1].Id, holes[2].Id, c17);
+        Timing.Connect(p, holes[0].Id, holes[2].Id, c109);
+        Timing.Solve(p);
+        Assert.Equal(34, holes[2].SurfaceTimeMs);
+    }
+
+    [Fact]
+    public void AutoTieUp_InitiatesEveryHole()
+    {
+        var p = BlastProject.CreateNew();
+        var holes = HoleDesign.FillPolygon(new[] { new Vec3(0, 0, 0), new Vec3(30, 0, 0), new Vec3(30, 20, 0), new Vec3(0, 20, 0) },
+            new PatternParameters { Burden = 4, Spacing = 5 }, new HoleParameters(), out var rows);
+        foreach (var h in holes) p.Add(h);
+        p.Rows.AddRange(rows);
+        var ip = p.Add(new InitiationPoint { Position = new Vec3(15, -5, 0) });
+        var c17 = p.Products.First(x => x.DelayMs == 17);
+        var c42 = p.Products.First(x => x.DelayMs == 42);
+        Timing.AutoTieUp(p, holes, ip, c17, c42, 2);
+        Timing.Solve(p);
+        Assert.All(holes, h => Assert.NotNull(h.FiringTimeMs));
+    }
+
+    [Fact]
+    public void Electronic_RowSetAndEnvelope()
+    {
+        var (p, holes, _) = Row(5);
+        Timing.RowSet(holes, 100, 8);
+        Timing.Solve(p);
+        Assert.Equal(132, holes[4].FiringTimeMs);
+        var env = Timing.TimeEnvelope(p, 8);
+        Assert.All(env, e => Assert.Equal(1, e.Holes));
+        Timing.ScaleIntervals(holes, 2);
+        Assert.Equal(164, holes[4].ElectronicTimeMs);
+    }
+}
+
+public class SurfaceAndQuantityTests
+{
+    [Fact]
+    public void Triangulate_PlaneGivesExactElevationsAndContours()
+    {
+        var pts = new List<Vec3>();
+        for (int x = 0; x <= 10; x++)
+            for (int y = 0; y <= 10; y++)
+                pts.Add(new Vec3(x, y, 100 + 0.5 * x));
+        var s = Surfaces.Triangulate(pts);
+        Assert.Equal(200, s.TriangleCount);
+        Assert.Equal(102.25, s.ElevationAt(4.5, 3.3)!.Value, 6);
+        Assert.Null(s.ElevationAt(20, 20));
+        var contours = Surfaces.Contours(s, 1);
+        Assert.Equal(5, contours.Count);
+    }
+
+    [Fact]
+    public void VolumeBetween_FlatSurfaceAboveBase()
+    {
+        var s = Surfaces.Triangulate(new[] { new Vec3(0, 0, 10), new Vec3(10, 0, 10), new Vec3(10, 10, 10), new Vec3(0, 10, 10) });
+        var (cut, fill, area) = Surfaces.VolumeBetween(s, null, 0, null, 0.5);
+        Assert.Equal(1000, cut, 0);
+        Assert.Equal(0, fill);
+        Assert.Equal(100, area, 0);
+    }
+
+    [Fact]
+    public void Quantities_VoronoiAreasMatchPattern()
+    {
+        var p = BlastProject.CreateNew();
+        var poly = new[] { new Vec3(0, 0, 100), new Vec3(40, 0, 100), new Vec3(40, 40, 100), new Vec3(0, 40, 100) };
+        var holes = HoleDesign.FillPolygon(poly, new PatternParameters { Burden = 4, Spacing = 5, Pattern = PatternType.Rectangular }, new HoleParameters { BenchHeight = 10, Subdrill = 1 }, out var rows);
+        foreach (var h in holes) p.Add(h);
+        p.Rows.AddRange(rows);
+        p.Add(new PolylineEntity { Points = poly.ToList(), Closed = true, Kind = LineKind.Boundary });
+        Charging.ApplyRules(p, holes);
+        var q = Quantities.Compute(p);
+        Assert.Equal(16000, q.Volume, 0);
+        Assert.Equal(4, q.AverageBurden, 3);
+        Assert.Equal(5, q.AverageSpacing, 3);
+        Assert.True(q.PowderFactorKgM3 > 0.2 && q.PowderFactorKgM3 < 1.5);
+        Assert.Contains(q.Products, x => x.Product.Name == "ANFO");
+    }
+
+    [Fact]
+    public void Vibration_ScaledDistanceLaw()
+    {
+        var m = new VibrationModel { SiteK = 1140, SiteB = 1.6 };
+        var ppv = Vibration.Ppv(m, 100, 100);
+        Assert.Equal(1140 * Math.Pow(10, -1.6), ppv, 6);
+        Assert.Equal(100, Vibration.AllowableCharge(m, 100, ppv), 3);
+    }
+}
+
+public class FileFormatTests
+{
+    private static BlastProject Sample()
+    {
+        var p = BlastProject.CreateNew("Test blast");
+        var holes = HoleDesign.FillPolygon(new[] { new Vec3(0, 0, 100), new Vec3(20, 0, 100), new Vec3(20, 12, 100), new Vec3(0, 12, 100) },
+            new PatternParameters { Burden = 4, Spacing = 5 }, new HoleParameters { Angle = 10, Bearing = 45 }, out var rows);
+        foreach (var h in holes) p.Add(h);
+        p.Rows.AddRange(rows);
+        Charging.ApplyRules(p, holes);
+        p.Add(new PolylineEntity { Points = { new Vec3(0, 0, 100), new Vec3(5, 5, 100) }, Kind = LineKind.Crest });
+        p.Add(Surfaces.Triangulate(holes.Select(h => h.Collar)));
+        p.Attachments.Add(new Attachment { FileName = "note.txt", Data = "hello"u8.ToArray() });
+        return p;
+    }
+
+    [Fact]
+    public void ProjectFile_RoundTrip()
+    {
+        var p = Sample();
+        var path = Path.Combine(Path.GetTempPath(), $"bd_test_{Guid.NewGuid():N}.bdp");
+        try
+        {
+            ProjectFile.Save(p, path, 2);
+            ProjectFile.Save(p, path, 2);
+            Assert.True(File.Exists(path + ".001"));
+            var r = ProjectFile.Load(path);
+            Assert.Equal(p.Header.Name, r.Header.Name);
+            Assert.Equal(p.Holes.Count(), r.Holes.Count());
+            Assert.Equal(p.Holes.First().Decks.Count, r.Holes.First().Decks.Count);
+            Assert.Equal(p.Holes.First().Angle, r.Holes.First().Angle);
+            Assert.Single(r.Entities.OfType<SurfaceEntity>());
+            Assert.Equal("hello", System.Text.Encoding.UTF8.GetString(r.Attachments[0].Data));
+            Assert.Equal(Charging.ExplosiveMass(p, p.Holes.First()), Charging.ExplosiveMass(r, r.Holes.First()), 6);
+        }
+        finally
+        {
+            foreach (var f in Directory.GetFiles(Path.GetTempPath(), Path.GetFileName(path) + "*")) File.Delete(f);
+        }
+    }
+
+    [Fact]
+    public void Document_UndoRedoRestoresState()
+    {
+        var doc = new Document(Sample());
+        var count = doc.Project.Holes.Count();
+        doc.Execute("Delete", p => p.Entities.RemoveAll(e => e is Hole));
+        Assert.Empty(doc.Project.Holes);
+        doc.Undo();
+        Assert.Equal(count, doc.Project.Holes.Count());
+        Assert.Equal("hello", System.Text.Encoding.UTF8.GetString(doc.Project.Attachments[0].Data));
+        doc.Redo();
+        Assert.Empty(doc.Project.Holes);
+        Assert.True(doc.IsModified);
+    }
+
+    [Fact]
+    public void Merge_RenamesCollidingIdsAndKeepsTies()
+    {
+        var a = Sample();
+        var b = ProjectJson.DeepClone(a);
+        var ip = b.Add(new InitiationPoint());
+        Timing.Connect(b, ip.Id, b.Holes.First().Id, null);
+        var n = ProjectFile.Merge(a, b);
+        Assert.True(n > 0);
+        Assert.Equal(a.Entities.Count, a.Entities.Select(e => e.Id).Distinct().Count());
+        var tie = a.Ties.Single();
+        Assert.NotNull(a.FindEntity(tie.ToId));
+    }
+
+    [Fact]
+    public void TextImport_GuessesColumnsAndImportsHoles()
+    {
+        var lines = new[] { "Hole,X,Y,Z,Angle,Bearing,Length,Diameter", "1,100,200,50,0,0,11,102", "2,105,200,50,10,90,12,102", "3,105.05,200,50,0,0,11,102" };
+        var fmt = TextImportFormat.Guess(lines);
+        Assert.Equal(',', fmt.Delimiter);
+        Assert.Equal(1, fmt.SkipLines);
+        var r = TextFiles.Import(lines, fmt, new DesignData());
+        Assert.Equal(2, r.Entities.Count);
+        Assert.Equal(1, r.Skipped);
+        var h2 = (Hole)r.Entities[1];
+        Assert.Equal(10, h2.Angle);
+        Assert.Equal(12, h2.Length);
+    }
+
+    [Fact]
+    public void Exports_ProduceContent()
+    {
+        var p = Sample();
+        Assert.Contains("3DFACE", CadFiles.ExportDxf(p, p.Entities));
+        Assert.Contains("Label,CollarX", TextFiles.ExportHoles(p, p.Holes));
+        Assert.Contains("Hole,Deck,Top", TextFiles.ExportDeckTable(p, p.Holes));
+        Assert.Contains("DRPPlan", CadFiles.ExportDrillPlan(p, p.Holes));
+        var str = CadFiles.ExportStr(p.Entities.OfType<PolylineEntity>(), "t");
+        var path = Path.GetTempFileName();
+        File.WriteAllText(path, str);
+        Assert.Single(CadFiles.ImportStr(path, false));
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void DxfExport_ReadsBackWithCadReader()
+    {
+        var p = Sample();
+        var path = Path.Combine(Path.GetTempPath(), $"bd_{Guid.NewGuid():N}.dxf");
+        File.WriteAllText(path, CadFiles.ExportDxf(p, p.Entities.Where(e => e is PolylineEntity or SurfaceEntity)));
+        try
+        {
+            var items = CadFiles.ImportCad(path, new CadImportOptions());
+            Assert.Contains(items, i => i.Entity is PolylineEntity);
+            Assert.Contains(items, i => i.Entity is SurfaceEntity);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Reports_WritePdf()
+    {
+        var p = Sample();
+        using var ms = new MemoryStream();
+        Reports.WritePdf(p, ms, new ReportOptions());
+        Assert.True(ms.Length > 2000);
+        Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(ms.ToArray(), 0, 4));
+        using var ms2 = new MemoryStream();
+        Reports.WritePlanPdf(p, ms2, 500, true, "Plan");
+        Assert.True(ms2.Length > 1000);
+        var png = Reports.RenderPng(p, new Camera { Width = 400, Height = 300 }, 400, 300);
+        Assert.True(png.Length > 1000);
+    }
+}

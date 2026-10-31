@@ -1,0 +1,2353 @@
+# English (key) <TAB> Русский. Lines starting with # are comments.
+(empty)	(пусто)
+(no group)	(без группы)
+(none)	(нет)
+0 ms	0 мс
+0 ms connection	Соединение 0 мс
+1. File ▸ New, fill in the blast header.	1. Файл ▸ Создать, заполните заголовок взрыва.
+2. Import survey data (DXF, text) or draw the boundary and crest.	2. Импортируйте съёмку (DXF, текст) или начертите контур и бровку.
+3. Edit ▸ Design data: burden, spacing, bench height, diameter, subdrill.	3. Правка ▸ Данные проекта: ЛНС, расстояние, высота уступа, диаметр, перебур.
+4. Blast tools ▸ Pattern (or Row / Hole) to lay out holes; build surfaces for collars and grade.	4. Проектирование ▸ Сетка (или Ряд / Скважина) для разбивки; постройте поверхности уступа и подошвы.
+5. Edit ▸ Available resources and Tools ▸ Auto loading ▸ Edit loading rules, then Apply.	5. Правка ▸ Доступные ресурсы и Инструменты ▸ Автозарядка ▸ Правила зарядки, затем Применить.
+6. Loading tools ▸ Lead-in and Tie (or Automatic tie-up), or electronic tools for programmed times.	6. Зарядка ▸ Точка инициирования и Связи (или Автосвязка), либо электронные инструменты для программирования времён.
+7. Calculations: Visualize timing, Time envelope, Burden relief, Quantities, Vibration.	7. Расчёты: Визуализация времени, Время на ступень, Рельеф ЛНС, Ведомость, Сейсмика.
+8. File ▸ Print ▸ Reports / Plan, and File ▸ Export for drill rigs and other software.	8. Файл ▸ Печать ▸ Отчёты / План и Файл ▸ Экспорт для буровых станков и других программ.
+3D polygon area	Площадь 3D-полигона
+3D view	3D-вид
+A recovery file from {0:g} was found ({1}). Restore it?	Найден файл восстановления от {0:g} ({1}). Восстановить?
+About	О программе
+Actual length	Фактическая длина
+Add	Добавить
+Add a downhole detonator to the available resources first.	Сначала добавьте внутрискважинный детонатор в доступные ресурсы.
+Add a survey station to see distances and bearings for set-out.	Добавьте маркшейдерскую станцию, чтобы видеть расстояния и азимуты для разбивки.
+Add along selected polyline	Добавить вдоль выбранной полилинии
+Add along selected polyline…	Добавить вдоль выбранной полилинии…
+Add an electronic detonator to the available resources first.	Сначала добавьте электронный детонатор в доступные ресурсы.
+Add arrow	Добавить стрелку
+Add at points	Скважина в точке
+Add attachment	Добавить вложение
+Add circle	Добавить окружность
+Add dimension	Добавить размер
+Add dummy hole	Добавить фиктивную скважину
+Add hole	Добавить скважину
+Add holes at points	Добавить скважины в точках
+Add holes to selected row	Добавить скважины в выбранный ряд
+Add initiation point	Добавить точку инициирования
+Add monitoring points (Survey tools) to predict vibration at receivers.	Добавьте точки мониторинга (панель «Съёмка»), чтобы прогнозировать вибрацию у объектов.
+Add point	Добавить точку
+Add polygon	Добавить полигон
+Add polyline	Добавить полилинию
+Add row	Добавить ряд
+Add station	Добавить станцию
+Add surface connectors to the available resources first.	Сначала добавьте поверхностные замедлители в доступные ресурсы.
+Add text	Добавить текст
+Add tie	Добавить связь
+Add/Subtract time	Прибавить/вычесть время
+Add/Subtract time from holes…	Прибавить/вычесть время скважин…
+Add/subtract time	Прибавить/вычесть время
+Added	Добавлено
+Add…	Добавить…
+Adjust increments	Изменить шаг
+Adjust increments of selected holes…	Изменить шаг выбранных скважин…
+Adjust intervals	Изменить интервалы
+Adjust intervals…	Изменить интервалы…
+Air b	Показатель B (ВУВ)
+Air k	Коэффициент K (ВУВ)
+Airblast	Воздушная волна
+Airblast dB	ВУВ, дБ
+Airblast limit db	Предел ВУВ, дБ
+Airblast map	Карта воздушной волны
+All	Все
+All files	Все файлы
+All holes	Все скважины
+Allowable kg	Допустимо, кг
+Amount	Количество
+Angle	Угол
+Angle of initiation	Угол инициирования
+Apply	Применить
+Apply loading rules	Применить правила зарядки
+Area	Площадь
+Area m²	Площадь, м²
+Arrow	Стрелка
+Assign a field to each column	Назначьте поле каждому столбцу
+Attach holes to row	Присоединить скважины к ряду
+Attach holes to row…	Присоединить скважины к ряду…
+Attachment	Вложение
+Attachment manager	Менеджер вложений
+Attachment manager…	Менеджер вложений…
+Attachments	Вложения
+Author	Автор
+Auto loading	Автозарядка
+Automatic tie-up	Автоматическая связка
+Automatic tie-up…	Автоматическая связка…
+Autosave minutes	Автосохранение, мин
+Available resources	Доступные ресурсы
+Available resources…	Доступные ресурсы…
+Average burden	Средняя ЛНС
+Average burden × spacing: {0:0.00} × {1:0.00} m	Средние ЛНС × расстояние: {0:0.00} × {1:0.00} м
+Average spacing	Среднее расстояние
+Axes	Оси
+Background	Фон
+Background color	Цвет фона
+Backup copies	Резервных копий
+Base time ms	Базовое время, мс
+Baseline	Базовая линия
+Batter	Откос
+Batter (toe from crest)…	Откос (подошва от бровки)…
+Bearing	Азимут
+Bearing for angled holes (deg)	Азимут наклонных скважин (°)
+Bench	Уступ
+Bench elevation (m)	Отметка уступа (м)
+Bench height	Высота уступа
+Bench layout	Контур уступа
+Blast	Взрыв
+Blast Designer project	Проект Blast Designer
+Blast number	Номер взрыва
+Blast orientation	Ориентация взрыва
+Blast orientation {0:0.0}°	Ориентация взрыва {0:0.0}°
+Blast orientation: {0:0.0}°	Ориентация взрыва: {0:0.0}°
+Blast outcomes	Итоги взрыва
+Blast outcomes…	Итоги взрыва…
+Blast properties	Свойства взрыва
+Blast properties…	Свойства взрыва…
+Blast report	Отчёт по взрыву
+Blast tools	Проектирование взрыва
+Blast view	Вид взрыва
+Blocked	Завалена
+Booster	Боевик
+Booster id	Боевик
+Bore track	Траектория скважины
+Bore tracks	Траектории скважин
+Bottom	Низ
+Boundary	Контур
+Breakline	Структурная линия
+Bulk explosive	Наливное ВВ
+Burden	ЛНС
+Burden at collar	ЛНС у устья
+Burden at toe	ЛНС у забоя
+Burden relief	Рельеф ЛНС
+CAD files	Файлы САПР
+Calculations	Расчёты
+Cancel	Отмена
+Cancel entry	Отменить ввод
+Catalogue	Каталог
+Cell size (m)	Размер ячейки (м)
+Center	Центр
+Centre of mass	Центр масс
+Charge	Заряд
+Charge kg	Заряд, кг
+Check for duplicates	Проверка дубликатов
+Check for duplicates by coordinates…	Проверить дубликаты по координатам…
+Choose a template to delete	Выберите шаблон для удаления
+Circle	Окружность
+Clear	Очистить
+Clear analysis display	Убрать результаты анализа
+Clear exceptions	Очистить исключения
+Clear loading rules	Очистить правила зарядки
+Clearance radius (m)	Радиус опасной зоны (м)
+Clearance zone	Опасная зона
+Click a hole to edit its charge column.	Щёлкните скважину, чтобы изменить её конструкцию заряда.
+Click a hole to type its programmed time.	Щёлкните скважину, чтобы ввести её время.
+Click a hole, then click its surveyed toe position in plan; the depth is kept.	Щёлкните скважину, затем фактическое положение забоя в плане; глубина сохраняется.
+Click holes in firing order; each gets the previous time plus the hole interval. Ctrl+click adds the row interval.	Щёлкайте скважины в порядке взрывания; каждая получает предыдущее время плюс интервал. Ctrl+щелчок добавляет интервал между рядами.
+Click holes in order to number them.	Щёлкайте скважины по порядку, чтобы пронумеровать их.
+Click holes to change their downhole detonators.	Щёлкайте скважины, чтобы заменить внутрискважинные детонаторы.
+Click points to measure distance, bearing and grade; Enter shows the area.	Щёлкайте точки для измерения расстояния, азимута и уклона; Enter показывает площадь.
+Click points; double-click or Enter to finish, Backspace removes the last point.	Щёлкайте точки; двойной щелчок или Enter — завершить, Backspace — удалить последнюю.
+Click surface points (elevation is taken from the work plane); double-click to triangulate.	Щёлкайте точки поверхности (отметка берётся с рабочей плоскости); двойной щелчок — построить.
+Click the centre, then a point on the circle.	Щёлкните центр, затем точку на окружности.
+Click the hole the signal comes from, then the hole it goes to. Shift keeps chaining from the last hole. The connector is chosen in the tie palette.	Щёлкните скважину, откуда идёт сигнал, затем куда. Shift продолжает цепочку. Замедлитель выбирается в палитре СИ.
+Click the pattern boundary; double-click to finish. The pattern fills the polygon.	Обведите контур сетки; двойной щелчок — завершить. Сетка заполнит полигон.
+Click the row start, then its end. For a curved row, Shift+click the bends before the end.	Щёлкните начало ряда, затем конец. Для криволинейного ряда изломы ставьте Shift+щелчком до конца ряда.
+Click the start and the end of the arrow.	Щёлкните начало и конец стрелки.
+Click the surveyed toe position.	Щёлкните фактическое положение забоя.
+Click to add holes using the design data.	Щёлкайте, чтобы добавлять скважины по данным проекта.
+Click to place points.	Щёлкайте, чтобы ставить точки.
+Click to place the electronic opening point.	Щёлкните, чтобы поставить точку открытия электронной схемы.
+Click to place the initiation point, then use the Tie tool from it to the first hole.	Щёлкните, чтобы поставить точку инициирования, затем свяжите её с первой скважиной.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it. Shift adds, Ctrl toggles.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить. Shift добавляет, Ctrl переключает.
+Click two holes to measure between them.	Щёлкните две скважины, чтобы измерить расстояние.
+Click two points of the section line.	Щёлкните две точки линии разреза.
+Click two points to dimension.	Щёлкните две точки для размера.
+Click two points: from the back of the blast towards the free face.	Щёлкните две точки: от тыла блока к свободной поверхности.
+Click where the text goes.	Щёлкните место для текста.
+Client	Заказчик
+Clip polylines to be inside polygon	Обрезать полилинии по полигону
+Clip polylines to polygon	Обрезать полилинии по полигону
+Clip surface to polygon	Обрезать поверхность по полигону
+Close	Закрыть
+Close tool	Закрыть инструмент
+Closed	Замкнута
+Collapse all	Свернуть всё
+Collar	Устье
+Collar size pixels	Размер устья, пикс.
+Collar surface	Поверхность устьев
+Collar x	Устье X
+Collar y	Устье Y
+Collar z	Устье Z
+Collars only	Только устья
+Collars: {0:0.00} m (plan {1:0.00} m), bearing {2:0.0}°	Устья: {0:0.00} м (в плане {1:0.00} м), азимут {2:0.0}°
+Color	Цвет
+Colour by time	Цвет по времени
+Colour holes	Окрашивать скважины
+Comma	Запятая
+Comment	Комментарий
+Comments	Комментарии
+Connect multiple holes	Связать несколько скважин
+Connect selected holes in order	Связать выбранные скважины по порядку
+Connector between holes in a row	Замедлитель между скважинами ряда
+Connector between rows	Замедлитель между рядами
+Contents	Содержание
+Contour	Изолиния
+Contour interval (m)	Шаг изолиний (м)
+Contours	Изолинии
+Convert	Преобразовать
+Convert circles to polygons	Окружности в полигоны
+Convert dummy holes to holes	Фиктивные скважины в скважины
+Convert holes to dummy holes	Скважины в фиктивные
+Convert points to monitoring points	Точки в точки мониторинга
+Convert polygons to polylines	Полигоны в полилинии
+Convert polylines to polygons	Полилинии в полигоны
+Convert pyrotechnic devices to electronic	Пиротехнические СИ в электронные
+Convert to group of points	В группу точек
+Convert to points	В точки
+Convert to polygon	В полигон
+Convert to polyline	В полилинию
+Coordinates box	Окно координат
+Copies	Копий
+Copy	Копировать
+Copy entities	Копировать объекты
+Copy image	Копировать изображение
+Copy times between horizons	Копировать времена между горизонтами
+Copy times between horizons…	Копировать времена между горизонтами…
+Corner	Угол экрана
+Correct slice direction	Исправить направление наклона
+Correct slice direction of selected…	Исправить направление наклона выбранных…
+Cost	Стоимость
+Cost per tonne	Стоимость на тонну
+Costs	Затраты
+Create a new blast	Создать новый взрыв
+Create a point set from surface	Набор точек с поверхности
+Create a point set from surface…	Набор точек с поверхности…
+Create bench layout polyline	Полилиния контура уступа
+Create bench layout polyline…	Полилиния контура уступа…
+Create centre of mass	Центр масс
+Create centre of mass for polygons	Центр масс полигонов
+Create contours	Построить изолинии
+Create contours…	Построить изолинии…
+Create intersection grade peg and surface	Пересечение репера и поверхности
+Create intersection line and surface	Пересечение линии и поверхности
+Create intersection of two surfaces	Пересечение двух поверхностей
+Create points	Создать точки
+Create points at collar	Точки на устьях
+Create points at grade	Точки на подошве
+Create points at toe	Точки на забоях
+Create polyline of bore track	Полилиния траектории
+Create row from holes	Создать ряд из скважин
+Create rows automatically	Создать ряды автоматически
+Create segment points	Точки пересечения рёбер
+Create surface	Построить поверхность
+Create surface (honour breaklines)	Построить поверхность (со структурными линиями)
+Created	Создан
+Created new file	Создан новый файл
+Crest	Бровка
+Crest: {0}	Бровка: {0}
+Cross section	Разрез
+Cross-section	Линия разреза
+Currency	Валюта
+Cut	Вырезать
+DXF / DWG…	DXF / DWG…
+DXF import options	Параметры импорта DXF
+Data	Данные
+Decimal comma	Десятичная запятая
+Decimal separator	Десятичный разделитель
+Decimate surface	Прореживание поверхности
+Decimate surface…	Проредить поверхность…
+Deck table (csv)…	Таблица колонок заряда (csv)…
+Decks	Колонки
+Decks are built from the bottom of the hole upward. Length 0 fills the column up to the top stemming.	Колонки строятся от забоя вверх. Длина 0 заполняет скважину до верхней забойки.
+Default layer	Слой по умолчанию
+Delay ms	Замедление, мс
+Delay number	Номер замедления
+Delete	Удалить
+Delete all objects on layer {0}?	Удалить все объекты слоя {0}?
+Delete duplicate holes	Удалить дубликаты скважин
+Delete layer	Удалить слой
+Delete objects	Удалить объекты
+Delete template {0}?	Удалить шаблон {0}?
+Delete the whole tie-up?	Удалить всю схему связки?
+Delete tie up	Удалить связку
+Delimiter	Разделитель
+Delta x	Смещение X
+Delta y	Смещение Y
+Delta z	Смещение Z
+Density	Плотность
+Deprogram holes	Сбросить программирование
+Deprogram manually set holes	Сбросить ручные времена
+Depth	Глубина
+Description	Описание
+Deselect objects	Снять выделение объектов
+Design	Проект
+Design data	Данные проекта
+Design data…	Данные проекта…
+Designed	Запроектирована
+Detach holes from rows	Отсоединить скважины от рядов
+Detonating cord	ДШ
+Detonator ID	ID детонатора
+Detonator id	Детонатор
+Detonator to assign	Назначаемый детонатор
+Diameter	Диаметр
+Digging rate	Производительность экскавации
+Dimension	Размер
+Dipped	Замер
+Dipped {0:0.0} vs design {1:0.0}	Замер {0:0.0} против проекта {1:0.0}
+Distance	Расстояние
+Distance (m)	Расстояние (м)
+Distance (m), negative shrinks	Расстояние (м), отрицательное — сжатие
+Distance m	Расстояние, м
+Distance tolerance (m)	Допуск расстояния (м)
+Do not show at startup	Не показывать при запуске
+Downhole detonator	Внутрискважинный детонатор
+Drag a rectangle to zoom in. Click to zoom in at a point.	Выделите прямоугольник для увеличения. Щелчок увеличивает в точке.
+Drag left/right to rotate the plan about the vertical axis.	Тяните влево/вправо, чтобы вращать план вокруг вертикали.
+Drag to orbit the 3D view.	Тяните, чтобы вращать 3D-вид.
+Drag to pan the view.	Тяните, чтобы сдвигать вид.
+Draw or select a crest polyline (kind Crest) to measure front-row burden.	Начертите или выберите полилинию бровки (тип «Бровка»), чтобы измерить ЛНС первого ряда.
+Drawing tools	Черчение
+Drill holes between lines	Скважины между линиями
+Drill holes between lines…	Скважины между линиями…
+Drill plan (XML)…	Буровая карта (XML)…
+Drill plan XML	Буровая карта XML
+Drilled	Пробурена
+Drilled metres	Пробурено, м
+Drilled: {0:0.0} m	Пробурено: {0:0.0} м
+Drilling cost	Бурение
+Drilling per metre	Бурение за метр
+Drilling: {0:0.00} {1}	Бурение: {0:0.00} {1}
+Dummy	Фиктивная
+Dummy count	Фиктивных
+Dummy hole	Фиктивная скважина
+Dummy holes	Фиктивные скважины
+Duplicate	Дублировать
+Duplicate tolerance	Допуск дубликатов
+Edge offset	Отступ от контура
+Edit	Правка
+Edit available resources…	Изменить доступные ресурсы…
+Edit costs…	Изменить затраты…
+Edit loading	Изменить зарядку
+Edit loading rules	Правила зарядки
+Edit loading rules…	Правила зарядки…
+Edit loading…	Изменить зарядку…
+Edit selected	Изменить выделенное
+Edit selected…	Изменить выделенное…
+Edit {0}	Изменить: {0}
+Edit..	Изменить…
+Effective length	Расчётная длина
+Electronic	Электронная
+Electronic detonator	Электронный детонатор
+Electronic logging report	Отчёт регистрации ЭСИ
+Electronic time manual	Время задано вручную
+Electronic time ms	Время ЭСИ, мс
+Electronic timing	Электронное инициирование
+Electronic timing preferences	Настройки электронного инициирования
+Electronic tools	Электронное инициирование
+Elevation	Отметка
+Elevation angle	Угол возвышения
+Empty	Разрядить
+Empty holes	Разрядить скважины
+Enclosed area {0:0.00} m²	Площадь внутри {0:0.00} м²
+End	Конец
+Energy	Энергия
+Energy factor mjt	Удельная энергия, МДж/т
+Energy factor: {0:0.00} MJ/t	Удельная энергия: {0:0.00} МДж/т
+Error	Ошибка
+Exact	Точно такие же
+Exceptions	Исключения
+Exceptions view	Исключения
+Exit	Выход
+Expand all	Развернуть всё
+Expand polygon	Расширить полигон
+Expand polygon…	Расширить полигон…
+Expand surface	Расширить поверхность
+Expand surface…	Расширить поверхность…
+Explosive kg	ВВ, кг
+Explosive {0:0.0} kg	ВВ {0:0.0} кг
+Explosive {0:0.0} kg, top stemming {1:0.0} m	ВВ {0:0.0} кг, верхняя забойка {1:0.0} м
+Explosive: {0:0.0} kg	ВВ: {0:0.0} кг
+Export	Экспорт
+Export CSV…	Экспорт CSV…
+Export DXF	Экспорт DXF
+Export OBJ	Экспорт OBJ
+Export catalogue	Экспорт каталога
+Export catalogue…	Экспорт каталога…
+Export deck table	Экспорт таблицы колонок
+Export drill plan	Экспорт буровой карты
+Export firing data	Экспорт данных взрывания
+Export load sheet	Экспорт ведомости зарядки
+Export quantities	Экспорт ведомости
+Export string file	Экспорт стрингового файла
+Export text file	Экспорт текстового файла
+Exported to {0}	Экспортировано в {0}
+Extra detonator	Лишний детонатор
+Extra hole	Лишняя скважина
+Face angle	Угол откоса
+Faces to surfaces	Грани в поверхности
+Factor applied to explosive mass (1 = nominal)	Коэффициент к массе ВВ (1 — номинал)
+File	Файл
+File closed	Файл закрыт
+File name	Имя файла
+File not found: {0}	Файл не найден: {0}
+File saved	Файл сохранён
+Fill polygon	Заполнить полигон
+Fill selected polygon…	Заполнить выбранный полигон…
+Filter by label…	Фильтр по номеру…
+Find empty hole	Найти незаряженную скважину
+Find hole	Найти скважину
+Find hole by detonator ID…	Найти скважину по ID детонатора…
+Find hole…	Найти скважину…
+Find log file	Показать папку журнала
+Find misfire hole	Найти отказавшую скважину
+Find missing objects	Найти потерянные объекты
+Finish entry	Завершить ввод
+Fired	Взорвана
+Firing data with cosines…	Данные взрывания с косинусами…
+Firing data…	Данные взрывания…
+Firing sequence	Порядок взрывания
+Firing time ms	Время взрыва, мс
+Firing: {0:0}–{1:0} ms ({2} timed)	Взрывание: {0:0}–{1:0} мс (с временем: {2})
+First movement	Направление отбойки
+First number	Первый номер
+Fit site constant	Подобрать коэффициент площадки
+Fit to page	По размеру страницы
+Fixed cost	Постоянные затраты
+Fixed: {0:0.00} {1}	Постоянные: {0:0.00} {1}
+Flip selected ties	Развернуть выбранные связи
+Fly through	Пролёт
+Fragmentation p50	Дробление P50
+Fragmentation p80	Дробление P80
+From hole {0}	От скважины {0}
+From horizon	С горизонта
+From station {0} ({1})	От станции {0} ({1})
+Front row view	Первый ряд
+Frozen	Заморожен
+Gas bag	Пневмозатвор
+General	Общий
+General functions	Общие функции
+Grade	Подошва
+Grade peg	Репер подошвы
+Grade point	Точка подошвы
+Grade surface	Поверхность подошвы
+Grid	Сетка
+Grid spacing (m)	Шаг сетки (м)
+Group	Группа
+Group name	Имя группы
+Half width (m)	Полуширина (м)
+Header	Заголовок
+Header lines	Строк заголовка
+Height	Высота
+Help	Справка
+Hidden layers with objects: {0}	Скрытые слои с объектами: {0}
+Hide group	Скрыть группу
+Hide layers	Скрыть слои
+Hide all	Скрыть всё
+Hide the selection	Скрыть выделенное
+Highlight	Подсветить
+Hole	Скважина
+Hole and material types	Типы скважин и пород
+Hole and material types…	Типы скважин и пород…
+Hole bearing	Азимут скважины
+Hole count	Скважин
+Hole interval ms	Интервал между скважинами, мс
+Hole label	Маркировка скважин
+Hole label or detonator ID	Номер скважины или ID детонатора
+Hole labels	Подписи скважин
+Hole legend	Легенда скважин
+Hole measure	Измерение между скважинами
+Hole properties..	Свойства скважины…
+Hole sequence	Порядок взрывания
+Hole state	Состояние скважины
+Hole table	Таблица скважин
+Hole time	Время скважины
+Hole type	Тип скважины
+Hole types	Типы скважин
+Hole {0}: length {1:0.00} m, Ø {2:0} mm, water {3:0.0} m	Скважина {0}: длина {1:0.00} м, Ø {2:0} мм, вода {3:0.0} м
+Holes	Скважины
+Holes table	Таблица скважин
+Holes: {0}	Скважин: {0}
+Holes: {0} (+{1} dummy)	Скважин: {0} (+{1} фиктивных)
+Horizon	Горизонт
+Horizontal slice	Горизонтальный срез
+Ignore	Пропустить
+Image copied (also saved to {0})	Изображение скопировано (также сохранено в {0})
+Import	Импорт
+Import DXF	Импорт DXF
+Import DXF/DWG	Импорт DXF/DWG
+Import OBJ	Импорт OBJ
+Import catalogue	Импорт каталога
+Import catalogue from project	Импорт каталога из проекта
+Import catalogue from project…	Импорт каталога из проекта…
+Import drill plan	Импорт буровой карты
+Import string file	Импорт стрингового файла
+Import template	Шаблон импорта
+Import text file	Импорт текстового файла
+Improve surface geometry	Улучшить геометрию поверхности
+In-hole delay	Внутрискважинное замедление
+Increment between consecutive holes (ms)	Шаг между соседними скважинами (мс)
+Index	Номер
+Inhole delay ms	Внутрискважинное замедление, мс
+Inhole time	Время взрыва
+Initiation angle	Угол инициирования
+Initiation point	Точка инициирования
+Instrument height	Высота инструмента
+Intersection	Пересечение
+Interval ms	Интервал, мс
+Invert	Инвертировать
+Invert selection	Инвертировать выделение
+Is dummy	Фиктивная
+Is electronic	Электронная
+Isochrone interval (ms)	Шаг изолиний (мс)
+Isochrones	Изолинии
+Isolate	Только этот слой
+Join like decks	Объединить одинаковые колонки
+Keep the part inside the polygon?	Оставить часть внутри полигона?
+Keep the toe positions (lengths change)?	Сохранить положение забоев (длины изменятся)?
+Keyboard and mouse	Клавиатура и мышь
+Keys: Esc cancels the tool, Enter finishes a line, Backspace removes the last point, F zooms all, Delete deletes the selection, F1 opens help.	Клавиши: Esc — отмена инструмента, Enter — завершить линию, Backspace — убрать последнюю точку, F — показать всё, Delete — удалить выделенное, F1 — справка.
+Kind	Тип
+Label	Номер
+Label hole	Пронумеровать скважину
+Label prefix	Префикс номера
+Labels	Подписи
+Labour per blast	Работа на взрыв
+Landscape	Альбомная
+Landscape orientation?	Альбомная ориентация?
+Language	Язык
+Language (applies after restart)	Язык (после перезапуска)
+Laser wizard	Мастер «Лазер»
+Laser wizard…	Мастер «Лазер»…
+Layer	Слой
+Layer manager	Менеджер слоёв
+Layer name	Имя слоя
+Layer properties	Свойства слоя
+Layer {0} has {1} objects. Delete the layer and its objects?	В слое {0} объектов: {1}. Удалить слой вместе с ними?
+Layer:	Слой:
+Layers	Слои
+Layers: {0}	Слоёв: {0}
+Lead in delay ms	Замедление ввода, мс
+Lead-in	Точка инициирования
+Length	Длина
+Length {0:0.00} m, plan {1:0.00} m, ΔZ {2:0.00} m, bearing {3:0.0}°	Длина {0:0.00} м, в плане {1:0.00} м, ΔZ {2:0.00} м, азимут {3:0.0}°
+Like	Подобные
+Line width	Толщина линии
+Load a trace and add the monitoring point first.	Сначала загрузите запись и добавьте точку мониторинга.
+Load by rule	Зарядить по правилу
+Load import template	Загрузить шаблон импорта
+Load sheets (csv)…	Ведомости зарядки (csv)…
+Load template…	Загрузить шаблон…
+Load trace…	Загрузить запись…
+Load vibration trace	Загрузить запись вибрации
+Loaded	Заряжена
+Loading	Зарядка
+Loading cost	Зарядка
+Loading factor	Коэффициент зарядки
+Loading per hole	Зарядка на скважину
+Loading rules	Правила зарядки
+Loading tools	Зарядка и монтаж
+Loading — hole {0}	Зарядка — скважина {0}
+Loading: {0:0.00} {1}	Зарядка: {0:0.00} {1}
+Location	Местоположение
+Lock holes	Заблокировать скважины
+Lock layers	Заблокировать слои
+Lock selected layers	Заблокировать выбранные слои
+Locked	Заблокирован
+Log extended debug information	Расширенный журнал отладки
+Log file	Журнал
+Logging exceptions	Исключения регистрации
+Low burden	Малая ЛНС
+Make default	Сделать слоем по умолчанию
+Make default layer	Слой по умолчанию
+Manual	Вручную
+Manual loading	Зарядка вручную
+Manufacturer	Производитель
+Mark clearance zone	Отметить опасную зону
+Mark clearance zone…	Отметить опасную зону…
+Mark drilled	Отметить пробуренными
+Mark fired	Отметить взорванными
+Markout	Разбивка
+Material boundary	Граница пород
+Material type	Тип породы
+Material types	Типы пород
+Max	Макс.
+Max charge per {0} ms: {1:0.0} kg	Макс. заряд за {0} мс: {1:0.0} кг
+Max diameter	Макс. диаметр
+Max flyrock	Макс. разлёт
+Max holes per window: {0}; max charge per window: {1:0.0} kg at {2:0} ms	Макс. скважин в окне: {0}; макс. заряд в окне: {1:0.0} кг на {2:0} мс
+Max instantaneous charge	Макс. заряд на замедление
+Max length	Макс. длина
+Max recent files	Последних файлов
+Max time ms	Макс. время, мс
+Maximum move distance (m)	Макс. смещение (м)
+Mean length	Средняя длина
+Mean spacing	Среднее расстояние
+Measure	Измерение
+Measured airblast	Измеренная ВУВ
+Measured ppv	Измеренная скорость
+Merge blast	Объединить взрыв
+Merge file	Объединение файлов
+Merge…	Объединить…
+Milliseconds per metre	Миллисекунд на метр
+Milliseconds to add (negative subtracts)	Миллисекунд прибавить (отрицательное — вычесть)
+Min	Мин.
+Min diameter	Мин. диаметр
+Min length	Мин. длина
+Min point distance	Мин. расстояние между точками
+Mine	Карьер
+Misfire	Отказ
+Missing detonator	Нет детонатора
+Modified	Изменён
+Monitor	Точка мониторинга
+Monitoring	Мониторинг
+Monitoring point	Точка мониторинга
+Mouse: wheel zooms at the cursor, middle button pans, Shift+middle or Alt+left orbits in 3D, right click opens the tool menu.	Мышь: колесо — масштаб у курсора, средняя кнопка — сдвиг, Shift+средняя или Alt+левая — вращение 3D, правая — меню инструмента.
+Move	Переместить
+Move collars onto surface	Посадить устья на поверхность
+Move collars onto surface…	Посадить устья на поверхность…
+Move entities	Переместить объекты
+Move holes to points	Переместить скважины в точки
+Move objects onto surface	Посадить объекты на поверхность
+Move selection to this layer	Перенести выделенное в этот слой
+Move to layer	Перенести в слой
+Move to selected points	Переместить в выбранные точки
+Move to selected points…	Переместить в выбранные точки…
+Move x	Сдвиг X
+Move y	Сдвиг Y
+Move z	Сдвиг Z
+Move/copy entities	Переместить/копировать объекты
+Move/copy entities…	Переместить/копировать объекты…
+Muckpile height	Высота развала
+Name	Название
+Neighbour radius	Радиус соседей
+New	Создать
+New blast	Новый взрыв
+New group	Новая группа
+New layer	Новый слой
+New product	Новый продукт
+New rule	Новое правило
+Next hole time (ms)	Время следующей скважины (мс)
+Next label: {0}	Следующий номер: {0}
+Next number	Следующий номер
+Next time: {0} ms	Следующее время: {0} мс
+No	Нет
+No duplicate holes found.	Дубликаты скважин не найдены.
+No hole is initiated. Add an initiation point and ties, or electronic times.	Ни одна скважина не инициирована. Добавьте точку инициирования и связи или электронные времена.
+No log	Нет регистрации
+No missing objects found.	Потерянных объектов не найдено.
+No timing.	Нет времён.
+None	Нет
+North	Север
+North point	Знак «Север»
+Not drilled	Не пробурена
+Not initiated	Не инициирована
+Not loaded	Не заряжена
+Notes	Примечания
+Nothing found.	Ничего не найдено.
+Number of rows	Число рядов
+OK	ОК
+Offset	Смещение
+Open	Открыть
+Open an existing blast	Открыть существующий взрыв
+Open attachment	Открыть вложение
+Open blast	Открыть взрыв
+Open log file	Открыть журнал
+Open-pit blast design: hole layout, charging, initiation timing, quantities, vibration and reports.	Проектирование взрывов на карьерах: разбивка скважин, зарядка, схемы инициирования, ведомости, сейсмика и отчёты.
+Open-pit blast design: layout, charging, initiation and analysis.	Проектирование взрывов на карьерах: разбивка, зарядка, инициирование и анализ.
+Opened file {0}	Открыт файл {0}
+Opening point	Точка открытия
+Open…	Открыть…
+Optimize row spacing	Выровнять расстояния в рядах
+Optimize rows	Оптимизировать ряды
+Orientation	Ориентация
+Other	Прочее
+Other fixed	Прочие постоянные
+Outcomes	Итоги
+Outwards	Наружу
+Overview	Обзор
+Packaged explosive	Патронированное ВВ
+Pan	Панорама
+Paste	Вставить
+Pattern	Сетка
+Pattern properties	Параметры сетки
+Per hole	По скважинам
+Pivot at centre	Центр поворота в центре
+Pivot x	Центр поворота X
+Pivot y	Центр поворота Y
+Place an initiation point (lead-in) first.	Сначала поставьте точку инициирования.
+Plan	План
+Plan area {0:0.00} m², 3D area {1:0.00} m², perimeter {2:0.00} m	Площадь в плане {0:0.00} м², 3D {1:0.00} м², периметр {2:0.00} м
+Plan view	Вид в плане
+Plan…	План…
+Play	Пуск
+Pause	Пауза
+Point	Точка
+Points	Точки
+Points and lines (X,Y,Z)	Точки и линии (X,Y,Z)
+Polygon	Полигон
+Polyline	Полилиния
+Position	Положение
+Powder factor kg m3	Удельный расход, кг/м³
+Powder factor kg t	Удельный расход, кг/т
+Powder factor: {0:0.000} kg/m³, {1:0.000} kg/t	Удельный расход: {0:0.000} кг/м³, {1:0.000} кг/т
+Ppv limit	Предел скорости, мм/с
+Preferences..	Настройки…
+Preferences…	Настройки…
+Primer count	Число боевиков
+Primer offset	Отступ боевика
+Primers	Боевики
+Primers in the selected deck	Боевики в выбранной колонке
+Print	Печать
+Print plan	Печать плана
+Priority	Приоритет
+Problem	Проблема
+Product	Продукт
+Product cost	Стоимость продуктов
+Products	Продукты
+Products: {0:0.00} {1}	Продукты: {0:0.00} {1}
+Program settings	Настройки программы
+Program settings…	Настройки программы…
+Programmed (ms)	Запрограммировано (мс)
+Programmed time for hole {0} (ms)	Время для скважины {0} (мс)
+Project costs	Затраты проекта
+Project line to bench surface	Спроецировать линию на уступ
+Properties	Свойства
+Quantities	Ведомость
+Quantities…	Ведомость…
+Radius	Радиус
+Rating	Оценка
+Re-apply timing	Пересчитать времена
+Re-label duplicate holes	Перенумеровать дубликаты
+Read only	Только чтение
+Recent files	Последние файлы
+Rectangular	Прямоугольная
+Redo	Повторить
+Relative weight strength	Относительная работоспособность
+Release for loading	Допустить к зарядке
+Released	Допущена к зарядке
+Remove	Удалить
+Remove all loading rules?	Удалить все правила зарядки?
+Remove attachment	Удалить вложение
+Remove…	Удалить…
+Renumber holes	Перенумеровать скважины
+Renumber…	Перенумеровать…
+Repair (remove broken ties, assign default layer, show hidden layers)?	Исправить (удалить битые связи, назначить слой по умолчанию, показать скрытые слои)?
+Report designer	Дизайнер отчётов
+Report designer…	Дизайнер отчётов…
+Reports	Отчёты
+Reports…	Отчёты…
+Reset design tracks	Сбросить фактические траектории
+Reset orientation	Сбросить поворот
+Resolution	Разрешение
+Resource cost schema	Схема стоимости ресурсов
+Resource cost schema…	Схема стоимости ресурсов…
+Restart at…	Начать с…
+Restore default UI layout	Восстановить раскладку окна
+Reverse draw order	Обратный порядок прорисовки
+Rock density	Плотность породы
+Rotate	Вращение
+Rotate degrees	Поворот, °
+Rotate views	Вращение вида
+Rotation	Поворот
+Row	Ряд
+Row check view	Проверка рядов
+Row interval ms	Интервал между рядами, мс
+Row set	Время ряда
+Rows	Ряды
+Rows: {0}	Рядов: {0}
+Rule	Правило
+Save	Сохранить
+Save as template	Сохранить как шаблон
+Save as template…	Сохранить как шаблон…
+Save as…	Сохранить как…
+Save blast as	Сохранить взрыв как
+Save import template	Сохранить шаблон импорта
+Save plan	Сохранить план
+Save report	Сохранить отчёт
+Save template…	Сохранить шаблон…
+Saved {0}. Open it now?	Сохранено: {0}. Открыть?
+Scale	Масштаб
+Scale factor for intervals	Коэффициент интервалов
+Scaled distance {0:0.0}, measured {1:0.00}. Site constant K = {2:0}. Save it to the project?	Приведённое расстояние {0:0.0}, измерено {1:0.00}. Коэффициент площадки K = {2:0}. Сохранить в проект?
+Section view	Разрез
+Sections	Разделы
+Select	Выбор
+Select a closed polygon first.	Сначала выберите замкнутый полигон.
+Select a hole first.	Сначала выберите скважину.
+Select a polygon and a surface.	Выберите полигон и поверхность.
+Select a polyline and a surface.	Выберите полилинию и поверхность.
+Select a surface first.	Сначала выберите поверхность.
+Select all	Выбрать всё
+Select exact	Выбрать точно такие же
+Select grade pegs and a surface.	Выберите реперы подошвы и поверхность.
+Select holes and the points to move them to.	Выберите скважины и точки, в которые их переместить.
+Select like	Выбрать подобные
+Select none	Снять выделение
+Select objects	Выбрать объекты
+Select objects of one kind to edit them together.	Для совместной правки выберите объекты одного типа.
+Select one polygon and the polylines to clip.	Выберите один полигон и полилинии для обрезки.
+Select points, lines or holes to build the surface from.	Выберите точки, линии или скважины для построения поверхности.
+Select polylines and a surface.	Выберите полилинии и поверхность.
+Select product	Выбрать продукт
+Select the crest polyline first.	Сначала выберите полилинию бровки.
+Select these holes	Выбрать эти скважины
+Select tool: click selects, drag a box (left to right = window, right to left = crossing), Shift adds, Ctrl toggles, drag a selected object to move it, double-click edits.	Выбор: щелчок выбирает, рамка слева направо — внутри, справа налево — пересечение, Shift добавляет, Ctrl переключает, перетаскивание выбранного перемещает, двойной щелчок — правка.
+Select two polylines.	Выберите две полилинии.
+Select two surfaces.	Выберите две поверхности.
+Select {0} first.	Сначала выберите: {0}.
+Selected circles to polygons	Выбранные окружности в полигоны
+Selected dummy holes to holes	Выбранные фиктивные в скважины
+Selected holes only	Только выбранные скважины
+Selected holes to dummy holes	Выбранные скважины в фиктивные
+Selected objects to a polygon	Выбранные объекты в полигон
+Selected objects to a polyline	Выбранные объекты в полилинию
+Selected objects to group of points	Выбранные объекты в группу точек
+Selected objects to points	Выбранные объекты в точки
+Selected points to monitoring points	Выбранные точки в точки мониторинга
+Selected polygons to polylines	Выбранные полигоны в полилинии
+Selected polylines to polygons	Выбранные полилинии в полигоны
+Selection color	Цвет выделения
+Semicolon	Точка с запятой
+Seq.	Пор.
+Set	Время скважины
+Set as offset	Задать смещение
+Set as offset…	Задать смещение…
+Set blast orientation	Задать ориентацию взрыва
+Set hole state	Состояние скважин
+Set hole time	Время скважины
+Set in-hole delay	Внутрискважинное замедление
+Set lengths to grade	Длины до подошвы
+Set lengths to grade surface	Длины до поверхности подошвы
+Set lengths to grade surface…	Длины до поверхности подошвы…
+Set loading factor	Коэффициент зарядки
+Set loading factor…	Коэффициент зарядки…
+Set pattern properties..	Параметры сетки…
+Set row properties..	Параметры ряда…
+Settings: {0}	Настройки: {0}
+Shift+middle drag or Alt+drag to orbit, wheel to zoom	Shift+средняя кнопка или Alt+левая — вращение, колесо — масштаб
+Short hole	Недобур
+Shot date	Дата взрыва
+Shots, one per line: bearing; vertical angle; slope distance	Замеры, по одному в строке: азимут; вертикальный угол; наклонное расстояние
+Show	Показать
+Show all	Показать всё
+Show axes	Оси
+Show coordinates box	Окно координат
+Show grid	Сетка
+Show group	Показать группу
+Show header	Заголовок
+Show hole legend	Легенда скважин
+Show loading	Зарядка
+Show only the selection	Только выделенное
+Show palette	Показать палитру
+Show pattern	Параметры сетки
+Show quantities	Ведомость
+Show rows	Ряды
+Show startup assistant	Стартовый мастер
+Show surfaces	Поверхности
+Show text	Текст
+Show tie legend	Легенда связей
+Show tie palette	Палитра СИ
+Show ties	Связи
+Show wireframe	Каркас
+Simplify surface	Упростить поверхность
+Simplify surface with smoothing	Упростить поверхность со сглаживанием
+Simplify surface with smoothing…	Упростить поверхность со сглаживанием…
+Simplify surface…	Упростить поверхность…
+Single hole view (bullseye)	Одна скважина
+Site b	Показатель B площадки
+Site constants…	Коэффициенты площадки…
+Site k	Коэффициент K площадки
+Size	Размер
+Skip duplicate holes	Пропускать дубликаты скважин
+Skip duplicates	Пропускать дубликаты
+Skip lines	Пропустить строк
+Snap to objects	Привязка к объектам
+Snap to objects off	Привязка выключена
+Snap to objects on	Привязка включена
+Some holes were loaded by hand. Overwrite them too?	Часть скважин заряжена вручную. Перезаписать их тоже?
+Space	Пробел
+Spacing	Расстояние
+Spacing (m)	Расстояние (м)
+Spacing along the row (m)	Расстояние в ряду (м)
+Staggered	Шахматная
+Start	Начало
+Start at…	Начать с…
+Start number	Начальный номер
+Start time	Начальное время
+Start time ms	Начальное время, мс
+Startup assistant	Стартовый мастер
+State	Состояние
+Station	Станция
+Station x	Станция X
+Station y	Станция Y
+Station z	Станция Z
+Stemming	Забойка
+Stemming length	Длина забойки
+Stemming m	Забойка, м
+Stemming product id	Материал забойки
+Stop	Стоп
+String file	Стринговый файл
+String file (.str)…	Стринговый файл (.str)…
+String file, ignore diameters…	Стринговый файл без диаметров…
+String files	Стринговые файлы
+String id	Номер стринга
+Subdrill	Перебур
+Summary	Сводка
+Summary block	Сводный блок
+Summary block…	Сводный блок…
+Surface	Поверхность
+Surface connector	Поверхностный замедлитель
+Surface kind	Тип поверхности
+Surface time	Поверхностное время
+Surface to OBJ…	Поверхность в OBJ…
+Surfaces	Поверхности
+Survey	Съёмка
+Survey point	Точка съёмки
+Survey station	Маркшейдерская станция
+Survey stations	Маркшейдерские станции
+Survey stations…	Маркшейдерские станции…
+Survey tools	Съёмка
+Swap X and Y	Поменять X и Y
+Swap xy	Поменять X и Y
+Tab	Табуляция
+Table view	Табличный вид
+Target height	Высота отражателя
+Target radius	Радиус поиска цели
+Target radius pixels	Радиус поиска, пикс.
+Target radius:	Радиус поиска:
+Template	Шаблон
+Template name	Имя шаблона
+Template {0} saved	Шаблон {0} сохранён
+Templates	Шаблоны
+Templates…	Шаблоны…
+Text	Текст
+Text files	Текстовые файлы
+Text file…	Текстовый файл…
+The file is read only or locked by another user. It is opened read only.	Файл только для чтения или занят другим пользователем. Открыт только для чтения.
+The project has no surfaces.	В проекте нет поверхностей.
+Theme	Тема
+There are no rows.	Рядов нет.
+There are no templates yet. Use File ▸ Save as template.	Шаблонов пока нет. Используйте Файл ▸ Сохранить как шаблон.
+Tie	Связи
+Tie connector: {0}	Замедлитель связи: {0}
+Tie legend	Легенда связей
+Tie palette	Палитра СИ
+Ties	Связи
+Ties: {0}	Связей: {0}
+Time	Время
+Time at the line (ms)	Время на линии (мс)
+Time envelope	Время на ступень
+Time offset (ms)	Смещение времени (мс)
+Time offset (s)	Смещение времени (с)
+Time step ms	Шаг времени, мс
+Timing	Время
+Timing labels	Подписи времени
+Timing labels on the plan	Подписи времени на плане
+Timing line	Линия времени
+Timing recalculated	Времена пересчитаны
+Title	Заголовок
+To horizon	На горизонт
+Toe	Подошва (низ откоса)
+Toe x	Забой X
+Toe y	Забой Y
+Toe z	Забой Z
+Toes: {0:0.00} m	Забои: {0:0.00} м
+Tonnes	Тонн
+Tonnes: {0:0} t	Тоннаж: {0:0} т
+Tools	Инструменты
+Top	Верх
+Topography	Рельеф
+Total cost	Итого затрат
+Total: {0:0.00} {1} ({2:0.000}/t)	Итого: {0:0.00} {1} ({2:0.000}/т)
+Transform coordinates	Преобразовать координаты
+Transform coordinates..	Преобразовать координаты…
+Transform coordinates…	Преобразовать координаты…
+Type	Тип
+Typical workflow:	Типовой порядок работы:
+Unable to open file. The file is either not a Blast Designer file or is corrupt.	Не удалось открыть файл: это не файл Blast Designer или он повреждён.
+Unable to read template file - creating empty blast file	Не удалось прочитать шаблон — создаётся пустой взрыв
+Undo	Отменить
+Undo list	Список отмены
+Undo zoom	Предыдущий вид
+Ungroup	Разгруппировать
+Unit	Ед.
+Unit length	Длина патрона
+Unit mass	Масса единицы
+Unlock holes	Разблокировать скважины
+Unlock layers	Разблокировать слои
+Unlock selected layers	Разблокировать выбранные слои
+Vertical tolerance (m)	Допуск по высоте (м)
+Vibration	Сейсмика
+Vibration analysis	Анализ вибраций
+Vibration analysis…	Анализ вибраций…
+Vibration map	Карта вибраций
+Vibration site constants	Коэффициенты площадки (сейсмика)
+Vibration site constants…	Коэффициенты площадки (сейсмика)…
+View	Вид
+View everything	Показать всё
+View selection	Показать выделенное
+View tools	Инструменты просмотра
+Visible	Видимый
+Visual style	Визуальный стиль
+Visual style…	Визуальный стиль…
+Visualize timing	Визуализация времени
+Vod	Скорость детонации
+Volume	Объём
+Volume from holes: {0:0} m³, {1:0} t	Объём по скважинам: {0:0} м³, {1:0} т
+Volume m³	Объём, м³
+Volume: {0:0} m³	Объём: {0:0} м³
+Volume…	Объём…
+Water	Вода
+Water depth	Столб воды
+Water resistant	Водоустойчивое
+Wavefront OBJ file…	Файл Wavefront OBJ…
+Wet	Обводнена
+What to export	Что экспортировать
+Width	Ширина
+Window	Окно
+Window (ms)	Окно (мс)
+Window ms	Окно, мс
+Yes	Да
+You have not saved your data. Do you want to save?	Данные не сохранены. Сохранить?
+Zoom	Зум
+Zoom all	Показать всё
+Zoom in	Увеличить
+Zoom out	Уменьшить
+Zoom to selection	Показать выделенное
+fill	заполнение
+a polyline	полилинию
+points	точки
+holes	скважины
+{0:0} ms — {1}/{2} holes	{0:0} мс — {1}/{2} скважин
+{0} above {1}: volume {2:0} m³ ({3:0} t), below {4:0} m³, area {5:0} m²	{0} выше {1}: объём {2:0} м³ ({3:0} т), ниже {4:0} м³, площадь {5:0} м²
+{0} duplicate pairs found (highlighted). Delete the second hole of each pair?	Найдено пар дубликатов: {0} (подсвечены). Удалить вторую скважину каждой пары?
+{0} hole numbers are duplicated after the merge. Re-label duplicates?	После объединения повторяются номера скважин: {0}. Перенумеровать?
+{0} holes created	Создано скважин: {0}
+{0} holes found	Найдено скважин: {0}
+{0} holes loaded	Заряжено скважин: {0}
+{0} holes moved	Перемещено скважин: {0}
+{0} holes re-labelled	Перенумеровано скважин: {0}
+{0} holes timed	Задано времён: {0}
+{0} holes, {1} programmed, {2} with exceptions, {3} without detonator ID	Скважин {0}, запрограммировано {1}, с исключениями {2}, без ID детонатора {3}
+{0} objects	Объектов: {0}
+{0} objects copied	Скопировано объектов: {0}
+{0} objects have invalid coordinates	Объектов с неверными координатами: {0}
+{0} objects have no layer	Объектов без слоя: {0}
+{0} objects imported	Импортировано объектов: {0}
+{0} objects imported, {1} skipped	Импортировано объектов: {0}, пропущено: {1}
+{0} objects merged	Добавлено объектов: {0}
+{0} objects: only the fields you change are applied to all of them.	Объектов: {0}. Ко всем применяются только изменённые поля.
+{0} products added	Добавлено продуктов: {0}
+{0} selected	Выбрано: {0}
+{0} selected ({1} holes, {2:0.0} m drilled, {3:0.0} kg)	Выбрано: {0} (скважин {1}, бурения {2:0.0} м, ВВ {3:0.0} кг)
+{0} selected objects are locked and will be kept. Delete the rest?	Выбранных заблокированных объектов: {0}, они останутся. Удалить остальные?
+{0} ties created	Создано связей: {0}
+{0} ties point at deleted holes	Связей на удалённые скважины: {0}
+# Object kinds, enums and model properties
+Monitoring point	Точка мониторинга
+Survey station	Маркшейдерская станция
+Dummy hole	Фиктивная скважина
+Polyline	Полилиния
+Tie	Связь
+Designed	Запроектирована
+Dipped	Замерена
+Production	Основная
+Buffer	Буферная
+Trim	Контурная
+Hole type 1	Тип скважины 1
+Material 1	Порода 1
+Bench	Уступ
+Design	Проектная
+Booster	Боевик
+Other	Прочее
+Survey	Съёмка
+Grade peg	Репер подошвы
+Centre of mass	Центр масс
+Clearance zone	Опасная зона
+Bench layout	Контур уступа
+Bore track	Траектория
+Cross section	Разрез
+Surface time	Поверхностное время
+Hole sequence	Порядок взрывания
+Charge	Заряд
+Label	Номер
+Collar z	Устье Z
+Header	Заголовок
+Plan	План
+Quantities	Ведомость
+Hole table	Таблица скважин
+Loading	Зарядка
+Timing	Время
+Outcomes	Итоги
+Holes	Скважины
+Points	Точки
+Polygon	Полигон
+Name	Название
+Mine	Карьер
+Location	Местоположение
+Blast number	Номер взрыва
+Comment	Комментарий
+Shot date	Дата взрыва
+Burden	ЛНС
+Spacing	Расстояние
+Bench height	Высота уступа
+Subdrill	Перебур
+Diameter	Диаметр
+Angle	Угол
+Bearing	Азимут
+Stemming length	Длина забойки
+Rock density	Плотность породы
+Pattern	Тип сетки
+Duplicate tolerance	Допуск дубликатов
+Length	Длина
+Hole type	Тип скважины
+Material type	Тип породы
+Is dummy	Фиктивная
+State	Состояние
+Exceptions	Исключения
+Water depth	Столб воды
+Loading factor	Коэффициент зарядки
+Manual loading	Зарядка вручную
+Horizon	Горизонт
+Locked	Заблокирована
+Notes	Примечания
+Firing time ms	Время взрыва, мс
+Surface time ms	Поверхностное время, мс
+Inhole delay ms	Внутрискважинное замедление, мс
+Firing sequence	Порядок взрывания
+Position	Положение
+Height	Высота
+Rotation	Поворот
+Radius	Радиус
+Start	Начало
+End	Конец
+Offset	Смещение
+Kind	Тип
+Closed	Замкнута
+Show wireframe	Каркас
+Product id	Продукт
+Delay ms	Замедление, мс
+Start time ms	Начальное время, мс
+Lead in delay ms	Замедление ввода, мс
+Is electronic	Электронная
+Top	Верх
+Bottom	Низ
+Depth	Глубина
+Booster id	Боевик
+Detonator id	Детонатор
+Manufacturer	Производитель
+Density	Плотность, г/см³
+Relative weight strength	Относительная работоспособность, %
+Energy	Энергия, МДж/кг
+Vod	Скорость детонации, м/с
+Unit mass	Масса единицы, кг
+Unit length	Длина патрона, м
+Water resistant	Водоустойчивое
+Cost	Стоимость
+Color	Цвет
+Priority	Приоритет
+Min length	Мин. длина
+Max length	Макс. длина
+Min diameter	Мин. диаметр
+Max diameter	Макс. диаметр
+Wet	Обводнена
+Stemming product id	Материал забойки
+Primer count	Число боевиков
+Primer offset	Отступ боевика
+Group	Группа
+Visible	Видимый
+Frozen	Заморожен
+Show text	Показывать текст
+Line width	Толщина линии
+Fragmentation p50	Дробление P50, мм
+Fragmentation p80	Дробление P80, мм
+Max flyrock	Макс. разлёт, м
+Measured ppv	Измеренная скорость, мм/с
+Measured airblast	Измеренная ВУВ, дБ
+Muckpile height	Высота развала, м
+Digging rate	Производительность экскавации
+Rating	Оценка
+Comments	Комментарии
+Currency	Валюта
+Drilling per metre	Бурение за метр
+Loading per hole	Зарядка на скважину
+Labour per blast	Работа на взрыв
+Other fixed	Прочие постоянные
+Hole interval ms	Интервал между скважинами, мс
+Row interval ms	Интервал между рядами, мс
+Max time ms	Макс. время, мс
+Time step ms	Шаг времени, мс
+Base time ms	Базовое время, мс
+Site k	Коэффициент K площадки
+Site b	Показатель B площадки
+Air k	Коэффициент K (ВУВ)
+Air b	Показатель B (ВУВ)
+Window ms	Окно, мс
+Ppv limit	Предел скорости, мм/с
+Airblast limit db	Предел ВУВ, дБ
+Visible	Видимый
+Show header	Заголовок
+Show quantities	Ведомость
+Show pattern	Параметры сетки
+Corner	Угол экрана
+Min point distance	Мин. расстояние между точками
+Faces to surfaces	Грани в поверхности
+Import text	Импорт текста
+Edge offset	Отступ от контура
+Label prefix	Префикс номера
+Start number	Начальный номер
+Orientation	Ориентация (направление отбойки)
+Rectangular	Прямоугольная
+Staggered	Шахматная
+Move x	Сдвиг X
+Move y	Сдвиг Y
+Move z	Сдвиг Z
+Rotate degrees	Поворот, °
+Pivot at centre	Центр поворота в центре
+Pivot x	Центр поворота X
+Pivot y	Центр поворота Y
+Scale	Масштаб
+Delta x	Смещение X
+Delta y	Смещение Y
+Delta z	Смещение Z
+Copies	Копий
+Face angle	Угол откоса
+Outwards	Наружу
+Station x	Станция X
+Station y	Станция Y
+Station z	Станция Z
+Instrument height	Высота инструмента
+Target height	Высота отражателя
+Background color	Цвет фона
+Selection color	Цвет выделения
+Collar size pixels	Размер устья, пикс.
+Autosave minutes	Автосохранение, мин
+Backup copies	Резервных копий
+Max recent files	Последних файлов
+Theme	Тема
+Snap to objects	Привязка к объектам
+Target radius pixels	Радиус поиска, пикс.
+Show startup assistant	Стартовый мастер
+Author	Автор
+Show coordinates box	Окно координат
+Index	Номер
+Description	Описание
+Client	Заказчик
+Created	Создан
+Blast orientation	Ориентация взрыва
+Material types	Типы пород
+Hole types	Типы скважин
+Bulk explosive	Наливное ВВ
+Packaged explosive	Патронированное ВВ
+Gas bag	Пневмозатвор
+Downhole detonator	Внутрискважинный детонатор
+Surface connector	Поверхностный замедлитель
+Electronic detonator	Электронный детонатор
+Detonating cord	ДШ
+Extra detonator	Лишний детонатор
+Extra hole	Лишняя скважина
+No log	Нет регистрации
+Missing detonator	Нет детонатора
+Blocked	Завалена
+Not drilled	Не пробурена
+Misfire	Отказ
+Short hole	Недобур
+Drilled	Пробурена
+Released	Допущена к зарядке
+Loaded	Заряжена
+Fired	Взорвана
+General	Общая
+Grade	Подошва
+Topography	Рельеф
+Crest	Бровка
+Toe	Подошва откоса
+Baseline	Базовая линия
+Breakline	Структурная линия
+Contour	Изолиния
+Material boundary	Граница пород
+Intersection	Пересечение
+Boundary	Контур
+Monitoring	Мониторинг
+North point	Знак «Север»
+Inhole time	Время взрыва
+Delay number	Номер замедления
+Holes table	Таблица скважин
+None	Нет
+Ignore	Пропустить
+Collar x	Устье X
+Collar y	Устье Y
+Toe x	Забой X
+Toe y	Забой Y
+Toe z	Забой Z
+Actual length	Фактическая длина
+Time	Время
+String id	Номер стринга
+Delimiter	Разделитель
+Skip lines	Пропустить строк
+Skip duplicates	Пропускать дубликаты
+Swap xy	Поменять X и Y
+Decimal separator	Десятичный разделитель
+Electronic time ms	Время ЭСИ, мс
+Electronic time manual	Время задано вручную
+Detonator ID	ID детонатора
+Language	Язык
+Collar	Устье
+Point	Точка
+Text	Текст
+Circle	Окружность
+Arrow	Стрелка
+Dimension	Размер
+Surface	Поверхность
+Hole	Скважина
+# Plan and reports
+Holes: {0}   Ø {1:0} mm   mean length {2:0.0} m	Скважин: {0}   Ø {1:0} мм   ср. длина {2:0.0} м
+Explosive: {0:0} kg	ВВ: {0:0} кг
+ms	мс
+Page	Стр.
+fit	по странице
+Mine / site	Карьер / участок
+Designer	Проектировщик
+Drilled	Пробурено
+Explosive	ВВ
+Powder factor	Удельный расход
+Energy factor	Удельная энергия
+Max charge per window	Макс. заряд в окне
+Ang	Угол
+Brg	Азим.
+Len	Длина
+kg	кг
+Charging	Зарядка
+Column (bottom → top)	Колонка (снизу вверх)
+Initiation points	Точек инициирования
+Firing duration	Длительность взрывания
+Max holes per window	Макс. скважин в окне
+Vibration prediction	Прогноз сейсмики
+Fragmentation P50 / P80	Дробление P50 / P80
+Measured PPV	Измеренная скорость
+Hole	Скважина
+Type	Тип
+Unit	Ед.
+# Standard layer and group names
+name:Default	По умолчанию
+name:Holes	Скважины
+name:Ties	Связи
+name:Boundary	Контур
+name:Survey	Съёмка
+name:Surfaces	Поверхности
+name:Annotation	Надписи
+name:Design	Проект
+name:Drawing	Черчение
+name:Imported	Импорт
+name:Contours	Изолинии
+name:Clearance	Опасная зона
+name:Bore tracks	Траектории скважин
+name:Analysis	Анализ
+name:Production	Основная
+name:Buffer	Буферная
+name:Trim	Контурная
+DXF…	DXF…
+Edit loading of selected holes…	Изменить зарядку выбранных скважин…
+Edit loading of selected holes	Изменение зарядки выбранных скважин
+Loading applied to {0} holes	Зарядка применена к скважинам: {0}
+This column will be applied to all {0} selected holes; for other lengths the main explosive deck is lengthened or shortened.	Конструкция будет применена ко всем выбранным скважинам ({0}); при другой длине основная колонка ВВ удлиняется или укорачивается.
+Edit loading ({0} holes)…	Изменить зарядку ({0} скв.)…
+Apply to the {0} selected holes or to all {1} holes?	Применить к выбранным скважинам ({0}) или ко всем ({1})?
+Apply to the selected polygons or to all polygons?	Применить к выбранным полигонам или ко всем?
+Only selected	Только выделенные
+(mixed)	(разные)
+# ---- Version 6 features ----
+(all holes)	(все скважины)
+(no row)	(без ряда)
+({0} selected holes)	({0} выбранных скважин)
+50 % (mean)	50 % (среднее)
+Add at least two events with distance, charge and PPV to fit the site law.	Добавьте не менее двух событий с расстоянием, зарядом и PPV, чтобы подобрать закон затухания.
+Airblast ({0} dB): {1:0} m	Воздушная волна ({0} дБ): {1:0} м
+Airblast db	Воздушная волна, дБ
+Analysis	Анализ
+Angle deg	Угол, °
+Angle dev °	Откл. угла, °
+Apply initiation rules	Применить правила инициирования
+Apply initiation rules only	Применить только правила инициирования
+At depth	На глубине
+Bearing deg	Азимут, °
+Bearing dev °	Откл. азимута, °
+Burden (m)	ЛНС (м)
+Burden check view	Проверка ЛНС
+Burden is measured towards the free face (blast orientation {0:0}°). Design burden {1:0.00} m, spacing {2:0.00} m.	ЛНС измеряется в сторону свободной поверхности (направление взрыва {0:0}°). Проектная ЛНС {1:0.00} м, расстояние в ряду {2:0.00} м.
+Burden m	ЛНС, м
+Burden × spacing	ЛНС × расстояние
+Cell size	Размер ячейки
+Charge (kg)	Заряд (кг)
+Charge per hole {0:0} kg	Заряд на скважину {0:0} кг
+Charge per interval	Заряд за интервал
+Clear actuals	Очистить фактические данные
+Clear actuals…	Очистить фактические данные…
+Clear dipped lengths, as-drilled collars, bore tracks and MWD logs of the selected holes (all holes when none is selected)?	Очистить замеренные глубины, фактические устья, траектории и данные MWD выбранных скважин (всех, если ничего не выбрано)?
+Clearance distance	Безопасное расстояние
+Collar burden	ЛНС у устья
+Collar dev m	Откл. устья, м
+Collar position	Положение устья
+Collar xy	Устье в плане
+Confidence (%)	Доверительный уровень (%)
+Constants…	Константы…
+Cratering m	Кратер, м
+Create holes from selected polylines	Создать скважины из выбранных полилиний
+Create intercept points	Создать точки пересечений
+Create intersection of multiple surfaces	Создать пересечения нескольких поверхностей
+Create midpoints of selected segments	Создать середины выбранных отрезков
+Cumulative charge	Накопленный заряд
+Cumulative kg	Накоплено, кг
+Curved layout	Криволинейная раскладка
+Curved layout…	Криволинейная раскладка…
+Dashboard	Сводная панель
+Date	Дата
+Delete holes outside polygon	Удалить скважины вне полигона
+Delete {0} holes outside the polygon?	Удалить {0} скважин вне полигона?
+Depth (m)	Глубина (м)
+Depth dev m	Откл. глубины, м
+Design burden	Проектная ЛНС
+Design tolerance check	Проверка допусков
+Design tolerances	Проектные допуски
+Design tolerances…	Проектные допуски…
+Draw clearance zone	Нарисовать зону безопасности
+Draw exclusion zone	Нарисовать опасную зону
+Draw or select a crest polyline (kind Crest) and optionally a toe polyline (kind Toe).	Нарисуйте или выберите полилинию бровки (тип «Бровка») и, при наличии, линию подошвы (тип «Подошва»).
+Drill deviation	Отклонение бурения
+Drilled m	Пробурено, м
+Drilled metres	Пробурено, м
+Edit initiation rules	Изменить правила инициирования
+Environment	Окружающая среда
+Environmental prediction	Прогноз воздействия
+Event {0}	Событие {0}
+Exclusion zone	Опасная зона
+Exclusion zone calculator	Расчёт опасной зоны
+Exclusion zone radius: {0:0} m	Радиус опасной зоны: {0:0} м
+Exclusion zone {0:0} m	Опасная зона {0:0} м
+Expand surface to polygon	Расширить поверхность до полигона
+Export IREDES plan	Экспорт плана IREDES
+Export KML	Экспорт KML
+Export KMZ	Экспорт KMZ
+Export charge vs time	Экспорт заряда по времени
+Export flyrock	Экспорт разлёта
+Export fragmentation	Экспорт фрагментации
+Export profile logs	Экспорт профилей скважин
+Export strata intercepts	Экспорт пересечений с пластами
+Export tolerance check	Экспорт проверки допусков
+Extend line to intersection	Продлить линию до пересечения
+Extended firing data with cosines…	Расширенные данные взрывания с косинусами…
+Face between crest "{0}" and toe "{1}".	Откос между бровкой «{0}» и подошвой «{1}».
+Face burst m	Выброс с откоса, м
+Find maximum surface	Найти максимальную поверхность
+Find minimum surface	Найти минимальную поверхность
+Fines < {0} cm: {1:0.0} %	Мелочь < {0} см: {1:0.0} %
+Fines cm	Мелочь, см
+Firing span	Время взрывания
+Flyrock clearance zone	Зона разлёта
+Flyrock clearance {0:0} m	Зона разлёта {0:0} м
+Flyrock clearance: {0:0} m	Зона разлёта: {0:0} м
+Flyrock constants	Константы разлёта
+Flyrock constants…	Константы разлёта…
+Flyrock max throw	Макс. дальность разлёта
+Flyrock prediction	Прогноз разлёта
+Fragmentation	Фрагментация
+Fragmentation inputs	Исходные данные фрагментации
+Fragmentation inputs…	Исходные данные фрагментации…
+Fragmentation prediction	Прогноз фрагментации
+Front row burden profile	Профиль ЛНС первого ряда
+Group by	Группировать по
+Hard alternate product id	Альтернатива для крепких интервалов
+Hardness	Крепость
+Hardness threshold	Порог крепости
+High burden	Большая ЛНС
+Highest PPV	Наибольшая PPV
+Highest airblast	Наибольшая воздушная волна
+Hole ahead	Скважина впереди
+Holes initiated	Инициировано скважин
+Holes not loaded	Не заряжено скважин
+Holes within tolerance	Скважин в допуске
+IREDES Plan file…	Файл плана IREDES…
+IREDES Quality file update holes…	Файл качества IREDES (обновить скважины)…
+IREDES XML	IREDES XML
+Import CSV…	Импорт CSV…
+Import IREDES plan	Импорт плана IREDES
+Import IREDES quality file	Импорт файла качества IREDES
+Import KML	Импорт KML
+Import KML/KMZ	Импорт KML/KMZ
+Import LIDAR file	Импорт файла LIDAR
+Import MWD data	Импорт данных MWD
+Import vibration events	Импорт сейсмических событий
+Initiation rule	Правило инициирования
+Initiation rules	Правила инициирования
+Initiation rules…	Правила инициирования…
+Inputs…	Исходные данные…
+Interval (ms)	Интервал (мс)
+Joint factor	Коэффициент трещиноватости
+KML file…	Файл KML…
+KML/KMZ	KML/KMZ
+KML/KMZ files…	Файлы KML/KMZ…
+KMZ file…	Файл KMZ…
+Keep lowest	Оставлять нижнюю точку
+Kuz-Ram (Rosin-Rammler)	Кузнецов-Рам (Розин-Раммлер)
+LAS {0}.{1}, format {2}: {3} points read, {4} kept	LAS {0}.{1}, формат {2}: прочитано точек {3}, оставлено {4}
+LIDAR files (las)…	Файлы LIDAR (las)…
+LIDAR import	Импорт LIDAR
+Largest interval: {0:0.0} kg ({1} holes) at {2:0} ms; total {3:0} kg	Наибольший интервал: {0:0.0} кг ({1} скважин) на {2:0} мс; всего {3:0} кг
+Load the holes first: flyrock is calculated from the charge columns.	Сначала зарядите скважины: разлёт рассчитывается по колонкам заряда.
+Load the holes first: fragmentation needs the powder factor and charge per hole.	Сначала зарядите скважины: для фрагментации нужны удельный расход и заряд скважины.
+Low-burden holes	Скважин с малой ЛНС
+MWD data, single file…	Данные MWD, один файл…
+Max block cm	Макс. размер блока, см
+Max edge	Макс. длина ребра
+Max m	Макс., м
+Maximum instantaneous charge: {0:0.0} kg (window {1} ms)	Максимальный мгновенный заряд: {0:0.0} кг (окно {1} мс)
+Maximum throw {0:0} m (hole {1}); clearance with safety factor {2}: {3:0} m. k = {4}. Face burst uses the crest line (kind Crest) when there is one.	Максимальная дальность {0:0} м (скважина {1}); безопасное расстояние с коэффициентом {2}: {3:0} м. k = {4}. Выброс с откоса считается по линии бровки (тип «Бровка»), если она есть.
+Measured	Измерено
+Minimum	Минимум
+Minimum clearance	Минимальное безопасное расстояние
+Neighbour	Соседняя
+Neighbour overlaps	Совпадений с соседями
+Neighbour radius (m)	Радиус соседства (м)
+No surface has kind Strata; all surfaces are used.	Нет поверхностей типа «Пласт»; используются все поверхности.
+No toe line (kind Toe): the face is assumed vertical below the crest.	Нет линии подошвы (тип «Подошва»): откос считается вертикальным под бровкой.
+Offset distance (m), positive to the left	Смещение (м), положительное влево
+Offset easting	Смещение по востоку
+Offset elevation	Смещение по высоте
+Offset northing	Смещение по северу
+Over-drilled	Перебур
+Oversize	Негабарит
+Oversize > {0} cm: {1:0.0} %	Негабарит > {0} см: {1:0.0} %
+Oversize cm	Негабарит, см
+PPV (mm/s)	PPV (мм/с)
+PPV = K · (D/√Q)^-B.  Events: {0}.  K(50 %) = {1:0}, B = {2:0.000}, R² = {3:0.000}, standard error {4:0.000} (log10).  K at {5:0.#} % = {6:0}.	PPV = K · (D/√Q)^-B.  Событий: {0}.  K(50 %) = {1:0}, B = {2:0.000}, R² = {3:0.000}, стандартная ошибка {4:0.000} (log10).  K при {5:0.#} % = {6:0}.
+Pass	Годна
+Passing (%)	Проход (%)
+Penetration rate	Скорость бурения
+Point cloud	Облако точек
+Polyline offset	Смещение полилинии
+Polyline offset…	Смещение полилинии…
+Powder factor {0:0.000} kg/m³	Удельный расход {0:0.000} кг/м³
+Ppv mm	PPV, мм/с
+Primers per deck	Боевиков на заряд
+Profile logs…	Профили скважин…
+RWS {0:0}	RWS {0:0}
+Recalculate	Пересчитать
+Redrill	Перебурить
+Redrill fraction	Доля для перебуривания
+Refresh	Обновить
+Result	Результат
+Rifling m	Вылет забойки, м
+Rock factor	Коэффициент породы
+Rock factor A = {0:0.0}	Коэффициент породы A = {0:0.0}
+Rock mass description	Описание массива
+Row filter	Фильтр рядов
+Rows to the left	Ряды слева
+Safety factor	Коэффициент запаса
+Save events to project	Сохранить события в проект
+Scale law calculator	Калькулятор закона затухания
+Scaled distance (m/√kg)	Приведённое расстояние (м/√кг)
+Scaled distance {0:0.0} m/√kg: PPV {1:0.00} mm/s (50 %), {2:0.00} mm/s ({3:0.#} %). Allowable charge for {4} mm/s: {5:0.0} kg. Distance for {4} mm/s: {6:0} m.	Приведённое расстояние {0:0.0} м/√кг: PPV {1:0.00} мм/с (50 %), {2:0.00} мм/с ({3:0.#} %). Допустимый заряд для {4} мм/с: {5:0.0} кг. Расстояние для {4} мм/с: {6:0} м.
+Select a surface and a closed polygon.	Выберите поверхность и замкнутый полигон.
+Select critical hole	Выбрать опасную скважину
+Select failing holes	Выбрать скважины вне допуска
+Select flagged holes	Выбрать отмеченные скважины
+Select the curved baseline (a polyline) first.	Сначала выберите базовую линию (полилинию).
+Select the line to extend first, then the line to extend it to.	Сначала выберите продлеваемую линию, затем линию, до которой продлить.
+Select two or more surfaces.	Выберите две или более поверхности.
+Set material type from strata	Задать тип породы по пластам
+Set the UTM zone in Edit ▸ Site coordinate system first.	Сначала задайте зону UTM в «Правка ▸ Система координат участка».
+Set the kind of the strata surfaces to Strata first.	Сначала задайте поверхностям пластов тип «Пласт».
+Short	Недобур
+Site coordinate system	Система координат участка
+Site coordinate system…	Система координат участка…
+Size (cm)	Размер (см)
+Soft alternate product id	Альтернатива для слабых интервалов
+Soft collar extra stemming	Доп. забойка при слабом устье
+Softness threshold	Порог слабости
+Southern hemisphere	Южное полушарие
+Strata	Пласт
+Strata intercepts	Пересечения с пластами
+Strata intercepts…	Пересечения с пластами…
+Swebrec	Swebrec
+The file contains no points.	В файле нет точек.
+There are no initiation rules. Add them in Edit ▸ Initiation rules.	Правил инициирования нет. Добавьте их в «Правка ▸ Правила инициирования».
+Time (ms)	Время (мс)
+Time envelope overview	Обзор заряда по времени
+Timing overlap	Совпадение времён
+Toe burden	ЛНС у забоя
+Toe dev m	Откл. забоя, м
+Toe position	Положение забоя
+Toe xy	Забой в плане
+Tolerance (%)	Допуск (%)
+Tolerances…	Допуски…
+Ucs	Предел прочности на сжатие
+Use	Использовать
+Use fitted K and B	Принять подобранные K и B
+Utm zone	Зона UTM
+Vibration ({0} mm/s, K = {1:0}, B = {2:0.00}): {3:0} m	Сейсмика ({0} мм/с, K = {1:0}, B = {2:0.00}): {3:0} м
+Vibration records	Сейсмические события
+Volume overview	Обзор объёмов
+Wet alternate product id	Альтернатива для обводнённой части
+X20 {0:0.0} cm	X20 {0:0.0} см
+X50 {0:0.0} cm	X50 {0:0.0} см
+X80 {0:0.0} cm	X80 {0:0.0} см
+Youngs modulus	Модуль Юнга
+front row	первый ряд
+kg per interval	кг за интервал
+kg/m	кг/м
+kg/m³	кг/м³
+{0:0.#} % confidence	доверительный уровень {0:0.#} %
+{0} holes initiated	Инициировано скважин: {0}
+{0} holes updated	Обновлено скважин: {0}
+{0} intersection lines	Линий пересечения: {0}
+{0} lines extended	Продлено линий: {0}
+{0} objects imported (UTM zone {1})	Импортировано объектов: {0} (зона UTM {1})
+{0} of {1} holes within tolerance (collar {2} m, depth {3} m, toe {4} m, angle {5}°, bearing {6}°).	В допуске {0} из {1} скважин (устье {2} м, глубина {3} м, забой {4} м, угол {5}°, азимут {6}°).
+{0} points will be added as separate objects. Continue? (Increase the cell size to keep fewer.)	Будет добавлено {0} отдельных точек. Продолжить? (Увеличьте размер ячейки, чтобы оставить меньше.)
+{0} strata surfaces.	Поверхностей пластов: {0}.
+Δt (ms)	Δt (мс)
+Quality	Качество
+X50	X50
+X80	X80
+ dummy	 холостых
+ mm/s at 	 мм/с у 
+MJ/t	МДж/т
+ ms	 мс
+ kg	 кг
+ cm	 см
+ dB	 дБ
+ m³	 м³
+ m	 м
+ t	 т
+Maximum instantaneous charge	Максимальный мгновенный заряд
+# ---- Work-stage shell (ribbon, rail, panels); keys start with "ui:" ----
+ui:File	Файл
+ui:Survey	Съёмка
+ui:Layout	Расстановка
+ui:Loading	Заряжание
+ui:Initiation	Инициирование
+ui:Analysis	Анализ
+ui:Output	Выдача
+ui:Document	Документ
+ui:New	Новый
+ui:Open	Открыть
+ui:Save	Сохранить
+ui:Recent	Последние
+ui:Save as…	Сохранить как…
+ui:Close	Закрыть
+ui:Templates	Шаблоны
+ui:From template	Из шаблона
+ui:Save as template	Сохранить как шаблон
+ui:Manage templates	Управление шаблонами
+ui:Data exchange	Обмен данными
+ui:Import	Импорт
+ui:Export	Экспорт
+ui:Merge with file…	Объединить с файлом…
+ui:Copy image	Копировать изображение
+ui:Print	Печать
+ui:Print plan	Печать плана
+ui:Reports	Отчёты
+ui:Report designer	Конструктор отчётов
+ui:Settings	Настройки
+ui:Program settings	Настройки
+ui:Blast properties	Свойства взрыва
+ui:Design data	Проектные данные
+ui:Site coordinate system	Система координат
+ui:Visual style	Оформление
+ui:Laser wizard	Мастер лазера
+ui:Survey points	Точки съёмки
+ui:Survey stations	Станции съёмки
+ui:Bore track	Траектория скважины
+ui:Grade pegs	Реперы подошвы
+ui:Monitoring points	Сейсмоконтроль
+ui:MWD data	Данные MWD
+ui:Point cloud (LAS)	Облако точек (LAS)
+ui:Surfaces	Поверхности
+ui:Build	Построить
+ui:Surface tool	Поверхность по точкам
+ui:Project objects	Проецировать объекты
+ui:Minimum	Минимальная
+ui:Maximum	Максимальная
+ui:Intersection of surfaces	Пересечения
+ui:Clip to polygon	Обрезать по контуру
+ui:Contours	Горизонтали
+ui:Volume	Объём
+ui:Lines and polygons	Линии и контуры
+ui:Convert	Преобразовать
+ui:Move / copy	Перенос / копия
+ui:Transform	Трансформация
+ui:Expand polygon	Расширить контур
+ui:Clip lines	Обрезать линии
+ui:Offset	Эквидистанта
+ui:Midpoints	Середины отрезков
+ui:Centre of mass	Центр масс
+ui:Extend to intersection	Продлить до пересечения
+ui:Clearance zone	Зона безопасности
+ui:Hole	Скважина
+ui:Row	Ряд
+ui:Pattern	Сетка
+ui:Baseline	Базовая линия
+ui:Fill polygon	Заполнить контур
+ui:Curved layout	Криволинейная
+ui:From objects	По объектам
+ui:At points	В точках
+ui:Along line	Вдоль линии
+ui:Between lines	Между линиями
+ui:From polylines	Из полилиний
+ui:To survey points	К точкам съёмки
+ui:Delete outside polygon	Удалить вне контура
+ui:Rows	Ряды
+ui:Optimize	Оптимизировать
+ui:Rows automatically	Ряды автоматически
+ui:Row from holes	Ряд из скважин
+ui:Detach from row	Отвязать от ряда
+ui:Face	Откос
+ui:Front row profile	Профиль первого ряда
+ui:Batter	Берма
+ui:Section	Разрез
+ui:Numbering	Нумерация
+ui:Renumber	Перенумеровать
+ui:Duplicate labels	Повторы номеров
+ui:Duplicate coordinates	Дубли координат
+ui:Holes → dummy	Рабочие → холостые
+ui:Dummy → holes	Холостые → рабочие
+ui:Markout and tracks	Вынос и траектории
+ui:Markout	Вынос в натуру
+ui:Distance at depth	Расстояние на глубине
+ui:Reset design tracks	Проектные траектории
+ui:Collars onto surface	Устья на поверхность
+ui:Lengths to grade	Глубины до подошвы
+ui:Data	Данные
+ui:Table	Таблица
+ui:Load	Зарядить
+ui:By rules	По правилам
+ui:Initiation only	Только инициирование
+ui:Empty	Пустые
+ui:Release for loading	Выдать на заряжание
+ui:Rules and products	Правила и продукты
+ui:Loading rules	Правила заряжания
+ui:Initiation rules	Правила инициирования
+ui:Products	Продукты
+ui:Hole and material types	Типы скважин и пород
+ui:Charge column	Колонка заряда
+ui:Edit column	Изменить колонку
+ui:In-hole detonators	Детонаторы в скважине
+ui:Join decks	Объединить заряды
+ui:Loading factor	Коэффициент массы
+ui:Strata	Пласты
+ui:Strata intercepts	Пересечения с пластами
+ui:Material from strata	Порода по пластам
+ui:As-built	Факт
+ui:Clear actuals	Сбросить фактические
+ui:Mark drilled	Отметить пробуренными
+ui:Design tolerances	Допуски
+ui:Tolerance check	Проверка допусков
+ui:Result	Итог
+ui:Quantities	Ведомость
+ui:Tie-up	Схема
+ui:Ties	Связи
+ui:Lead-in	Магистраль
+ui:Dummy hole	Холостая скважина
+ui:Tie palette	Палитра связей
+ui:Automatic tie-up	Автосвязка
+ui:Connect in order	Связать по порядку
+ui:Flip ties	Перевернуть связи
+ui:Delete ties	Удалить связи
+ui:Electronic	Электронное (ЭСИ)
+ui:Time by click	Время щелчком
+ui:Along row	Вдоль ряда
+ui:Timing line	Линия времени
+ui:Opening point	Точка начала
+ui:V pattern	V-схема
+ui:Encoding sequence	Порядок кодирования
+ui:i-kon loggers	Логгеры i-kon
+ui:Edit times	Правка времён
+ui:Shift time…	Сдвинуть время…
+ui:Scale intervals…	Масштаб интервалов…
+ui:Constant step…	Постоянный шаг…
+ui:Between horizons	Между горизонтами
+ui:Re-apply	Пересчитать
+ui:Deprogram	Сбросить программу
+ui:Conversion	Преобразование
+ui:Pyrotechnic → electronic	Пиротехника → ЭСИ
+ui:Clear exceptions	Очистить исключения
+ui:Electronic settings	Настройки ЭСИ
+ui:Check	Проверка
+ui:Isochrones	Изолинии
+ui:Timing overlap	Совпадение времён
+ui:Logging report	Отчёт регистрации
+ui:Blast dynamics	Динамика взрыва
+ui:Angle of initiation	Угол инициирования
+ui:First movement	Первое движение
+ui:Burden relief	Разгрузка ЛНС
+ui:Time envelope	Огибающая
+ui:Charge vs time	Заряд по времени
+ui:Volumes	Объёмы
+ui:Dashboard	Сводка
+ui:Volume between surfaces	Объём между пов.
+ui:Volume overview	Объёмы по зонам
+ui:Costs	Стоимость
+ui:Environment	Воздействие
+ui:Exclusion zone	Опасная зона
+ui:Vibration	Сейсмика: прогноз
+ui:Vibration map	Сейсмика: карта
+ui:Airblast map	Возд. волна: карта
+ui:Flyrock	Разлёт
+ui:Scale law	Закон затухания
+ui:Vibration records	Анализ сейсмограмм
+ui:Fragmentation	Фрагментация
+ui:Prediction	Прогноз
+ui:Inputs	Исходные данные
+ui:Quality control	Контроль качества
+ui:Bullseye	Мишень
+ui:Exceptions	Аналитика
+ui:Front row	Первый ряд
+ui:Row check	Проверка рядов
+ui:Burden check	Проверка ЛНС
+ui:Horizontal slice	Горизонт. срез
+ui:Charge in 3D	Заряд в 3D
+ui:Tolerances	Допуски
+ui:Fly through	Пролёт 3D
+ui:EBS field report	Полевой отчёт ЭСИ
+ui:To the drill rig	На буровой станок
+ui:IREDES	IREDES
+ui:Drill plan (XML)	Буровая карта (XML)
+ui:Surpac STR	Surpac STR
+ui:Leica	Leica
+ui:MineSight 3D	MineSight 3D
+ui:To loading	На заряжание
+ui:Load sheets (CSV)	Ведомости заряжания (CSV)
+ui:Deck table (CSV)	Таблица зарядов (CSV)
+ui:ELS for MMU	ELS для СЗМ
+ui:Vibration monitoring	Сейсмоконтроль
+ui:Firing data	Данные взрывания
+ui:With cosines	С косинусами
+ui:Extended firing data	Расширенные данные
+ui:Other formats	Другие форматы
+ui:KML / KMZ	KML / KMZ
+ui:DXF	DXF
+ui:BlastIQ cloud	Облако BlastIQ
+ui:Send plan	Отправить план
+ui:Load plan	Загрузить план
+ui:Blast management	Управление взрывом
+ui:Select	Выбор
+ui:Pan (or middle button)	Панорама (или средняя кнопка)
+ui:Zoom to rectangle	Масштаб рамкой
+ui:View everything	Показать всё
+ui:Previous view	Предыдущий вид
+ui:Rotate 3D	Вращение 3D
+ui:North up / rotate plan	Север вверх / повернуть план
+ui:Measure	Измерить
+ui:Drawing: polyline (others in the list)	Рисование: полилиния (остальное — в списке)
+ui:Snap to objects	Привязка к объектам
+ui:Coordinate grid	Координатная сетка
+ui:Layers	Слои
+ui:Dipped	С замером
+ui:Misfires	Отказы
+ui:Not programmed	Без программы ЭСИ
+ui:Alt+1…7 — switch stage	Alt+1…7 — переключить этап
+ui:All commands in the classic menu	Все команды в классическом меню
+ui:Bench	Уступ
+ui:Blast direction: click to set, double-click to reset the orientation	Направление взрыва: щелчок — задать, двойной щелчок — сбросить ориентацию
+ui:Blast properties, design data, resources	Свойства взрыва, проектные данные, ресурсы
+ui:Cancel	Отмена
+ui:Command, hole, setting…	Команда, скважина, настройка…
+ui:Coordinates	Координаты
+ui:Done	Готово
+ui:Help (F1)	Справка (F1)
+ui:Hole table	Таблица скважин
+ui:Hole table (Ctrl+T)	Таблица скважин (Ctrl+T)
+ui:Menu	Меню
+ui:New (Ctrl+N)	Новый (Ctrl+N)
+ui:No blast open	Взрыв не открыт
+ui:Not saved	Не сохранено
+ui:not saved	не сохранён
+ui:Open (Ctrl+O)	Открыть (Ctrl+O)
+ui:Pick radius, px	Радиус захвата, пкс
+ui:Hide the panel	Скрыть панель
+ui:Show the panel	Показать панель
+ui:Objects	Объекты
+ui:Print plan (Ctrl+P)	Печать плана (Ctrl+P)
+ui:Properties	Свойства
+ui:Quick filters:	Быстрые фильтры:
+ui:Redo (Ctrl+Y)	Повторить (Ctrl+Y)
+ui:Save (Ctrl+S)	Сохранить (Ctrl+S)
+ui:Show	Показывать
+ui:Undo (Ctrl+Z)	Отменить (Ctrl+Z)
+ui:Visibility	Видимость
+ui:Like	Похожие
+ui:Exact	Такие же
+ui:Invert	Инверсия
+ui:Only selected	Только выбранные
+ui:Show all	Показать все
+ui:Plan	План
+ui:Timing	Время
+ui:Charge 3D	Заряд 3D
+ui:Labels	Подписи
+ui:Tracks	Траектории
+ui:Isochrones and colour by time (Ctrl+Shift+V)	Изолинии и цвет по времени (Ctrl+Shift+V)
+ui:Charge columns (Ctrl+Shift+L)	Колонки заряда (Ctrl+Shift+L)
+ui:Hole labels and times	Номера и времена скважин
+ui:Hole number	Поряд.Номер
+ui:In-hole delay	Внут.замедление
+ui:Hole time	Время скважины
+ui:Hole order	Скв.порядок
+ui:Hole tracks; off shows collars only	Траектории скважин; выключено — только устья
+ui:Surface ties	Поверхностные связи
+ui:Burden, m	ЛНС, м
+ui:Spacing, m	Шаг, м
+ui:Diameter, mm	Диаметр, мм
+ui:Angle, °	Угол, °
+ui:Step, ms	Шаг, мс
+Not in Blast Designer	Нет в Blast Designer
+Enter coordinates	Ввод координат
+X Y [Z] (separated by spaces or semicolons)	X Y [Z] (через пробел или точку с запятой)
+Enter two or three numbers.	Введите два или три числа.
+{0} holes selected	Выбрано скважин: {0}
+Show all objects	Показать все объекты
+Show only selected	Показать только выбранные
+Section along line	Разрез по линии
+Properties…	Свойства…
+Hole {0}	Скважина {0}
+Rows and strata	Ряды и пласты
+Tracks and points	Траектории и точки
+Expand	Расширить
+Simplify	Упростить
+ui:Clear analysis	Убрать анализ
+ui:Remove maps, isochrones and arrows from the plan (Esc)	Убрать с плана карты, изолинии и стрелки (Esc)
+No firing times: add an initiation point and ties, or electronic times.	Нет времён взрывания: добавьте точку инициирования и связи или задайте времена ЭСИ.
+Chart could not be drawn:	Не удалось нарисовать график:
+At least {0} points are needed	Нужно не меньше {0} точек
+Point at a deck to find it in the list; click to select it	Наведите на заряд, чтобы найти его в списке; щелчок выбирает его
+ui:Initiation point	Точка инициирования
+ui:Finish row (Enter)	Завершить ряд (Enter)
+ui:Cancel segment (Backspace)	Отменить отрезок (Backspace)
+Cancel segment	Отменить отрезок
+{0} holes	{0} скв.
+ui:Cancel row (Esc)	Отменить ряд (Esc)
+Selection	Выделение
+# Loading window (new design)
+Loading · hole {0}	Зарядка · скважина {0}
+ui:Depth	Глубина
+ui:Water	Вода
+ui:m	м
+ui:mm	мм
+ui:kg	кг
+ui:kg/m	кг/м
+ui:l	л
+ui:g/cm³	г/см³
+ui:The column will be applied to	Конструкция применится к
+{0} selected hole	{0} выбранной скважине
+{0} selected holes	{0} выбранным скважинам
+If a hole is longer or shorter, the main explosive deck adapts and the stemming stays {0} m.	Если скважина длиннее или короче, основная колонка ВВ подстроится, забойка останется {0} м.
+ui:— not selected —	— не выбрано —
+ui:Apply	Применить
+Apply to {0} hole	Применить к {0} скважине
+Apply to {0} holes	Применить к {0} скважинам
+ui:Column	Колонка
+ui:Decks from top to bottom	Интервалы сверху вниз
+ui:Add a deck below	Добавить интервал ниже
+ui:Split the selected deck in half	Разделить выбранный интервал пополам
+ui:Duplicate	Дублировать
+ui:Move up	Выше
+ui:Move down	Ниже
+ui:Delete	Удалить
+ui:Product	Продукт
+ui:Top, m	Верх, м
+ui:Bottom, m	Низ, м
+ui:Length, m	Длина, м
+ui:Mass, kg	Масса, кг
+ui:Primers	Боевики
+ui:none	нет
+ui:Drag deck boundaries and primers on the column on the left: 1 m steps, 0.1 m with Shift (↑/↓ keys too). The neighbouring deck moves with the boundary, so there are no gaps or overlaps.	Границы интервалов и боевики тянутся мышью на схеме слева: шаг 1 м, с зажатым Shift 0,1 м (так же стрелки ↑/↓). Соседний интервал сдвигается вместе с границей, дыр и наложений не бывает.
+ui:The column is empty. Load it by a rule or add a deck.	Колонка пуста. Зарядите по правилу или добавьте интервал.
+Deck {0} of {1}	Интервал {0} из {1}
+ui:Top	Верх
+ui:Bottom	Низ
+ui:Length	Длина
+ui:Density	Плотность
+ui:Linear charge	Погонная масса
+ui:Deck mass	Масса интервала
+ui:Share of the explosive column	Доля от колонки ВВ
+ui:Material volume	Объём материала
+ui:Role	Роль
+ui:Add a primer	Добавить боевик
+ui:Primers in the deck	Боевики в интервале
+ui:Primers go only into explosive decks.	Боевики ставятся только в интервалы с ВВ.
+ui:This deck has no primer: the charge will not fire.	В этом интервале нет боевика: заряд не сработает.
+at {0} m	на {0} м
+ui:Delete the primer	Удалить боевик
+ui:Depth	Глубина
+ui:Delay, ms	Замедление, мс
+ui:Detonator	Детонатор
+ui:Explosive in hole	ВВ в скважине
+ui:Explosive column	Колонка ВВ
+ui:Top stemming	Верхняя забойка
+ui:No explosive in the hole, nowhere to put a primer	В скважине нет ВВ, боевик некуда поставить
+ui:Every explosive deck has a primer	В каждом заряде ВВ есть боевик
+Explosive decks without a primer: {0}	Интервалов с ВВ без боевика: {0}
+The column covers the whole depth {0} m	Колонка покрывает всю глубину {0} м
+The column does not cover {0} m of {1} m	Колонка не покрывает {0} м из {1} м
+Stemming {0} m, at least 25 diameters	Забойка {0} м, не меньше 25 диаметров
+Stemming {0} m, less than 25 diameters ({1} m)	Забойка {0} м, меньше 25 диаметров ({1} м)
+ui:Save as rule	Сохранить как правило
+ui:Save the current column as a loading rule	Сохранить текущую конструкцию как правило
+Save loading rule	Сохранить правило зарядки
+{0}, stemming {1} m	{0}, забойка {1} м
+Only hole type {0}	Только скважины типа {0}
+ui:Any	Любые
+ui:Dry only	Только сухие
+ui:Wet only	Только обводнённые
+The {0} deck will adapt to the hole length; the stemming {1} m and the other decks keep their lengths, primers keep their distance above the deck bottom.	Колонка {0} подстроится под длину скважины; забойка {1} м и остальные интервалы сохранят длину, боевики — расстояние от низа своего интервала.
+ui:Name	Название
+ui:Applies to	Условия применения
+ui:Diameter from, mm	Диаметр от, мм
+ui:Diameter to, mm	Диаметр до, мм
+ui:Length from, m	Длина от, м
+ui:Length to, m	Длина до, м
+ui:Priority	Приоритет
+Rule "{0}" is already in the loading rules. Replace it?	Правило «{0}» уже есть в справочнике правил. Заменить?
+ui:Replace	Заменить
+ui:Save	Сохранить
+ui:Apply the column and close	Применить конструкцию и закрыть окно
+ui:Help	Справка
+ui:Version {0}	Версия {0}
+ui:New blast	Новый взрыв
+ui:Empty project with the site settings	Пустой проект с настройками площадки
+ui:Open…	Открыть…
+ui:.bdp file from the disk or the network	Файл .bdp с диска или из сети
+ui:From template	Из шаблона
+ui:Blast settings and resources of a saved template	Настройки и ресурсы сохранённого шаблона
+ui:Search by name or folder	Поиск по имени и папке
+ui:Drop a .bdp file here to open it	Перетащите сюда файл .bdp, чтобы открыть его
+ui:Pinned	Закреплённые
+ui:Today and yesterday	Сегодня и вчера
+ui:Earlier this month	Ранее в этом месяце
+ui:Long ago	Давно
+ui:Nothing matches the search	Ничего не найдено
+ui:Your projects will appear here	Здесь появятся ваши проекты
+ui:Create a new blast or open a .bdp file: the files you work with are listed here so you can return to them in one click.	Создайте новый взрыв или откройте файл .bdp — проекты, с которыми вы работаете, появятся здесь, чтобы к ним можно было вернуться в один щелчок.
+ui:File not found at this path	Файл не найден по этому пути
+ui:Pin	Закрепить
+ui:Unpin	Открепить
+ui:Show in folder	Показать в папке
+ui:Remove from the list	Убрать из списка
+ui:Today	Сегодня
+ui:Yesterday	Вчера
+ui:The file {0} was not found. Find it in another folder?	Файл {0} не найден. Найти его в другой папке?
+Trial version, days left: {0}	Пробная версия, осталось дней: {0}
+The trial period of version {0} has ended.	Пробный период версии {0} закончился.
+The date and time on this computer are earlier than the last time the program was run ({0}). Set the correct date and time and start the program again.	Дата и время на компьютере раньше последнего запуска программы ({0}). Установите правильные дату и время и запустите программу снова.
+The trial data on this computer has been changed. The trial period has ended.	Данные пробного периода на этом компьютере изменены. Пробный период закончился.
+Trial ({0})	Триал ({0})
+Edit hole	Изменить скважину
+Holes selected: {0}	Выбрано скважин: {0}
+Type {0}	Тип {0}
+{0} holes: fields marked "mixed" differ between them; only the fields you change are applied to all.	{0} скв.: поля с пометкой «разные» отличаются у скважин; ко всем применяются только изменённые поля.
+ui:Edit holes	Изменить скважины
+ui:mixed	разные
+ui:Collar	Устье
+ui:Geometry	Геометрия
+ui:Classification	Классификация
+ui:State	Состояние
+ui:Hole exceptions	Исключения
+ui:Initiation and loading	Инициирование и заряжание
+ui:Notes	Примечание
+ui:Diameter	Диаметр
+ui:Subdrill	Перебур
+ui:Actual length	Фактическая длина
+ui:Angle	Угол
+ui:Bearing	Азимут
+ui:Water depth	Вода от забоя
+ui:Number	Номер
+ui:Hole type	Тип скважины
+ui:Material type	Тип породы
+ui:Electronic time	Время ЭСИ
+ui:Detonator ID	ID детонатора
+ui:Horizon	Горизонт
+ui:Dummy	Фиктивная
+ui:Locked	Заблокирована
+ui:Time set by hand	Время задано вручную
+ui:Column edited by hand	Колонка задана вручную
+ui:ms	мс
+ui:not measured	не замерена
+ui:not set	не задано
+ui:Edit loading…	Изменить зарядку…
+ui:Dummy holes are not loaded	Фиктивные скважины не заряжаются
+ui:Dummy hole: not loaded	Фиктивная скважина: не заряжается
+ui:Not loaded	Не заряжена
+ui:Build the charge column in the loading window.	Соберите колонку заряда в окне зарядки.
+ui:Charge (changed, applied with the form)	Заряд (изменён, применится вместе с формой)
+ui:Charge	Заряд
+ui:Explosive	ВВ
+ui:The charge has warnings: see the loading window	В зарядке есть предупреждения — см. окно зарядки
+ui:Column of the first hole; it adapts to the length of each hole.	Колонка первой скважины; подстраивается под длину каждой скважины.
+ui:Types differ	Типы разные
+ui:States differ	Состояния разные
+ui:Toe	Забой
+ui:first hole	первая скважина
+ui:Enter — confirm the field, Ctrl+Enter — apply, Esc — cancel	Enter — принять поле, Ctrl+Enter — применить, Esc — отмена
+in {0} holes	в {0} скв.
+in {0} ties	в {0} связях
+in {0} loading rules	в {0} правилах зарядки
+All {0}	Все {0}
+Delete "{0}"?	Удалить «{0}»?
+Resources: {0}	Ресурсов: {0}
+changed: {0}	изменено: {0}
+ui:Used	Используется
+ui:Explosives	ВВ
+ui:Stemming	Забойка
+ui:Gas bags	Пневмозатворы
+ui:Boosters	Боевики
+ui:Detonators	Детонаторы
+ui:Surface connectors	Поверхностные
+ui:Detonating cord	ДШ
+ui:Other	Прочее
+ui:Search by name or manufacturer…	Поиск по названию или производителю…
+ui:Add	Добавить
+ui:Add a resource	Добавить ресурс
+ui:g	г
+ui:%	%
+ui:MJ/kg	МДж/кг
+ui:m/s	м/с
+ui:g/m	г/м
+ui:per kg	за кг
+ui:per unit	за шт.
+ui:Nothing found	Ничего не найдено
+ui:(no name)	(без названия)
+ui:No resources yet: add one with the button on the left.	Ресурсов пока нет: добавьте кнопкой слева.
+ui:Select a resource in the list.	Выберите ресурс в списке.
+ui:General	Основное
+ui:Manufacturer	Производитель
+ui:Kind	Тип
+ui:Parameters	Параметры
+ui:Cost and colour	Стоимость и цвет
+ui:Cost	Стоимость
+ui:Relative weight strength	Относительная работоспособность
+ui:Energy	Энергия
+ui:Velocity of detonation	Скорость детонации
+ui:Delay	Замедление
+ui:Cartridge length	Длина патрона
+ui:Cartridge mass	Масса патрона
+ui:Mass	Масса
+ui:Default delay	Замедление по умолчанию
+ui:Core load	Навеска
+ui:Unit mass	Масса единицы
+ui:Water resistant	Водоустойчивое
+ui:Colour	Цвет
+ui:They will be left without this product.	Они останутся без этого продукта.
+ui:order changed	порядок изменён
+ui:Appearance	Оформление
+ui:Viewport	Вьюпорт
+ui:Snapping and picking	Привязка и выбор
+ui:Files	Файлы
+ui:Interface language	Язык интерфейса
+ui:Applies after a restart	Применится после перезапуска
+ui:Dark	Тёмная
+ui:Light	Светлая
+ui:Theme	Тема
+ui:Default	По умолчанию
+ui:Back to the default accent	Вернуть цвет акцента по умолчанию
+ui:Accent colour	Цвет акцента
+ui:Active tab, chips, main buttons, group captions	Активная вкладка, чипы, основные кнопки, подписи групп
+ui:Chip	Чип
+ui:Check box	Флажок
+ui:Tab	Вкладка
+ui:Group caption	Подпись группы
+ui:Background colour	Цвет фона
+ui:Layer colours	Цвета слоёв
+ui:Geometry colour	Цвет геометрии
+ui:Lines, points, polygons and text without their own colour	Линии, точки, полигоны и текст без собственного цвета
+ui:Selected objects colour	Цвет выделенных объектов
+ui:Collar size	Размер устья
+ui:px	пкс
+ui:Coordinates box	Окно координат
+ui:Cursor coordinates in the status bar	Координаты курсора в строке состояния
+ui:Key S in the viewport	Клавиша S во вьюпорте
+ui:Pick radius	Радиус захвата
+ui:Snapping reaches 1.5 times as far	Привязка срабатывает в 1,5 раза дальше
+ui:Autosave	Автосохранение
+ui:min	мин
+ui:0 — off	0 — выключено
+ui:Backup copies	Резервных копий
+ui:Recent files	Последних файлов
+ui:Startup assistant	Стартовый мастер
+ui:Shown when the program starts	Показывается при запуске программы
+ui:Author	Автор
+ui:In reports and the blast header	В отчётах и шапке взрыва
+ui:Open the folder	Открыть папку
+ui:Settings folder	Папка настроек
+ui:Logs, templates and import formats	Логи, шаблоны и форматы импорта
+ui:Reset everything to defaults	Сбросить всё по умолчанию
+ui:Nothing changes until Apply	Ничего не меняется до «Применить»
+ui:Hole symbols	Обозначения скважин
+ui:Outline colour: hole type	Цвет обводки — тип скважины
+ui:Fill: hole state	Заливка — состояние скважины
+ui:With “Loading” on: colour of the explosive in the column	При включённой «Зарядке» — цвет ВВ в колонке
+ui:Marks	Знаки
+ui:Red ring: the hole has exceptions	Красное кольцо — у скважины есть исключения
+ui:Grey square: the hole is locked	Серый квадратик — скважина заблокирована
+ui:Amber triangle: the charge has warnings	Жёлтый треугольник — в зарядке есть предупреждения
+ui:Line from the collar to the toe (angled holes, 3D)	Линия от устья к забою (наклонные скважины, 3D)
+ui:Large circle: fired at this moment of the timing animation	Большой круг — взорвана к этому моменту анимации
+ui:Thick outline in the selection colour: selected	Толстая обводка цветом выделения — выделена
+ui:By type	По типу
+ui:By elevation	По высоте
+ui:Surface colouring	Окраска поверхностей
+ui:Default palette	Палитра по умолчанию
+ui:Back to the default surface colours	Вернуть цвета поверхностей по умолчанию
+ui:Surface colours	Цвета поверхностей
+ui:points	точками
+ui:Surfaces with their own colour keep it	Поверхности с собственным цветом сохраняют его
+ui:Change in Program settings ▸ Viewport	Изменить: Настройки программы ▸ Вьюпорт
+ui:One scale for all surfaces: grey-blue at the lowest point, cream at the highest, whatever their kind	Одна шкала для всех поверхностей: серо-голубой в самой низкой точке, кремовый в самой высокой, независимо от типа
+ui:Colour: elevation, one scale for all surfaces	Цвет — отметка, одна шкала для всех поверхностей
+ui:Each kind has its colour; one height scale for all surfaces, darker at the lowest point, lighter at the highest	У каждого типа свой цвет; одна шкала высот для всех поверхностей: темнее в самой низкой точке, светлее в самой высокой
+ui:Colour: kind of surface; one height scale for all, darker at the lowest point, lighter at the highest	Цвет — тип поверхности; шкала высот общая: темнее в самой низкой точке, светлее в самой высокой
+Click up to four points of the timing line (double-click or Enter to finish); selected holes (or all) are programmed from it.	Щёлкните до четырёх точек линии времени (двойной щелчок или Enter — готово); выбранные (или все) скважины получат время от неё.
+Time line (contour)	Линия времени (контурная)
+Burn line	Линия горения
+Advanced burn	Расширенная линия горения
+Reverse line direction	Обратное направление линии
+Progressive relief	Прогрессивное замедление
+Progressive exponent	Показатель прогрессии
+Segment	Отрезок
+Burn rate, ms/m	Скорость горения, мс/м
+Relief, ms/m	Замедление, мс/м
+Progress, ms at 10 m	Прогрессия, мс на 10 м
+Relief along the line, ms/m	Замедление вдоль линии, мс/м
+Left front angle, °	Угол левого фронта, °
+Right front angle, °	Угол правого фронта, °
+Line type	Тип линии
+Time of the first hole, ms	Время первой скважины, мс
+Holes with a time set by hand keep it.	Скважины с временем, заданным вручную, не перезаписываются.
+{0} holes timed, {1} with manual time kept	Время задано {0} скважинам, ручное время сохранено у {1}
+Maximum delay {0} ms exceeded, holes not timed: {1}	Превышено максимальное замедление {0} мс, время не задано скважинам: {1}
+Timing lines	Линии времени
+Segments: {0} · {1} m	Отрезков: {0} · {1} м
+Selected holes: {0}	Выбрано скважин: {0}
+All holes: {0}	Все скважины: {0}
+{0} holes get times: {1} – {2} ms	{0} скв. получат время: {1} – {2} мс
+Shortest interval between neighbours: {0} ms	Мин. интервал между соседними скважинами: {0} мс
+Up to {0} holes fire within one {1} ms window	До {0} скв. срабатывают в одном окне {1} мс
+No two holes within one {0} ms window	Нет совпадений в окне {0} мс
+{0} holes with a time set by hand keep it	{0} скв. с временем, заданным вручную, сохранят его
+{0} holes are out of reach of the line	{0} скв. вне досягаемости линии
+{0} holes would pass the maximum delay {1} ms and stay as they are	{0} скв. превысят максимальное время {1} мс и останутся без изменений
+ui:Mouse wheel or ↑/↓ change a value; Ctrl+Enter applies, Esc cancels	Колесо мыши или ↑/↓ меняют значение; Ctrl+Enter — применить, Esc — отмена
+ui:Line type	Тип линии
+ui:Start	Начало
+ui:Time of the first hole	Время первой скважины
+ui:Direction	Направление
+ui:Burn with angles	Горение с углами
+ui:Segments	Отрезки
+ui:Contour line	Контурная
+ui:Time grows with the distance from the line	Время растёт с удалением от линии
+ui:Burn line	Горение
+ui:The signal runs along the line and spreads to the sides	Сигнал идёт вдоль линии и расходится в стороны
+ui:The front spreads to the sides at set angles	Фронт расходится в стороны под заданными углами
+ui:A and B are marked on the plan	Точки A и B отмечены на плане
+ui:Same values for all segments	Одинаково для всех отрезков
+ui:No.	№
+ui:Burn rate	Скорость горения
+ui:Relief	Замедление
+ui:Progress	Прогрессия
+ui:All	Все
+ui:ms/m	мс/м
+ui:ms/10 m	мс/10 м
+ui:°	°
+ui:Progressive relief	Прогрессивное замедление
+ui:Exponent	Показатель
+ui:Relief along the line	Замедление вдоль линии
+ui:Left front angle	Угол фронта слева
+ui:Right front angle	Угол фронта справа
+ui:The angle arms are drawn from the first point on the plan; the relief to each side is the relief along the line × tan(angle).	Лучи углов на плане идут от первой точки; замедление в каждую сторону = замедление вдоль линии × tg(угла).
+ui:No hole gets a time from this line	Ни одна скважина не получит время от этой линии
+ui:Holes	Скважины
+ui:Elevation	Отметка
+ui:Temperature	Температура
+ui:Hole track	Трек скважины
+ui:Dip track	Трек промера
+ui:Charge track	Трек заряда
+ui:Actual track	Фактический трек
+ui:Grade point	Точка подошвы
+ui:Deviation	Девиация
+ui:Explosive mass	Вес ВВ
+ui:Burden marker	Маркер ЛНС
+ui:Deck masses	Массы зарядов
+ui:MWD profile	Профиль MWD
+ui:Deck sequence	Послед. зарядов
+ui:Surface time	Время поверхности
+ui:°C	°C
+Decks: {0}	Заряды: {0}
+Edit timing line	Изменить линию времени
+Holes of this line: {0}	Скважин этой линии: {0}
+ui:Reprogram the holes from the changed line	Перепрограммировать скважины по изменённой линии
+ui:Off: only the line changes, the holes keep their times	Выключено: меняется только линия, время скважин остаётся прежним
+Timing line moved: {0} holes reprogrammed	Линия времени перемещена: перепрограммировано скважин — {0}
+Visualization	Визуализация
+Arrow {0:0.0} m	Стрелка {0:0.0} м
+Increase arrow	Увеличить стрелку
+Decrease arrow	Уменьшить стрелку
+Show on plan	Показать на плане
+ui:Depths	Глубины
+ui:Hole depth lines from collar to toe; off shows collars only	Линии скважин от устья до забоя; выключено — только устья
+ui:Charge columns along the holes, also without depth lines (Ctrl+Shift+L)	Колонки зарядов по скважинам, в том числе без линий глубин (Ctrl+Shift+L)
+Arrows	Стрелки
+Triangles	Треугольники
+Auto	Авто
+{0:0.0} m	{0:0.0} м
+Shape	Форма
+Arrow size	Размер стрелки
+{0} arrows	Стрелок: {0}
+Plan turned to the blast orientation, everything in view	План повёрнут по направлению взрыва, видно всё
+X, Y and the direction of every arrow	X, Y и направление каждой стрелки
+The arrows show where the rock moves first, from the firing times of the neighbouring holes	Стрелки показывают, куда порода сдвигается первой, по времени срабатывания соседних скважин
+What's new	Что нового
+What's new in {0}	Что нового в версии {0}
+Full history	Вся история
+Usage statistics	Статистика действий
+7 days	7 дней
+30 days	30 дней
+90 days	90 дней
+All time	За всё время
+Buttons	Кнопки
+Menus	Меню
+Hot keys	Горячие клавиши
+No actions recorded in this period	За этот период действий не записано
+{0} actions in {1} sessions, {2:d} – {3:d}	Действий: {0}, сеансов: {1}, {2:d} – {3:d}
+Most used	Чаще всего
+Times	Раз
+Switched on and straight back off	Включили и сразу выключили
+Reverted · median time	Откатов · медиана
+{0} of {1} · {2:0} s	{0} из {1} · {2:0} с
+Changed back within {0:0} s — a misclick, or a default worth changing	Вернули обратно в течение {0:0} с — случайное нажатие или неудачное умолчание
+Long pause after	Долгая пауза после
+Long pauses · median	Долгих пауз · медиана
+{0} of {1} · {2}	{0} из {1} · {2}
+No action for {0:0} s or more while the program was active; over {1:0} min counts as away	Нет действий {0:0} с и дольше при активной программе; больше {1:0} мин — пользователь отошёл
+{0:0.#} min	{0:0.#} мин
+{0:0} s	{0:0} с
+Open folder	Открыть папку
+Clear statistics	Очистить статистику
+Delete all recorded actions?	Удалить все записанные действия?
+Nothing yet	Пока ничего нет
+ui:Usage statistics	Статистика действий
+ui:Record usage statistics	Записывать статистику действий
+ui:Buttons, menus, hot keys and view switches; kept on this computer only, 90 days	Кнопки, меню, горячие клавиши и переключения вида; хранится только на этом компьютере, 90 дней
+ui:Open analysis…	Открыть анализ…
+ui:Most used commands, flags switched back, long pauses	Частые команды, отменённые флаги, долгие паузы
+Design data, products and layers of the new blast	Данные проекта, ресурсы и слои нового взрыва
+The header goes into reports and the plan's title block	Заголовок попадает в отчёты и штамп плана
+Place	Место
+Create	Создать
+Ctrl+Enter creates, Esc cancels	Ctrl+Enter — создать, Esc — отмена
+Author and notes	Автор и заметки
+ui:Visualization	Визуализация
+Tabs	Вкладки

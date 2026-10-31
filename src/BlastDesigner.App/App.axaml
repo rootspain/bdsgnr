@@ -1,0 +1,65 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:svc="using:BlastDesigner.App.Services"
+             x:Class="BlastDesigner.App.App"
+             RequestedThemeVariant="Dark">
+  <Application.Styles>
+    <FluentTheme DensityStyle="Compact">
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark" Accent="#F0A63A" AltHigh="#15181C" AltMediumHigh="#1B1E23" AltMedium="#20242A"
+                               AltLow="#20242A" AltMediumLow="#2A2F36" ChromeAltLow="#C9CFD6" ChromeBlackHigh="#000000"
+                               ChromeHigh="#3A414A" ChromeMedium="#2C3138" ChromeMediumLow="#20242A" ChromeLow="#1B1E23"
+                               BaseHigh="#E6E9ED" BaseMediumHigh="#C9CFD6" BaseMedium="#A3ABB6" BaseMediumLow="#6E7782" BaseLow="#3A414A"
+                               ListLow="#2A2F36" ListMedium="#3A414A" RegionColor="#1B1E23" />
+        <ColorPaletteResources x:Key="Light" Accent="#F0A63A" AltHigh="#FFFFFF" AltMediumHigh="#F6F7F9" AltMedium="#EEF0F3"
+                               AltLow="#F6F7F9" AltMediumLow="#E8EBEF" ChromeAltLow="#353B43" ChromeBlackHigh="#000000"
+                               ChromeHigh="#C4CBD3" ChromeMedium="#DDE1E6" ChromeMediumLow="#EEF0F3" ChromeLow="#F6F7F9"
+                               BaseHigh="#1B1F24" BaseMediumHigh="#353B43" BaseMedium="#5B6470" BaseMediumLow="#78818C" BaseLow="#C4CBD3"
+                               ListLow="#E8EBEF" ListMedium="#DDE1E6" RegionColor="#FFFFFF" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+    <!-- every window of the program (main window, dialogs, tool windows) shows the program icon -->
+    <Style Selector=":is(Window)">
+      <Setter Property="Icon" Value="avares://BlastDesigner/Assets/icons/app-icon.ico"/>
+    </Style>
+    <Style Selector="Button.tool, ToggleButton.tool">
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="Margin" Value="1"/>
+      <Setter Property="MinWidth" Value="28"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <Style Selector="Button.flat:disabled /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.flat:disabled">
+      <Setter Property="Opacity" Value="0.4"/>
+    </Style>
+    <!-- The accent brushes are recoloured in place when the accent changes (Settings ▸ Accent colour). -->
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{x:Static svc:Look.Accent}"/>
+      <Setter Property="BorderBrush" Value="{x:Static svc:Look.Accent}"/>
+      <Setter Property="Foreground" Value="{x:Static svc:Look.OnAccent}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{x:Static svc:Look.AccentHover}"/>
+      <Setter Property="BorderBrush" Value="{x:Static svc:Look.AccentHover}"/>
+      <Setter Property="Foreground" Value="{x:Static svc:Look.OnAccent}"/>
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{x:Static svc:Look.AccentPressed}"/>
+      <Setter Property="BorderBrush" Value="{x:Static svc:Look.AccentPressed}"/>
+      <Setter Property="Foreground" Value="{x:Static svc:Look.OnAccent}"/>
+    </Style>
+    <Style Selector="TextBlock.caption">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Margin" Value="4,6,4,2"/>
+    </Style>
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="Padding" Value="12,0"/>
+    </Style>
+  </Application.Styles>
+</Application>

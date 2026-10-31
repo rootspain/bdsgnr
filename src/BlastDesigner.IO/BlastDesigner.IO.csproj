@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="ACadSharp" Version="3.8.0" />
+    <ProjectReference Include="..\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
+    <ProjectReference Include="..\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- release notes shown on the first start of a new version (Changelog.cs) -->
+    <EmbeddedResource Include="..\..\CHANGELOG.md" LogicalName="BlastDesigner.CHANGELOG.md" />
+    <EmbeddedResource Include="..\..\CHANGELOG.en.md" LogicalName="BlastDesigner.CHANGELOG.en.md" WithCulture="false" />
+  </ItemGroup>
+</Project>

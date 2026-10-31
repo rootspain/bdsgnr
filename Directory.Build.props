@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Version>0.1.7</Version>
+    <Product>Blast Designer</Product>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- Не зашивать локальный путь к исходникам в сборки и pdb -->
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+    <Deterministic>true</Deterministic>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+</Project>

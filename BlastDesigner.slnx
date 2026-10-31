@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BlastDesigner.App/BlastDesigner.App.csproj" />
+    <Project Path="src/BlastDesigner.Domain/BlastDesigner.Domain.csproj" />
+    <Project Path="src/BlastDesigner.Engine/BlastDesigner.Engine.csproj" />
+    <Project Path="src/BlastDesigner.IO/BlastDesigner.IO.csproj" />
+    <Project Path="src/BlastDesigner.Rendering/BlastDesigner.Rendering.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BlastDesigner.Tests/BlastDesigner.Tests.csproj" />
+    <Project Path="tests/BlastDesigner.UiSmoke/BlastDesigner.UiSmoke.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Blast Designer (Debug)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-app",
+      "program": "${workspaceFolder}/src/BlastDesigner.App/bin/Debug/net10.0/BlastDesigner.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/BlastDesigner.App",
+      "console": "internalConsole",
+      "stopAtEntry": false
+    }
+  ]
+}

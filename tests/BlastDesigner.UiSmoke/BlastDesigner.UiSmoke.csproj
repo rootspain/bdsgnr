@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="11.3.13" />
+    <ProjectReference Include="..\..\src\BlastDesigner.App\BlastDesigner.App.csproj" />
+  </ItemGroup>
+</Project>

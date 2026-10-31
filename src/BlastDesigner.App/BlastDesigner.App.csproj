@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- icon of the exe in Explorer; the windows take the same file through App.axaml -->
+    <ApplicationIcon>Assets/icons/app-icon.ico</ApplicationIcon>
+    <AssemblyName>BlastDesigner</AssemblyName>
+    <!-- Trimmed / single-file publishing: keep reflection-based JSON on and keep the app assemblies whole,
+         because projects, settings, undo snapshots, the property grid and table bindings all work by reflection. -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+  <!-- Trial build: dotnet publish -p:Trial=true [-p:TrialDays=30] [-p:TrialValidDays=N]. See Services/Trial.cs.
+       TrialDays run from the first start of this version; TrialValidDays (0 = off) stop the build N days after it was made. -->
+  <PropertyGroup Condition="'$(Trial)' == 'true'">
+    <TrialDays Condition="'$(TrialDays)' == ''">30</TrialDays>
+    <TrialValidDays Condition="'$(TrialValidDays)' == ''">0</TrialValidDays>
+    <TrialIssued>$([System.DateTime]::UtcNow.ToString('yyyy-MM-dd'))</TrialIssued>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Trial)' == 'true'">
+    <AssemblyMetadata Include="TrialIssued" Value="$(TrialIssued)" />
+    <AssemblyMetadata Include="TrialDays" Value="$(TrialDays)" />
+    <AssemblyMetadata Include="TrialValidDays" Value="$(TrialValidDays)" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="11.3.13" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.13" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.2" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
+    <ProjectReference Include="..\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
+    <ProjectReference Include="..\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
+    <ProjectReference Include="..\BlastDesigner.IO\BlastDesigner.IO.csproj" />
+    <ProjectReference Include="..\BlastDesigner.Rendering\BlastDesigner.Rendering.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Services/ru.tsv" />
+    <AvaloniaResource Include="Assets/icons/app-icon.ico" />
+    <TrimmerRootAssembly Include="BlastDesigner" />
+    <TrimmerRootAssembly Include="BlastDesigner.Domain" />
+    <TrimmerRootAssembly Include="BlastDesigner.Engine" />
+    <TrimmerRootAssembly Include="BlastDesigner.IO" />
+    <TrimmerRootAssembly Include="BlastDesigner.Rendering" />
+  </ItemGroup>
+</Project>

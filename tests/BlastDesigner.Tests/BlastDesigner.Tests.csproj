@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
+    <ProjectReference Include="..\..\src\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
+    <ProjectReference Include="..\..\src\BlastDesigner.IO\BlastDesigner.IO.csproj" />
+    <ProjectReference Include="..\..\src\BlastDesigner.Rendering\BlastDesigner.Rendering.csproj" />
+  </ItemGroup>
+</Project>
