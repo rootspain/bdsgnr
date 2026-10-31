@@ -281,9 +281,12 @@ public sealed partial class MainViewModel
         if (path == null) return;
         var opt = await Dialogs.EditObject("DXF import options", new CadImportOptions());
         if (opt == null) return;
-        var items = CadFiles.ImportCad(path, opt);
-        AddImported(Loc.T("Import DXF"), items, false);
-        SetStatus(Loc.F("{0} objects imported", items.Count));
+        var drawing = CadFiles.ReadCad(path, opt);
+        AddImported(Loc.T("Import DXF"), drawing.Items, false, drawing.Layers);
+        var status = Loc.F("{0} objects imported", drawing.Items.Count);
+        if (drawing.SkippedHidden > 0) status += "; " + Loc.F("{0} on hidden layers skipped", drawing.SkippedHidden);
+        if (drawing.FlatLines > 0) status += "; " + Loc.F("{0} flat lines moved to 2D layers", drawing.FlatLines);
+        SetStatus(status);
     }
 
     public async Task ImportStr(string? path, bool ignoreDiameters)
@@ -313,16 +316,23 @@ public sealed partial class MainViewModel
         AddImported(Loc.T("Import drill plan"), holes.Select(h => (StandardLayers.Holes, (Entity)h)), true);
     }
 
-    private void AddImported(string undoName, IEnumerable<(string Layer, Entity Entity)> items, bool holesToHoleLayer)
+    /// <param name="layers">Colour and visibility of the source layers (drawings); applied to layers this import creates.</param>
+    private void AddImported(string undoName, IEnumerable<(string Layer, Entity Entity)> items, bool holesToHoleLayer, IReadOnlyDictionary<string, CadLayerInfo>? layers = null)
     {
         var list = items.ToList();
         Change(undoName, p =>
         {
             foreach (var (layerName, e) in list)
             {
+                var existed = p.Layers.Any(l => string.Equals(l.Name, layerName, StringComparison.OrdinalIgnoreCase));
                 var layer = e is Hole && holesToHoleLayer ? p.GetOrCreateLayer(StandardLayers.Holes, 0xFF1E3A8A, "Design")
                     : e is SurfaceEntity ? p.GetOrCreateLayer(layerName == StandardLayers.Surfaces ? layerName : layerName, 0xFF64748B, "Imported")
                     : p.GetOrCreateLayer(layerName, 0xFF334155, "Imported");
+                if (!existed && layer.Name == layerName && layers != null && layers.TryGetValue(layerName, out var info))
+                {
+                    if (info.Color is uint c) layer.Color = c;
+                    layer.Visible = info.Visible;
+                }
                 p.Add(e, layer);
             }
             if (list.Any(x => x.Entity is Hole) && p.Rows.Count == 0)

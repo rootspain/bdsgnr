@@ -2351,3 +2351,40 @@ Ctrl+Enter creates, Esc cancels	Ctrl+Enter — создать, Esc — отме�
 Author and notes	Автор и заметки
 ui:Visualization	Визуализация
 Tabs	Вкладки
+Hidden layers	Скрытые слои
+Separate flat lines	Отделять плоские линии
+Import hidden	Импортировать скрытыми
+Skip	Пропустить
+Import visible	Импортировать видимыми
+{0} on hidden layers skipped	пропущено на скрытых слоях: {0}
+{0} flat lines moved to 2D layers	плоских линий отнесено в слои «(2D)»: {0}
+Bench elements	Элементы уступа
+ui:Bench elements	Элементы уступа
+{0} — whole line	{0} — вся линия
+Click a segment to change its class; Ctrl+click changes the whole line. Right-click to choose the class.	Щелчок по участку меняет его класс; Ctrl+щелчок — всю линию. Правая кнопка — выбор класса.
+Give the lines their type (crest, toe, contour, boundary)	Назначить линиям тип (бровка, подошва, горизонталь, граница)
+Split lines where the class changes	Разрезать линии там, где меняется класс
+Build the bench surface (crests and toes as breaklines)	Построить поверхность уступа (бровки — структурные линии)
+Recognized by the model	Распознано моделью
+Recognized by rules	Распознано правилами
+Click a segment on the plan to change its class; Ctrl+click changes the whole line. Dashed: the recognition is unsure.	Щелчок по участку на плане меняет его класс; Ctrl+щелчок — всю линию. Пунктир — распознавание не уверено.
+Lines	Линии
+Benches	Уступы
+Save labels…	Сохранить разметку…
+Save labels	Сохранить разметку
+The classes of all segments as a reference for measuring the recognition (no coordinates in the file)	Классы всех участков — эталон для оценки распознавания (координат в файле нет)
+Labels saved: {0}	Разметка сохранена: {0}
+{0} to check	проверить: {0}
+Crest Z	Отметка бровки
+Face	Откос
+No bench found: no crest with ground a bench lower beside it	Уступов не найдено: нет бровки, рядом с которой земля ниже на высоту уступа
+Recognize bench elements	Распознать элементы уступа
+Recognize bench elements…	Распознать элементы уступа…
+Bench surface	Поверхность уступа
+Bench elements: {0} crests, {1} toes	Элементы уступа: верхних бровок {0}, нижних {1}
+No survey lines with elevations. Import the survey (DWG/DXF) or select its lines.	Нет линий съёмки с высотами. Импортируйте съёмку (DWG/DXF) или выделите её линии.
+Recognizing bench elements…	Распознавание элементов уступа…
+Crest line	Верхняя бровка
+Toe line	Нижняя бровка
+Contour line	Горизонталь
+Boundary line	Граница

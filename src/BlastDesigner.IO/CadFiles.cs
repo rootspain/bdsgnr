@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using ACadSharp.IO;
 using BlastDesigner.Domain.Geometry;
@@ -15,6 +16,29 @@ public sealed class CadImportOptions
     /// <summary>3D faces are collected into one surface per layer.</summary>
     public bool FacesToSurfaces { get; set; } = true;
     public bool ImportText { get; set; } = true;
+    /// <summary>What to do with layers switched off or frozen in the drawing.</summary>
+    public CadHiddenLayers HiddenLayers { get; set; } = CadHiddenLayers.ImportHidden;
+    /// <summary>
+    /// In a drawing with real elevations (a survey), lines lying at elevation 0 are annotation or plan drawing, not survey:
+    /// they go to a layer of their own ("name (2D)") so they stay out of surfaces and recognition.
+    /// </summary>
+    public bool SeparateFlatLines { get; set; } = true;
+}
+
+public enum CadHiddenLayers { ImportHidden, Skip, ImportVisible }
+
+/// <summary>Colour (null: keep the program's default) and visibility of a drawing layer.</summary>
+public sealed record CadLayerInfo(uint? Color, bool Visible);
+
+/// <summary>Objects read from a drawing, with the layers they came from.</summary>
+public sealed class CadImport
+{
+    public List<(string Layer, Entity Entity)> Items { get; } = new();
+    public Dictionary<string, CadLayerInfo> Layers { get; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Objects left out because their layer is off or frozen (<see cref="CadHiddenLayers.Skip"/>).</summary>
+    public int SkippedHidden { get; set; }
+    /// <summary>Lines moved to "(2D)" layers (<see cref="CadImportOptions.SeparateFlatLines"/>).</summary>
+    public int FlatLines { get; set; }
 }
 
 /// <summary>CAD and mining-package exchange formats: DXF/DWG, string files, OBJ and an IREDES-style drill plan.</summary>
@@ -24,40 +48,57 @@ public static class CadFiles
 
     // ---- DXF / DWG import (via ACadSharp) -------------------------------------
 
-    public static List<(string Layer, Entity Entity)> ImportCad(string path, CadImportOptions options)
+    public static List<(string Layer, Entity Entity)> ImportCad(string path, CadImportOptions options) => ReadCad(path, options).Items;
+
+    public static CadImport ReadCad(string path, CadImportOptions options)
     {
         var doc = Path.GetExtension(path).Equals(".dwg", StringComparison.OrdinalIgnoreCase) ? DwgReader.Read(path) : DxfReader.Read(path);
-        var result = new List<(string, Entity)>();
+        var result = new CadImport();
         var faces = new Dictionary<string, List<Vec3>>();
 
         foreach (var e in doc.Entities)
         {
             var layer = e.Layer?.Name ?? "0";
+            var shown = e.Layer == null || (e.Layer.IsOn && !e.Layer.Flags.HasFlag(ACadSharp.Tables.LayerFlags.Frozen));
+            if (!shown && options.HiddenLayers == CadHiddenLayers.Skip) { result.SkippedHidden++; continue; }
+            if (!result.Layers.ContainsKey(layer))
+                result.Layers[layer] = new CadLayerInfo(e.Layer == null ? null : Argb(e.Layer.Color), shown || options.HiddenLayers == CadHiddenLayers.ImportVisible);
+            Entity? item = null;
             switch (e)
             {
                 case Cad.Point p:
-                    result.Add((layer, new PointEntity { Position = V(p.Location) }));
+                    item = new PointEntity { Position = V(p.Location) };
                     break;
                 case Cad.Line l:
-                    result.Add((layer, new PolylineEntity { Points = new() { V(l.StartPoint), V(l.EndPoint) } }));
+                    item = new PolylineEntity { Points = new() { V(l.StartPoint), V(l.EndPoint) } };
                     break;
                 case Cad.LwPolyline lw:
-                    result.Add((layer, new PolylineEntity { Points = Thin(lw.Vertices.Select(v => new Vec3(v.Location.X, v.Location.Y, lw.Elevation)), options.MinPointDistance), Closed = lw.IsClosed }));
+                    item = new PolylineEntity { Points = Thin(lw.Vertices.Select(v => new Vec3(v.Location.X, v.Location.Y, lw.Elevation)), options.MinPointDistance), Closed = lw.IsClosed };
                     break;
                 case Cad.Polyline2D p2:
-                    result.Add((layer, new PolylineEntity { Points = Thin(p2.Vertices.Select(v => V(v.Location)), options.MinPointDistance), Closed = p2.IsClosed }));
+                    item = new PolylineEntity { Points = Thin(p2.Vertices.Select(v => V(v.Location)), options.MinPointDistance), Closed = p2.IsClosed };
                     break;
                 case Cad.Polyline3D p3:
-                    result.Add((layer, new PolylineEntity { Points = Thin(p3.Vertices.Select(v => V(v.Location)), options.MinPointDistance), Closed = p3.IsClosed }));
+                    item = new PolylineEntity { Points = Thin(p3.Vertices.Select(v => V(v.Location)), options.MinPointDistance), Closed = p3.IsClosed };
+                    break;
+                case Cad.Arc a:
+                    // a vertex every 5° of the sweep
+                    item = new PolylineEntity { Points = a.PolygonalVertexes(Math.Max(8, (int)Math.Ceiling(Math.Abs(a.Sweep) / GeoMath.Deg / 5))).Select(V).ToList() };
                     break;
                 case Cad.Circle c:
-                    result.Add((layer, new CircleEntity { Center = V(c.Center), Radius = c.Radius }));
+                    item = new CircleEntity { Center = V(c.Center), Radius = c.Radius };
+                    break;
+                case Cad.Spline s when s.TryPolygonalVertexes(Math.Max(16, s.ControlPoints.Count * 8), out var sp):
+                    item = new PolylineEntity { Points = Thin(sp.Select(V), options.MinPointDistance), Closed = s.IsClosed };
+                    break;
+                case Cad.Insert ins when ins.HasAttributes:
+                    item = SurveyPoint(ins);
                     break;
                 case Cad.TextEntity t when options.ImportText:
-                    result.Add((layer, new TextEntity { Position = V(t.InsertPoint), Text = t.Value, Height = t.Height, Rotation = t.Rotation / GeoMath.Deg }));
+                    item = new TextEntity { Position = V(t.InsertPoint), Text = t.Value, Height = t.Height, Rotation = t.Rotation / GeoMath.Deg };
                     break;
                 case Cad.MText mt when options.ImportText:
-                    result.Add((layer, new TextEntity { Position = V(mt.InsertPoint), Text = mt.Value, Height = mt.Height }));
+                    item = new TextEntity { Position = V(mt.InsertPoint), Text = PlainMText(mt.Value), Height = mt.Height, Rotation = mt.Rotation / GeoMath.Deg };
                     break;
                 case Cad.Face3D f when options.FacesToSurfaces:
                     if (!faces.TryGetValue(layer, out var list)) faces[layer] = list = new();
@@ -65,9 +106,107 @@ public static class CadFiles
                     if (!f.FourthCorner.Equals(f.ThirdCorner)) { list.Add(V(f.FirstCorner)); list.Add(V(f.ThirdCorner)); list.Add(V(f.FourthCorner)); }
                     break;
             }
+            if (item == null) continue;
+            item.Color = Argb(e.Color);
+            result.Items.Add((layer, item));
         }
-        foreach (var (layer, tri) in faces) result.Add((layer, SurfaceFromTriangleSoup(tri, layer)));
+        foreach (var (layer, tri) in faces) result.Items.Add((layer, SurfaceFromTriangleSoup(tri, layer)));
+        if (options.SeparateFlatLines) SeparateFlat(result);
         return result;
+    }
+
+    /// <summary>
+    /// Moves lines at elevation 0 to "layer (2D)" when the drawing also holds objects with real elevations — the
+    /// 2D plan drawing (design outlines, grid, annotation) of a survey drawing. A drawing that is all 2D is left alone.
+    /// </summary>
+    private static void SeparateFlat(CadImport result)
+    {
+        static bool Flat(Entity e) => e is PolylineEntity pl && pl.Points.Count > 0 && pl.Points.All(p => Math.Abs(p.Z) < 1e-6);
+        var elevated = result.Items.Any(i => i.Entity is PointEntity or PolylineEntity or SurfaceEntity && i.Entity.GetVertices().Any(p => Math.Abs(p.Z) > 1e-6));
+        if (!elevated) return;
+        for (int i = 0; i < result.Items.Count; i++)
+        {
+            var (layer, e) = result.Items[i];
+            if (!Flat(e)) continue;
+            var flat = layer + " (2D)";
+            if (!result.Layers.ContainsKey(flat) && result.Layers.TryGetValue(layer, out var info)) result.Layers[flat] = info;
+            result.Items[i] = (flat, e);
+            result.FlatLines++;
+        }
+    }
+
+    /// <summary>
+    /// A survey point drawn as a block with attributes: the point at the insertion, its elevation from the attribute that
+    /// holds it (by tag, or the only attribute that reads as a decimal number) when the insertion itself is at 0.
+    /// </summary>
+    private static PointEntity SurveyPoint(Cad.Insert ins)
+    {
+        var attrs = ins.Attributes.Select(a => (Tag: a.Tag?.Trim().ToUpperInvariant() ?? "", Value: a.Value?.Trim() ?? "")).Where(a => a.Value.Length > 0).ToList();
+        static double? Number(string s) => double.TryParse(s.Replace(',', '.'), NumberStyles.Float, Ci, out var v) ? v : null;
+        string[] elevationTags = { "Z", "H", "ELEV", "ELEVATION", "HEIGHT", "ОТМ", "ОТМЕТКА", "ВЫСОТА", "ОТМЕТКИ" };
+        string[] nameTags = { "N", "NO", "NAME", "NUMBER", "POINT", "ID", "НОМЕР", "№", "ИМЯ", "ПИКЕТ", "ТОЧКА" };
+        var elevation = attrs.Where(a => elevationTags.Contains(a.Tag)).Select(a => Number(a.Value)).FirstOrDefault(v => v != null);
+        if (elevation == null)
+        {
+            // values like "612.34": a decimal point, unlike point numbers
+            var decimals = attrs.Where(a => (a.Value.Contains('.') || a.Value.Contains(',')) && Number(a.Value) != null).ToList();
+            if (decimals.Count == 1) elevation = Number(decimals[0].Value);
+        }
+        var p = V(ins.InsertPoint);
+        if (elevation is double z && Math.Abs(p.Z) < 1e-6) p = p.WithZ(z);
+        // the point number: a named attribute, else the first one that is not a decimal (the elevation)
+        var label = attrs.FirstOrDefault(a => nameTags.Contains(a.Tag)).Value
+            ?? attrs.FirstOrDefault(a => a.Value.Length > 0 && !a.Value.Contains('.') && !a.Value.Contains(',')).Value ?? "";
+        return new PointEntity { Position = p, Label = label };
+    }
+
+    /// <summary>ARGB of an AutoCAD colour; null for by-layer, by-block and colour 7 (white on dark, black on light — the program's default does that).</summary>
+    private static uint? Argb(ACadSharp.Color c)
+    {
+        if (c.IsByLayer || c.IsByBlock || (!c.IsTrueColor && c.Index is 0 or 7 or 256)) return null;
+        var rgb = c.GetRgb();
+        return rgb.Length < 3 ? null : 0xFF000000u | (uint)rgb[0] << 16 | (uint)rgb[1] << 8 | rgb[2];
+    }
+
+    /// <summary>
+    /// Text of a multi-line text without AutoCAD's inline formatting: \P is a line break, \S a/b; a stacked fraction,
+    /// codes like \A1; \fArial|b0; \H2.5x; \W1; \Q0; \C3; and the braces around formatted runs are dropped.
+    /// </summary>
+    public static string PlainMText(string value)
+    {
+        var sb = new StringBuilder(value.Length);
+        for (int i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (c is '{' or '}') continue;
+            if (c != '\\' || i + 1 >= value.Length) { sb.Append(c); continue; }
+            var code = value[++i];
+            switch (code)
+            {
+                case 'P': case 'n': sb.Append('\n'); break;
+                case '~': sb.Append(' '); break;
+                case '\\': case '{': case '}': sb.Append(code); break;
+                case 'L': case 'l': case 'O': case 'o': case 'K': case 'k': break;
+                case 'S':
+                    // \Snumerator^denominator; (or / or #)
+                    var end = value.IndexOf(';', i + 1);
+                    if (end < 0) end = value.Length;
+                    sb.Append(Regex.Replace(value[(i + 1)..end], @"[\^#]", "/"));
+                    i = end;
+                    break;
+                case 'U' when i + 5 < value.Length && value[i + 1] == '+':
+                    // \U+0416: a character by its code
+                    if (int.TryParse(value.AsSpan(i + 2, 4), NumberStyles.HexNumber, Ci, out var u)) { sb.Append((char)u); i += 5; }
+                    break;
+                default:
+                    // \A1; \fFont|b0|i0; \H2.5x; \W1; \Q0; \T1; \C3; \c255; \p…; — up to the semicolon
+                    var semi = value.IndexOf(';', i);
+                    i = semi < 0 ? value.Length : semi;
+                    break;
+            }
+        }
+        var lines = sb.ToString().Split('\n').Select(l => l.Trim());
+        return string.Join("\n", lines).Trim('\n');
     }
 
     private static Vec3 V(CSMath.XYZ p) => new(p.X, p.Y, p.Z);

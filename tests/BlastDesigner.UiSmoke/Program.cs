@@ -1345,6 +1345,41 @@ Step("selecting on the plan brings Properties forward", () =>
     if (!window.LayersVisible) throw new Exception("an empty click switched the tab");
     window.ShowInspectorTab(0);
 });
+Step("bench elements: recognize a survey, change a class by click, apply with split and surface, undo", () =>
+{
+    vm.NewSilent(); Pump();
+    // a synthetic pit survey, as the import would bring it (lines at elevation 0 left out)
+    var scene = SurveySynth.Generate(13);
+    vm.Change("survey", p => { var layer = p.GetOrCreateLayer("Survey", 0xFF64748B); foreach (var e in scene.Entities) if (e is not PolylineEntity pl || pl.Points.Any(v => v.Z != 0)) p.Add(e, layer); });
+    vm.View.ZoomAll(); Pump();
+    var task = vm.RecognizeBenchElements();
+    for (int i = 0; i < 1000 && !task.IsCompleted; i++) { Pump(); Thread.Sleep(10); }
+    Pump();
+    var form = BlastDesigner.App.Services.Dialogs.LastShown?.Content as SurveyRecognitionForm ?? throw new Exception("no bench elements window");
+    if (vm.ActiveTool is not SurveyClassTool) throw new Exception("the class tool is not active");
+    var r = form.Recognition;
+    if (!r.Segments.Any(x => x.Class == SurveyLineClass.Crest) || r.Benches.Count == 0) throw new Exception("no crest or bench recognized");
+    // a click between two vertices of the first segment cycles its class
+    var seg = r.Segments[0];
+    var line = (PolylineEntity)vm.Project!.FindEntity(seg.Segment.LineId)!;
+    var mid = Vec3.Lerp(line.Points[seg.Segment.From], line.Points[seg.Segment.From + 1], 0.5);
+    var (sx, sy) = vm.View.Camera.ToScreen(mid);
+    var before = seg.Class;
+    vm.ActiveTool!.PointerPressed(new ToolPointer { X = sx, Y = sy, World = mid, Snapped = mid, Left = true, ClickCount = 1 });
+    if (r.Segments[0].Class == before) throw new Exception("click did not change the class");
+    Shot("60_bench_elements");
+    BlastDesigner.App.Services.Dialogs.LastShown!.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "60b_bench_elements_window.png"));
+    form.Set(0, before, false);
+    form.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "surface").IsChecked = true;
+    form.Apply();
+    form.Close!(); Pump();
+    var p2 = vm.Project!;
+    if (!p2.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest)) throw new Exception("no line got the crest type");
+    if (!p2.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("no bench surface built");
+    if (vm.ActiveTool is SurveyClassTool || vm.View.Overlays.OfType<SurveyRecognitionOverlay>().Any()) throw new Exception("tool or overlay left after closing");
+    vm.Undo(); Pump();
+    if (vm.Project!.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest) || vm.Project.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("undo did not take it all back");
+});
 UsageLog.Stop();
 
 Console.WriteLine(failures == 0 ? "SMOKE PASSED" : $"SMOKE FAILED ({failures})");

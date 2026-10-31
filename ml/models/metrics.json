@@ -1,0 +1,228 @@
+{
+ "model_version": 1,
+ "feature_version": 1,
+ "trees": 249,
+ "validation": {
+  "model": {
+   "accuracy": 0.9776232836232622,
+   "Crest": {
+    "recall": 0.9653501015460412,
+    "precision": 0.985636445982117
+   },
+   "Toe": {
+    "recall": 0.9747869734861532,
+    "precision": 0.9408490805411084
+   },
+   "Contour": {
+    "recall": 1.0,
+    "precision": 1.0
+   },
+   "Boundary": {
+    "recall": 1.0,
+    "precision": 1.0
+   },
+   "Other": {
+    "recall": 0.9629105329714689,
+    "precision": 0.9471608738141698
+   }
+  },
+  "rules": {
+   "accuracy": 0.847156524441958,
+   "Crest": {
+    "recall": 0.7676582235861308,
+    "precision": 0.8928107607816664
+   },
+   "Toe": {
+    "recall": 0.9156049606361707,
+    "precision": 0.7998131477613516
+   },
+   "Contour": {
+    "recall": 1.0,
+    "precision": 0.9964138798301405
+   },
+   "Boundary": {
+    "recall": 0.8830511040418855,
+    "precision": 0.8863034638181668
+   },
+   "Other": {
+    "recall": 0.5611727190481991,
+    "precision": 0.42550402175524515
+   }
+  },
+  "check": {
+   "share": 0.019751384152530936,
+   "wrong_among_marked": 0.2435759464552594,
+   "wrong_among_rest": 0.017919693028892788
+  },
+  "traps": {}
+ },
+ "shifted": {
+  "model": {
+   "accuracy": 0.9354869141223011,
+   "Crest": {
+    "recall": 0.9126242728353937,
+    "precision": 0.9455718826128136
+   },
+   "Toe": {
+    "recall": 0.8581568442780272,
+    "precision": 0.9011883275870421
+   },
+   "Contour": {
+    "recall": 0.9999999999999998,
+    "precision": 0.9999999999999998
+   },
+   "Boundary": {
+    "recall": 1.0,
+    "precision": 1.0
+   },
+   "Other": {
+    "recall": 0.946349805664506,
+    "precision": 0.7816914099282327
+   }
+  },
+  "rules": {
+   "accuracy": 0.7545779424989649,
+   "Crest": {
+    "recall": 0.6147402317533244,
+    "precision": 0.8312252933017125
+   },
+   "Toe": {
+    "recall": 0.7700692646577524,
+    "precision": 0.6993780295824376
+   },
+   "Contour": {
+    "recall": 0.9999999999999998,
+    "precision": 0.9990285981538937
+   },
+   "Boundary": {
+    "recall": 0.7757586588136652,
+    "precision": 0.9682401098443397
+   },
+   "Other": {
+    "recall": 0.5271633696774691,
+    "precision": 0.28373120395191676
+   }
+  },
+  "check": {
+   "share": 0.05450332440373523,
+   "wrong_among_marked": 0.3550841822221591,
+   "wrong_among_rest": 0.047763063233331814
+  },
+  "traps": {}
+ },
+ "traps": {
+  "model": {
+   "accuracy": 0.9768559620876915,
+   "Crest": {
+    "recall": 0.9714791069498557,
+    "precision": 0.9799426815750345
+   },
+   "Toe": {
+    "recall": 0.9522595824365575,
+    "precision": 0.9317484661509445
+   },
+   "Contour": {
+    "recall": 1.0,
+    "precision": 1.0
+   },
+   "Boundary": {
+    "recall": 0.9972317914203211,
+    "precision": 1.0
+   },
+   "Other": {
+    "recall": 0.9584598174854628,
+    "precision": 0.9580870079934575
+   }
+  },
+  "rules": {
+   "accuracy": 0.8421675441858826,
+   "Crest": {
+    "recall": 0.7701696523689338,
+    "precision": 0.8899947712997216
+   },
+   "Toe": {
+    "recall": 0.8656153256092278,
+    "precision": 0.6777149112028483
+   },
+   "Contour": {
+    "recall": 1.0,
+    "precision": 0.9976795532635323
+   },
+   "Boundary": {
+    "recall": 0.9008130870952754,
+    "precision": 0.9306103464786332
+   },
+   "Other": {
+    "recall": 0.5504364800186727,
+    "precision": 0.4945144968923892
+   }
+  },
+  "check": {
+   "share": 0.022620975508882896,
+   "wrong_among_marked": 0.27286926437548087,
+   "wrong_among_rest": 0.017364265592440184
+  },
+  "traps": {
+   "BrokenCrest": {
+    "model": 0.9746234000472397,
+    "rules": 0.8391520399647816
+   },
+   "ContoursAlongWall": {
+    "model": 0.9879481025236795,
+    "rules": 0.9033871557087302
+   },
+   "MissingToes": {
+    "model": 0.9867896412455267,
+    "rules": 0.807159156182528
+   },
+   "MuckAtToe": {
+    "model": 0.987369077041633,
+    "rules": 0.8641308019979573
+   },
+   "NarrowBerms": {
+    "model": 0.9416523517183292,
+    "rules": 0.7426095164610896
+   },
+   "RoadAlongCrest": {
+    "model": 0.9813231328434543,
+    "rules": 0.8721149008261753
+   }
+  }
+ },
+ "importance": {
+  "line_z_range": 0.2050957940515195,
+  "line_closed": 0.16461276359964033,
+  "pts_high_dz": 0.1296725194139603,
+  "low_dz": 0.079605888831167,
+  "collar_dist": 0.07079297086000093,
+  "seg_roughness": 0.060515869225211495,
+  "pts_low_dz": 0.044903794905945676,
+  "high_dz": 0.036964517817883596,
+  "low_dist": 0.02832851878563434,
+  "high_angle": 0.019264122697922787,
+  "seg_z_std": 0.018122906078635106,
+  "low_angle": 0.01616335236995732,
+  "high_dist": 0.015658175516806434,
+  "layer_road_word": 0.014712599859790456,
+  "layer_crest_word": 0.01434894341998151,
+  "seg_slope": 0.011656309723972401,
+  "layer_toe_word": 0.010001043788403441,
+  "level_parallel": 0.007842155901035411,
+  "pts_low_count": 0.0075191851964888845,
+  "neighbour_lines": 0.006040917836201673,
+  "pts_high_count": 0.005024484981929854,
+  "line_constant_z": 0.004805519189140124,
+  "layer_edge_word": 0.004744255343425052,
+  "high_parallel": 0.004726895922362715,
+  "pts_agree": 0.004235631580779405,
+  "layer_generic": 0.0036886909429762606,
+  "low_hit": 0.0027699670123501738,
+  "low_parallel": 0.002526464215374067,
+  "collar_dz": 0.0021434223205971507,
+  "seg_length": 0.0013033289968557757,
+  "high_hit": 0.0012711195918537175,
+  "collars_low_side": 0.0005116766521364943,
+  "layer_boundary_word": 0.0004119747787126224,
+  "layer_contour_word": 1.4218591347896479e-05
+ }
+}

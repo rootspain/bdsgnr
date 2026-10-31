@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
+    <ProjectReference Include="..\..\src\BlastDesigner.IO\BlastDesigner.IO.csproj" />
+    <ProjectReference Include="..\..\src\BlastDesigner.Rendering\BlastDesigner.Rendering.csproj" />
+  </ItemGroup>
+</Project>

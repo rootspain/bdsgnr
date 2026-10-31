@@ -885,6 +885,29 @@ public sealed partial class MainViewModel
         });
     }
 
+    /// <summary>
+    /// Survey ▸ Recognize bench elements: crests, toes, contours and boundaries among the survey lines (selected, or all
+    /// on visible layers) — shown for checking, applied only from the window.
+    /// </summary>
+    public async Task RecognizeBenchElements()
+    {
+        var p = Project!;
+        var selected = Doc!.SelectedEntities.ToList();
+        var source = selected.Count > 0 ? selected : p.Entities.Where(e => p.FindLayer(e.LayerId)?.Visible != false && !HiddenEntities.Contains(e.Id)).ToList();
+        var lines = source.OfType<PolylineEntity>().Where(SurveyFeatures.IsSurveyLine).Select(l => (l, p.FindLayer(l.LayerId)?.Name ?? "0")).ToList();
+        if (lines.Count == 0)
+        {
+            await Dialogs.Info(Loc.T("No survey lines with elevations. Import the survey (DWG/DXF) or select its lines."));
+            return;
+        }
+        var points = source.OfType<PointEntity>().ToList();
+        var collars = p.Holes.Select(h => h.Collar).ToList();
+        SetStatus(Loc.T("Recognizing bench elements…"));
+        var result = await Task.Run(() => SurveyRecognizer.Recognize(lines, points, collars));
+        // the window's tool puts its hint in the status bar
+        SurveyRecognitionWindow.Show(this, lines, points, result);
+    }
+
     /// <summary>Surface tool: click points, then a surface is triangulated through them.</summary>
     public void SurfaceTool() =>
         SetTool(new PickPointsTool(this, "Surface", "Click surface points (elevation is taken from the work plane); double-click to triangulate.", 3, int.MaxValue, false, pts =>

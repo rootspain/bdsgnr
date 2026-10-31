@@ -10,4 +10,7 @@
     <Project Path="tests/BlastDesigner.Tests/BlastDesigner.Tests.csproj" />
     <Project Path="tests/BlastDesigner.UiSmoke/BlastDesigner.UiSmoke.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/BlastDesigner.SurveyData/BlastDesigner.SurveyData.csproj" />
+  </Folder>
 </Solution>
