@@ -806,14 +806,44 @@ Step("settings: surface colours", () =>
     if (!dlg.GetLogicalDescendants().OfType<TextBox>().Any(t => t.Name == "surfaceBench")) throw new Exception("no colour for benches");
     // the frame rate is a setting, off unless switched on
     if (!dlg.GetLogicalDescendants().OfType<ToggleSwitch>().Any(t => t.Name == "showFps") || new ProgramSettings().ShowFps) throw new Exception("frame rate setting missing or on by default");
-    // surface wireframe: three choices, hidden while the camera moves by default
+    // surface wireframe: four choices, hidden while the camera moves by default
     var wireChips = dlg.GetLogicalDescendants().OfType<Button>().Where(b => (b.Tag as string)?.StartsWith("wireframe:") == true).ToList();
-    if (wireChips.Count != 3 || new ProgramSettings().SurfaceWireframe != ProgramSettings.WireframeWhileStill) throw new Exception("surface wireframe setting missing or not hidden while moving by default");
+    if (wireChips.Count != 4 || new ProgramSettings().SurfaceWireframe != ProgramSettings.WireframeWhileStill) throw new Exception("surface wireframe setting missing or not hidden while moving by default");
     var heading = dlg.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Surface colouring"));
     var sv = dlg.GetLogicalDescendants().OfType<ScrollViewer>().First(s => s.Content is StackPanel);
     sv.Offset = new Vector(0, heading.TranslatePoint(new Point(0, 0), (Visual)sv.Content!)!.Value.Y - 20); Pump();
 });
 WindowShot("41c_settings_surfaces");
+Step("settings: Apply applies and keeps the window, OK applies and closes, buttons Apply, Cancel, OK", () =>
+{
+    var applied = 0;
+    var task = SettingsWindow.Show(new ProgramSettings { Language = settings.Language }, _ => applied++); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var buttons = dlg.GetLogicalDescendants().OfType<Button>().Where(b => b.Tag is "apply" or "ok" || b.IsCancel).ToList();
+    var order = buttons.OrderBy(b => b.TranslatePoint(new Point(0, 0), dlg)!.Value.X).Select(b => b.Tag as string ?? "cancel").ToList();
+    if (string.Join(",", order) != "apply,cancel,ok") throw new Exception("button order: " + string.Join(",", order));
+    buttons.First(b => b.Tag is "apply").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (applied != 1 || !dlg.IsVisible || task.IsCompleted) throw new Exception("Apply did not apply or closed the window");
+    buttons.First(b => b.Tag is "ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (applied != 2 || !task.IsCompleted || task.Result == null) throw new Exception("OK did not apply and close");
+});
+Step("settings: the colour swatch opens a colour picker that sets the colour", () =>
+{
+    _ = SettingsWindow.Show(new ProgramSettings { Language = settings.Language }); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var button = dlg.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "surfaceBenchPicker") ?? throw new Exception("the bench colour swatch is not a button");
+    var flyout = button.Flyout as Flyout ?? throw new Exception("no colour picker on the swatch");
+    button.BringIntoView(); Pump();
+    flyout.ShowAt(button); Pump();
+    var view = flyout.Content as Avalonia.Controls.ColorView ?? throw new Exception("the flyout holds no colour view");
+    view.Color = Avalonia.Media.Color.FromUInt32(0xFF123456); Pump();
+    var hex = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "surfaceBench");
+    if (hex.Text != "#123456") throw new Exception("the picked colour did not reach the field: " + hex.Text);
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "41d_settings_colour_picker.png"));
+    flyout.Hide(); Pump();
+    dlg.Close(); Pump();
+});
 Step("hole form applies a field and the layer in one undo step", () =>
 {
     var h = vm.Project!.Holes.First(x => !x.IsDummy);

@@ -11,13 +11,16 @@ using BlastDesigner.IO;
 
 namespace BlastDesigner.App.Views;
 
-/// <summary>Edit ▸ Program settings. Theme and accent are previewed live and put back on Cancel.</summary>
+/// <summary>
+/// Edit ▸ Program settings. Apply applies and saves and keeps the window open, OK applies and closes, Cancel closes
+/// without applying. Theme and accent are previewed live and put back to the last applied settings on Cancel.
+/// </summary>
 public static class SettingsWindow
 {
-    /// <summary>Returns the edited copy on Apply, null on Cancel.</summary>
-    public static async Task<ProgramSettings?> Show(ProgramSettings settings)
+    /// <summary>Calls <paramref name="apply"/> with the edited copy on Apply and on OK; returns that copy on OK, null on Cancel.</summary>
+    public static async Task<ProgramSettings?> Show(ProgramSettings settings, Action<ProgramSettings>? apply = null)
     {
-        var form = new SettingsForm(settings);
+        var form = new SettingsForm(settings) { ApplyTo = apply };
         var w = new Window
         {
             Title = Loc.T("Program settings"),
@@ -63,7 +66,7 @@ public sealed class SettingsForm : DockPanel
         Children.Add(_scroll);
         AddHandler(KeyDownEvent, (_, e) =>
         {
-            if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.Control) { CommitFocused(); Closing?.Invoke(true); e.Handled = true; }
+            if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.Control) { Apply(); Closing?.Invoke(true); e.Handled = true; }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         Build();
     }
@@ -72,6 +75,15 @@ public sealed class SettingsForm : DockPanel
     public ProgramSettings Edited { get; private set; }
     public bool Applied { get; set; }
     public Action<bool>? Closing { get; set; }
+    /// <summary>Applies and saves the edited copy (Apply and OK).</summary>
+    public Action<ProgramSettings>? ApplyTo { get; set; }
+
+    /// <summary>Apply: the program takes the settings, the window stays open for more changes.</summary>
+    public void Apply()
+    {
+        CommitFocused();
+        ApplyTo?.Invoke(Edited);
+    }
 
     private static string L(string english) => Loc.Ui(english);
     private static string N(double v, string format = "0.##") => v.ToString(format, CultureInfo.CurrentCulture);
@@ -201,21 +213,56 @@ public sealed class SettingsForm : DockPanel
             BorderBrush = Look.LineStrong,
             Text = $"#{value & 0xFFFFFF:X6}"
         };
-        var current = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(Color.FromUInt32(value)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1) };
+        // the swatch of the current colour opens a full colour picker (spectrum, hue, hex)
+        var swatch = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(Color.FromUInt32(value)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1) };
+        var view = new ColorView
+        {
+            Color = Color.FromUInt32(value | 0xFF000000),
+            IsAlphaEnabled = false,
+            IsAlphaVisible = false,
+            IsAccentColorsVisible = false,
+            IsColorPaletteVisible = false,
+            Width = 300
+        };
+        var current = new Button
+        {
+            Content = swatch,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = new Cursor(StandardCursorType.Hand),
+            Name = name + "Picker",
+            Flyout = new Flyout { Content = view, Placement = Avalonia.Controls.PlacementMode.BottomEdgeAlignedLeft }
+        };
+        ToolTip.SetTip(current, L("Pick a colour"));
         // Wraps: the swatches go onto a second line in a narrow window instead of being cut off.
         var row = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
         row.Children.Add(current);
         row.Children.Add(hex);
         var swatches = new List<Button>();
+        var syncing = false;
         void Pick(uint c)
         {
             c |= 0xFF000000;
             set(c);
-            current.Background = new SolidColorBrush(Color.FromUInt32(c));
+            swatch.Background = new SolidColorBrush(Color.FromUInt32(c));
             hex.Text = $"#{c & 0xFFFFFF:X6}";
             foreach (var s in swatches) Mark(s, (uint)s.Tag! == c);
+            syncing = true;
+            view.Color = Color.FromUInt32(c);
+            syncing = false;
             if (rebuild) Build();
         }
+        // follows the picker live; a picker that rebuilds the page applies when it closes (rebuilding would close it)
+        uint? picked = null;
+        view.ColorChanged += (_, e) =>
+        {
+            if (syncing) return;
+            var c = e.NewColor.ToUInt32() | 0xFF000000;
+            if (rebuild) { picked = c; swatch.Background = new SolidColorBrush(Color.FromUInt32(c)); hex.Text = $"#{c & 0xFFFFFF:X6}"; }
+            else Pick(c);
+        };
+        current.Flyout!.Closed += (_, _) => { if (picked is uint c) { picked = null; Pick(c); } };
         hex.LostFocus += (_, _) =>
         {
             var t = (hex.Text ?? "").Trim().TrimStart('#');
@@ -380,7 +427,7 @@ public sealed class SettingsForm : DockPanel
         yield return kinds;
 
         var wireframe = new WrapPanel { Name = "wireframe" };
-        foreach (var (key, label) in new[] { (ProgramSettings.WireframeAlways, "Always"), (ProgramSettings.WireframeWhileStill, "Hide while rotating or moving"), (ProgramSettings.WireframeNever, "Never") })
+        foreach (var (key, label) in new[] { (ProgramSettings.WireframeAlways, "Always"), (ProgramSettings.WireframeWhileStill, "Hide while rotating or moving"), (ProgramSettings.WireframeSelected, "Only when selected"), (ProgramSettings.WireframeNever, "Never") })
         {
             var k = key;
             var chip = Ui.Chip(L(label), () => { if (Edited.SurfaceWireframe != k) { Edited.SurfaceWireframe = k; Build(); } }, Edited.SurfaceWireframe == key);
@@ -440,7 +487,7 @@ public sealed class SettingsForm : DockPanel
     private Control Footer()
     {
         var reset = Ui.Flat(Ui.Row(6, Look.Icon("prev", 14, Look.Muted), new TextBlock { Text = L("Reset everything to defaults"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center }),
-            L("Nothing changes until Apply"), ResetAll, null, 32);
+            L("Nothing changes until Apply or OK"), ResetAll, null, 32);
         var cancel = new Button
         {
             Content = Loc.T("Cancel"),
@@ -454,20 +501,36 @@ public sealed class SettingsForm : DockPanel
             IsCancel = true
         };
         cancel.Click += (_, _) => Closing?.Invoke(false);
-        var ok = new Button
+        var apply = new Button
         {
             Content = L("Apply"),
             Height = 32,
+            Padding = new Thickness(14, 0),
+            CornerRadius = new CornerRadius(6),
+            BorderBrush = Look.LineStrong,
+            BorderThickness = new Thickness(1),
+            Background = Brushes.Transparent,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Tag = "apply"
+        };
+        ToolTip.SetTip(apply, L("Apply and save; the window stays open"));
+        apply.Click += (_, _) => Apply();
+        var ok = new Button
+        {
+            Content = Loc.T("OK"),
+            Height = 32,
+            MinWidth = 80,
             Padding = new Thickness(16, 0),
             CornerRadius = new CornerRadius(6),
             BorderThickness = new Thickness(1),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
             Classes = { "primary" },
-            Tag = "apply"
+            Tag = "ok"
         };
-        ToolTip.SetTip(ok, L("Apply") + " (Ctrl+Enter)");
-        ok.Click += (_, _) => { CommitFocused(); Closing?.Invoke(true); };
-        var buttons = Ui.Row(8, cancel, ok);
+        ToolTip.SetTip(ok, L("Apply, save and close") + " (Ctrl+Enter)");
+        ok.Click += (_, _) => { Apply(); Closing?.Invoke(true); };
+        var buttons = Ui.Row(8, apply, cancel, ok);
         var dock = new DockPanel();
         DockPanel.SetDock(buttons, Dock.Right);
         dock.Children.Add(buttons);

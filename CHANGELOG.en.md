@@ -13,18 +13,21 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   contours and block outlines in layers in the class colours, so each type is shown or hidden in the layers panel.
   Setting a line's type by hand in Properties moves it the same way.
 - **Surface wireframe setting**: Program settings ▸ Viewport ▸ Surface wireframe — Always, Hide while rotating
-  or moving (the default) or Never.
+  or moving (the default), Only when selected or Never.
 - **Surface kind Face.** "Build the surface from the survey" in the Bench elements window puts the faces between
   the recognized crests and toes into a surface of their own, "Faces", of this kind; their colour is in
   Program settings ▸ Viewport ▸ Surface colours.
 - Frame rate in the corner of the plan: Program settings ▸ Viewport ▸ FPS, off by default.
 - An OK button in the start assistant opens the file selected in the list.
+- In the program settings a click on a colour swatch opens a colour picker: spectrum, hue, hex.
 
 ### Changed
 - **The plan and the 3D view are several times faster**, especially a blast over a mine survey and moving
   the mouse over a large project.
 - The Survey ribbon tab and the Survey layer group are now called "Topography".
 - In the layers panel the Topography group comes before Drawing, layers without a group are at the bottom.
+- Settings window: Apply applies and saves the settings and keeps the window open; the new OK button applies and
+  closes. Buttons in order: Apply, Cancel, OK.
 - The program no longer picks the discrete GPU itself: on laptops the integrated one is usually faster.
   The GPU can be chosen in Windows Settings ▸ Display ▸ Graphics.
 
@@ -32,6 +35,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - A surface built from a survey no longer throws triangles across crests, toes and other survey lines: the lines go
   into the triangulation as fixed edges. "Create surface" on the ribbon and in the selection menu does this too;
   the old way is kept as "Create surface without breaklines". Surfaces built before need to be built again.
+- Timing contours stopped short of a row farther from its neighbour than three design burdens or spacings: the
+  distance between the rows on the ground now counts.
 - An occasional drawing error while using tools ("Collection was modified").
 
 ## 0.2.1 — 2026-11-01

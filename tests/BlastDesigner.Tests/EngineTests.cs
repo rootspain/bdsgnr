@@ -341,6 +341,30 @@ public class SurfaceAndQuantityTests
         Assert.Equal(faces.Triangles.Distinct().Count(), faces.Vertices.Count);
     }
 
+    /// <summary>
+    /// Timing contours of three rows 14 m and 13 m apart, 4.6 m between holes, with the 4 × 4.5 m design: the limit
+    /// follows the rows on the ground, so the contours reach the first row (they stopped at the second one).
+    /// </summary>
+    [Fact]
+    public void TimingContours_ReachRowsFartherApartThanTheDesign()
+    {
+        var p = BlastProject.CreateNew();
+        double[] xs = { 0, 14, 27 };
+        var holes = new List<Hole>();
+        for (int c = 0; c < 3; c++)
+            for (int i = 0; i < 12; i++)
+                holes.Add(new Hole { Collar = new Vec3(1000 + xs[c], 2000 + i * 4.6, 100), FiringTimeMs = (c == 0 ? 50 : c == 1 ? 25 : 0) + i * 17 });
+        var limit = TimingContourOverlay.MaxEdge(p, holes);
+        Assert.True(limit > 14.8, $"limit {limit}");
+        var tin = Surfaces.Triangulate(holes.Select(h => h.Collar.WithZ(h.FiringTimeMs!.Value)), "time", limit);
+        // the first row is part of the timing surface
+        Assert.NotNull(tin.ElevationAt(1007, 2025));
+        // and a notch stays empty: a 3 × 4.5 m pattern has a limit near the design one
+        var tight = new List<Hole>();
+        for (int c = 0; c < 4; c++) for (int i = 0; i < 6; i++) tight.Add(new Hole { Collar = new Vec3(c * 4, i * 4.5, 0) });
+        Assert.InRange(TimingContourOverlay.MaxEdge(p, tight), 13.4, 13.6);
+    }
+
     [Fact]
     public void VolumeBetween_FlatSurfaceAboveBase()
     {

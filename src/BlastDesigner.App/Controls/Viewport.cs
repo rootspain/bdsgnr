@@ -119,6 +119,7 @@ public sealed class Viewport : Control
             TopInset = opt.TopInset,
             HideWireframes = SurfaceWireframe == IO.ProgramSettings.WireframeNever
                 || (SurfaceWireframe == IO.ProgramSettings.WireframeWhileStill && System.Diagnostics.Stopwatch.GetElapsedTime(_cameraMovedAt).TotalMilliseconds < SettleMs),
+            WireframesOnSelected = SurfaceWireframe == IO.ProgramSettings.WireframeSelected,
             Overlays = all,
             MovedEntities = Preview.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null,
             MoveOffset = Preview.MoveOffset

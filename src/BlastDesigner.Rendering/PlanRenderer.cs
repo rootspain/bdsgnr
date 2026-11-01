@@ -37,6 +37,8 @@ public sealed class SceneOptions
     public float TopInset { get; init; }
     /// <summary>Leave out surface wireframes (switched off, or the camera is moving and they wait until it stops).</summary>
     public bool HideWireframes { get; init; }
+    /// <summary>Surface wireframes on selected surfaces only.</summary>
+    public bool WireframesOnSelected { get; init; }
     /// <summary>Objects drawn shifted by <see cref="MoveOffset"/> (live preview while they are dragged).</summary>
     public ISet<Guid>? MovedEntities { get; init; }
     public Vec3 MoveOffset { get; init; }
@@ -135,7 +137,7 @@ public static class PlanRenderer
             foreach (var s in entities.OfType<SurfaceEntity>())
             {
                 var mc = BeginMove(s);
-                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes);
+                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes || (opt.WireframesOnSelected && !opt.Selection.Contains(s.Id)));
                 EndMove(mc);
             }
 

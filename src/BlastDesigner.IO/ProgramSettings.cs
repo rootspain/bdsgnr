@@ -33,10 +33,11 @@ public sealed class ProgramSettings
     [System.Text.Json.Serialization.JsonIgnore] public bool SurfacesByType => SurfaceColoring != SurfaceByElevation;
     /// <summary>
     /// When surface wireframes are drawn: <see cref="WireframeAlways"/>, <see cref="WireframeWhileStill"/> (left out while
-    /// the camera moves, the costliest part of a frame) or <see cref="WireframeNever"/>.
+    /// the camera moves, the costliest part of a frame), <see cref="WireframeSelected"/> (on selected surfaces only)
+    /// or <see cref="WireframeNever"/>.
     /// </summary>
     public string SurfaceWireframe { get; set; } = WireframeWhileStill;
-    public const string WireframeAlways = "Always", WireframeWhileStill = "WhileStill", WireframeNever = "Never";
+    public const string WireframeAlways = "Always", WireframeWhileStill = "WhileStill", WireframeSelected = "Selected", WireframeNever = "Never";
     /// <summary>Fill colour per surface kind (SurfaceKind names); kinds missing here use <see cref="DefaultSurfaceColors"/>.</summary>
     public Dictionary<string, uint> SurfaceColors { get; set; } = new();
 
@@ -49,7 +50,7 @@ public sealed class ProgramSettings
         ["General"] = 0xFF8A9BB0,
         ["Bench"] = 0xFFD9A441,
         ["Grade"] = 0xFFC46A4A,
-        ["Face"] = 0xFF4C2F27,
+        ["Face"] = 0xFF7D644C,
         ["Topography"] = 0xFF8DA35A,
         ["Design"] = 0xFF3B82F6,
         ["Strata"] = 0xFF9B7BFF,

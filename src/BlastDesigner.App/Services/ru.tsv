@@ -2423,8 +2423,13 @@ Frames per second	Кадров в секунду
 ui:Always	Всегда
 ui:Hide while rotating or moving	Скрывать при вращении/перемещении
 ui:Never	Никогда
-ui:Surface wireframe	Отображать каркас поверхности
+ui:Surface wireframe	Сетка поверхности
 ui:Edges of the surface triangles; with the whole surface in view they slow the plan down the most	Рёбра треугольников поверхности; когда видна вся поверхность, сильнее всего замедляют отрисовку
 Faces	Откосы
 Build the surface from the survey (all its lines as breaklines, the faces as a surface of kind Face)	Построить поверхность по съёмке (все её линии — структурные, откосы — отдельной поверхностью типа «Откос»)
 Create surface without breaklines	Построить поверхность без структурных линий
+ui:Pick a colour	Выбрать цвет
+ui:Apply and save; the window stays open	Применить и сохранить; окно остаётся открытым
+ui:Apply, save and close	Применить, сохранить и закрыть
+ui:Nothing changes until Apply or OK	Ничего не меняется до «Применить» или «OK»
+ui:Only when selected	Только когда выделена

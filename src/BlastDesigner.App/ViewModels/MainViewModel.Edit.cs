@@ -286,10 +286,11 @@ public sealed partial class MainViewModel
         View.Redraw();
     }
 
-    public async Task EditProgramSettings()
+    public Task EditProgramSettings() => SettingsWindow.Show(Settings, ApplyProgramSettings);
+
+    /// <summary>Takes the settings edited in the settings window (Apply and OK) and saves them.</summary>
+    private void ApplyProgramSettings(ProgramSettings edited)
     {
-        var edited = await SettingsWindow.Show(Settings);
-        if (edited == null) return;
         var s = Settings;
         s.Language = edited.Language;
         s.Theme = edited.Theme;
@@ -298,7 +299,8 @@ public sealed partial class MainViewModel
         s.GeometryColor = edited.GeometryColor;
         s.SurfaceColoring = edited.SurfaceColoring;
         s.SurfaceWireframe = edited.SurfaceWireframe;
-        s.SurfaceColors = edited.SurfaceColors;
+        // a copy: the window keeps editing its own after Apply, and Cancel must not leave those edits here
+        s.SurfaceColors = new Dictionary<string, uint>(edited.SurfaceColors);
         s.SelectionColor = edited.SelectionColor;
         s.CollarSizePixels = edited.CollarSizePixels;
         s.ShowCoordinatesBox = edited.ShowCoordinatesBox;

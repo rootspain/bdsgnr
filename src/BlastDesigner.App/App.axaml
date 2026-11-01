@@ -19,6 +19,7 @@
       </FluentTheme.Palettes>
     </FluentTheme>
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml"/>
+    <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml"/>
     <!-- every window of the program (main window, dialogs, tool windows) shows the program icon -->
     <Style Selector=":is(Window)">
       <Setter Property="Icon" Value="avares://BlastDesigner/Assets/icons/app-icon.ico"/>

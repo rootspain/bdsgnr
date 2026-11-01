@@ -105,6 +105,12 @@ public sealed class TimingContourOverlay : IOverlay
     /// <summary>Current animation time; holes fired by then are drawn as larger circles.</summary>
     public double? AnimationTimeMs { get; set; }
 
+    // The contours of the last holes and interval: rebuilt only when a hole moves or changes time, not on every frame
+    // of panning or of the animation. Drawn on the render thread, so guarded.
+    private readonly object _lock = new();
+    private int _key;
+    private List<PolylineEntity> _contours = new();
+
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         var holes = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy).ToList();
@@ -128,8 +134,21 @@ public sealed class TimingContourOverlay : IOverlay
                 c.DrawCircle(x, y, r, fill);
             }
         if (!Contours || holes.Count < 3 || IntervalMs <= 0) return;
-        var tin = Surfaces.Triangulate(holes.Select(h => h.Collar.WithZ(h.FiringTimeMs!.Value)), "time", MaxEdge(project));
-        foreach (var line in Surfaces.Contours(tin, IntervalMs))
+        var key = new HashCode();
+        key.Add(IntervalMs); key.Add(project.Design.Burden); key.Add(project.Design.Spacing);
+        foreach (var h in holes) { key.Add(h.Collar); key.Add(h.FiringTimeMs); }
+        List<PolylineEntity> contours;
+        lock (_lock)
+        {
+            if (_key != key.ToHashCode() || _contours.Count == 0)
+            {
+                var tin = Surfaces.Triangulate(holes.Select(h => h.Collar.WithZ(h.FiringTimeMs!.Value)), "time", MaxEdge(project, holes));
+                _contours = Surfaces.Contours(tin, IntervalMs);
+                _key = key.ToHashCode();
+            }
+            contours = _contours;
+        }
+        foreach (var line in contours)
         {
             var t = line.Points[0].Z;
             stroke.Color = ColorRamp.Heat(max > min ? (t - min) / (max - min) : 0);
@@ -141,7 +160,48 @@ public sealed class TimingContourOverlay : IOverlay
         }
     }
 
-    private static double MaxEdge(BlastProject p) => Math.Max(p.Design.Burden, p.Design.Spacing) * 3;
+    /// <summary>
+    /// Longest triangle edge of the timing contours: long enough to join neighbouring rows, short enough to leave a
+    /// notch in the blast outline empty. Three times the design burden or spacing, or more when the rows on the ground
+    /// are farther apart: rows 14 m apart with a 4 × 4.5 m design lost the contours between them, and the first row
+    /// showed none.
+    /// </summary>
+    public static double MaxEdge(BlastProject p, IReadOnlyList<Hole> holes) => Math.Max(Math.Max(p.Design.Burden, p.Design.Spacing) * 3, 1.5 * RowGap(holes));
+
+    /// <summary>
+    /// Distance between rows on the ground, 90th percentile over the holes: from each hole to the nearest hole off the
+    /// line to its nearest neighbour (more than 45° from it), which lies in the next row. 0 for fewer than three holes.
+    /// </summary>
+    public static double RowGap(IReadOnlyList<Hole> holes)
+    {
+        if (holes.Count < 3) return 0;
+        var gaps = new List<double>();
+        foreach (var h in holes)
+        {
+            Hole? nearest = null;
+            double best = double.MaxValue;
+            foreach (var o in holes)
+            {
+                if (o == h) continue;
+                var d = Vec3.Distance2D(h.Collar, o.Collar);
+                if (d > 1e-6 && d < best) { best = d; nearest = o; }
+            }
+            if (nearest == null) continue;
+            double ax = nearest.Collar.X - h.Collar.X, ay = nearest.Collar.Y - h.Collar.Y, al = Math.Sqrt(ax * ax + ay * ay);
+            double across = double.MaxValue;
+            foreach (var o in holes)
+            {
+                double bx = o.Collar.X - h.Collar.X, by = o.Collar.Y - h.Collar.Y, bl = Math.Sqrt(bx * bx + by * by);
+                if (bl < 1e-6) continue;
+                // |cos| below cos 45°: off the row line in either direction
+                if (Math.Abs(ax * bx + ay * by) / (al * bl) < Math.Sqrt(0.5) && bl < across) across = bl;
+            }
+            if (across < double.MaxValue) gaps.Add(across);
+        }
+        if (gaps.Count == 0) return 0;
+        gaps.Sort();
+        return gaps[(int)Math.Min(gaps.Count - 1, Math.Floor(0.9 * gaps.Count))];
+    }
 }
 
 /// <summary>
