@@ -279,7 +279,7 @@ public sealed partial class MainViewModel
         EnsureProject();
         path ??= await Dialogs.OpenFile("Import DXF/DWG", ("CAD files", new[] { "*.dxf", "*.dwg" }));
         if (path == null) return;
-        var opt = await Dialogs.EditObject("DXF import options", new CadImportOptions());
+        var opt = await CadImportWindow.Show(path);
         if (opt == null) return;
         var drawing = CadFiles.ReadCad(path, opt);
         AddImported(Loc.T("Import DXF"), drawing.Items, false, drawing.Layers);

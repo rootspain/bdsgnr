@@ -100,7 +100,7 @@ public sealed partial class MainViewModel
                 M("Minimum", "surface", "Tools/Surfaces/Find minimum surface"), M("Maximum", "surface", "Tools/Surfaces/Find maximum surface"),
                 M("Intersection of surfaces", "section", "Tools/Surfaces/Create intersection of multiple surfaces"), M("Clip to polygon", "polygon", "Tools/Surfaces/Clip surface to polygon"),
                 M("Contours", "iso", "Tools/Surfaces/Create contours…"), M("Volume", "cube", "Tools/Surfaces/Volume…"),
-                M("Bench elements", "wand", "Tools/Surfaces/Recognize bench elements…")),
+                M("Recognize (AI)", "wand", "Tools/Surfaces/Recognize bench elements…")),
             G("Lines and polygons", M("Convert", "convert", "Tools/Convert"), M("Move / copy", "pan", "Tools/General functions/Move/copy entities…"),
                 M("Transform", "orbit", "Tools/General functions/Transform coordinates…"), M("Expand polygon", "polygon", "Tools/General functions/Expand polygon…"),
                 M("Clip lines", "edit", "Tools/General functions/Clip polylines to be inside polygon"), M("Offset", "polyline", "Tools/General functions/Polyline offset…"),

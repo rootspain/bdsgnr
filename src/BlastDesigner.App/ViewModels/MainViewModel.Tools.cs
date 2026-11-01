@@ -908,7 +908,7 @@ public sealed partial class MainViewModel
         if (model && !Recognition.SurveyModel.Available) IO.Log.Error("Survey model not available: " + Recognition.SurveyModel.Problem);
         var result = await Task.Run(() => Recognition.SurveyModel.Recognize(lines, points, collars, model));
         // the window's tool puts its hint in the status bar
-        SurveyRecognitionWindow.Show(this, lines, points, result);
+        SurveyRecognitionWindow.Show(this, lines, points, collars, result);
     }
 
     /// <summary>Surface tool: click points, then a surface is triangulated through them.</summary>

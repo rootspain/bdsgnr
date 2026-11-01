@@ -1362,18 +1362,19 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     if (!r.FromModel) throw new Exception("not recognized by the model: " + BlastDesigner.Recognition.SurveyModel.Problem);
     var chips = form.GetLogicalDescendants().OfType<Button>().ToList();
     if (!chips.Any(b => (b.Tag as string) == "method:model" && b.IsEnabled) || !chips.Any(b => (b.Tag as string) == "method:rules")) throw new Exception("no model / rules switch");
-    // the rules path (the switch would also save the choice in the user's settings, which the smoke test leaves alone)
-    BlastDesigner.App.Services.Dialogs.LastShown!.Close(); Pump();
-    var rulesTask = vm.RecognizeBenchElements(false);
-    for (int i = 0; i < 1000 && !rulesTask.IsCompleted; i++) { Pump(); Thread.Sleep(10); }
-    Pump();
-    if ((BlastDesigner.App.Services.Dialogs.LastShown?.Content as SurveyRecognitionForm)?.Recognition.FromModel != false) throw new Exception("rules did not recognize");
-    BlastDesigner.App.Services.Dialogs.LastShown!.Close(); Pump();
-    task = vm.RecognizeBenchElements(true);
-    for (int i = 0; i < 1000 && !task.IsCompleted; i++) { Pump(); Thread.Sleep(10); }
-    Pump();
-    form = (SurveyRecognitionForm)BlastDesigner.App.Services.Dialogs.LastShown!.Content!;
+    // switching to the rules and back recognizes again in the same window, which stays where it is (the switch also
+    // saves the choice in the user's settings, which the smoke test leaves alone: it calls what the switch calls after)
+    var win = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var position = win.Position;
+    void Wait(Task t) { for (int i = 0; i < 1000 && !t.IsCompleted; i++) { Pump(); Thread.Sleep(10); } Pump(); }
+    Wait(form.Recognize(false));
+    if (BlastDesigner.App.Services.Dialogs.LastShown != win || !win.IsVisible || win.Position != position) throw new Exception("the window was recreated or moved");
+    if (form.Recognition.FromModel) throw new Exception("rules did not recognize");
+    var overlays = vm.View.Overlays.OfType<SurveyRecognitionOverlay>().ToList();
+    if (overlays.Count != 1 || overlays[0].Recognition != form.Recognition) throw new Exception("the plan does not show the new result");
+    Wait(form.Recognize(true));
     r = form.Recognition;
+    if (!r.FromModel || BlastDesigner.App.Services.Dialogs.LastShown != win) throw new Exception("back to the model failed");
     // a click between two vertices of the first segment cycles its class
     var seg = r.Segments[0];
     var line = (PolylineEntity)vm.Project!.FindEntity(seg.Segment.LineId)!;
@@ -1391,9 +1392,34 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     var p2 = vm.Project!;
     if (!p2.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest)) throw new Exception("no line got the crest type");
     if (!p2.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("no bench surface built");
+    // every survey line shapes the surface, not only crests and toes: a line left as "other" passes through it too
+    var surface = p2.Entities.OfType<SurfaceEntity>().First();
+    var other = p2.Entities.OfType<PolylineEntity>().FirstOrDefault(l => l.Kind == LineKind.General && l.Points.All(q => q.Z != 0));
+    if (other != null && !other.Points.All(q => surface.Vertices.Any(v => Vec3.Distance(v, q) < 0.01))) throw new Exception("a survey line of class other is not in the surface");
     if (vm.ActiveTool is SurveyClassTool || vm.View.Overlays.OfType<SurveyRecognitionOverlay>().Any()) throw new Exception("tool or overlay left after closing");
     vm.Undo(); Pump();
     if (vm.Project!.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest) || vm.Project.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("undo did not take it all back");
+});
+Step("DXF import window: hidden layers as chips with a note, toggles, Import returns the choice", () =>
+{
+    var path = Path.Combine(outDir, "survey.dxf");
+    // the window only shows the file's name and size; it does not read the drawing
+    File.WriteAllText(path, "0" + Environment.NewLine + "EOF" + Environment.NewLine);
+    var task = CadImportWindow.Show(path); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var form = dlg.GetLogicalDescendants().OfType<CadImportForm>().First();
+    var chips = form.GetLogicalDescendants().OfType<Button>().Where(b => (b.Tag as string)?.StartsWith("hidden:") == true).ToList();
+    if (chips.Count != 3) throw new Exception($"{chips.Count} hidden-layer chips");
+    foreach (var name in new[] { "separateFlat", "faces", "text" })
+        if (!form.GetLogicalDescendants().OfType<ToggleSwitch>().Any(t => t.Name == name)) throw new Exception("no toggle " + name);
+    var note = form.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "hiddenNote");
+    var before = note.Text;
+    chips.First(b => (string)b.Tag! == "hidden:Skip").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (note.Text == before) throw new Exception("the note did not follow the choice");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "61_dxf_import.png"));
+    form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "import").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!task.IsCompleted || task.Result?.HiddenLayers != CadHiddenLayers.Skip) throw new Exception("Import did not return the chosen options");
 });
 UsageLog.Stop();
 

@@ -2392,3 +2392,21 @@ Model (experimental)	Модель (эксперимент.)
 Rules	Правила
 The model is not available	Модель недоступна
 A model trained on synthetic surveys; better than the rules there, not yet checked on real ones	Модель обучена на синтетических съёмках; там она лучше правил, на реальных ещё не проверена
+Everything comes in; layers switched off in the drawing stay switched off	Всё придёт в проект; слои, выключенные в чертеже, останутся выключенными
+Only what the drawing shows — usually the survey itself	Только то, что видно в чертеже, — обычно это и есть съёмка
+Everything comes in and is shown	Всё придёт в проект и будет видно
+{0:0.0} MB	{0:0.0} МБ
+Import DXF / DWG	Импорт DXF / DWG
+Drawing layers	Слои чертежа
+Layers switched off or frozen in the drawing	Слои, выключенные или замороженные в чертеже
+Lines at elevation 0 (grid, design outline, annotation) go to layers "name (2D)" and stay out of the survey	Линии на высоте 0 (сетка, проектный контур, подписи) уйдут в слои «имя (2D)» и не смешаются со съёмкой
+Objects	Объекты
+3D faces of a layer become one surface	3D-грани слоя собираются в одну поверхность
+Labels and multi-line text, without the formatting codes	Подписи и многострочный текст, без кодов форматирования
+Line vertices closer than this are dropped; 0 keeps them all	Вершины линий ближе этого расстояния отбрасываются; 0 — оставить все
+m	м
+Enter imports, Esc cancels	Enter — импорт, Esc — отмена
+Build the surface from the survey (all its lines as breaklines)	Построить поверхность по съёмке (все её линии — структурные)
+Survey surface	Поверхность съёмки
+ui:Recognize (AI)	Распознать (AI)
+Recognize (AI)	Распознать (AI)

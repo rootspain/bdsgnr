@@ -34,11 +34,11 @@ public static class SurveyRecognitionWindow
 
     public static uint ColorOf(SurveyLineClass c) => Classes.First(x => x.Class == c).Color;
 
-    public static Window Show(MainViewModel vm, List<(PolylineEntity Line, string Layer)> lines, List<PointEntity> points, SurveyRecognition recognition)
+    public static Window Show(MainViewModel vm, List<(PolylineEntity Line, string Layer)> lines, List<PointEntity> points, IReadOnlyList<Vec3> collars, SurveyRecognition recognition)
     {
         if (Dialogs.ActivateExisting(Title)) Dialogs.CloseWindow(Title);
         var overlay = new SurveyRecognitionOverlay(recognition, lines.ToDictionary(l => l.Line.Id, l => l.Line));
-        var form = new SurveyRecognitionForm(vm, lines, points, recognition, overlay);
+        var form = new SurveyRecognitionForm(vm, lines, points, collars, recognition, overlay);
         var tool = new SurveyClassTool(vm, form);
         vm.View.Overlays.Add(overlay);
         vm.SetTool(tool);
@@ -60,16 +60,18 @@ public static class SurveyRecognitionWindow
 /// <summary>The segment classes on the plan: thick lines in the class colour, dashed where the recognition is unsure.</summary>
 public sealed class SurveyRecognitionOverlay : IOverlay
 {
-    private readonly SurveyRecognition _r;
     private readonly IReadOnlyDictionary<Guid, PolylineEntity> _lines;
 
-    public SurveyRecognitionOverlay(SurveyRecognition r, IReadOnlyDictionary<Guid, PolylineEntity> lines) => (_r, _lines) = (r, lines);
+    public SurveyRecognitionOverlay(SurveyRecognition r, IReadOnlyDictionary<Guid, PolylineEntity> lines) => (Recognition, _lines) = (r, lines);
+
+    /// <summary>What is drawn; replaced when the window recognizes again by the other method.</summary>
+    public SurveyRecognition Recognition { get; set; }
 
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         using var paint = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 4, StrokeCap = SKStrokeCap.Round };
         using var dash = SKPathEffect.CreateDash(new[] { 7f, 5f }, 0);
-        foreach (var s in _r.Segments)
+        foreach (var s in Recognition.Segments)
         {
             if (!_lines.TryGetValue(s.Segment.LineId, out var line)) continue;
             var pts = line.Points.Skip(s.Segment.From).Take(s.Segment.To - s.Segment.From + 1).ToList();
@@ -84,9 +86,9 @@ public sealed class SurveyRecognitionOverlay : IOverlay
     {
         int? best = null;
         var bestD = pixels;
-        for (int i = 0; i < _r.Segments.Count; i++)
+        for (int i = 0; i < Recognition.Segments.Count; i++)
         {
-            var s = _r.Segments[i].Segment;
+            var s = Recognition.Segments[i].Segment;
             if (!_lines.TryGetValue(s.LineId, out var line)) continue;
             for (int k = s.From + 1; k <= s.To; k++)
             {
@@ -137,24 +139,28 @@ public sealed class SurveyRecognitionForm : DockPanel
     private readonly List<(PolylineEntity Line, string Layer)> _lines;
     private readonly Dictionary<Guid, PolylineEntity> _byId;
     private readonly List<PointEntity> _points;
+    private readonly IReadOnlyList<Vec3> _collars;
+    private readonly Button _byModel;
+    private readonly Button _byRules;
+    private bool _busy;
     private readonly StackPanel _summary = new() { Spacing = 4 };
     private readonly Grid _benches = new() { Name = "benches" };
     private readonly CheckBox _assign = new() { IsChecked = true, Name = "assign" };
     private readonly CheckBox _split = new() { IsChecked = true, Name = "split" };
     private readonly CheckBox _surface = new() { IsChecked = false, Name = "surface" };
 
-    public SurveyRecognition Recognition { get; }
+    public SurveyRecognition Recognition { get; private set; }
     public SurveyRecognitionOverlay Overlay { get; }
     public Action? Close { get; set; }
 
-    public SurveyRecognitionForm(MainViewModel vm, List<(PolylineEntity Line, string Layer)> lines, List<PointEntity> points, SurveyRecognition recognition, SurveyRecognitionOverlay overlay)
+    public SurveyRecognitionForm(MainViewModel vm, List<(PolylineEntity Line, string Layer)> lines, List<PointEntity> points, IReadOnlyList<Vec3> collars, SurveyRecognition recognition, SurveyRecognitionOverlay overlay)
     {
-        (_vm, _lines, _points, Recognition, Overlay) = (vm, lines, points, recognition, overlay);
+        (_vm, _lines, _points, _collars, Recognition, Overlay) = (vm, lines, points, collars, recognition, overlay);
         _byId = lines.ToDictionary(l => l.Line.Id, l => l.Line);
         Background = Look.Ground;
         _assign.Content = Loc.T("Give the lines their type (crest, toe, contour, boundary)");
         _split.Content = Loc.T("Split lines where the class changes");
-        _surface.Content = Loc.T("Build the bench surface (crests and toes as breaklines)");
+        _surface.Content = Loc.T("Build the surface from the survey (all its lines as breaklines)");
 
         static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(0, 10, 0, 6) };
         var source = new TextBlock
@@ -165,33 +171,33 @@ public sealed class SurveyRecognitionForm : DockPanel
             Foreground = Look.TextSoft,
             Margin = new Thickness(0, 8, 0, 0)
         };
-        // the trained model or the rules: switching recognizes again and keeps the choice for next time
+        // the trained model or the rules: switching recognizes again in this window and keeps the choice for next time
         Button Method(string text, bool model)
         {
             var chip = Ui.Chip(Loc.T(text), () =>
             {
-                if (model == Recognition.FromModel) return;
+                if (model == Recognition.FromModel || _busy) return;
                 _vm.Settings.UseSurveyModel = model;
                 _vm.Settings.Save();
-                Close?.Invoke();
-                _ = _vm.RecognizeBenchElements(model);
+                _ = Recognize(model);
             }, model == Recognition.FromModel);
             chip.Tag = model ? "method:model" : "method:rules";
             return chip;
         }
-        var byModel = Method("Model (experimental)", true);
+        _byModel = Method("Model (experimental)", true);
+        _byRules = Method("Rules", false);
         if (!BlastDesigner.Recognition.SurveyModel.Available)
         {
-            byModel.IsEnabled = false;
-            ToolTip.SetTip(byModel, Loc.T("The model is not available") + ": " + BlastDesigner.Recognition.SurveyModel.Problem);
+            _byModel.IsEnabled = false;
+            ToolTip.SetTip(_byModel, Loc.T("The model is not available") + ": " + BlastDesigner.Recognition.SurveyModel.Problem);
         }
-        else ToolTip.SetTip(byModel, Loc.T("A model trained on synthetic surveys; better than the rules there, not yet checked on real ones"));
+        else ToolTip.SetTip(_byModel, Loc.T("A model trained on synthetic surveys; better than the rules there, not yet checked on real ones"));
         var body = new StackPanel
         {
             Margin = new Thickness(16, 12, 16, 12),
             Children =
             {
-                Ui.Row(6, byModel, Method("Rules", false)),
+                Ui.Row(6, _byModel, _byRules),
                 source,
                 Caption("Lines"), _summary,
                 Caption("Benches"), new ScrollViewer { MaxHeight = 260, Content = _benches, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled },
@@ -222,6 +228,35 @@ public sealed class SurveyRecognitionForm : DockPanel
         Children.Add(footer);
         Children.Add(new ScrollViewer { Content = body });
         Refresh();
+    }
+
+    /// <summary>
+    /// Recognizes the same survey again by the model or the rules and shows the result in place — the window stays where
+    /// it is. Changes made by hand to the previous result are dropped.
+    /// </summary>
+    public async Task Recognize(bool model)
+    {
+        if (_busy) return;
+        _busy = true;
+        _byModel.IsEnabled = _byRules.IsEnabled = false;
+        _vm.SetStatus(Loc.T("Recognizing bench elements…"));
+        try
+        {
+            var result = await Task.Run(() => BlastDesigner.Recognition.SurveyModel.Recognize(_lines, _points, _collars, model));
+            Recognition = result;
+            Overlay.Recognition = result;
+            Ui.SetChip(_byModel, result.FromModel);
+            Ui.SetChip(_byRules, !result.FromModel);
+            Refresh();
+            _vm.View.Redraw();
+            _vm.SetStatus(Loc.T(result.FromModel ? "Recognized by the model" : "Recognized by rules"));
+        }
+        finally
+        {
+            _busy = false;
+            _byModel.IsEnabled = BlastDesigner.Recognition.SurveyModel.Available;
+            _byRules.IsEnabled = true;
+        }
     }
 
     /// <summary>Next class for a segment (or its whole line).</summary>
@@ -351,14 +386,13 @@ public sealed class SurveyRecognitionForm : DockPanel
             toes = result.Count(l => l.Kind == LineKind.Toe);
             if (surface)
             {
-                // the bench: lines that bound it as breaklines, pickets in between; contours and other lines left out
-                var bench = Recognition.Segments.Where(s => s.Class is SurveyLineClass.Crest or SurveyLineClass.Toe).Select(s => s.Segment.LineId).ToHashSet();
-                var input = (assign ? result.Where(l => l.Kind is LineKind.Crest or LineKind.Toe) : result.Where(l => bench.Contains(l.Id))).Cast<Entity>()
-                    .Concat(_points.Where(pt => Math.Abs(pt.Position.Z) > 1e-6)).ToList();
+                // everything surveyed lies on the ground, whatever its class: crests and toes, but also roads, windrows,
+                // sumps and contours; every survey line is a breakline, the pickets fill in between
+                var input = result.Cast<Entity>().Concat(_points.Where(pt => Math.Abs(pt.Position.Z) > 1e-6)).ToList();
                 if (input.Count >= 3)
                 {
                     var s = Surfaces.FromEntities(input, true, 2.0, 60);
-                    s.Name = Loc.T("Bench surface");
+                    s.Name = Loc.T("Survey surface");
                     p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, "Survey"));
                 }
             }
