@@ -77,6 +77,9 @@ public static class ProjectFile
         if (p.Layers.Count == 0) p.DefaultLayerId = p.GetOrCreateLayer("Default").Id;
         foreach (var e in p.Entities)
             if (p.FindLayer(e.LayerId) == null) e.LayerId = p.DefaultLayer.Id;
+        // the layer group "Survey" was renamed; keeps one group when new survey layers are added to an old project
+        foreach (var l in p.Layers)
+            if (l.Group == "Survey") l.Group = StandardLayers.TopographyGroup;
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;
     }
 

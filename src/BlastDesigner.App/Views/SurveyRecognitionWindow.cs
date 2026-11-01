@@ -34,6 +34,13 @@ public static class SurveyRecognitionWindow
 
     public static uint ColorOf(SurveyLineClass c) => Classes.First(x => x.Class == c).Color;
 
+    /// <summary>Layer for each recognized type, in the colour the class has on the plan, so the types are shown and hidden with the layers.</summary>
+    public static readonly (LineKind Kind, SurveyLineClass Class, string Layer)[] KindLayers =
+    {
+        (LineKind.Crest, SurveyLineClass.Crest, "Crest lines"), (LineKind.Toe, SurveyLineClass.Toe, "Toe lines"),
+        (LineKind.Contour, SurveyLineClass.Contour, "Contour lines"), (LineKind.Boundary, SurveyLineClass.Boundary, "Block boundaries")
+    };
+
     public static Window Show(MainViewModel vm, List<(PolylineEntity Line, string Layer)> lines, List<PointEntity> points, IReadOnlyList<Vec3> collars, SurveyRecognition recognition)
     {
         if (Dialogs.ActivateExisting(Title)) Dialogs.CloseWindow(Title);
@@ -147,6 +154,7 @@ public sealed class SurveyRecognitionForm : DockPanel
     private readonly Grid _benches = new() { Name = "benches" };
     private readonly CheckBox _assign = new() { IsChecked = true, Name = "assign" };
     private readonly CheckBox _split = new() { IsChecked = true, Name = "split" };
+    private readonly CheckBox _layers = new() { IsChecked = true, Name = "layers" };
     private readonly CheckBox _surface = new() { IsChecked = false, Name = "surface" };
 
     public SurveyRecognition Recognition { get; private set; }
@@ -160,6 +168,10 @@ public sealed class SurveyRecognitionForm : DockPanel
         Background = Look.Ground;
         _assign.Content = Loc.T("Give the lines their type (crest, toe, contour, boundary)");
         _split.Content = Loc.T("Split lines where the class changes");
+        _layers.Content = Loc.T("Move the lines to a layer per type, in its colour");
+        ToolTip.SetTip(_layers, Loc.T("Crests, toes, contours and boundaries get their own layers: each type is shown or hidden with its layer"));
+        // splitting and layers only make sense when the lines get a type
+        _assign.IsCheckedChanged += (_, _) => _split.IsEnabled = _layers.IsEnabled = _assign.IsChecked == true;
         _surface.Content = Loc.T("Build the surface from the survey (all its lines as breaklines)");
 
         static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(0, 10, 0, 6) };
@@ -201,7 +213,7 @@ public sealed class SurveyRecognitionForm : DockPanel
                 source,
                 Caption("Lines"), _summary,
                 Caption("Benches"), new ScrollViewer { MaxHeight = 260, Content = _benches, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled },
-                Caption("Apply"), new StackPanel { Spacing = 4, Children = { _assign, _split, _surface } }
+                Caption("Apply"), new StackPanel { Spacing = 4, Children = { _assign, _split, _layers, _surface } }
             }
         };
 
@@ -345,6 +357,7 @@ public sealed class SurveyRecognitionForm : DockPanel
     {
         var assign = _assign.IsChecked == true;
         var split = _split.IsChecked == true;
+        var layers = assign && _layers.IsChecked == true;
         var surface = _surface.IsChecked == true;
         int crests = 0, toes = 0;
         _vm.Change("Recognize bench elements", p =>
@@ -382,6 +395,14 @@ public sealed class SurveyRecognitionForm : DockPanel
                     result.Add(line);
                 }
             }
+            if (layers)
+                foreach (var l in result)
+                    if (SurveyRecognitionWindow.KindLayers.FirstOrDefault(k => k.Kind == l.Kind) is { Layer: not null } k)
+                    {
+                        // the layer's colour, not the one from the drawing, so the type reads on the plan
+                        l.LayerId = p.GetOrCreateLayer(k.Layer, SurveyRecognitionWindow.ColorOf(k.Class), StandardLayers.TopographyGroup).Id;
+                        l.Color = null;
+                    }
             crests = result.Count(l => l.Kind == LineKind.Crest);
             toes = result.Count(l => l.Kind == LineKind.Toe);
             if (surface)
@@ -393,7 +414,7 @@ public sealed class SurveyRecognitionForm : DockPanel
                 {
                     var s = Surfaces.FromEntities(input, true, 2.0, 60);
                     s.Name = Loc.T("Survey surface");
-                    p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, "Survey"));
+                    p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup));
                 }
             }
         });

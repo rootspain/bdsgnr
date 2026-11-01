@@ -68,8 +68,8 @@ public sealed class BlastProject
         p.GetOrCreateLayer(StandardLayers.Holes, 0xFF1E3A8A, "Design");
         p.GetOrCreateLayer(StandardLayers.Ties, 0xFFDC2626, "Design");
         p.GetOrCreateLayer(StandardLayers.Boundary, 0xFF16A34A, "Design");
-        p.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, "Survey");
-        p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, "Survey");
+        p.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, StandardLayers.TopographyGroup);
+        p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup);
         p.GetOrCreateLayer(StandardLayers.Annotation, 0xFF0F172A, "Drawing");
         p.DefaultLayerId = def.Id;
         p.Products = Product.DefaultCatalogue();
@@ -103,6 +103,8 @@ public static class StandardLayers
     public const string Annotation = "Annotation";
     public const string Analysis = "Analysis";
     public const string TimingLines = "Timing lines";
+    /// <summary>Layer group of the survey, surfaces and recognized bench lines; "Survey" before 0.2.1.</summary>
+    public const string TopographyGroup = "Topography";
 }
 
 public sealed class ProjectHeader

@@ -1391,6 +1391,10 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     form.Close!(); Pump();
     var p2 = vm.Project!;
     if (!p2.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest)) throw new Exception("no line got the crest type");
+    // each type in its own layer, drawn in the layer's colour: shown and hidden with the layer
+    var crestLayer = p2.Layers.FirstOrDefault(l => l.Name == "Crest lines") ?? throw new Exception("no crest layer");
+    if (crestLayer.Color != SurveyRecognitionWindow.ColorOf(SurveyLineClass.Crest)) throw new Exception("crest layer has the wrong colour");
+    if (p2.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest && (l.LayerId != crestLayer.Id || l.Color != null))) throw new Exception("a crest outside its layer or with its own colour");
     if (!p2.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("no bench surface built");
     // every survey line shapes the surface, not only crests and toes: a line left as "other" passes through it too
     var surface = p2.Entities.OfType<SurfaceEntity>().First();
@@ -1398,7 +1402,8 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     if (other != null && !other.Points.All(q => surface.Vertices.Any(v => Vec3.Distance(v, q) < 0.01))) throw new Exception("a survey line of class other is not in the surface");
     if (vm.ActiveTool is SurveyClassTool || vm.View.Overlays.OfType<SurveyRecognitionOverlay>().Any()) throw new Exception("tool or overlay left after closing");
     vm.Undo(); Pump();
-    if (vm.Project!.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest) || vm.Project.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("undo did not take it all back");
+    if (vm.Project!.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest) || vm.Project.Entities.OfType<SurfaceEntity>().Any()
+        || vm.Project.Layers.Any(l => l.Name == "Crest lines")) throw new Exception("undo did not take it all back");
 });
 Step("DXF import window: hidden layers as chips with a note, toggles, Import returns the choice", () =>
 {

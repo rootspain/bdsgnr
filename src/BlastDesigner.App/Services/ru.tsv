@@ -2410,3 +2410,11 @@ Build the surface from the survey (all its lines as breaklines)	Построит
 Survey surface	Поверхность съёмки
 ui:Recognize (AI)	Распознать (AI)
 Recognize (AI)	Распознать (AI)
+name:Crest lines	Верхние бровки
+name:Toe lines	Нижние бровки
+name:Contour lines	Горизонтали
+name:Block boundaries	Контуры блоков
+Move the lines to a layer per type, in its colour	Разложить линии по слоям типов, в их цветах
+Crests, toes, contours and boundaries get their own layers: each type is shown or hidden with its layer	Верхние и нижние бровки, горизонтали и контуры попадут в свои слои: каждый тип включается и выключается своим слоем
+ui:Topography	Топография
+name:Topography	Топография

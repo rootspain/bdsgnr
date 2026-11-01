@@ -91,7 +91,7 @@ public sealed partial class MainViewModel
             G("Settings", M("Program settings", "gear", "Edit/Program settings…", big: true), M("Blast properties", "edit", "Edit/Blast properties…"), M("Design data", "edit", "Edit/Design data…"),
                 M("Site coordinate system", "north", "Edit/Site coordinate system…"), M("Visual style", "eye", "Edit/Visual style…"))
         }),
-        new Stage("Survey", new()
+        new Stage("Topography", new()
         {
             G("Survey", M("Laser wizard", "laser", "Tools/Laser wizard…", big: true), Tb("Survey points", "point", "Survey point", big: true),
                 M("Survey stations", "station", "Tools/Survey stations…"), Tb("Bore track", "bore", "Bore track"), Tb("Grade pegs", "peg", "Grade peg"),

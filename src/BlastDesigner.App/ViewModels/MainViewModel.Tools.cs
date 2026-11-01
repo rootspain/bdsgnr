@@ -58,7 +58,7 @@ public sealed partial class MainViewModel
         SetTool(new PickPointsTool(this, Loc.Enum(kind), "Click to place points.", 1, 1, false, async pts =>
         {
             var label = kind is PointKind.Monitoring or PointKind.SurveyStation ? await Dialogs.Prompt(Loc.Enum(kind), Loc.T("Label"), Loc.Enum(kind)) ?? "" : "";
-            var layer = kind is PointKind.Survey or PointKind.SurveyStation or PointKind.GradePeg ? Project!.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, "Survey") : null;
+            var layer = kind is PointKind.Survey or PointKind.SurveyStation or PointKind.GradePeg ? Project!.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, StandardLayers.TopographyGroup) : null;
             Change("Add point", p => p.Add(new PointEntity { Position = pts[0], Kind = kind, Label = label }, layer));
         }));
 
@@ -223,7 +223,7 @@ public sealed partial class MainViewModel
         var ids = SelectedHoleIds();
         Change("Create points", p =>
         {
-            var layer = p.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, "Survey");
+            var layer = p.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, StandardLayers.TopographyGroup);
             foreach (var h in HolesById(p, ids))
             {
                 var pt = where switch { "grade" => h.GradePoint, "toe" => h.Toe, _ => h.Collar };
@@ -238,7 +238,7 @@ public sealed partial class MainViewModel
         Change("Create polyline of bore track", p =>
         {
             foreach (var h in HolesById(p, ids))
-                p.Add(new PolylineEntity { Points = h.BoreTrack?.ToList() ?? new List<Vec3> { h.Collar, h.Toe }, Kind = LineKind.BoreTrack, Label = h.Label }, p.GetOrCreateLayer("Bore tracks", 0xFF0891B2, "Survey"));
+                p.Add(new PolylineEntity { Points = h.BoreTrack?.ToList() ?? new List<Vec3> { h.Collar, h.Toe }, Kind = LineKind.BoreTrack, Label = h.Label }, p.GetOrCreateLayer("Bore tracks", 0xFF0891B2, StandardLayers.TopographyGroup));
         });
     }
 
@@ -881,7 +881,7 @@ public sealed partial class MainViewModel
             var s = Surfaces.FromEntities(sel, breaklines);
             s.Kind = (SurfaceKind)k;
             s.Name = Loc.Enum(s.Kind);
-            p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, "Survey"));
+            p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup));
         });
     }
 
@@ -914,7 +914,7 @@ public sealed partial class MainViewModel
     /// <summary>Surface tool: click points, then a surface is triangulated through them.</summary>
     public void SurfaceTool() =>
         SetTool(new PickPointsTool(this, "Surface", "Click surface points (elevation is taken from the work plane); double-click to triangulate.", 3, int.MaxValue, false, pts =>
-            Change("Create surface", p => p.Add(Surfaces.Triangulate(pts), p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, "Survey")))));
+            Change("Create surface", p => p.Add(Surfaces.Triangulate(pts), p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup)))));
 
     private async Task SurfaceOp(string name, Func<SurfaceEntity, Task<Action<BlastProject>?>> op)
     {
@@ -924,7 +924,7 @@ public sealed partial class MainViewModel
         if (act != null) Change(name, act);
     }
 
-    private Layer SurfLayer(BlastProject p) => p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, "Survey");
+    private Layer SurfLayer(BlastProject p) => p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup);
 
     public Task SurfacePointSet() => SurfaceOp("Create a point set from surface", async s =>
     {
@@ -935,7 +935,7 @@ public sealed partial class MainViewModel
     public Task SurfaceContours() => SurfaceOp("Create contours", async s =>
     {
         var d = await Dialogs.PromptNumber("Create contours", Loc.T("Contour interval (m)"), 1);
-        return d is double v ? p => { var layer = p.GetOrCreateLayer("Contours", 0xFF94A3B8, "Survey"); foreach (var c in Surfaces.Contours(s, v)) p.Add(c, layer); } : null;
+        return d is double v ? p => { var layer = p.GetOrCreateLayer("Contours", 0xFF94A3B8, StandardLayers.TopographyGroup); foreach (var c in Surfaces.Contours(s, v)) p.Add(c, layer); } : null;
     });
 
     public Task SurfaceSegmentPoints() => SurfaceOp("Create segment points", async s =>
@@ -1068,7 +1068,7 @@ public sealed partial class MainViewModel
             var hd = sd * Math.Cos(va * GeoMath.Deg);
             pts.Add(origin + new Vec3(hd * Math.Sin(brg * GeoMath.Deg), hd * Math.Cos(brg * GeoMath.Deg), sd * Math.Sin(va * GeoMath.Deg) - p.TargetHeight));
         }
-        Change("Laser wizard", pr => { foreach (var pt in pts) pr.Add(new PointEntity { Position = pt, Kind = PointKind.Survey }, pr.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, "Survey")); });
+        Change("Laser wizard", pr => { foreach (var pt in pts) pr.Add(new PointEntity { Position = pt, Kind = PointKind.Survey }, pr.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, StandardLayers.TopographyGroup)); });
     }
 }
 

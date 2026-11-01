@@ -191,7 +191,7 @@ public sealed class StartupForm : DockPanel
         catch { return false; }
     }
 
-    private static string AppVersion => typeof(StartupForm).Assembly.GetName().Version?.ToString(3) ?? "0.1.8";
+    private static string AppVersion => typeof(StartupForm).Assembly.GetName().Version?.ToString(3) ?? "0.2.2";
 
     private static CultureInfo Culture => CultureInfo.GetCultureInfo(Loc.Language == "ru" ? "ru-RU" : "en-US");
 

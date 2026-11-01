@@ -6,7 +6,17 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.1.8 — 2026-11-01
+## 0.2.2 — 2026-11-01
+
+### New
+- Bench elements ▸ "Move the lines to a layer per type": crests, toes, contours and block outlines
+  go to layers of their own in the class colours, so each type is shown or hidden in the layers panel.
+
+### Changed
+- The Survey ribbon tab and the Survey layer group are now "Topography";
+  Recognize (AI) is on the Topography tab.
+
+## 0.2.1 — 2026-11-01
 
 ### New
 - **Bench element recognition** from a mine survey: Survey ribbon ▸ Recognize (AI).
