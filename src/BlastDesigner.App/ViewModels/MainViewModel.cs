@@ -292,7 +292,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// Holes a timing line programmed: those whose present time is what the line gives them, up to the one shift the line's
     /// own first-firing hole introduced (it times its holes from the earliest of them, not of all holes).
     /// </summary>
-    private static List<Guid> HolesTimedBy(BlastProject p, TimingLineEntity line)
+    internal static List<Guid> HolesTimedBy(BlastProject p, TimingLineEntity line)
     {
         var holes = p.Holes.Where(h => !h.IsDummy && h.ElectronicTimeMs.HasValue && !h.ElectronicTimeManual).ToList();
         if (holes.Count == 0 || line.Points.Count < 2) return new();

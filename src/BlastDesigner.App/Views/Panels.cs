@@ -200,6 +200,18 @@ public sealed class PropertiesPanel : DockPanel
             edit.Click += async (_, _) => await _vm.EditHoleLoading(hole);
             panel.Children.Add(edit);
         }
+        if (first is TimingLineEntity line && sel.Count == 1)
+        {
+            // the line programs the holes it remembers; this adds the electronic holes no line programs yet
+            var add = new Button { Content = Loc.T("Add holes"), Margin = new Thickness(6), IsEnabled = !doc.IsReadOnly, Name = "addHolesToLine" };
+            ToolTip.SetTip(add, Loc.T("Add the holes with an electronic detonator that are on no timing line, program them from this line and select its holes"));
+            add.Click += async (_, _) => await _vm.AddHolesToTimingLine(line);
+            panel.Children.Add(add);
+            var assigned = new Button { Content = Loc.T("Select assigned"), Margin = new Thickness(6, 0, 6, 6), Name = "selectLineHoles" };
+            ToolTip.SetTip(assigned, Loc.T("Select the holes this timing line programs"));
+            assigned.Click += (_, _) => _vm.SelectTimingLineHoles(line);
+            panel.Children.Add(assigned);
+        }
         panel.Children.Add(grid);
         _content.Content = panel;
     }

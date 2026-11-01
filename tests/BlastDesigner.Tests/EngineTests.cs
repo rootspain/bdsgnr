@@ -365,6 +365,38 @@ public class SurfaceAndQuantityTests
         Assert.InRange(TimingContourOverlay.MaxEdge(p, tight), 13.4, 13.6);
     }
 
+    /// <summary>
+    /// Two faces with a 20 m platform between them: the platform (toe of the upper face and crest of the lower one at its
+    /// level) is a bench, the ground above the top crest and the floor below the last toe are not.
+    /// </summary>
+    [Fact]
+    public void SplitBenches_PlatformBetweenFaces()
+    {
+        List<Vec3> Line(double y, double z) => new() { new(0, y, z), new(80, y, z) };
+        var crest1 = Line(0, 110); var toe1 = Line(-6, 100);
+        var crest2 = Line(-26, 100); var toe2 = Line(-32, 90);
+        var input = new List<Entity> { new PolylineEntity { Points = crest1 }, new PolylineEntity { Points = toe1 }, new PolylineEntity { Points = crest2 }, new PolylineEntity { Points = toe2 } };
+        foreach (var x in new[] { 10.0, 40, 70 })
+        {
+            input.Add(new PointEntity { Position = new Vec3(x, 30, 110.1) });
+            input.Add(new PointEntity { Position = new Vec3(x, -16, 100.1) });
+            input.Add(new PointEntity { Position = new Vec3(x, -70, 90.1) });
+        }
+        var s = Surfaces.FromEntities(input, true);
+        var crests = new[] { crest1, crest2 };
+        var toes = new[] { toe1, toe2 };
+        var (ground, faces) = Surfaces.SplitFaces(s, crests, toes);
+        var (rest, benches) = Surfaces.SplitBenches(ground, crests, toes);
+        Assert.NotNull(faces);
+        Assert.NotNull(benches);
+        Assert.Equal(s.TriangleCount, faces!.TriangleCount + benches!.TriangleCount + rest.TriangleCount);
+        Assert.Equal(100, benches.ElevationAt(40, -16)!.Value, 0);
+        Assert.Null(benches.ElevationAt(40, 20));
+        Assert.Null(benches.ElevationAt(40, -60));
+        Assert.NotNull(rest.ElevationAt(40, 20));
+        Assert.NotNull(rest.ElevationAt(40, -60));
+    }
+
     [Fact]
     public void VolumeBetween_FlatSurfaceAboveBase()
     {

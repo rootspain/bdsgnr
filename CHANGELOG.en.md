@@ -15,9 +15,11 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Surface wireframe setting**: Program settings ▸ Viewport ▸ Surface wireframe — Always, Hide while rotating
   or moving (the default), Only when selected or Never.
 - **Surface kind Face.** "Build the surface from the survey" in the Bench elements window puts the faces between
-  the recognized crests and toes into a surface of their own, "Faces", of this kind; their colour is in
-  Program settings ▸ Viewport ▸ Surface colours.
+  the recognized crests and toes into a surface of their own, "Faces", of this kind, and the platforms between the
+  faces into "Benches" of kind Bench; the colours are in Program settings ▸ Viewport ▸ Surface colours.
 - Frame rate in the corner of the plan: Program settings ▸ Viewport ▸ FPS, off by default.
+- **Add holes** in the properties of a timing line: the holes with an electronic detonator that are on no timing line
+  yet join this line, are programmed from it and selected. "Select assigned" there selects the holes the line fires.
 - An OK button in the start assistant opens the file selected in the list.
 - In the program settings a click on a colour swatch opens a colour picker: spectrum, hue, hex.
 

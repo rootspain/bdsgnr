@@ -186,7 +186,7 @@ public sealed class SurveyRecognitionForm : DockPanel
         ToolTip.SetTip(_layers, Loc.T("Crests, toes, contours and boundaries get their own layers: each type is shown or hidden with its layer"));
         // splitting and layers only make sense when the lines get a type
         _assign.IsCheckedChanged += (_, _) => _split.IsEnabled = _layers.IsEnabled = _assign.IsChecked == true;
-        _surface.Content = Loc.T("Build the surface from the survey (all its lines as breaklines, the faces as a surface of kind Face)");
+        _surface.Content = Loc.T("Build the surface from the survey (all its lines as breaklines; faces and bench platforms as surfaces of their kinds)");
 
         static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(0, 10, 0, 6) };
         var source = new TextBlock
@@ -426,10 +426,20 @@ public sealed class SurveyRecognitionForm : DockPanel
                     // (taken from the recognition, so this works whether or not the lines got their types)
                     List<IReadOnlyList<Vec3>> Pieces(SurveyLineClass c) => Recognition.Segments.Where(g => g.Class == c && _byId.ContainsKey(g.Segment.LineId))
                         .Select(g => (IReadOnlyList<Vec3>)_byId[g.Segment.LineId].Points.Skip(g.Segment.From).Take(g.Segment.To - g.Segment.From + 1).ToList()).ToList();
-                    var (ground, faces) = Surfaces.SplitFaces(s, Pieces(SurveyLineClass.Crest), Pieces(SurveyLineClass.Toe));
+                    var crestPieces = Pieces(SurveyLineClass.Crest);
+                    var toePieces = Pieces(SurveyLineClass.Toe);
+                    var (ground, faces) = Surfaces.SplitFaces(s, crestPieces, toePieces);
+                    // and the platforms between a toe above and a crest below, of kind Bench
+                    var (rest, benches) = Surfaces.SplitBenches(ground, crestPieces, toePieces);
                     var surfaces = p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup);
-                    ground.Name = Loc.T("Survey surface");
-                    p.Add(ground, surfaces);
+                    rest.Name = Loc.T("Survey surface");
+                    p.Add(rest, surfaces);
+                    if (benches != null)
+                    {
+                        benches.Name = Loc.T("Benches");
+                        benches.Kind = SurfaceKind.Bench;
+                        p.Add(benches, surfaces);
+                    }
                     if (faces != null)
                     {
                         faces.Name = Loc.T("Faces");

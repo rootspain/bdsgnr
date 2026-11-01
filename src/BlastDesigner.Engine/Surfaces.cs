@@ -239,6 +239,122 @@ public static class Surfaces
         }
     }
 
+    /// <summary>
+    /// Splits the bench platforms off a survey surface (its faces already split off by <see cref="SplitFaces"/>). A
+    /// triangle is on a bench when it is gentler than <paramref name="maxSlopeDeg"/> and has, within
+    /// <paramref name="reach"/> m in plan and <paramref name="level"/> m in height of its middle, both a crest (the edge
+    /// of the face below the platform) and a toe (the foot of the face above it). The ground above the top crest (no toe
+    /// at its level) and the pit floor (no crest at its level) stay with the rest. Benches is null when none qualifies.
+    /// </summary>
+    public static (SurfaceEntity Ground, SurfaceEntity? Benches) SplitBenches(SurfaceEntity s, IEnumerable<IReadOnlyList<Vec3>> crests, IEnumerable<IReadOnlyList<Vec3>> toes,
+        double maxSlopeDeg = 20, double reach = 40, double level = 1.5)
+    {
+        // crest and toe points every 2 m, in a grid of 10 m cells
+        const double cell = 10, step = 2;
+        Dictionary<(long, long), List<Vec3>> Grid(IEnumerable<IReadOnlyList<Vec3>> lines)
+        {
+            var grid = new Dictionary<(long, long), List<Vec3>>();
+            void Put(Vec3 p)
+            {
+                var key = ((long)Math.Floor(p.X / cell), (long)Math.Floor(p.Y / cell));
+                if (!grid.TryGetValue(key, out var list)) grid[key] = list = new();
+                list.Add(p);
+            }
+            foreach (var l in lines)
+                for (int i = 0; i < l.Count; i++)
+                {
+                    Put(l[i]);
+                    if (i == 0) continue;
+                    int n = (int)(Vec3.Distance2D(l[i - 1], l[i]) / step);
+                    for (int k = 1; k < n; k++) Put(Vec3.Lerp(l[i - 1], l[i], (double)k / n));
+                }
+            return grid;
+        }
+        var crestGrid = Grid(crests);
+        var toeGrid = Grid(toes);
+        bool Near(Dictionary<(long, long), List<Vec3>> grid, Vec3 c)
+        {
+            int r = (int)Math.Ceiling(reach / cell);
+            long cx = (long)Math.Floor(c.X / cell), cy = (long)Math.Floor(c.Y / cell);
+            for (var x = cx - r; x <= cx + r; x++)
+                for (var y = cy - r; y <= cy + r; y++)
+                    if (grid.TryGetValue((x, y), out var list))
+                        foreach (var p in list)
+                            if (Math.Abs(p.Z - c.Z) <= level && Vec3.Distance2D(p, c) <= reach) return true;
+            return false;
+        }
+
+        // gentle triangles, and which of them see a crest and a toe at their level
+        var tan = Math.Tan(maxSlopeDeg * Math.PI / 180);
+        int count = s.Triangles.Count / 3;
+        var flat = new bool[count];
+        var seen = new bool[count];
+        for (int t = 0; t < count; t++)
+        {
+            var a = s.Vertices[s.Triangles[3 * t]]; var b = s.Vertices[s.Triangles[3 * t + 1]]; var c = s.Vertices[s.Triangles[3 * t + 2]];
+            var n = Vec3.Cross(b - a, c - a);
+            flat[t] = Math.Abs(n.Z) > 1e-12 && Math.Sqrt(n.X * n.X + n.Y * n.Y) / Math.Abs(n.Z) <= tan;
+            var mid = (a + b + c) / 3;
+            seen[t] = flat[t] && Near(crestGrid, mid) && Near(toeGrid, mid);
+        }
+        // From each triangle that sees both lines the bench spreads over its gentle neighbours at the same level (within
+        // the level of that triangle) and within twice the reach of it: a platform wider than the reach fills up, a
+        // ramp stops once it has climbed or dropped. Whole connected patches were too much: ramps and gaps in the
+        // faces joined the platforms into one.
+        var byEdge = new Dictionary<(int, int), List<int>>();
+        var mids = new Vec3[count];
+        for (int t = 0; t < count; t++)
+        {
+            mids[t] = (s.Vertices[s.Triangles[3 * t]] + s.Vertices[s.Triangles[3 * t + 1]] + s.Vertices[s.Triangles[3 * t + 2]]) / 3;
+            for (int k = 0; k < 3; k++)
+            {
+                int u = s.Triangles[3 * t + k], v = s.Triangles[3 * t + (k + 1) % 3];
+                var key = u < v ? (u, v) : (v, u);
+                if (!byEdge.TryGetValue(key, out var list)) byEdge[key] = list = new List<int>(2);
+                list.Add(t);
+            }
+        }
+        var isBench = new bool[count];
+        var queue = new Queue<(int T, Vec3 Seed)>();
+        for (int t = 0; t < count; t++)
+            if (seen[t]) { isBench[t] = true; queue.Enqueue((t, mids[t])); }
+        while (queue.Count > 0)
+        {
+            var (t, seed) = queue.Dequeue();
+            for (int k = 0; k < 3; k++)
+            {
+                int u = s.Triangles[3 * t + k], v = s.Triangles[3 * t + (k + 1) % 3];
+                foreach (var o in byEdge[u < v ? (u, v) : (v, u)])
+                    if (!isBench[o] && flat[o] && Math.Abs(mids[o].Z - seed.Z) <= level && Vec3.Distance2D(mids[o], seed) <= 2 * reach)
+                    {
+                        isBench[o] = true;
+                        queue.Enqueue((o, seed));
+                    }
+            }
+        }
+        var bench = new List<int>();
+        var rest = new List<int>();
+        for (int t = 0; t < count; t++)
+        {
+            var into = isBench[t] ? bench : rest;
+            into.Add(s.Triangles[3 * t]); into.Add(s.Triangles[3 * t + 1]); into.Add(s.Triangles[3 * t + 2]);
+        }
+        if (bench.Count == 0) return (s, null);
+        return (Part(s, rest), Part(s, bench));
+
+        static SurfaceEntity Part(SurfaceEntity s, List<int> tris)
+        {
+            var map = new Dictionary<int, int>();
+            var part = new SurfaceEntity { Name = s.Name, Kind = s.Kind, ShowWireframe = s.ShowWireframe };
+            foreach (var i in tris)
+            {
+                if (!map.TryGetValue(i, out var j)) { j = part.Vertices.Count; map[i] = j; part.Vertices.Add(s.Vertices[i]); }
+                part.Triangles.Add(j);
+            }
+            return part;
+        }
+    }
+
     /// <summary>Contour lines at a fixed interval, joined into polylines.</summary>
     public static List<PolylineEntity> Contours(SurfaceEntity s, double interval, double? onlyLevel = null)
     {

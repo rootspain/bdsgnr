@@ -965,6 +965,51 @@ Step("edit a timing line: its values, layer and reprogramming in one step", () =
     if (Math.Abs(((TimingLineEntity)vm.Project.FindEntity(line.Id)!).Segments[0].ReliefMsPerM - 8) > 1e-9) throw new Exception("one undo should restore the line");
     vm.Undo();
 });
+Step("Properties ▸ Add holes: electronic holes on no timing line join the line, are programmed and selected", () =>
+{
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy && h.Decks.Any(d => d.Primers.Count > 0)).ToList();
+    if (holes.Count < 30) throw new Exception("the smoke blast needs 30 primed holes");
+    var det = vm.Project.Products.FirstOrDefault(p => p.Kind == ProductKind.ElectronicDetonator) ?? throw new Exception("no electronic detonator in the catalogue");
+    var y = holes.Max(h => h.Collar.Y) + 3;
+    var pts = new List<BlastDesigner.Domain.Geometry.Vec3> { new(holes.Min(h => h.Collar.X) - 3, y, 300), new(holes.Max(h => h.Collar.X) + 3, y, 300) };
+    var line = BlastDesigner.Engine.EbsTimingLine.CreateEntity(pts, new[] { new TimingLineSegment(5, 8, 0) }, new BlastDesigner.Engine.TimingLineOptions());
+    var other = BlastDesigner.Engine.EbsTimingLine.CreateEntity(pts, new[] { new TimingLineSegment(5, 8, 0) }, new BlastDesigner.Engine.TimingLineOptions());
+    line.HoleIds = holes.Take(20).Select(h => h.Id).ToList();
+    other.HoleIds = holes.Skip(20).Take(5).Select(h => h.Id).ToList();
+    var electronic = holes.Take(30).Select(h => h.Id).ToHashSet();
+    vm.Change("Smoke electronic holes", p =>
+    {
+        p.Add(line); p.Add(other);
+        foreach (var h in p.Holes.Where(h => electronic.Contains(h.Id)))
+            foreach (var d in h.Decks) foreach (var pr in d.Primers) pr.DetonatorId = det.Id;
+    });
+    var tabs = window.GetLogicalDescendants().OfType<TabControl>().First(t => t.Items.OfType<TabItem>().Any(i => (i.Tag as string) == "Layers"));
+    var tabBefore = tabs.SelectedIndex;
+    vm.Doc!.Select(new[] { line.Id }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    var button = window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "addHolesToLine") ?? throw new Exception("no Add holes button on a timing line");
+    button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    for (int i = 0; i < 50; i++) Pump();
+    var after = ((TimingLineEntity)vm.Project.FindEntity(line.Id)!).HoleIds.ToHashSet();
+    var want = holes.Take(20).Concat(holes.Skip(25).Take(5)).Select(h => h.Id).ToHashSet();
+    if (!after.SetEquals(want)) throw new Exception($"the line has {after.Count} holes, {after.Count(want.Contains)} of the {want.Count} expected (holes of the other line must stay with it)");
+    if (!vm.Doc.Selection.SetEquals(want)) throw new Exception("the line's holes are not selected");
+    var planned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, vm.Project.Holes.Where(h => want.Contains(h.Id)).ToList(), line.Points, line.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(line), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.TimeStepMs).Times;
+    foreach (var (id, t) in planned)
+        if (((Hole)vm.Project.FindEntity(id)!).ElectronicTimeMs is not double et || Math.Abs(et - t) > 1e-6) throw new Exception("an added hole is not programmed from the line");
+    // Select assigned: the holes the line programs, from its properties
+    vm.Doc.Select(new[] { line.Id }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    var select = window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "selectLineHoles") ?? throw new Exception("no Select assigned button on a timing line");
+    select.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!vm.Doc.Selection.SetEquals(want)) throw new Exception($"Select assigned selected {vm.Doc.Selection.Count} objects, {vm.Doc.Selection.Count(want.Contains)} of the line's {want.Count} holes");
+    vm.Undo(); vm.Undo();
+    vm.Undo();
+    if (((TimingLineEntity)vm.Project.FindEntity(line.Id)!).HoleIds.Count != 20) throw new Exception("one undo should take the added holes back");
+    vm.Undo();
+    vm.Doc.ClearSelection();
+    tabs.SelectedIndex = tabBefore; Pump();
+});
 Step("moving a timing line reprograms its holes in the same undo step", () =>
 {
     var holes = vm.Project!.Holes.Where(h => !h.IsDummy).ToList();
@@ -1463,6 +1508,8 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     if (!p2.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("no bench surface built");
     // the faces between crests and toes as a surface of their own, of kind Face
     if (!p2.Entities.OfType<SurfaceEntity>().Any(s => s.Kind == SurfaceKind.Face && s.TriangleCount > 0)) throw new Exception("no face surface");
+    // and the bench platforms, of kind Bench
+    if (!p2.Entities.OfType<SurfaceEntity>().Any(s => s.Kind == SurfaceKind.Bench && s.TriangleCount > 0)) throw new Exception("no bench surface");
     // every survey line shapes the surface, not only crests and toes: a line left as "other" passes through it too
     // (the survey surface and its faces together)
     var surfaceVertices = p2.Entities.OfType<SurfaceEntity>().SelectMany(s => s.Vertices).ToList();

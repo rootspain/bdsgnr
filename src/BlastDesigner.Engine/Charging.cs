@@ -34,6 +34,10 @@ public static class Charging
         hole.Decks.SelectMany(d => d.Primers.Select(p => (p, d)));
 
     /// <summary>Delay of a primer's detonator, ms.</summary>
+    /// <summary>Whether a primer of the hole carries an electronic detonator.</summary>
+    public static bool HasElectronicDetonator(BlastProject project, Hole hole) =>
+        Primers(hole).Any(x => project.FindProduct(x.Primer.DetonatorId)?.Kind == ProductKind.ElectronicDetonator);
+
     public static double PrimerDelay(BlastProject project, Primer p) =>
         p.DelayMs ?? project.FindProduct(p.DetonatorId)?.DelayMs ?? 0;
 

@@ -681,6 +681,48 @@ public sealed partial class MainViewModel
             await Dialogs.Info(Loc.F("Maximum delay {0} ms exceeded, holes not timed: {1}", Project!.Electronic.MaxTimeMs, string.Join(", ", r.MaxTimeExceeded.Select(h => h.Label))));
     }
 
+    /// <summary>
+    /// Properties ▸ Add holes on a timing line: the holes with an electronic detonator that no timing line programs yet
+    /// join the holes of this line, all of them are programmed from it (one undo step), and they are selected. Holes of
+    /// other lines stay with their lines.
+    /// </summary>
+    public async Task AddHolesToTimingLine(TimingLineEntity line)
+    {
+        var p = Project!;
+        var bound = p.Entities.OfType<TimingLineEntity>().SelectMany(l => l.HoleIds).ToHashSet();
+        var electronic = p.Holes.Where(h => !h.IsDummy && !bound.Contains(h.Id) && Charging.HasElectronicDetonator(p, h)).Select(h => h.Id).ToList();
+        if (electronic.Count == 0) { await Dialogs.Info(Loc.T("Every hole with an electronic detonator is already on a timing line.")); return; }
+        var lineId = line.Id;
+        var ids = line.HoleIds.Union(electronic).ToHashSet();
+        var added = ids.Count - line.HoleIds.Count;
+        TimingLineResult? r = null;
+        Change("Add holes to timing line", pr =>
+        {
+            if (pr.FindEntity(lineId) is not TimingLineEntity l) return;
+            l.HoleIds = ids.ToList();
+            r = EbsTimingLine.Apply(pr, HolesById(pr, ids), l);
+        });
+        // selected without an undo step of its own: one Undo takes the whole command back
+        Doc!.Select(ids, record: false);
+        if (r == null) return;
+        SetStatus(Loc.F("Timing line: {0} holes added, {1} holes timed, {2} with manual time kept", added, r.Timed, r.SkippedManual));
+        if (r.MaxTimeExceeded.Count > 0)
+            await Dialogs.Info(Loc.F("Maximum delay {0} ms exceeded, holes not timed: {1}", p.Electronic.MaxTimeMs, string.Join(", ", r.MaxTimeExceeded.Select(h => h.Label))));
+    }
+
+    /// <summary>
+    /// Properties ▸ Select assigned on a timing line: selects the holes the line programs. A line from an older file that
+    /// does not know them finds them by their times, as when it is moved (nothing is changed).
+    /// </summary>
+    public void SelectTimingLineHoles(TimingLineEntity line)
+    {
+        var p = Project!;
+        var ids = (line.HoleIds.Count > 0 ? line.HoleIds : HolesTimedBy(p, line)).Where(id => p.FindEntity(id) is Hole).ToList();
+        if (ids.Count == 0) { SetStatus(Loc.T("The timing line programs no holes")); return; }
+        Doc!.Select(ids);
+        SetStatus(Loc.F("Timing line: {0} holes selected", ids.Count));
+    }
+
     public async Task AddSubtractTime()
     {
         var d = await Dialogs.PromptNumber("Add/Subtract time", Loc.T("Milliseconds to add (negative subtracts)"), 0);

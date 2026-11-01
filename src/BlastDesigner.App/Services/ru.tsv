@@ -2433,3 +2433,13 @@ ui:Apply and save; the window stays open	Применить и сохранит�
 ui:Apply, save and close	Применить, сохранить и закрыть
 ui:Nothing changes until Apply or OK	Ничего не меняется до «Применить» или «OK»
 ui:Only when selected	Только когда выделена
+Add holes	Добавить скважины
+Add the holes with an electronic detonator that are on no timing line, program them from this line and select its holes	Добавить скважины с электронным детонатором, не привязанные ни к одной линии времени, запрограммировать от этой линии и выделить её скважины
+Every hole with an electronic detonator is already on a timing line.	Все скважины с электронным детонатором уже привязаны к линиям времени.
+Add holes to timing line	Добавить скважины в линию времени
+Timing line: {0} holes added, {1} holes timed, {2} with manual time kept	Линия времени: добавлено скважин {0}, запрограммировано {1}, с ручным временем оставлено {2}
+Select assigned	Выделить назначенные
+Select the holes this timing line programs	Выделить скважины, которые инициирует эта линия времени
+The timing line programs no holes	Линия времени не инициирует ни одной скважины
+Timing line: {0} holes selected	Линия времени: выделено скважин {0}
+Build the surface from the survey (all its lines as breaklines; faces and bench platforms as surfaces of their kinds)	Построить поверхность по съёмке (все её линии — структурные; откосы и площадки уступов — отдельными поверхностями своих типов)
