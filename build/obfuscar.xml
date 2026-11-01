@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Obfuscation for the distributable build: the app (BlastDesigner.dll) and the calculation libraries (Domain, Engine, IO,
-  Rendering), processed in one run so the references between them are renamed alike.
+  Rendering, Recognition), processed in one run so the references between them are renamed alike. The survey
+  model is an embedded resource of Recognition: kept as it is, readable by anyone who unpacks the assembly.
   Public API, properties and events keep their names: public property names are the .bdp file format (JSON), the data
   bindings and the property grid, which all find them by name. Embedded resources (ru.tsv, CHANGELOG) are kept too.
   What this does: encrypt string literals (hides the trial secret, the registry path and the messages) and rename private
@@ -24,4 +25,5 @@
   <Module file="$(InPath)\BlastDesigner.Engine.dll" />
   <Module file="$(InPath)\BlastDesigner.IO.dll" />
   <Module file="$(InPath)\BlastDesigner.Rendering.dll" />
+  <Module file="$(InPath)\BlastDesigner.Recognition.dll" />
 </Obfuscator>

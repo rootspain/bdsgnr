@@ -56,17 +56,26 @@ public static class SurveyRecognizer
     private static readonly int CrestWord = F("layer_crest_word"), ToeWord = F("layer_toe_word"), ContourWord = F("layer_contour_word"), BoundaryWord = F("layer_boundary_word");
 
     /// <param name="features">Segment features already computed for the same input (training data); computed here when null.</param>
+    /// <param name="classifier">
+    /// A trained model: class and confidence for each feature row, in order. Without it the rules classify. Smoothing,
+    /// benches and pickets are the same either way.
+    /// </param>
     public static SurveyRecognition Recognize(IReadOnlyList<(PolylineEntity Line, string Layer)> lines, IReadOnlyList<PointEntity> points, IReadOnlyList<Vec3> collars,
-        List<(SurveySegment Segment, double[] Values)>? features = null)
+        List<(SurveySegment Segment, double[] Values)>? features = null,
+        Func<IReadOnlyList<double[]>, IReadOnlyList<(SurveyLineClass Class, double Confidence)>>? classifier = null)
     {
         var heights = points.Where(p => Math.Abs(p.Position.Z) > 1e-6).ToList();
         features ??= SurveyFeatures.Compute(lines, heights.Select(p => p.Position).ToList(), collars);
-        var result = new SurveyRecognition();
-        foreach (var g in features.GroupBy(f => f.Segment.LineId))
+        var result = new SurveyRecognition { FromModel = classifier != null };
+        var guesses = new List<SegmentGuess>(features.Count);
+        if (classifier != null)
         {
-            var guesses = g.Select(f => Classify(f.Segment, f.Values)).ToList();
-            result.Segments.AddRange(Smooth(guesses));
+            var answers = classifier(features.Select(f => f.Values).ToList());
+            for (int i = 0; i < features.Count; i++) guesses.Add(new SegmentGuess(features[i].Segment, answers[i].Class, answers[i].Confidence));
         }
+        else guesses.AddRange(features.Select(f => Classify(f.Segment, f.Values)));
+        foreach (var g in guesses.GroupBy(x => x.Segment.LineId))
+            result.Segments.AddRange(Smooth(g.ToList()));
         Refresh(result, lines.Select(l => l.Line).ToList(), points);
         return result;
     }

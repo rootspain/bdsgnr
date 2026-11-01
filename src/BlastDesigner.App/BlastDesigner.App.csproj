@@ -35,6 +35,7 @@
     <ProjectReference Include="..\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
     <ProjectReference Include="..\BlastDesigner.IO\BlastDesigner.IO.csproj" />
     <ProjectReference Include="..\BlastDesigner.Rendering\BlastDesigner.Rendering.csproj" />
+    <ProjectReference Include="..\BlastDesigner.Recognition\BlastDesigner.Recognition.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Services/ru.tsv" />
@@ -44,5 +45,10 @@
     <TrimmerRootAssembly Include="BlastDesigner.Engine" />
     <TrimmerRootAssembly Include="BlastDesigner.IO" />
     <TrimmerRootAssembly Include="BlastDesigner.Rendering" />
+    <TrimmerRootAssembly Include="BlastDesigner.Recognition" />
   </ItemGroup>
+  <!-- ONNX Runtime ships import libraries (.lib) next to its DLLs; the program does not need them -->
+  <Target Name="DropOnnxImportLibraries" AfterTargets="Publish">
+    <Delete Files="$(PublishDir)onnxruntime.lib;$(PublishDir)onnxruntime_providers_shared.lib" />
+  </Target>
 </Project>

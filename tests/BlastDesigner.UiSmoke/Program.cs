@@ -1359,6 +1359,21 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     if (vm.ActiveTool is not SurveyClassTool) throw new Exception("the class tool is not active");
     var r = form.Recognition;
     if (!r.Segments.Any(x => x.Class == SurveyLineClass.Crest) || r.Benches.Count == 0) throw new Exception("no crest or bench recognized");
+    if (!r.FromModel) throw new Exception("not recognized by the model: " + BlastDesigner.Recognition.SurveyModel.Problem);
+    var chips = form.GetLogicalDescendants().OfType<Button>().ToList();
+    if (!chips.Any(b => (b.Tag as string) == "method:model" && b.IsEnabled) || !chips.Any(b => (b.Tag as string) == "method:rules")) throw new Exception("no model / rules switch");
+    // the rules path (the switch would also save the choice in the user's settings, which the smoke test leaves alone)
+    BlastDesigner.App.Services.Dialogs.LastShown!.Close(); Pump();
+    var rulesTask = vm.RecognizeBenchElements(false);
+    for (int i = 0; i < 1000 && !rulesTask.IsCompleted; i++) { Pump(); Thread.Sleep(10); }
+    Pump();
+    if ((BlastDesigner.App.Services.Dialogs.LastShown?.Content as SurveyRecognitionForm)?.Recognition.FromModel != false) throw new Exception("rules did not recognize");
+    BlastDesigner.App.Services.Dialogs.LastShown!.Close(); Pump();
+    task = vm.RecognizeBenchElements(true);
+    for (int i = 0; i < 1000 && !task.IsCompleted; i++) { Pump(); Thread.Sleep(10); }
+    Pump();
+    form = (SurveyRecognitionForm)BlastDesigner.App.Services.Dialogs.LastShown!.Content!;
+    r = form.Recognition;
     // a click between two vertices of the first segment cycles its class
     var seg = r.Segments[0];
     var line = (PolylineEntity)vm.Project!.FindEntity(seg.Segment.LineId)!;

@@ -58,6 +58,8 @@ public sealed class ProgramSettings
     public string? LastSeenVersion { get; set; }
     /// <summary>Record clicks, menus, hot keys and view flags for Settings ▸ Usage statistics (kept on this computer).</summary>
     public bool UsageLogging { get; set; } = true;
+    /// <summary>Recognize bench elements with the trained model (experimental); off: by rules. The window switches it.</summary>
+    public bool UseSurveyModel { get; set; } = true;
     /// <summary>No settings file existed when these settings were loaded: a new installation.</summary>
     [System.Text.Json.Serialization.JsonIgnore] public bool IsNewInstallation { get; private set; }
     public string Author { get; set; } = Environment.UserName;

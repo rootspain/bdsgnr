@@ -105,6 +105,12 @@ internal static class SelfTest
         {
             if (IO.Changelog.Load("ru").Count == 0 || IO.Changelog.Load("en").Count == 0) throw new Exception("release notes missing");
         });
+        Check("survey model", () =>
+        {
+            if (!Recognition.SurveyModel.Available) throw new Exception(Recognition.SurveyModel.Problem ?? "not loaded");
+            var answer = Recognition.SurveyModel.Classify(new[] { new double[Engine.SurveyFeatures.Names.Length] });
+            if (answer.Count != 1) throw new Exception("no answer");
+        });
         Check("property grid reflection", () =>
         {
             var props = typeof(Domain.Model.Hole).GetProperties().Select(x => x.Name).ToList();

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
+    <ProjectReference Include="..\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- the survey segment classifier trained by ml/train.py -->
+    <EmbeddedResource Include="..\..\ml\models\survey-segments.onnx" LogicalName="BlastDesigner.survey-segments.onnx" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+  </ItemGroup>
+</Project>

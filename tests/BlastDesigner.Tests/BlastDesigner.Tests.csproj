@@ -13,5 +13,10 @@
     <ProjectReference Include="..\..\src\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
     <ProjectReference Include="..\..\src\BlastDesigner.IO\BlastDesigner.IO.csproj" />
     <ProjectReference Include="..\..\src\BlastDesigner.Rendering\BlastDesigner.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\BlastDesigner.Recognition\BlastDesigner.Recognition.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- reference probabilities from ml/train.py for the ONNX parity test -->
+    <None Include="..\..\ml\models\parity.json" Link="parity.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

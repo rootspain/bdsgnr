@@ -2388,3 +2388,7 @@ Crest line	Верхняя бровка
 Toe line	Нижняя бровка
 Contour line	Горизонталь
 Boundary line	Граница
+Model (experimental)	Модель (эксперимент.)
+Rules	Правила
+The model is not available	Модель недоступна
+A model trained on synthetic surveys; better than the rules there, not yet checked on real ones	Модель обучена на синтетических съёмках; там она лучше правил, на реальных ещё не проверена

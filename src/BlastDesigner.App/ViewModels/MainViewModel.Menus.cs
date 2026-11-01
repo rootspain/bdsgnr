@@ -240,7 +240,7 @@ public sealed partial class MainViewModel
                 Item("Improve surface geometry", Run(SurfaceImprove), P),
                 Item("Batter (toe from crest)…", Run(BatterTool), S),
                 Item("Volume…", Run(VolumeTool), P),
-                Item("Recognize bench elements…", Run(RecognizeBenchElements), P)),
+                Item("Recognize bench elements…", Run(() => RecognizeBenchElements()), P)),
             Sub("Ties",
                 Item("Show palette", ShowTiePalette, P),
                 Item("Automatic tie-up…", AutoTieUp, P),

@@ -889,7 +889,8 @@ public sealed partial class MainViewModel
     /// Survey ▸ Recognize bench elements: crests, toes, contours and boundaries among the survey lines (selected, or all
     /// on visible layers) — shown for checking, applied only from the window.
     /// </summary>
-    public async Task RecognizeBenchElements()
+    /// <param name="useModel">The trained model or the rules; the setting when null.</param>
+    public async Task RecognizeBenchElements(bool? useModel = null)
     {
         var p = Project!;
         var selected = Doc!.SelectedEntities.ToList();
@@ -903,7 +904,9 @@ public sealed partial class MainViewModel
         var points = source.OfType<PointEntity>().ToList();
         var collars = p.Holes.Select(h => h.Collar).ToList();
         SetStatus(Loc.T("Recognizing bench elements…"));
-        var result = await Task.Run(() => SurveyRecognizer.Recognize(lines, points, collars));
+        var model = useModel ?? Settings.UseSurveyModel;
+        if (model && !Recognition.SurveyModel.Available) IO.Log.Error("Survey model not available: " + Recognition.SurveyModel.Problem);
+        var result = await Task.Run(() => Recognition.SurveyModel.Recognize(lines, points, collars, model));
         // the window's tool puts its hint in the status bar
         SurveyRecognitionWindow.Show(this, lines, points, result);
     }

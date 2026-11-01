@@ -4,6 +4,7 @@
     <Project Path="src/BlastDesigner.Domain/BlastDesigner.Domain.csproj" />
     <Project Path="src/BlastDesigner.Engine/BlastDesigner.Engine.csproj" />
     <Project Path="src/BlastDesigner.IO/BlastDesigner.IO.csproj" />
+    <Project Path="src/BlastDesigner.Recognition/BlastDesigner.Recognition.csproj" />
     <Project Path="src/BlastDesigner.Rendering/BlastDesigner.Rendering.csproj" />
   </Folder>
   <Folder Name="/tests/">

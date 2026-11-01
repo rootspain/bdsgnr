@@ -159,16 +159,39 @@ public sealed class SurveyRecognitionForm : DockPanel
         static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(0, 10, 0, 6) };
         var source = new TextBlock
         {
-            Text = (recognition.FromModel ? Loc.T("Recognized by the model") : Loc.T("Recognized by rules")) + "  ·  " + Loc.T("Click a segment on the plan to change its class; Ctrl+click changes the whole line. Dashed: the recognition is unsure."),
+            Text = Loc.T("Click a segment on the plan to change its class; Ctrl+click changes the whole line. Dashed: the recognition is unsure."),
             TextWrapping = TextWrapping.Wrap,
             FontSize = 11.5,
-            Foreground = Look.TextSoft
+            Foreground = Look.TextSoft,
+            Margin = new Thickness(0, 8, 0, 0)
         };
+        // the trained model or the rules: switching recognizes again and keeps the choice for next time
+        Button Method(string text, bool model)
+        {
+            var chip = Ui.Chip(Loc.T(text), () =>
+            {
+                if (model == Recognition.FromModel) return;
+                _vm.Settings.UseSurveyModel = model;
+                _vm.Settings.Save();
+                Close?.Invoke();
+                _ = _vm.RecognizeBenchElements(model);
+            }, model == Recognition.FromModel);
+            chip.Tag = model ? "method:model" : "method:rules";
+            return chip;
+        }
+        var byModel = Method("Model (experimental)", true);
+        if (!BlastDesigner.Recognition.SurveyModel.Available)
+        {
+            byModel.IsEnabled = false;
+            ToolTip.SetTip(byModel, Loc.T("The model is not available") + ": " + BlastDesigner.Recognition.SurveyModel.Problem);
+        }
+        else ToolTip.SetTip(byModel, Loc.T("A model trained on synthetic surveys; better than the rules there, not yet checked on real ones"));
         var body = new StackPanel
         {
             Margin = new Thickness(16, 12, 16, 12),
             Children =
             {
+                Ui.Row(6, byModel, Method("Rules", false)),
                 source,
                 Caption("Lines"), _summary,
                 Caption("Benches"), new ScrollViewer { MaxHeight = 260, Content = _benches, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled },
