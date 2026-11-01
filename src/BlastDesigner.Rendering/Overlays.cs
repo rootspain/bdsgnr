@@ -31,6 +31,20 @@ public sealed class PreviewOverlay : IOverlay
         Snap = null;
     }
 
+    /// <summary>
+    /// A copy for one frame. The frame is drawn on the render thread while tools keep changing the lists on the UI thread;
+    /// drawing the live lists failed with "collection was modified".
+    /// </summary>
+    public PreviewOverlay Snapshot()
+    {
+        var copy = new PreviewOverlay { ScreenRect = ScreenRect, Snap = Snap, Moving = Moving, MoveOffset = MoveOffset };
+        foreach (var (pts, closed, col) in Lines) copy.Lines.Add((pts.ToArray(), closed, col));
+        copy.Points.AddRange(Points);
+        copy.Labels.AddRange(Labels);
+        copy.Markers.AddRange(Markers);
+        return copy;
+    }
+
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, PathEffect = SKPathEffect.CreateDash(new[] { 5f, 3f }, 0) };
@@ -321,8 +335,10 @@ public sealed class HighlightOverlay : IOverlay
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3, Color = Color };
-        foreach (var id in Ids)
-            if (project.FindEntity(id) is { } e)
+        if (Ids.Count == 0) return;
+        // one pass over the project, not a search per highlighted object (a find can highlight hundreds)
+        foreach (var e in project.Entities)
+            if (Ids.Contains(e.Id))
                 foreach (var v in e.GetVertices().Take(1))
                 {
                     var (x, y) = cam.ToScreen(v);

@@ -9,12 +9,30 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.2.2 — 2026-11-01
 
 ### New
-- Bench elements ▸ "Move the lines to a layer per type": crests, toes, contours and block outlines
-  go to layers of their own in the class colours, so each type is shown or hidden in the layers panel.
+- **Recognized bench elements in layers of their own.** Apply in the Bench elements window puts crests, toes,
+  contours and block outlines in layers in the class colours, so each type is shown or hidden in the layers panel.
+  Setting a line's type by hand in Properties moves it the same way.
+- **Surface wireframe setting**: Program settings ▸ Viewport ▸ Surface wireframe — Always, Hide while rotating
+  or moving (the default) or Never.
+- **Surface kind Face.** "Build the surface from the survey" in the Bench elements window puts the faces between
+  the recognized crests and toes into a surface of their own, "Faces", of this kind; their colour is in
+  Program settings ▸ Viewport ▸ Surface colours.
+- Frame rate in the corner of the plan: Program settings ▸ Viewport ▸ FPS, off by default.
+- An OK button in the start assistant opens the file selected in the list.
 
 ### Changed
-- The Survey ribbon tab and the Survey layer group are now "Topography";
-  Recognize (AI) is on the Topography tab.
+- **The plan and the 3D view are several times faster**, especially a blast over a mine survey and moving
+  the mouse over a large project.
+- The Survey ribbon tab and the Survey layer group are now called "Topography".
+- In the layers panel the Topography group comes before Drawing, layers without a group are at the bottom.
+- The program no longer picks the discrete GPU itself: on laptops the integrated one is usually faster.
+  The GPU can be chosen in Windows Settings ▸ Display ▸ Graphics.
+
+### Fixed
+- A surface built from a survey no longer throws triangles across crests, toes and other survey lines: the lines go
+  into the triangulation as fixed edges. "Create surface" on the ribbon and in the selection menu does this too;
+  the old way is kept as "Create surface without breaklines". Surfaces built before need to be built again.
+- An occasional drawing error while using tools ("Collection was modified").
 
 ## 0.2.1 — 2026-11-01
 

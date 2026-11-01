@@ -270,6 +270,77 @@ public class SurfaceAndQuantityTests
         Assert.Equal(5, contours.Count);
     }
 
+    /// <summary>
+    /// A bench face: crest and toe 1.5 m apart in plan, 60 m long without vertices between, and a picket 20 m off
+    /// each side, at site coordinates in the millions. The pickets lie inside the huge circles of the thin face, so plain
+    /// Delaunay joins them across the lines; with the lines forced in as edges no triangle cuts across, and the face
+    /// lies between the two lines.
+    /// </summary>
+    [Fact]
+    public void FromEntities_TrianglesDoNotCutAcrossSurveyLines()
+    {
+        const double x0 = 4_316_000, y0 = 5_513_000;
+        PolylineEntity Line(double dy, double z) => new() { Points = { new Vec3(x0, y0 + dy, z), new Vec3(x0 + 60, y0 + dy, z) } };
+        var crest = Line(0, 110);
+        var toe = Line(-1.5, 100);
+        var pickets = new List<Entity>
+        {
+            new PointEntity { Position = new Vec3(x0 + 30, y0 + 20, 110.5) },
+            new PointEntity { Position = new Vec3(x0 + 30, y0 - 21.5, 99.5) }
+        };
+        int Crossings(SurfaceEntity s)
+        {
+            int n = 0;
+            for (int t = 0; t < s.Triangles.Count; t += 3)
+                for (int k = 0; k < 3; k++)
+                {
+                    var a = s.Vertices[s.Triangles[t + k]]; var b = s.Vertices[s.Triangles[t + (k + 1) % 3]];
+                    foreach (var l in new[] { crest, toe })
+                        for (int i = 1; i < l.Points.Count; i++)
+                            if (GeoMath.SegmentIntersect2D(a, b, l.Points[i - 1], l.Points[i], out var ta, out var tb) && ta > 1e-6 && ta < 1 - 1e-6 && tb > 1e-6 && tb < 1 - 1e-6) n++;
+                }
+            return n;
+        }
+        var input = new List<Entity> { crest, toe };
+        input.AddRange(pickets);
+        // densify far beyond the segment length: only the line vertices go in, the hardest case for the lines
+        var plain = Surfaces.Triangulate(input.SelectMany(e => e.GetVertices()));
+        Assert.True(Crossings(plain) > 0, "the test scene should defeat plain Delaunay");
+        var forced = Surfaces.FromEntities(input, true, densify: 100);
+        Assert.Equal(0, Crossings(forced));
+        // halfway between crest and toe, on the face
+        var z = forced.ElevationAt(x0 + 45, y0 - 0.75)!.Value;
+        Assert.InRange(z, 100, 110);
+    }
+
+    /// <summary>
+    /// The band between a crest and its toe goes to the faces, the berms above and below stay with the ground; the two
+    /// parts keep every triangle and only the vertices they use.
+    /// </summary>
+    [Fact]
+    public void SplitFaces_BandBetweenCrestAndToe()
+    {
+        var crest = new List<Vec3> { new(0, 0, 110), new(60, 0, 110) };
+        var toe = new List<Vec3> { new(0, -6, 100), new(60, -6, 100) };
+        var input = new List<Entity>
+        {
+            new PolylineEntity { Points = crest }, new PolylineEntity { Points = toe },
+            new PointEntity { Position = new Vec3(10, 15, 110.2) }, new PointEntity { Position = new Vec3(50, 15, 110.1) },
+            new PointEntity { Position = new Vec3(10, -20, 100.1) }, new PointEntity { Position = new Vec3(50, -20, 99.9) }
+        };
+        var s = Surfaces.FromEntities(input, true);
+        var (ground, faces) = Surfaces.SplitFaces(s, new[] { crest }, new[] { toe });
+        Assert.NotNull(faces);
+        Assert.Equal(s.TriangleCount, ground.TriangleCount + faces!.TriangleCount);
+        // every face triangle lies between the two lines, every ground triangle outside them
+        for (int t = 0; t < faces.Triangles.Count; t += 3)
+            Assert.InRange((faces.Vertices[faces.Triangles[t]].Y + faces.Vertices[faces.Triangles[t + 1]].Y + faces.Vertices[faces.Triangles[t + 2]].Y) / 3, -6, 0);
+        for (int t = 0; t < ground.Triangles.Count; t += 3)
+            Assert.False((ground.Vertices[ground.Triangles[t]].Y + ground.Vertices[ground.Triangles[t + 1]].Y + ground.Vertices[ground.Triangles[t + 2]].Y) / 3 is > -6 and < 0);
+        Assert.Equal(105, faces.ElevationAt(30, -3)!.Value, 1);
+        Assert.Equal(faces.Triangles.Distinct().Count(), faces.Vertices.Count);
+    }
+
     [Fact]
     public void VolumeBetween_FlatSurfaceAboveBase()
     {

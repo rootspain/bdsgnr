@@ -185,7 +185,8 @@ public sealed class DimensionEntity : Entity
     public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(new[] { Start, End }, p, false);
 }
 
-public enum SurfaceKind { General, Bench, Grade, Topography, Design, Strata, PointCloud }
+/// <summary>Role of a surface. Stored by name, so new kinds go anywhere in the list; <see cref="Face"/>: the bench faces of a survey.</summary>
+public enum SurfaceKind { General, Bench, Grade, Face, Topography, Design, Strata, PointCloud }
 
 /// <summary>Triangulated surface (TIN). <see cref="Triangles"/> holds vertex index triples.</summary>
 public sealed class SurfaceEntity : Entity

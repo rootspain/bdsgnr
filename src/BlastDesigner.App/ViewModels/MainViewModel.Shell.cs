@@ -325,7 +325,7 @@ public sealed partial class MainViewModel
             {
                 props, Item("Select like", SelectLike), Item("Select exact", SelectExact), Separator,
                 Item("Add at points", Run(AddHolesAtPoints), W).WithIcon("point"), Item("Move to selected points…", Run(MoveHolesToPoints), W), Separator,
-                Item("Selected points to monitoring points", PointsToMonitoring, W), Item("Create surface", Run(() => CreateSurface(false)), W),
+                Item("Selected points to monitoring points", PointsToMonitoring, W), Item("Create surface", Run(() => CreateSurface(true)), W),
                 Sub("Convert", Item("Selected objects to a polyline", () => ConvertToPolyline(false), W), Item("Selected objects to a polygon", () => ConvertToPolyline(true), W))
             }.Concat(edit),
             _ => new[] { props, Item("Select like", SelectLike), Item("Select exact", SelectExact), Item("Transform coordinates..", TransformCoordinates, W) }.Concat(edit)

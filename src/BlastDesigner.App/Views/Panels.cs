@@ -46,7 +46,9 @@ public sealed class LayersPanel : DockPanel
         _list.Children.Clear();
         var p = _vm.Project;
         if (p == null) return;
-        foreach (var group in p.Layers.GroupBy(l => l.Group).OrderBy(g => g.Key))
+        // groups by name, but Topography just before Drawing and layers without a group last
+        static string SortKey(string g) => g == StandardLayers.TopographyGroup ? "Drawing" : g;
+        foreach (var group in p.Layers.GroupBy(l => l.Group).OrderBy(g => g.Key.Length == 0).ThenBy(g => SortKey(g.Key)).ThenBy(g => g.Key != StandardLayers.TopographyGroup))
         {
             var groupName = string.IsNullOrEmpty(group.Key) ? Loc.T("(no group)") : Loc.Name(group.Key);
             var collapsed = _collapsed.Contains(group.Key);
@@ -181,6 +183,8 @@ public sealed class PropertiesPanel : DockPanel
                 {
                     grid.ApplyTo(template, e);
                     if (e is SurfaceEntity s) s.InvalidateIndex();
+                    // crests, toes, contours and boundaries live in the layers of their type, in its colour
+                    if (name == nameof(PolylineEntity.Kind) && e is PolylineEntity line) SurveyRecognitionWindow.PutInKindLayer(p, line);
                 }
             });
         };

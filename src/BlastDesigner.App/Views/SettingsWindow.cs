@@ -378,8 +378,20 @@ public sealed class SettingsForm : DockPanel
         // Full width (title above, not in the label column): seven pickers would each wrap onto two lines otherwise.
         kinds.Children.Insert(0, new TextBlock { Text = L("Surface colours"), Foreground = Look.TextSoft, Margin = new Thickness(0, 0, 0, 2) });
         yield return kinds;
+
+        var wireframe = new WrapPanel { Name = "wireframe" };
+        foreach (var (key, label) in new[] { (ProgramSettings.WireframeAlways, "Always"), (ProgramSettings.WireframeWhileStill, "Hide while rotating or moving"), (ProgramSettings.WireframeNever, "Never") })
+        {
+            var k = key;
+            var chip = Ui.Chip(L(label), () => { if (Edited.SurfaceWireframe != k) { Edited.SurfaceWireframe = k; Build(); } }, Edited.SurfaceWireframe == key);
+            chip.Margin = new Thickness(0, 0, 6, 6);
+            chip.Tag = "wireframe:" + key;
+            wireframe.Children.Add(chip);
+        }
+        yield return Row("Surface wireframe", wireframe, "Edges of the surface triangles; with the whole surface in view they slow the plan down the most");
         yield return Row("Collar size", Number("collar", Edited.CollarSizePixels, v => Edited.CollarSizePixels = v, "px", 2, 40, "0.#"));
         yield return Row("Coordinates box", Toggle(Edited.ShowCoordinatesBox, v => Edited.ShowCoordinatesBox = v), "Cursor coordinates in the status bar");
+        yield return Row("FPS", Toggle(Edited.ShowFps, v => Edited.ShowFps = v, "showFps"), "Frames per second");
     }
 
     private IEnumerable<Control> SnapRows()

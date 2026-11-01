@@ -10,51 +10,42 @@ namespace BlastDesigner.Rendering;
 public sealed class Camera
 {
     public Vec3 Target { get; set; }
-    public double Yaw { get; set; }
-    public double Pitch { get; set; } = 90;
+    public double Yaw { get => _yaw; set { _yaw = value; _basisValid = false; } }
+    public double Pitch { get => _pitch; set { _pitch = value; _basisValid = false; } }
     /// <summary>Pixels per metre.</summary>
     public double Scale { get; set; } = 5;
     public double Width { get; set; } = 800;
     public double Height { get; set; } = 600;
 
+    private double _yaw;
+    private double _pitch = 90;
+    // The view directions depend only on yaw and pitch; ToScreen runs for every vertex of every frame and every hit
+    // test, so the trigonometry is done once per change instead of on each call.
+    private bool _basisValid;
+    private Vec3 _right, _up, _toViewer, _forward;
+
+    private void Basis()
+    {
+        if (_basisValid) return;
+        var y = _yaw * GeoMath.Deg;
+        var p = _pitch * GeoMath.Deg;
+        _right = new Vec3(Math.Cos(y), -Math.Sin(y), 0);
+        _forward = new Vec3(Math.Sin(y), Math.Cos(y), 0);
+        _up = _forward * Math.Sin(p) + new Vec3(0, 0, 1) * Math.Cos(p);
+        _toViewer = new Vec3(0, 0, 1) * Math.Sin(p) - _forward * Math.Cos(p);
+        _basisValid = true;
+    }
+
     public bool IsPlan => Math.Abs(Pitch - 90) < 1e-6;
 
-    public Vec3 Right
-    {
-        get
-        {
-            var y = Yaw * GeoMath.Deg;
-            return new Vec3(Math.Cos(y), -Math.Sin(y), 0);
-        }
-    }
+    public Vec3 Right { get { Basis(); return _right; } }
 
-    private Vec3 ForwardHorizontal
-    {
-        get
-        {
-            var y = Yaw * GeoMath.Deg;
-            return new Vec3(Math.Sin(y), Math.Cos(y), 0);
-        }
-    }
+    private Vec3 ForwardHorizontal { get { Basis(); return _forward; } }
 
-    public Vec3 Up
-    {
-        get
-        {
-            var p = Pitch * GeoMath.Deg;
-            return ForwardHorizontal * Math.Sin(p) + new Vec3(0, 0, 1) * Math.Cos(p);
-        }
-    }
+    public Vec3 Up { get { Basis(); return _up; } }
 
     /// <summary>Unit vector pointing from the scene towards the viewer.</summary>
-    public Vec3 ToViewer
-    {
-        get
-        {
-            var p = Pitch * GeoMath.Deg;
-            return new Vec3(0, 0, 1) * Math.Sin(p) - ForwardHorizontal * Math.Cos(p);
-        }
-    }
+    public Vec3 ToViewer { get { Basis(); return _toViewer; } }
 
     public (float X, float Y) ToScreen(Vec3 p)
     {

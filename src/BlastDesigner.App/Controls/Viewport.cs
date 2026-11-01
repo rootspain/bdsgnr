@@ -44,6 +44,17 @@ public sealed class Viewport : Control
     public bool SnapEnabled { get; set; } = true;
     public double TargetRadius { get; set; } = 8;
     public bool LockPlan { get; set; }
+    /// <summary>When surface wireframes are drawn (<see cref="IO.ProgramSettings.SurfaceWireframe"/>).</summary>
+    public string SurfaceWireframe { get; set; } = IO.ProgramSettings.WireframeWhileStill;
+    /// <summary>Frames per second and the time of the last frame in the corner of the view.</summary>
+    public bool ShowFps { get; set; }
+    private readonly FrameStats _stats = new();
+    private static long _framesDrawn;
+
+    /// <summary>Frames drawn by every viewport since the start (render benchmarks read it).</summary>
+    public static long FramesDrawn => Interlocked.Read(ref _framesDrawn);
+    /// <summary>Time spent drawing frames since the start, ms (render benchmarks read it).</summary>
+    public static double DrawMs { get; private set; }
 
     /// <summary>Raised with the world position under the cursor (status bar coordinates).</summary>
     public event Action<Vec3>? PointerWorldMoved;
@@ -61,6 +72,20 @@ public sealed class Viewport : Control
 
     public void Redraw() => InvalidateVisual();
 
+    // While the camera moves the frame leaves out the costliest details; one full frame follows when it has settled.
+    private const double SettleMs = 200;
+    private long _cameraMovedAt;
+    private Avalonia.Threading.DispatcherTimer? _settle;
+
+    /// <summary>The camera is being moved by the user (pan, orbit, zoom): draw quick frames until it stops.</summary>
+    public void CameraMoving()
+    {
+        _cameraMovedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        _settle ??= new Avalonia.Threading.DispatcherTimer(TimeSpan.FromMilliseconds(SettleMs + 20), Avalonia.Threading.DispatcherPriority.Background, (_, _) => { _settle!.Stop(); Redraw(); });
+        _settle.Stop();
+        _settle.Start();
+    }
+
     public override void Render(DrawingContext context)
     {
         Camera.Width = Bounds.Width;
@@ -75,7 +100,7 @@ public sealed class Viewport : Control
         var opt = OptionsSource?.Invoke() ?? new SceneOptions();
         var all = new List<IOverlay>(opt.Overlays);
         all.AddRange(Overlays);
-        all.Add(Preview);
+        all.Add(Preview.Snapshot());
         var options = new SceneOptions
         {
             Selection = opt.Selection,
@@ -92,6 +117,8 @@ public sealed class Viewport : Control
             HiddenEntities = opt.HiddenEntities,
             SliceHalfWidth = opt.SliceHalfWidth,
             TopInset = opt.TopInset,
+            HideWireframes = SurfaceWireframe == IO.ProgramSettings.WireframeNever
+                || (SurfaceWireframe == IO.ProgramSettings.WireframeWhileStill && System.Diagnostics.Stopwatch.GetElapsedTime(_cameraMovedAt).TotalMilliseconds < SettleMs),
             Overlays = all,
             MovedEntities = Preview.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null,
             MoveOffset = Preview.MoveOffset
@@ -99,18 +126,45 @@ public sealed class Viewport : Control
         // The draw runs later on the render thread while the UI thread keeps moving the camera (orbit, pan):
         // a snapshot keeps every frame consistent instead of mixing two camera positions.
         var cam = Camera.Clone();
-        context.Custom(new SkiaDraw(new Rect(Bounds.Size), canvas => PlanRenderer.Render(canvas, cam, project, options)));
+        context.Custom(new SkiaDraw(new Rect(Bounds.Size), canvas => PlanRenderer.Render(canvas, cam, project, options), ShowFps ? _stats : null));
+    }
+
+    /// <summary>
+    /// Frames drawn in the last second and how long the last one took to draw. The view redraws only when something changes,
+    /// so the rate is meaningful while panning, orbiting or animating; the frame time is the limit (1000 / ms frames per second).
+    /// </summary>
+    private sealed class FrameStats
+    {
+        private readonly Queue<long> _frames = new();
+        private readonly SKPaint _text = new() { Color = SKColors.White, IsAntialias = true, TextSize = 12, Typeface = SKTypeface.FromFamilyName("Consolas") };
+        private readonly SKPaint _back = new() { Color = new SKColor(0, 0, 0, 150), IsAntialias = true };
+
+        public void Draw(SKCanvas canvas, Rect bounds, double ms)
+        {
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            _frames.Enqueue(now);
+            while (_frames.Count > 0 && System.Diagnostics.Stopwatch.GetElapsedTime(_frames.Peek(), now).TotalSeconds > 1) _frames.Dequeue();
+            var text = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0} FPS · {1:0.0} ms", _frames.Count, ms);
+            var w = _text.MeasureText(text);
+            // above the scale bar in the bottom right corner
+            var r = SKRect.Create((float)bounds.Width - w - 22, (float)bounds.Height - 62, w + 14, 20);
+            _text.Color = ms > 33 ? new SKColor(0xFFFCA5A5) : ms > 16.7 ? new SKColor(0xFFFDE68A) : SKColors.White;
+            canvas.DrawRoundRect(r, 5, 5, _back);
+            canvas.DrawText(text, r.Left + 7, r.Top + 14.5f, _text);
+        }
     }
 
     private sealed class SkiaDraw : ICustomDrawOperation
     {
         private static bool _backendLogged;
         private readonly Action<SKCanvas> _draw;
+        private readonly FrameStats? _stats;
 
-        public SkiaDraw(Rect bounds, Action<SKCanvas> draw)
+        public SkiaDraw(Rect bounds, Action<SKCanvas> draw, FrameStats? stats)
         {
             Bounds = bounds;
             _draw = draw;
+            _stats = stats;
         }
 
         public Rect Bounds { get; }
@@ -131,8 +185,12 @@ public sealed class Viewport : Control
             var canvas = l.SkCanvas;
             canvas.Save();
             canvas.ClipRect(new SKRect(0, 0, (float)Bounds.Width, (float)Bounds.Height));
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
             try { _draw(canvas); }
             catch (Exception ex) { IO.Log.Error("Render failed", ex); }
+            _stats?.Draw(canvas, Bounds, System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+            DrawMs += System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            Interlocked.Increment(ref _framesDrawn);
             canvas.Restore();
         }
     }
@@ -182,6 +240,11 @@ public sealed class Viewport : Control
                 var (x, y) = Camera.ToScreen(h.Collar);
                 return Math.Max(0, Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy)) - h.RadiusM * Camera.Scale);
             }
+            case PointEntity pt:
+            {
+                var (x, y) = Camera.ToScreen(pt.Position);
+                return Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
+            }
             case PolylineEntity pl:
                 return SegmentsDistance(pl.Points, pl.Closed, sx, sy);
             case TieEntity t:
@@ -201,10 +264,26 @@ public sealed class Viewport : Control
         }
     }
 
+    /// <summary>Screen distance to a polyline; runs for every line on every pointer move, so it projects in place without allocating.</summary>
     private double SegmentsDistance(IReadOnlyList<Vec3> pts, bool closed, double sx, double sy)
     {
-        var screen = pts.Select(p => { var (x, y) = Camera.ToScreen(p); return new Vec3(x, y, 0); }).ToList();
-        return GeoMath.DistanceToPolyline2D(screen, new Vec3(sx, sy, 0), closed);
+        if (pts.Count == 0) return double.MaxValue;
+        var (x0, y0) = Camera.ToScreen(pts[0]);
+        double best = Math.Sqrt((x0 - sx) * (x0 - sx) + (y0 - sy) * (y0 - sy));
+        double fx = x0, fy = y0, px = x0, py = y0;
+        int n = closed ? pts.Count + 1 : pts.Count;
+        for (int i = 1; i < n; i++)
+        {
+            double qx, qy;
+            if (i == pts.Count) (qx, qy) = (fx, fy);
+            else { var (x, y) = Camera.ToScreen(pts[i]); (qx, qy) = (x, y); }
+            double dx = qx - px, dy = qy - py, len2 = dx * dx + dy * dy;
+            double t = len2 > 0 ? Math.Clamp(((sx - px) * dx + (sy - py) * dy) / len2, 0, 1) : 0;
+            double cx = px + t * dx - sx, cy = py + t * dy - sy;
+            best = Math.Min(best, Math.Sqrt(cx * cx + cy * cy));
+            (px, py) = (qx, qy);
+        }
+        return best;
     }
 
     /// <summary>Entities whose geometry lies fully inside a screen rectangle.</summary>
@@ -276,10 +355,11 @@ public sealed class Viewport : Control
         return best;
     }
 
-    private ToolPointer MakePointer(PointerEventArgs e, int clicks = 0)
+    private ToolPointer MakePointer(PointerEventArgs e, int clicks = 0) =>
+        MakePointer(e.GetPosition(this), e.GetCurrentPoint(this).Properties, e.KeyModifiers, clicks);
+
+    private ToolPointer MakePointer(Point p, PointerPointProperties props, KeyModifiers modifiers, int clicks)
     {
-        var p = e.GetPosition(this);
-        var props = e.GetCurrentPoint(this).Properties;
         var project = Project;
         // Work on the elevation of the design: average collar elevation, else the camera target.
         double? planeZ = project?.Holes.Any() == true ? project.Holes.Average(h => h.Collar.Z) : null;
@@ -295,7 +375,7 @@ public sealed class Viewport : Control
             Hit = HitTest(p.X, p.Y),
             Left = props.IsLeftButtonPressed,
             Right = props.IsRightButtonPressed,
-            Modifiers = e.KeyModifiers,
+            Modifiers = modifiers,
             ClickCount = clicks
         };
     }
@@ -305,6 +385,7 @@ public sealed class Viewport : Control
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        FlushMove();
         Focus();
         var pt = e.GetCurrentPoint(this);
         _lastPointer = pt.Position;
@@ -412,6 +493,7 @@ public sealed class Viewport : Control
         {
             Camera.Pan(p.X - _lastPointer.X, p.Y - _lastPointer.Y);
             _lastPointer = p;
+            CameraMoving();
             CameraChanged?.Invoke();
             Redraw();
             return;
@@ -420,11 +502,29 @@ public sealed class Viewport : Control
         {
             Camera.Orbit((p.X - _lastPointer.X) * 0.4, (p.Y - _lastPointer.Y) * 0.3);
             _lastPointer = p;
+            CameraMoving();
             CameraChanged?.Invoke();
             Redraw();
             return;
         }
-        var tp = MakePointer(e);
+        // The mouse reports far more often than the screen refreshes, and each move snaps and hit-tests the whole
+        // project: only the latest position is handled, once the input queue is empty, so frames are not starved.
+        _pendingMove = (p, e.GetCurrentPoint(this).Properties, e.KeyModifiers);
+        if (_moveQueued) return;
+        _moveQueued = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(FlushMove, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private (Point Position, PointerPointProperties Properties, KeyModifiers Modifiers)? _pendingMove;
+    private bool _moveQueued;
+
+    /// <summary>Hands the latest pointer move to the tool; called before a press or release so the tool sees moves in order.</summary>
+    private void FlushMove()
+    {
+        _moveQueued = false;
+        if (_pendingMove is not { } m) return;
+        _pendingMove = null;
+        var tp = MakePointer(m.Position, m.Properties, m.Modifiers, 0);
         PointerWorldMoved?.Invoke(tp.Snapped);
         Preview.Snap = tp.IsSnapped ? tp.Snapped : null;
         ToolSource?.Invoke()?.PointerMoved(tp);
@@ -434,6 +534,7 @@ public sealed class Viewport : Control
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        FlushMove();
         e.Pointer.Capture(null);
         if (_panStart != null || _orbitStart != null)
         {
@@ -455,6 +556,7 @@ public sealed class Viewport : Control
         base.OnPointerWheelChanged(e);
         var p = e.GetPosition(this);
         Camera.ZoomAt(p.X, p.Y, e.Delta.Y > 0 ? 1.2 : 1 / 1.2);
+        CameraMoving();
         CameraChanged?.Invoke();
         Redraw();
     }

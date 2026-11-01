@@ -2418,3 +2418,13 @@ Move the lines to a layer per type, in its colour	Разложить линии 
 Crests, toes, contours and boundaries get their own layers: each type is shown or hidden with its layer	Верхние и нижние бровки, горизонтали и контуры попадут в свои слои: каждый тип включается и выключается своим слоем
 ui:Topography	Топография
 name:Topography	Топография
+ui:Open the selected file (Enter)	Открыть выбранный файл (Enter)
+Frames per second	Кадров в секунду
+ui:Always	Всегда
+ui:Hide while rotating or moving	Скрывать при вращении/перемещении
+ui:Never	Никогда
+ui:Surface wireframe	Отображать каркас поверхности
+ui:Edges of the surface triangles; with the whole surface in view they slow the plan down the most	Рёбра треугольников поверхности; когда видна вся поверхность, сильнее всего замедляют отрисовку
+Faces	Откосы
+Build the surface from the survey (all its lines as breaklines, the faces as a surface of kind Face)	Построить поверхность по съёмке (все её линии — структурные, откосы — отдельной поверхностью типа «Откос»)
+Create surface without breaklines	Построить поверхность без структурных линий

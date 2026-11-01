@@ -69,6 +69,7 @@ public sealed class StartupForm : DockPanel
     private readonly Border _dropZone;
     private readonly List<Entry> _visible = new();
     private readonly List<Border> _rows = new();
+    private readonly Button _ok;
     private int _selected;
 
     /// <summary>Called with the choice and, for <see cref="StartupChoice.Recent"/>, the file to open.</summary>
@@ -99,6 +100,23 @@ public sealed class StartupForm : DockPanel
             VerticalAlignment = VerticalAlignment.Center
         };
         help.Click += (_, _) => AnalysisWindows.Help(null);
+        // opens the file selected in the list, the same as a double click or Enter
+        _ok = new Button
+        {
+            Content = Loc.T("OK"),
+            Height = 30,
+            MinWidth = 88,
+            Padding = new Thickness(16, 0),
+            CornerRadius = new CornerRadius(6),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Classes = { "primary" },
+            Name = "openSelected",
+            IsEnabled = false
+        };
+        ToolTip.SetTip(_ok, Loc.Ui("Open the selected file (Enter)"));
+        _ok.Click += async (_, _) => { if (_selected >= 0 && _selected < _visible.Count) await OpenEntry(_visible[_selected]); };
         var version = new TextBlock { Text = "v" + AppVersion + (Trial.IsTrial ? " · " + Trial.Status : ""), FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center };
         var footer = new Border
         {
@@ -110,7 +128,7 @@ public sealed class StartupForm : DockPanel
             {
                 Children =
                 {
-                    new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14, [DockPanel.DockProperty] = Dock.Right, Children = { help, version } },
+                    new StackPanel { Orientation = Orientation.Horizontal, Spacing = 14, [DockPanel.DockProperty] = Dock.Right, Children = { help, version, _ok } },
                     dontShow
                 }
             }
@@ -346,6 +364,7 @@ public sealed class StartupForm : DockPanel
             .Select((e, i) => (e, i)).OrderBy(x => Group(x.e)).ThenBy(x => x.i).Select(x => x.e).ToList();
         _visible.Clear();
         _visible.AddRange(shown);
+        _ok.IsEnabled = shown.Count > 0;
         _rows.Clear();
         _list.Children.Clear();
         _right.Children.Clear();

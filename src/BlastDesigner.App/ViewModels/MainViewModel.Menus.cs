@@ -221,8 +221,9 @@ public sealed partial class MainViewModel
                 Item("Mark clearance zone…", Run(MarkClearanceZone), P),
                 Item("3D polygon area", Run(PolygonArea3D), S)),
             Sub("Surfaces",
-                Item("Create surface", Run(() => CreateSurface(false)), S),
-                Item("Create surface (honour breaklines)", Run(() => CreateSurface(true)), S),
+                // lines are breaklines by default: a surface cutting across a crest or toe is never what a survey means
+                Item("Create surface", Run(() => CreateSurface(true)), S),
+                Item("Create surface without breaklines", Run(() => CreateSurface(false)), S),
                 Item("Create a point set from surface…", Run(SurfacePointSet), P),
                 Item("Create contours…", Run(SurfaceContours), P),
                 Item("Create segment points", Run(SurfaceSegmentPoints), S),

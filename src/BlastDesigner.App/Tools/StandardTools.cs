@@ -198,6 +198,7 @@ public sealed class PanTool : Tool
     {
         if (_last == null) return;
         View.Camera.Pan(p.X - _last.X, p.Y - _last.Y);
+        View.CameraMoving();
         _last = p;
     }
 
@@ -225,6 +226,7 @@ public sealed class RotateTool : Tool
     {
         if (_last == null) return;
         View.Camera.Orbit((p.X - _last.X) * 0.4, _northOnly ? 0 : (p.Y - _last.Y) * 0.3);
+        View.CameraMoving();
         _last = p;
     }
 

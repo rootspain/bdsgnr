@@ -6,13 +6,18 @@ namespace BlastDesigner.Engine;
 /// <summary>Triangulated surface operations: creation, contours, clipping, simplification and intersections.</summary>
 public static class Surfaces
 {
-    /// <summary>Bowyer–Watson Delaunay triangulation in plan. Duplicate points (within 1 mm) are merged.</summary>
-    public static SurfaceEntity Triangulate(IEnumerable<Vec3> input, string name = "Surface", double maxEdge = 0)
+    /// <summary>
+    /// Bowyer–Watson Delaunay triangulation in plan. Duplicate points (within 1 mm) are merged. The <paramref name="forcedEdges"/>
+    /// (pairs of input points) are forced into the triangulation as edges, so no triangle cuts across them; one that crosses
+    /// an edge forced before it is left out.
+    /// </summary>
+    public static SurfaceEntity Triangulate(IEnumerable<Vec3> input, string name = "Surface", double maxEdge = 0, IEnumerable<(Vec3 A, Vec3 B)>? forcedEdges = null)
     {
         var pts = new List<Vec3>();
-        var seen = new HashSet<(long, long)>();
+        var index = new Dictionary<(long, long), int>();
+        static (long, long) Key(Vec3 p) => ((long)Math.Round(p.X * 1000), (long)Math.Round(p.Y * 1000));
         foreach (var p in input)
-            if (seen.Add(((long)Math.Round(p.X * 1000), (long)Math.Round(p.Y * 1000)))) pts.Add(p);
+            if (index.TryAdd(Key(p), pts.Count)) pts.Add(p);
 
         var surface = new SurfaceEntity { Name = name };
         if (pts.Count < 3) return surface;
@@ -21,14 +26,15 @@ public static class Surfaces
         var d = Math.Max(maxX - minX, maxY - minY) * 20 + 1;
         var cx = (minX + maxX) / 2;
         var cy = (minY + maxY) / 2;
-        // Triangulate on slightly jittered copies so co-circular points (regular grids) cannot produce overlapping triangles.
+        // Triangulate on slightly jittered copies so co-circular points (regular grids) cannot produce overlapping triangles,
+        // centred on the data: site coordinates in the millions leave too few digits for the circle and side tests.
         var extent = Math.Max(maxX - minX, maxY - minY) + 1;
         var rng = new Random(12345);
-        var all = new List<Vec3>(pts.Select(p => new Vec3(p.X + (rng.NextDouble() - 0.5) * 1e-6 * extent, p.Y + (rng.NextDouble() - 0.5) * 1e-6 * extent, p.Z)))
+        var all = new List<Vec3>(pts.Select(p => new Vec3(p.X - cx + (rng.NextDouble() - 0.5) * 1e-6 * extent, p.Y - cy + (rng.NextDouble() - 0.5) * 1e-6 * extent, p.Z)))
         {
-            new(cx - d, cy - d, 0),
-            new(cx + d, cy - d, 0),
-            new(cx, cy + d, 0)
+            new(-d, -d, 0),
+            new(d, -d, 0),
+            new(0, d, 0)
         };
         int s0 = pts.Count, s1 = pts.Count + 1, s2 = pts.Count + 2;
         var tris = new List<Tri> { MakeTri(all, s0, s1, s2) };
@@ -58,15 +64,25 @@ public static class Surfaces
                 if (count == 1) tris.Add(MakeTri(all, e.Item1, e.Item2, i));
         }
 
-        surface.Vertices = pts;
-        foreach (var t in tris)
+        var result = new List<int>(tris.Count * 3);
+        foreach (var t in tris) { result.Add(t.A); result.Add(t.B); result.Add(t.C); }
+        if (forcedEdges != null)
         {
-            if (t.A >= s0 || t.B >= s0 || t.C >= s0) continue;
-            if (maxEdge > 0 && (Vec3.Distance2D(pts[t.A], pts[t.B]) > maxEdge || Vec3.Distance2D(pts[t.B], pts[t.C]) > maxEdge || Vec3.Distance2D(pts[t.C], pts[t.A]) > maxEdge))
+            var forced = new ConstrainedEdges(all.Select(v => v.X).ToArray(), all.Select(v => v.Y).ToArray(), result);
+            foreach (var (a, b) in forcedEdges)
+                if (index.TryGetValue(Key(a), out var ia) && index.TryGetValue(Key(b), out var ib)) forced.Force(ia, ib);
+        }
+
+        surface.Vertices = pts;
+        for (int k = 0; k < result.Count; k += 3)
+        {
+            int ta = result[k], tb = result[k + 1], tc = result[k + 2];
+            if (ta >= s0 || tb >= s0 || tc >= s0) continue;
+            if (maxEdge > 0 && (Vec3.Distance2D(pts[ta], pts[tb]) > maxEdge || Vec3.Distance2D(pts[tb], pts[tc]) > maxEdge || Vec3.Distance2D(pts[tc], pts[ta]) > maxEdge))
                 continue;
-            surface.Triangles.Add(t.A);
-            surface.Triangles.Add(t.B);
-            surface.Triangles.Add(t.C);
+            surface.Triangles.Add(ta);
+            surface.Triangles.Add(tb);
+            surface.Triangles.Add(tc);
         }
         return surface;
     }
@@ -104,10 +120,14 @@ public static class Surfaces
         public bool InCircle(double x, double y) => (x - Cx) * (x - Cx) + (y - Cy) * (y - Cy) < R2 * (1 - 1e-12);
     }
 
-    /// <summary>Creates a surface from points and polylines; breaklines are densified so the triangulation follows them.</summary>
+    /// <summary>
+    /// Creates a surface from points and polylines. Breaklines are densified and every piece of them is forced into the
+    /// triangulation as an edge, so the surface follows the lines and no triangle cuts across them.
+    /// </summary>
     public static SurfaceEntity FromEntities(IEnumerable<Entity> entities, bool honourBreaklines, double densify = 2.0, double maxEdge = 0)
     {
         var pts = new List<Vec3>();
+        var edges = new List<(Vec3, Vec3)>();
         foreach (var e in entities)
         {
             switch (e)
@@ -119,8 +139,15 @@ public static class Surfaces
                         var next = i + 1 < pl.Points.Count ? pl.Points[i + 1] : pl.Closed ? pl.Points[0] : (Vec3?)null;
                         if (next is not Vec3 n) continue;
                         var len = Vec3.Distance(pl.Points[i], n);
-                        int steps = (int)(len / densify);
-                        for (int k = 1; k < steps; k++) pts.Add(Vec3.Lerp(pl.Points[i], n, (double)k / steps));
+                        int steps = Math.Max(1, (int)(len / densify));
+                        var prev = pl.Points[i];
+                        for (int k = 1; k <= steps; k++)
+                        {
+                            var q = k == steps ? n : Vec3.Lerp(pl.Points[i], n, (double)k / steps);
+                            if (k < steps) pts.Add(q);
+                            edges.Add((prev, q));
+                            prev = q;
+                        }
                     }
                     break;
                 case Hole h:
@@ -134,7 +161,82 @@ public static class Surfaces
                     break;
             }
         }
-        return Triangulate(pts, honourBreaklines ? "Surface (breaklines)" : "Surface", maxEdge);
+        return Triangulate(pts, honourBreaklines ? "Surface (breaklines)" : "Surface", maxEdge, honourBreaklines ? edges : null);
+    }
+
+    /// <summary>
+    /// Splits a survey surface into its bench faces and the rest. A triangle is a face when its corners all lie on crest
+    /// and toe lines, with at least one of each (the band between a crest and its toe), or when it is steeper than
+    /// <paramref name="minSlopeDeg"/> and touches a crest or toe (from the line down to a spot height on the face).
+    /// Berms, roads and windrows stay with the rest: they are flat, or their edges are neither crests nor toes.
+    /// Faces is null when no triangle qualifies.
+    /// </summary>
+    public static (SurfaceEntity Ground, SurfaceEntity? Faces) SplitFaces(SurfaceEntity s, IEnumerable<IReadOnlyList<Vec3>> crests, IEnumerable<IReadOnlyList<Vec3>> toes, double minSlopeDeg = 30)
+    {
+        // which vertices lie on a crest (1) or a toe (2) line: within 1 cm of a segment, found through a 5 m grid
+        const double cell = 5, near = 0.01;
+        var segs = new List<(Vec3 A, Vec3 B, int Class)>();
+        foreach (var (lines, cls) in new[] { (crests, 1), (toes, 2) })
+            foreach (var l in lines)
+                for (int i = 1; i < l.Count; i++) segs.Add((l[i - 1], l[i], cls));
+        var grid = new Dictionary<(long, long), List<int>>();
+        for (int i = 0; i < segs.Count; i++)
+        {
+            var (a, b, _) = segs[i];
+            for (var x = (long)Math.Floor((Math.Min(a.X, b.X) - near) / cell); x <= (long)Math.Floor((Math.Max(a.X, b.X) + near) / cell); x++)
+                for (var y = (long)Math.Floor((Math.Min(a.Y, b.Y) - near) / cell); y <= (long)Math.Floor((Math.Max(a.Y, b.Y) + near) / cell); y++)
+                {
+                    if (!grid.TryGetValue((x, y), out var list)) grid[(x, y)] = list = new();
+                    list.Add(i);
+                }
+        }
+        var onLine = new int[s.Vertices.Count];
+        for (int v = 0; v < onLine.Length; v++)
+        {
+            var p = s.Vertices[v];
+            if (!grid.TryGetValue(((long)Math.Floor(p.X / cell), (long)Math.Floor(p.Y / cell)), out var list)) continue;
+            foreach (var i in list)
+            {
+                // on the line in plan and in height (a twin line a few metres above is not the same line)
+                var (q, _) = GeoMath.ClosestOnSegment2D(segs[i].A, segs[i].B, p);
+                if (Vec3.Distance2D(p, q) <= near && Math.Abs(p.Z - q.Z) <= 0.05) onLine[v] |= segs[i].Class;
+            }
+        }
+
+        var tan = Math.Tan(minSlopeDeg * Math.PI / 180);
+        var face = new List<int>();
+        var rest = new List<int>();
+        for (int t = 0; t + 2 < s.Triangles.Count; t += 3)
+        {
+            int a = s.Triangles[t], b = s.Triangles[t + 1], c = s.Triangles[t + 2];
+            int all = onLine[a] | onLine[b] | onLine[c];
+            bool band = onLine[a] != 0 && onLine[b] != 0 && onLine[c] != 0 && all == 3;
+            bool steep = all != 0 && Slope(s.Vertices[a], s.Vertices[b], s.Vertices[c]) >= tan;
+            var into = band || steep ? face : rest;
+            into.Add(a); into.Add(b); into.Add(c);
+        }
+        if (face.Count == 0) return (s, null);
+        return (Part(s, rest, s.Name), Part(s, face, s.Name));
+
+        // rise over run of the triangle's plane
+        static double Slope(Vec3 a, Vec3 b, Vec3 c)
+        {
+            var n = Vec3.Cross(b - a, c - a);
+            var h = Math.Sqrt(n.X * n.X + n.Y * n.Y);
+            return Math.Abs(n.Z) < 1e-12 ? double.MaxValue : h / Math.Abs(n.Z);
+        }
+        // the given triangles with only the vertices they use
+        static SurfaceEntity Part(SurfaceEntity s, List<int> tris, string name)
+        {
+            var map = new Dictionary<int, int>();
+            var part = new SurfaceEntity { Name = name, Kind = s.Kind, ShowWireframe = s.ShowWireframe };
+            foreach (var i in tris)
+            {
+                if (!map.TryGetValue(i, out var j)) { j = part.Vertices.Count; map[i] = j; part.Vertices.Add(s.Vertices[i]); }
+                part.Triangles.Add(j);
+            }
+            return part;
+        }
     }
 
     /// <summary>Contour lines at a fixed interval, joined into polylines.</summary>

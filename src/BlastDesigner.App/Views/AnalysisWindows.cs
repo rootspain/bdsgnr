@@ -96,7 +96,7 @@ public static class AnalysisWindows
 
     private static Viewport SecondaryViewport(MainViewModel vm, Func<SceneOptions>? options = null)
     {
-        var v = new Viewport { ProjectSource = () => vm.Project, OptionsSource = options ?? vm.BuildSceneOptions, LockPlan = false };
+        var v = new Viewport { ProjectSource = () => vm.Project, OptionsSource = options ?? vm.BuildSceneOptions, LockPlan = false, SurfaceWireframe = vm.Settings.SurfaceWireframe };
         v.ViewMenu = () => new[] { MenuEntry.Item("Zoom all", v.ZoomAll) };
         vm.ModelRefreshed += v.Redraw;
         return v;
@@ -757,7 +757,7 @@ public static class AnalysisWindows
         var view = SecondaryViewport(vm);
         view.Camera.Pitch = 30;
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-        timer.Tick += (_, _) => { view.Camera.Orbit(0.6, 0); view.Redraw(); };
+        timer.Tick += (_, _) => { view.Camera.Orbit(0.6, 0); view.CameraMoving(); view.Redraw(); };
         var play = new Button { Content = "▶ / ■" };
         play.Click += (_, _) => { if (timer.IsEnabled) timer.Stop(); else timer.Start(); };
         var pitch = new Slider { Minimum = 5, Maximum = 90, Value = 30, Width = 200 };

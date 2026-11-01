@@ -297,6 +297,7 @@ public sealed partial class MainViewModel
         s.BackgroundColor = edited.BackgroundColor;
         s.GeometryColor = edited.GeometryColor;
         s.SurfaceColoring = edited.SurfaceColoring;
+        s.SurfaceWireframe = edited.SurfaceWireframe;
         s.SurfaceColors = edited.SurfaceColors;
         s.SelectionColor = edited.SelectionColor;
         s.CollarSizePixels = edited.CollarSizePixels;
@@ -306,6 +307,7 @@ public sealed partial class MainViewModel
         else IO.UsageLog.Stop();
         s.SnapToObjects = edited.SnapToObjects;
         s.TargetRadiusPixels = edited.TargetRadiusPixels;
+        s.ShowFps = edited.ShowFps;
         s.AutosaveMinutes = edited.AutosaveMinutes;
         s.BackupCopies = edited.BackupCopies;
         s.MaxRecentFiles = edited.MaxRecentFiles;
@@ -315,6 +317,8 @@ public sealed partial class MainViewModel
         Look.ApplyTheme(s.IsLight, s.AccentColor);
         View.SnapEnabled = s.SnapToObjects;
         View.TargetRadius = s.TargetRadiusPixels;
+        View.ShowFps = s.ShowFps;
+        View.SurfaceWireframe = s.SurfaceWireframe;
         RefreshAll();
     }
 

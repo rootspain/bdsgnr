@@ -35,6 +35,8 @@ public sealed class SceneOptions
     public double? SliceHalfWidth { get; init; }
     /// <summary>Space kept free at the top of the view for controls drawn over it (north arrow and summary block move below).</summary>
     public float TopInset { get; init; }
+    /// <summary>Leave out surface wireframes (switched off, or the camera is moving and they wait until it stops).</summary>
+    public bool HideWireframes { get; init; }
     /// <summary>Objects drawn shifted by <see cref="MoveOffset"/> (live preview while they are dragged).</summary>
     public ISet<Guid>? MovedEntities { get; init; }
     public Vec3 MoveOffset { get; init; }
@@ -133,16 +135,47 @@ public static class PlanRenderer
             foreach (var s in entities.OfType<SurfaceEntity>())
             {
                 var mc = BeginMove(s);
-                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range);
+                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes);
                 EndMove(mc);
             }
 
+        // Plain point crosses go into one batch per colour and width: thousands of survey points as two lines each would
+        // be thousands of draw calls a frame, the batch is one.
+        var crosses = new Dictionary<(SKColor Color, float Width), List<SKPoint>>();
+        var pointLabels = new TextBatch();
+        float viewW = (float)cam.Width, viewH = (float)cam.Height;
         foreach (var e in entities)
         {
+            if (e is PointEntity pe && IsCross(pe.Kind) && (moved == null || !moved.Contains(e.Id)))
+            {
+                var (x, y) = cam.ToScreen(pe.Position);
+                if (x < -10 || y < -10 || x > viewW + 10 || y > viewH + 10) continue;
+                var selected = opt.Selection.Contains(e.Id);
+                var key = (selected ? opt.SelectionColor : ColorOf(e), (float)((layerById.TryGetValue(e.LayerId, out var pl) ? pl.LineWidth : 1) * (selected ? 2 : 1)));
+                if (!crosses.TryGetValue(key, out var list)) crosses[key] = list = new List<SKPoint>();
+                // on pixel centres: the crosses are drawn without antialiasing and stay sharp
+                float cx = MathF.Floor(x) + 0.5f, cy = MathF.Floor(y) + 0.5f;
+                list.Add(new SKPoint(cx - 4, cy)); list.Add(new SKPoint(cx + 5, cy));
+                list.Add(new SKPoint(cx, cy - 4)); list.Add(new SKPoint(cx, cy + 5));
+                if (!string.IsNullOrEmpty(pe.Label) && view.ShowText && (pl?.ShowText ?? true))
+                    pointLabels.Add(pe.Label, x + 6, y - 6, key.Item1, text.TextSize);
+                continue;
+            }
             var mc = BeginMove(e);
             DrawEntity(e);
             EndMove(mc);
         }
+        // Without antialiasing: the GPU draws such lines directly, while antialiased ones are built on the CPU each frame,
+        // which for a few thousand survey points took most of the frame. Horizontal and vertical lines lose nothing.
+        stroke.IsAntialias = false;
+        foreach (var ((color, width), list) in crosses)
+        {
+            stroke.Color = color;
+            stroke.StrokeWidth = width;
+            canvas.DrawPoints(SKPointMode.Lines, list.ToArray(), stroke);
+        }
+        stroke.IsAntialias = true;
+        pointLabels.Flush(canvas, text);
 
         void DrawEntity(Entity e)
         {
@@ -175,6 +208,9 @@ public static class PlanRenderer
                 {
                     var (x, y) = cam.ToScreen(t.Position);
                     text.TextSize = (float)Math.Clamp(t.Height * cam.Scale, 6, 200);
+                    // off the view whichever way it is turned: no farther than its length from the anchor
+                    var reach = text.TextSize * (t.Text.Length + 1);
+                    if (x < -reach || y < -reach || x > viewW + reach || y > viewH + reach) { text.TextSize = 11; break; }
                     canvas.Save();
                     canvas.RotateDegrees((float)-t.Rotation, x, y);
                     canvas.DrawText(t.Text, x, y, text);
@@ -200,19 +236,47 @@ public static class PlanRenderer
             }
         }
 
-        if (view.ShowTies) DrawTies(canvas, cam, project, entities.OfType<TieEntity>(), opt, stroke, fill, text);
-        if (view.ShowRows) DrawRows(canvas, cam, project, stroke);
+        // Ties and rows refer to holes by id: one lookup table per frame, instead of searching the whole project for
+        // each end of each tie (with a survey under the blast that was most of the frame).
+        Dictionary<Guid, Entity>? byId = null;
+        if (view.ShowTies || view.ShowRows)
+        {
+            byId = new Dictionary<Guid, Entity>(project.Entities.Count);
+            foreach (var e in project.Entities) byId.TryAdd(e.Id, e);
+        }
+        if (view.ShowTies) DrawTies(canvas, cam, project, entities.OfType<TieEntity>(), byId!, opt, stroke, fill, text);
+        if (view.ShowRows) DrawRows(canvas, cam, project, byId!, stroke);
 
         var holes = entities.OfType<Hole>().Where(h => HoleVisible(view, h)).ToList();
         if (!cam.IsPlan) holes = holes.OrderBy(h => cam.Depth(h.Collar)).ToList();
         if (view.ShowDipTrack || view.ShowActualTrack || view.ShowDeviation || view.ShowGradePoint || view.ShowProfile)
             foreach (var h in holes) { var mc = BeginMove(h); DrawHoleTracks(canvas, cam, h, view); EndMove(mc); }
-        foreach (var h in holes) { var mc = BeginMove(h); DrawHole(canvas, cam, project, h, opt, stroke, fill); EndMove(mc); }
-        if (view.ShowBurdenMarker) DrawBurdenMarkers(canvas, cam, project, holes, text);
-        foreach (var h in holes) { var mc = BeginMove(h); DrawHoleLabels(canvas, cam, project, h, view, opt, text); EndMove(mc); }
+        // Depth lines and charge columns of all holes in one batch, under the collars: in 3D with the charge shown they
+        // were three or four thick lines per hole, thousands of draws a frame. Dragged holes draw their own.
+        var columns = new LineMesh();
+        foreach (var h in holes)
+            if (moved?.Contains(h.Id) != true) DrawHoleColumn(canvas, cam, project, h, opt, fill, columns);
+        columns.Flush(canvas);
         foreach (var h in holes)
         {
-            if (!Charging.HasLoadingWarning(project, h)) continue;
+            var mc = BeginMove(h);
+            if (mc >= 0) { var own = new LineMesh(); DrawHoleColumn(canvas, cam, project, h, opt, fill, own); own.Flush(canvas); }
+            DrawHole(canvas, cam, project, h, opt, stroke, fill);
+            EndMove(mc);
+        }
+        if (view.ShowBurdenMarker) DrawBurdenMarkers(canvas, cam, project, holes, text);
+        var holeLabels = new TextBatch();
+        foreach (var h in holes)
+        {
+            // labels of dragged holes follow them at once, the rest go into one batch
+            if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(canvas, cam, project, h, view, opt, text, own); own.Flush(canvas, text); EndMove(mc); }
+            else DrawHoleLabels(canvas, cam, project, h, view, opt, text, holeLabels);
+        }
+        holeLabels.Flush(canvas, text);
+        var productsKey = ProductsKey(project);
+        foreach (var h in holes)
+        {
+            if (!LoadingWarning(project, h, productsKey)) continue;
             var mc = BeginMove(h);
             DrawLoadingWarning(canvas, cam, h, opt, fill);
             EndMove(mc);
@@ -231,6 +295,37 @@ public static class PlanRenderer
         if (view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, cam, project, holes, fill, text);
         if (view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, fill, text);
         if (opt.DrawSummaryBlock && project.Summary.Visible) DrawSummary(canvas, cam, project, fill, stroke, text);
+    }
+
+    private sealed class WarningCache { public int Key; public bool Warning; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Hole, WarningCache> _warnings = new();
+
+    /// <summary>
+    /// The loading check of a hole, kept until its charge column, length, water, diameter or the products change: run
+    /// for every hole on every frame it took more time than drawing the holes.
+    /// </summary>
+    private static bool LoadingWarning(BlastProject project, Hole h, int productsKey)
+    {
+        if (h.Decks.Count == 0) return false;
+        var key = new HashCode();
+        key.Add(productsKey);
+        key.Add(h.Length); key.Add(h.ActualLength); key.Add(h.WaterDepth); key.Add(h.Diameter); key.Add(h.BoreTrack?.Count);
+        foreach (var d in h.Decks) { key.Add(d.Top); key.Add(d.Bottom); key.Add(d.ProductId); key.Add(d.Primers.Count); }
+        var k = key.ToHashCode();
+        var cache = _warnings.GetValue(h, _ => new WarningCache { Key = ~k });
+        lock (cache)
+        {
+            if (cache.Key != k) { cache.Warning = Charging.HasLoadingWarning(project, h); cache.Key = k; }
+            return cache.Warning;
+        }
+    }
+
+    /// <summary>What of the products the loading check depends on.</summary>
+    private static int ProductsKey(BlastProject project)
+    {
+        var key = new HashCode();
+        foreach (var p in project.Products) { key.Add(p.Id); key.Add(p.Kind); key.Add(p.IsExplosive); key.Add(p.WaterResistant); }
+        return key.ToHashCode();
     }
 
     /// <summary>Radius of a hole that has already fired in the timing animation.</summary>
@@ -257,15 +352,21 @@ public static class PlanRenderer
     public static void DrawPolyline(SKCanvas c, Camera cam, IReadOnlyList<Vec3> pts, bool closed, SKPaint paint)
     {
         if (pts.Count < 2) return;
-        using var path = new SKPath();
-        var (x0, y0) = cam.ToScreen(pts[0]);
-        path.MoveTo(x0, y0);
-        for (int i = 1; i < pts.Count; i++)
+        // projected into one array and handed over in one call (a native call per vertex added up over a survey);
+        // a line entirely outside the view is not drawn at all
+        var screen = new SKPoint[pts.Count];
+        float minX = float.MaxValue, minY = float.MaxValue, maxX = float.MinValue, maxY = float.MinValue;
+        for (int i = 0; i < screen.Length; i++)
         {
             var (x, y) = cam.ToScreen(pts[i]);
-            path.LineTo(x, y);
+            screen[i] = new SKPoint(x, y);
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
         }
-        if (closed) path.Close();
+        var pad = paint.StrokeWidth + 2;
+        if (maxX < -pad || maxY < -pad || minX > cam.Width + pad || minY > cam.Height + pad) return;
+        using var path = new SKPath();
+        path.AddPoly(screen, closed);
         c.DrawPath(path, paint);
     }
 
@@ -294,6 +395,9 @@ public static class PlanRenderer
         fill.Color = stroke.Color;
         c.DrawPath(path, fill);
     }
+
+    /// <summary>Point kinds drawn as a plain cross (batched by <see cref="Render"/>).</summary>
+    private static bool IsCross(PointKind kind) => kind is not (PointKind.Monitoring or PointKind.GradePeg or PointKind.SurveyStation or PointKind.NorthPoint);
 
     private static void DrawPoint(SKCanvas c, Camera cam, PointEntity p, SKPaint stroke, SKPaint fill, SKPaint text, bool showText)
     {
@@ -466,9 +570,16 @@ public static class PlanRenderer
         public SKColor[] OrderedColors = Array.Empty<SKColor>();
         public int[] Order = Array.Empty<int>();
         public float[] Keys = Array.Empty<float>();
+        /// <summary>Camera direction <see cref="Order"/> was sorted for.</summary>
+        public double SortYaw = double.NaN, SortPitch = double.NaN;
+        /// <summary>Vertex index pairs of the wireframe, each edge once (shared triangle edges were drawn twice).</summary>
+        public int[] Edges = Array.Empty<int>();
     }
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SurfaceEntity, SurfaceMesh> _surfaceMeshes = new();
+
+    /// <summary>Degrees the camera may turn before a surface is sorted far-to-near again.</summary>
+    private const double SortTolerance = 2;
 
     /// <summary>Wireframe is skipped above this triangle count: at that size the single mesh fill carries the shape.</summary>
     private const int WireframeTriangleCap = 40_000;
@@ -502,7 +613,7 @@ public static class PlanRenderer
     private static SKColor Shade(SKColor c, double f) =>
         new((byte)Math.Clamp(c.Red * f, 0, 255), (byte)Math.Clamp(c.Green * f, 0, 255), (byte)Math.Clamp(c.Blue * f, 0, 255), c.Alpha);
 
-    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null)
+    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null, bool hideWireframe = false)
     {
         // A point cloud coloured by kind shows its measured points, not a mesh made up between them.
         if (fill is SKColor pc && s.Kind == SurfaceKind.PointCloud)
@@ -515,7 +626,7 @@ public static class PlanRenderer
 
         var mesh = _surfaceMeshes.GetValue(s, _ => new SurfaceMesh());
         // The same surface can be drawn by the viewport's render thread and by an export on the UI thread.
-        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range);
+        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe);
     }
 
     private static void DrawPointCloud(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color)
@@ -531,7 +642,7 @@ public static class PlanRenderer
         c.DrawPoints(SKPointMode.Points, pts, paint);
     }
 
-    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range)
+    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe)
     {
         // The per-triangle fill colour depends only on the geometry, the theme, the fill and the shared elevation range,
         // so compute the expensive normal shading and colouring once and reuse it; only the projection runs per frame.
@@ -554,6 +665,7 @@ public static class PlanRenderer
             mesh.OrderedColors = Array.Empty<SKColor>();
             mesh.Order = Array.Empty<int>();
             mesh.Keys = Array.Empty<float>();
+            mesh.Edges = UniqueEdges(s.Triangles, tri);
             double minZ = double.MaxValue, maxZ = double.MinValue;
             if (range is { } shared) (minZ, maxZ) = shared;
             else foreach (var v in s.Vertices) { if (v.Z < minZ) minZ = v.Z; if (v.Z > maxZ) maxZ = v.Z; }
@@ -609,15 +721,21 @@ public static class PlanRenderer
         }
         else
         {
-            if (mesh.Ordered.Length != tri * 3) { mesh.Ordered = new SKPoint[tri * 3]; mesh.OrderedColors = new SKColor[tri * 3]; mesh.Order = new int[tri]; mesh.Keys = new float[tri]; }
+            if (mesh.Ordered.Length != tri * 3) { mesh.Ordered = new SKPoint[tri * 3]; mesh.OrderedColors = new SKColor[tri * 3]; mesh.Order = new int[tri]; mesh.Keys = new float[tri]; mesh.SortYaw = double.NaN; }
             // Sort by precomputed keys (sum of corner depths, far first): no comparison delegate, so the order is
-            // always consistent and depth is computed once per vertex instead of on every comparison.
-            for (int t = 0; t < tri; t++)
+            // always consistent and depth is computed once per vertex instead of on every comparison. Panning and
+            // zooming keep the order, so it is sorted again only when the camera turns by more than a couple of degrees:
+            // the order hardly changes in between, and the translucent fill does not show it.
+            if (!(Math.Abs(mesh.SortYaw - cam.Yaw) < SortTolerance) || !(Math.Abs(mesh.SortPitch - cam.Pitch) < SortTolerance))
             {
-                mesh.Order[t] = t;
-                mesh.Keys[t] = vd[tris[3 * t]] + vd[tris[3 * t + 1]] + vd[tris[3 * t + 2]];
+                for (int t = 0; t < tri; t++)
+                {
+                    mesh.Order[t] = t;
+                    mesh.Keys[t] = vd[tris[3 * t]] + vd[tris[3 * t + 1]] + vd[tris[3 * t + 2]];
+                }
+                Array.Sort(mesh.Keys, mesh.Order);
+                (mesh.SortYaw, mesh.SortPitch) = (cam.Yaw, cam.Pitch);
             }
-            Array.Sort(mesh.Keys, mesh.Order);
             for (int i = 0; i < tri; i++)
             {
                 int t = mesh.Order[i];
@@ -632,63 +750,132 @@ public static class PlanRenderer
         using (var vpaint = new SKPaint { IsAntialias = false })
             c.DrawVertices(skVertices, SKBlendMode.Modulate, vpaint);
 
-        // Wireframe as a single batched path, skipping triangles fully outside the viewport.
-        if (s.ShowWireframe && cam.Scale > 0.5 && tri <= WireframeTriangleCap)
+        // Wireframe: every edge once, skipping edges fully outside the view (a path of every triangle's outline drew shared
+        // edges twice). With the whole surface in view it is the costliest part of a frame, so by default it waits while
+        // the camera moves (Program settings ▸ Viewport ▸ Surface wireframe).
+        if (s.ShowWireframe && !hideWireframe && cam.Scale > 0.5 && tri <= WireframeTriangleCap)
         {
             float w = (float)cam.Width, hgt = (float)cam.Height;
+            var edges = mesh.Edges;
             using var wire = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 0.5f, Color = (selected ?? color).WithAlpha(110) };
             using var path = new SKPath();
-            for (int t = 0; t < tri; t++)
+            for (int k = 0; k < edges.Length; k += 2)
             {
-                var p0 = pts[3 * t]; var p1 = pts[3 * t + 1]; var p2 = pts[3 * t + 2];
-                if ((p0.X < 0 && p1.X < 0 && p2.X < 0) || (p0.X > w && p1.X > w && p2.X > w) ||
-                    (p0.Y < 0 && p1.Y < 0 && p2.Y < 0) || (p0.Y > hgt && p1.Y > hgt && p2.Y > hgt)) continue;
-                path.MoveTo(p0); path.LineTo(p1); path.LineTo(p2); path.Close();
+                var p0 = vs[edges[k]]; var p1 = vs[edges[k + 1]];
+                if ((p0.X < 0 && p1.X < 0) || (p0.X > w && p1.X > w) || (p0.Y < 0 && p1.Y < 0) || (p0.Y > hgt && p1.Y > hgt)) continue;
+                path.MoveTo(p0); path.LineTo(p1);
             }
             c.DrawPath(path, wire);
         }
     }
 
-    private static void DrawTies(SKCanvas c, Camera cam, BlastProject project, IEnumerable<TieEntity> ties, SceneOptions opt, SKPaint stroke, SKPaint fill, SKPaint text)
+    /// <summary>Each triangle edge once, as pairs of vertex indices.</summary>
+    private static int[] UniqueEdges(List<int> tris, int tri)
     {
-        foreach (var t in ties)
-        {
-            var from = Timing.PositionOf(project, t.FromId);
-            var to = Timing.PositionOf(project, t.ToId);
-            if (from is null || to is null) continue;
-            var product = project.FindProduct(t.ProductId);
-            var col = opt.Selection.Contains(t.Id) ? opt.SelectionColor : product != null ? new SKColor(product.Color) : new SKColor(0xFF6B7280);
-            if (!_dark && col.Red > 230 && col.Green > 230 && col.Blue > 230) col = new SKColor(0xFF374151);
-            col = Adapt(col);
-            stroke.Color = col;
-            stroke.StrokeWidth = opt.Selection.Contains(t.Id) ? 3 : 2;
-            var a = from.Value;
-            var b = to.Value;
-            var dir = (b - a).Normalized();
-            var gap = Math.Min(8 / cam.Scale, Vec3.Distance(a, b) / 3);
-            DrawArrow(c, cam, a + dir * gap, b - dir * gap, stroke, fill, 8);
-            if (cam.Scale > 4)
+        var seen = new HashSet<long>(tri * 2);
+        var result = new List<int>(tri * 4);
+        for (int t = 0; t < tri; t++)
+            for (int k = 0; k < 3; k++)
             {
-                var (x, y) = cam.ToScreen(Vec3.Lerp(a, b, 0.5));
-                text.Color = col;
-                text.TextSize = 9;
-                c.DrawText($"{Timing.TieDelay(project, t):0}", x + 2, y - 2, text);
-                text.TextSize = 11;
+                int a = tris[3 * t + k], b = tris[3 * t + (k + 1) % 3];
+                long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+                if (seen.Add(key)) { result.Add(a); result.Add(b); }
             }
+        return result.ToArray();
+    }
+
+    private static void DrawTies(SKCanvas c, Camera cam, BlastProject project, IEnumerable<TieEntity> ties, IReadOnlyDictionary<Guid, Entity> byId, SceneOptions opt, SKPaint stroke, SKPaint fill, SKPaint text)
+    {
+        static Vec3? PositionOf(IReadOnlyDictionary<Guid, Entity> byId, Guid id) => byId.TryGetValue(id, out var e) ? e switch
+        {
+            Hole h => h.Collar,
+            InitiationPoint ip => ip.Position,
+            _ => null
+        } : null;
+        // All arrows go into one triangle mesh: drawn one by one, 750 ties were 750 antialiased lines and 750 small
+        // filled paths, half of a blast frame; as paths, Skia stroked them on the CPU. Ties outside the view are skipped.
+        var products = new Dictionary<Guid, Product>();
+        foreach (var p in project.Products) products.TryAdd(p.Id, p);
+        var arrows = new LineMesh();
+        var labels = new TextBatch();
+        float w = (float)cam.Width, h = (float)cam.Height;
+        const float head = 8;
+        {
+            foreach (var t in ties)
+            {
+                var from = PositionOf(byId, t.FromId);
+                var to = PositionOf(byId, t.ToId);
+                if (from is null || to is null) continue;
+                var a = from.Value;
+                var b = to.Value;
+                var dir = (b - a).Normalized();
+                var gap = Math.Min(8 / cam.Scale, Vec3.Distance(a, b) / 3);
+                var (x0, y0) = cam.ToScreen(a + dir * gap);
+                var (x1, y1) = cam.ToScreen(b - dir * gap);
+                if ((x0 < -20 && x1 < -20) || (x0 > w + 20 && x1 > w + 20) || (y0 < -20 && y1 < -20) || (y0 > h + 20 && y1 > h + 20)) continue;
+                var product = t.ProductId is Guid pid && products.TryGetValue(pid, out var found) ? found : null;
+                var selected = opt.Selection.Contains(t.Id);
+                var col = selected ? opt.SelectionColor : product != null ? new SKColor(product.Color) : new SKColor(0xFF6B7280);
+                if (!_dark && col.Red > 230 && col.Green > 230 && col.Blue > 230) col = new SKColor(0xFF374151);
+                col = Adapt(col);
+                arrows.Line(col, selected ? 3f : 2f, x0, y0, x1, y1);
+                var ang = Math.Atan2(y1 - y0, x1 - x0);
+                arrows.Triangle(col, new SKPoint(x1, y1),
+                    new SKPoint((float)(x1 - head * Math.Cos(ang - 0.4)), (float)(y1 - head * Math.Sin(ang - 0.4))),
+                    new SKPoint((float)(x1 - head * Math.Cos(ang + 0.4)), (float)(y1 - head * Math.Sin(ang + 0.4))));
+                if (cam.Scale > 4)
+                {
+                    var (x, y) = cam.ToScreen(Vec3.Lerp(a, b, 0.5));
+                    // the tie delay (Timing.TieDelay) without searching the products again
+                    var delay = product != null && t.DelayMs == 0 ? product.DelayMs : t.DelayMs;
+                    labels.Add(delay.ToString("0"), x + 2, y - 2, col, 9);
+                }
+            }
+            arrows.Flush(c);
+            labels.Flush(c, text);
         }
     }
 
-    private static void DrawRows(SKCanvas c, Camera cam, BlastProject project, SKPaint stroke)
+    private static void DrawRows(SKCanvas c, Camera cam, BlastProject project, IReadOnlyDictionary<Guid, Entity> byId, SKPaint stroke)
     {
         stroke.Color = new SKColor(0x8016A34A);
         stroke.StrokeWidth = 1;
         stroke.PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0);
         foreach (var r in project.Rows)
         {
-            var pts = r.HoleIds.Select(project.FindEntity).OfType<Hole>().Select(h => h.Collar).ToList();
+            var pts = r.HoleIds.Select(id => byId.TryGetValue(id, out var e) ? e : null).OfType<Hole>().Select(h => h.Collar).ToList();
             DrawPolyline(c, cam, pts, false, stroke);
         }
         stroke.PathEffect = null;
+    }
+
+    /// <summary>Hole depth line (collar to toe) and, on its own switch, the charge column along it, into <paramref name="lines"/>.</summary>
+    private static void DrawHoleColumn(SKCanvas c, Camera cam, BlastProject project, Hole h, SceneOptions opt, SKPaint fill, LineMesh lines)
+    {
+        var view = project.View;
+        if (view.CollarsOnly && !(view.ShowLoading && h.Decks.Count > 0)) return;
+        var (x, y) = cam.ToScreen(h.Collar);
+        var (tx, ty) = cam.ToScreen(h.Toe);
+        if (Math.Abs(tx - x) + Math.Abs(ty - y) <= 1) return;
+        var selected = opt.Selection.Contains(h.Id);
+        var typeColor = Adapt(new SKColor(project.Design.HoleTypes.FirstOrDefault(t => t.Index == h.HoleType)?.Color ?? 0xFF1E3A8A));
+        var color = selected ? opt.SelectionColor : typeColor;
+        var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
+        if (!view.CollarsOnly) lines.Line(color.WithAlpha(160), 1, x, y, tx, ty);
+        if (view.ShowLoading && h.Decks.Count > 0)
+            foreach (var d in h.Decks)
+            {
+                var p = project.FindProduct(d.ProductId);
+                if (p == null) continue;
+                var (ax, ay) = cam.ToScreen(h.PointAtDepth(d.Top));
+                var (bx, by) = cam.ToScreen(h.PointAtDepth(d.Bottom));
+                lines.Line(new SKColor(p.Color), Math.Max(3, r), ax, ay, bx, by);
+            }
+        if (!view.CollarsOnly)
+        {
+            fill.Color = color.WithAlpha(160);
+            c.DrawCircle(tx, ty, 1.5f, fill);
+        }
     }
 
     private static void DrawHole(SKCanvas c, Camera cam, BlastProject project, Hole h, SceneOptions opt, SKPaint stroke, SKPaint fill)
@@ -699,37 +886,6 @@ public static class PlanRenderer
         var color = selected ? opt.SelectionColor : typeColor;
         var (x, y) = cam.ToScreen(h.Collar);
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
-
-        // Hole depth line (collar to toe) and, on its own switch, the charge column along it.
-        var (tx, ty) = cam.ToScreen(h.Toe);
-        if (Math.Abs(tx - x) + Math.Abs(ty - y) > 1)
-        {
-            if (!view.CollarsOnly)
-            {
-                stroke.Color = color.WithAlpha(160);
-                stroke.StrokeWidth = 1;
-                c.DrawLine(x, y, tx, ty, stroke);
-            }
-            if (view.ShowLoading && h.Decks.Count > 0)
-            {
-                stroke.StrokeWidth = Math.Max(3, r);
-                foreach (var d in h.Decks)
-                {
-                    var p = project.FindProduct(d.ProductId);
-                    if (p == null) continue;
-                    stroke.Color = new SKColor(p.Color);
-                    var (ax, ay) = cam.ToScreen(h.PointAtDepth(d.Top));
-                    var (bx, by) = cam.ToScreen(h.PointAtDepth(d.Bottom));
-                    c.DrawLine(ax, ay, bx, by, stroke);
-                }
-                stroke.StrokeWidth = 1;
-            }
-            if (!view.CollarsOnly)
-            {
-                fill.Color = color.WithAlpha(160);
-                c.DrawCircle(tx, ty, 1.5f, fill);
-            }
-        }
 
         bool fired = opt.AnimationTimeMs is double at && h.FiringTimeMs is double ft && ft <= at;
         stroke.Color = color;
@@ -785,12 +941,13 @@ public static class PlanRenderer
         }
     }
 
-    private static void DrawHoleLabels(SKCanvas c, Camera cam, BlastProject project, Hole h, ViewState view, SceneOptions opt, SKPaint text)
+    private static void DrawHoleLabels(SKCanvas c, Camera cam, BlastProject project, Hole h, ViewState view, SceneOptions opt, SKPaint text, TextBatch batch)
     {
-        var layer = project.FindLayer(h.LayerId);
-        if (layer is { ShowText: false }) return;
         if (cam.Scale < 1.2) return;
         var (x, y) = cam.ToScreen(h.Collar);
+        if (x < -100 || y < -100 || x > cam.Width + 100 || y > cam.Height + 100) return;
+        var layer = project.FindLayer(h.LayerId);
+        if (layer is { ShowText: false }) return;
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
         var selected = opt.Selection.Contains(h.Id);
         text.Color = selected ? opt.SelectionColor : Ink;
@@ -802,7 +959,7 @@ public static class PlanRenderer
         {
             // Hole number top right of the collar in blue, mirroring the hole order top left.
             text.Color = selected ? opt.SelectionColor : new SKColor(_dark ? 0xFF60A5FAu : 0xFF1D4ED8u);
-            c.DrawText(h.Label, x + r + 1, y - r - 2, text);
+            batch.Add(h.Label, x + r + 1, y - r - 2, text.Color, text.TextSize);
             text.Color = selected ? opt.SelectionColor : Ink;
         }
         if (m.HasFlag(HoleLabelMode.Length)) lines.Add($"L {h.EffectiveLength:0.0}");
@@ -820,7 +977,7 @@ public static class PlanRenderer
         if (m.HasFlag(HoleLabelMode.Type)) lines.Add($"T{h.HoleType}");
         // the other labels follow on the right, under the number
         var first = numbered ? y - r + 9 : y - r;
-        for (int i = 0; i < lines.Count; i++) c.DrawText(lines[i], x + r + 2, first + i * 11, text);
+        for (int i = 0; i < lines.Count; i++) batch.Add(lines[i], x + r + 2, first + i * 11, text.Color, text.TextSize);
 
         var timingLabels = new List<string>();
         if ((view.ShowSurfaceTimeLabel || view.TimingLabels == TimingLabelMode.SurfaceTime) && h.SurfaceTimeMs is double s) timingLabels.Add($"{s:0}");
@@ -830,14 +987,14 @@ public static class PlanRenderer
         {
             // Top left of the collar, clear of the labels on the right and the times below.
             var order = sequence.ToString();
-            c.DrawText(order, x - r - text.MeasureText(order) - 1, y - r - 2, text);
+            batch.Add(order, x - r - text.MeasureText(order) - 1, y - r - 2, text.Color, text.TextSize);
         }
         for (int i = 0; i < timingLabels.Count; i++)
         {
             var timing = timingLabels[i];
             text.Color = Adapt(new SKColor(0xFFB91C1C));
             var w = text.MeasureText(timing);
-            c.DrawText(timing, x - w / 2, y + r + 11 + i * 11, text);
+            batch.Add(timing, x - w / 2, y + r + 11 + i * 11, text.Color, text.TextSize);
         }
         text.TextSize = 11;
     }

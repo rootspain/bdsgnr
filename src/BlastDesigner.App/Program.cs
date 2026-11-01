@@ -9,33 +9,20 @@ internal static class Program
     {
         var i = Array.IndexOf(args, "--selftest");
         if (i >= 0) return SelfTest.Run(i + 1 < args.Length ? args[i + 1] : Path.Combine(Path.GetTempPath(), "BlastDesigner-selftest.txt"));
-        PreferDiscreteGpu();
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         return 0;
-    }
-
-    /// <summary>
-    /// Hybrid laptops start unknown programs on the integrated GPU. Registers this exe for the discrete
-    /// ("High performance") GPU the same way Settings ▸ Display ▸ Graphics does, unless the user already chose one.
-    /// Runs before the renderer creates its Direct3D device.
-    /// </summary>
-    private static void PreferDiscreteGpu()
-    {
-        if (!OperatingSystem.IsWindows() || Environment.ProcessPath is not string exe) return;
-        // Only our own exe: when started as "dotnet BlastDesigner.dll" the process is dotnet.exe, and the setting would
-        // then switch every .NET program on the machine.
-        if (!Path.GetFileNameWithoutExtension(exe).StartsWith("BlastDesigner", StringComparison.OrdinalIgnoreCase)) return;
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\DirectX\UserGpuPreferences");
-            if (key.GetValue(exe) == null) key.SetValue(exe, "GpuPreference=2;");
-        }
-        catch (Exception ex) { IO.Log.Error("Could not set the GPU preference", ex); }
     }
 
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // A DXGI swap chain hands frames to Windows directly. The default WinUI composition copies every frame
+            // through an extra surface; with a blast over a survey that cost about half the frame rate. The program
+            // has no transparent windows, which the swap chain cannot show. The other modes are fallbacks, in order.
+            .With(new Win32PlatformOptions
+            {
+                CompositionMode = new[] { Win32CompositionMode.LowLatencyDxgiSwapChain, Win32CompositionMode.WinUIComposition, Win32CompositionMode.RedirectionSurface }
+            })
             .WithInterFont()
             .LogToTrace();
 }

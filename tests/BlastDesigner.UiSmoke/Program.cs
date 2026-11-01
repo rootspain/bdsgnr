@@ -804,6 +804,11 @@ Step("settings: surface colours", () =>
     _ = SettingsWindow.Show(vm.Settings); Pump();
     var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
     if (!dlg.GetLogicalDescendants().OfType<TextBox>().Any(t => t.Name == "surfaceBench")) throw new Exception("no colour for benches");
+    // the frame rate is a setting, off unless switched on
+    if (!dlg.GetLogicalDescendants().OfType<ToggleSwitch>().Any(t => t.Name == "showFps") || new ProgramSettings().ShowFps) throw new Exception("frame rate setting missing or on by default");
+    // surface wireframe: three choices, hidden while the camera moves by default
+    var wireChips = dlg.GetLogicalDescendants().OfType<Button>().Where(b => (b.Tag as string)?.StartsWith("wireframe:") == true).ToList();
+    if (wireChips.Count != 3 || new ProgramSettings().SurfaceWireframe != ProgramSettings.WireframeWhileStill) throw new Exception("surface wireframe setting missing or not hidden while moving by default");
     var heading = dlg.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Surface colouring"));
     var sv = dlg.GetLogicalDescendants().OfType<ScrollViewer>().First(s => s.Content is StackPanel);
     sv.Offset = new Vector(0, heading.TranslatePoint(new Point(0, 0), (Visual)sv.Content!)!.Value.Y - 20); Pump();
@@ -1239,9 +1244,18 @@ Step("startup assistant", () =>
     var search = w.GetLogicalDescendants().OfType<Avalonia.Controls.TextBox>().First();
     search.Text = "11-"; Pump();
     if (form.VisibleFiles.Count != 2) throw new Exception("search does not filter by name");
+    // OK opens the selected file, as a double click does
+    var ok = w.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().FirstOrDefault(b => b.Name == "openSelected") ?? throw new Exception("no OK button");
+    if (!ok.IsEnabled) throw new Exception("OK is off with files in the list");
+    var task = StartupWindow.Show(s); Pump();
+    var okForm = StartupWindow.Last!;
+    var okWin = BlastDesigner.App.Services.Dialogs.LastShown!;
+    okWin.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().First(b => b.Name == "openSelected").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent)); Pump();
+    if (!task.IsCompleted || task.Result != StartupChoice.Recent || StartupWindow.SelectedRecent != okForm.VisibleFiles[0]) throw new Exception("OK did not open the selected file");
     w.Close(); Pump();
     _ = StartupWindow.Show(new ProgramSettings { Language = settings.Language }); Pump();
     Capture(BlastDesigner.App.Services.Dialogs.LastShown!, "40c_startup_empty");
+    if (BlastDesigner.App.Services.Dialogs.LastShown!.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().First(b => b.Name == "openSelected").IsEnabled) throw new Exception("OK is on with an empty list");
     BlastDesigner.App.Services.Dialogs.LastShown!.Close(); Pump();
 });
 Step("what's new: shown once after an update, never on a new installation", () =>
@@ -1345,6 +1359,17 @@ Step("selecting on the plan brings Properties forward", () =>
     if (!window.LayersVisible) throw new Exception("an empty click switched the tab");
     window.ShowInspectorTab(0);
 });
+Step("layers panel: Topography before Drawing, layers without a group last", () =>
+{
+    vm.Change("smoke groups", p => { p.GetOrCreateLayer("Smoke loose"); p.GetOrCreateLayer("Smoke drawing", 0xFF000000, "Drawing"); });
+    var panel = window.GetLogicalDescendants().OfType<LayersPanel>().First();
+    panel.Refresh(); Pump();
+    var groups = panel.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").Where(t => t.StartsWith("▾ ") || t.StartsWith("▸ ")).Select(t => t[2..]).ToList();
+    int At(string key) => groups.IndexOf(key.Length == 0 ? BlastDesigner.App.Services.Loc.T("(no group)") : BlastDesigner.App.Services.Loc.Name(key));
+    if (At(StandardLayers.TopographyGroup) < 0 || At("Drawing") < 0 || At("") < 0) throw new Exception("groups missing: " + string.Join(", ", groups));
+    if (At(StandardLayers.TopographyGroup) > At("Drawing") || At("") != groups.Count - 1) throw new Exception("wrong order: " + string.Join(", ", groups));
+    vm.Undo(); Pump();
+});
 Step("bench elements: recognize a survey, change a class by click, apply with split and surface, undo", () =>
 {
     vm.NewSilent(); Pump();
@@ -1395,11 +1420,24 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     var crestLayer = p2.Layers.FirstOrDefault(l => l.Name == "Crest lines") ?? throw new Exception("no crest layer");
     if (crestLayer.Color != SurveyRecognitionWindow.ColorOf(SurveyLineClass.Crest)) throw new Exception("crest layer has the wrong colour");
     if (p2.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest && (l.LayerId != crestLayer.Id || l.Color != null))) throw new Exception("a crest outside its layer or with its own colour");
+    // a type set by hand in Properties moves the line the same way, and back out when the type is taken away
+    var byHand = p2.Entities.OfType<PolylineEntity>().First(l => l.Kind == LineKind.Crest);
+    byHand.Kind = LineKind.Toe;
+    SurveyRecognitionWindow.PutInKindLayer(p2, byHand);
+    if (p2.FindLayer(byHand.LayerId)?.Name != "Toe lines") throw new Exception("a toe set by hand is not in the toe layer");
+    byHand.Kind = LineKind.General;
+    SurveyRecognitionWindow.PutInKindLayer(p2, byHand);
+    if (p2.FindLayer(byHand.LayerId)?.Name != StandardLayers.Survey) throw new Exception("a line without a type stayed in a type layer");
+    byHand.Kind = LineKind.Crest;
+    SurveyRecognitionWindow.PutInKindLayer(p2, byHand);
     if (!p2.Entities.OfType<SurfaceEntity>().Any()) throw new Exception("no bench surface built");
+    // the faces between crests and toes as a surface of their own, of kind Face
+    if (!p2.Entities.OfType<SurfaceEntity>().Any(s => s.Kind == SurfaceKind.Face && s.TriangleCount > 0)) throw new Exception("no face surface");
     // every survey line shapes the surface, not only crests and toes: a line left as "other" passes through it too
-    var surface = p2.Entities.OfType<SurfaceEntity>().First();
+    // (the survey surface and its faces together)
+    var surfaceVertices = p2.Entities.OfType<SurfaceEntity>().SelectMany(s => s.Vertices).ToList();
     var other = p2.Entities.OfType<PolylineEntity>().FirstOrDefault(l => l.Kind == LineKind.General && l.Points.All(q => q.Z != 0));
-    if (other != null && !other.Points.All(q => surface.Vertices.Any(v => Vec3.Distance(v, q) < 0.01))) throw new Exception("a survey line of class other is not in the surface");
+    if (other != null && !other.Points.All(q => surfaceVertices.Any(v => Vec3.Distance(v, q) < 0.01))) throw new Exception("a survey line of class other is not in the surface");
     if (vm.ActiveTool is SurveyClassTool || vm.View.Overlays.OfType<SurveyRecognitionOverlay>().Any()) throw new Exception("tool or overlay left after closing");
     vm.Undo(); Pump();
     if (vm.Project!.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest) || vm.Project.Entities.OfType<SurfaceEntity>().Any()

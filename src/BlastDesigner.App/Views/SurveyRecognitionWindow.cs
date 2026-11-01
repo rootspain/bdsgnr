@@ -41,6 +41,20 @@ public static class SurveyRecognitionWindow
         (LineKind.Contour, SurveyLineClass.Contour, "Contour lines"), (LineKind.Boundary, SurveyLineClass.Boundary, "Block boundaries")
     };
 
+    /// <summary>
+    /// Puts the line in the layer of its type, drawn in the layer's colour, not the one from the drawing. A line that lost its
+    /// type leaves a type layer for the survey layer, so it is not shown as a crest any more. Lines of other types stay where they are.
+    /// </summary>
+    public static void PutInKindLayer(BlastProject p, PolylineEntity line)
+    {
+        if (KindLayers.FirstOrDefault(k => k.Kind == line.Kind) is { Layer: not null } k)
+            line.LayerId = p.GetOrCreateLayer(k.Layer, ColorOf(k.Class), StandardLayers.TopographyGroup).Id;
+        else if (p.FindLayer(line.LayerId) is { } layer && KindLayers.Any(x => x.Layer == layer.Name))
+            line.LayerId = p.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, StandardLayers.TopographyGroup).Id;
+        else return;
+        line.Color = null;
+    }
+
     public static Window Show(MainViewModel vm, List<(PolylineEntity Line, string Layer)> lines, List<PointEntity> points, IReadOnlyList<Vec3> collars, SurveyRecognition recognition)
     {
         if (Dialogs.ActivateExisting(Title)) Dialogs.CloseWindow(Title);
@@ -172,7 +186,7 @@ public sealed class SurveyRecognitionForm : DockPanel
         ToolTip.SetTip(_layers, Loc.T("Crests, toes, contours and boundaries get their own layers: each type is shown or hidden with its layer"));
         // splitting and layers only make sense when the lines get a type
         _assign.IsCheckedChanged += (_, _) => _split.IsEnabled = _layers.IsEnabled = _assign.IsChecked == true;
-        _surface.Content = Loc.T("Build the surface from the survey (all its lines as breaklines)");
+        _surface.Content = Loc.T("Build the surface from the survey (all its lines as breaklines, the faces as a surface of kind Face)");
 
         static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(0, 10, 0, 6) };
         var source = new TextBlock
@@ -397,12 +411,7 @@ public sealed class SurveyRecognitionForm : DockPanel
             }
             if (layers)
                 foreach (var l in result)
-                    if (SurveyRecognitionWindow.KindLayers.FirstOrDefault(k => k.Kind == l.Kind) is { Layer: not null } k)
-                    {
-                        // the layer's colour, not the one from the drawing, so the type reads on the plan
-                        l.LayerId = p.GetOrCreateLayer(k.Layer, SurveyRecognitionWindow.ColorOf(k.Class), StandardLayers.TopographyGroup).Id;
-                        l.Color = null;
-                    }
+                    SurveyRecognitionWindow.PutInKindLayer(p, l);
             crests = result.Count(l => l.Kind == LineKind.Crest);
             toes = result.Count(l => l.Kind == LineKind.Toe);
             if (surface)
@@ -413,8 +422,20 @@ public sealed class SurveyRecognitionForm : DockPanel
                 if (input.Count >= 3)
                 {
                     var s = Surfaces.FromEntities(input, true, 2.0, 60);
-                    s.Name = Loc.T("Survey surface");
-                    p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup));
+                    // the faces between the recognized crests and toes become a surface of their own, of kind Face
+                    // (taken from the recognition, so this works whether or not the lines got their types)
+                    List<IReadOnlyList<Vec3>> Pieces(SurveyLineClass c) => Recognition.Segments.Where(g => g.Class == c && _byId.ContainsKey(g.Segment.LineId))
+                        .Select(g => (IReadOnlyList<Vec3>)_byId[g.Segment.LineId].Points.Skip(g.Segment.From).Take(g.Segment.To - g.Segment.From + 1).ToList()).ToList();
+                    var (ground, faces) = Surfaces.SplitFaces(s, Pieces(SurveyLineClass.Crest), Pieces(SurveyLineClass.Toe));
+                    var surfaces = p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup);
+                    ground.Name = Loc.T("Survey surface");
+                    p.Add(ground, surfaces);
+                    if (faces != null)
+                    {
+                        faces.Name = Loc.T("Faces");
+                        faces.Kind = SurfaceKind.Face;
+                        p.Add(faces, surfaces);
+                    }
                 }
             }
         });

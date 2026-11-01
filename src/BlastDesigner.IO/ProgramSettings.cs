@@ -31,11 +31,17 @@ public sealed class ProgramSettings
     public string SurfaceColoring { get; set; } = SurfaceByType;
     public const string SurfaceByType = "Type", SurfaceByElevation = "Elevation";
     [System.Text.Json.Serialization.JsonIgnore] public bool SurfacesByType => SurfaceColoring != SurfaceByElevation;
+    /// <summary>
+    /// When surface wireframes are drawn: <see cref="WireframeAlways"/>, <see cref="WireframeWhileStill"/> (left out while
+    /// the camera moves, the costliest part of a frame) or <see cref="WireframeNever"/>.
+    /// </summary>
+    public string SurfaceWireframe { get; set; } = WireframeWhileStill;
+    public const string WireframeAlways = "Always", WireframeWhileStill = "WhileStill", WireframeNever = "Never";
     /// <summary>Fill colour per surface kind (SurfaceKind names); kinds missing here use <see cref="DefaultSurfaceColors"/>.</summary>
     public Dictionary<string, uint> SurfaceColors { get; set; } = new();
 
     /// <summary>
-    /// Earth tones for what exists (bench, grade, topography), blue for design, violet for strata, grey for raw data —
+    /// Earth tones for what exists (bench, grade, topography, dark brown faces), blue for design, violet for strata, grey for raw data —
     /// apart in hue and in lightness so the common colour-vision deficiencies still tell them apart.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, uint> DefaultSurfaceColors = new Dictionary<string, uint>
@@ -43,6 +49,7 @@ public sealed class ProgramSettings
         ["General"] = 0xFF8A9BB0,
         ["Bench"] = 0xFFD9A441,
         ["Grade"] = 0xFFC46A4A,
+        ["Face"] = 0xFF4C2F27,
         ["Topography"] = 0xFF8DA35A,
         ["Design"] = 0xFF3B82F6,
         ["Strata"] = 0xFF9B7BFF,
@@ -60,6 +67,8 @@ public sealed class ProgramSettings
     public bool UsageLogging { get; set; } = true;
     /// <summary>Recognize bench elements with the trained model (experimental); off: by rules. The window switches it.</summary>
     public bool UseSurveyModel { get; set; } = true;
+    /// <summary>Frames per second in the corner of the plan (Program settings ▸ Display).</summary>
+    public bool ShowFps { get; set; }
     /// <summary>No settings file existed when these settings were loaded: a new installation.</summary>
     [System.Text.Json.Serialization.JsonIgnore] public bool IsNewInstallation { get; private set; }
     public string Author { get; set; } = Environment.UserName;
