@@ -128,6 +128,61 @@ public static class Timing
         return tie;
     }
 
+    /// <summary>
+    /// Turns the existing ties so the signal runs away from the initiation points (and the holes they stand on): the
+    /// signal spreads from them along the ties in both directions, by the tie delays, and each tie is pointed from the
+    /// end it reaches first to the other. Ties no initiation point reaches, and ties whose ends it reaches at the same
+    /// time, keep their direction; no tie is pointed into an initiation point. Returns the number of ties turned.
+    /// </summary>
+    public static int OrientTiesFromInitiation(BlastProject project)
+    {
+        var ties = project.Ties.ToList();
+        var ips = project.Entities.OfType<InitiationPoint>().ToList();
+        if (ties.Count == 0 || ips.Count == 0) return 0;
+        var adj = new Dictionary<Guid, List<(Guid To, double Delay)>>();
+        void Edge(Guid a, Guid b, double d)
+        {
+            if (!adj.TryGetValue(a, out var list)) adj[a] = list = new();
+            list.Add((b, d));
+        }
+        foreach (var t in ties)
+        {
+            var d = TieDelay(project, t);
+            Edge(t.FromId, t.ToId, d);
+            Edge(t.ToId, t.FromId, d);
+        }
+        var arrival = new Dictionary<Guid, double>();
+        var pq = new PriorityQueue<Guid, double>();
+        void Seed(Guid id, double t0)
+        {
+            if (arrival.TryGetValue(id, out var cur) && cur <= t0) return;
+            arrival[id] = t0;
+            pq.Enqueue(id, t0);
+        }
+        foreach (var ip in ips)
+        {
+            var t0 = ip.StartTimeMs + ip.LeadInDelayMs;
+            Seed(ip.Id, t0);
+            if (ip.HoleId is Guid hid) Seed(hid, t0);
+        }
+        while (pq.TryDequeue(out var node, out var time))
+        {
+            if (arrival[node] < time || !adj.TryGetValue(node, out var edges)) continue;
+            foreach (var (to, delay) in edges) Seed(to, time + delay);
+        }
+        var ipIds = ips.Select(i => i.Id).ToHashSet();
+        int turned = 0;
+        foreach (var t in ties)
+        {
+            if (ipIds.Contains(t.FromId)) continue;
+            var into = ipIds.Contains(t.ToId);
+            if (!into && (!arrival.TryGetValue(t.FromId, out var a) || !arrival.TryGetValue(t.ToId, out var b) || b >= a)) continue;
+            FlipTies(new[] { t });
+            turned++;
+        }
+        return turned;
+    }
+
     public static void FlipTies(IEnumerable<TieEntity> ties)
     {
         foreach (var t in ties)

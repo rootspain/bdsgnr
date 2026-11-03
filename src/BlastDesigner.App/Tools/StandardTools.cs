@@ -68,7 +68,9 @@ public sealed class SelectTool : Tool
             var (delta, handle, snap) = MoveDelta(p);
             _shown = delta;
             Preview.Snap = snap;
-            Preview.Moving ??= Vm.Doc!.Selection.ToList();
+            // a bound initiation point and its hole move together, on screen as on release
+            Preview.Moving ??= InitiationLinks.WithLinked(Vm.Project!, Vm.Doc!.Selection);
+            Vm.RaiseDragPreview();
             Preview.MoveOffset = delta;
             Preview.Labels.Add((handle + delta, $"Δ {delta.Length2D:0.00} m"));
         }

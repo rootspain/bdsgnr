@@ -200,7 +200,11 @@ public static class Dialogs
     }
 
     /// <summary>Shows a non-modal tool window, or brings the already open one with the same title to the front.</summary>
-    public static Window ShowWindow(string title, Control content, double width, double height, bool alignBottomToOwner = false)
+    /// <summary>
+    /// Shows a tool window: centred on the main window, at its bottom edge (<paramref name="alignBottomToOwner"/>) or at
+    /// <paramref name="at"/> (a remembered place, set before it is shown so nothing centres it afterwards).
+    /// </summary>
+    public static Window ShowWindow(string title, Control content, double width, double height, bool alignBottomToOwner = false, PixelPoint? at = null)
     {
         if (!MultiInstance.Contains(title) && ActivateExisting(title)) return OpenWindows[title];
         UsageLog.Track(UsageLog.Dialog, title);
@@ -210,8 +214,9 @@ public static class Dialogs
             Content = content,
             Width = width,
             Height = height,
-            WindowStartupLocation = alignBottomToOwner ? WindowStartupLocation.Manual : WindowStartupLocation.CenterOwner
+            WindowStartupLocation = alignBottomToOwner || at != null ? WindowStartupLocation.Manual : WindowStartupLocation.CenterOwner
         };
+        if (at is PixelPoint p) w.Position = p;
         LastShown = w;
         if (!MultiInstance.Contains(title))
         {
@@ -219,7 +224,7 @@ public static class Dialogs
             w.Closed += (_, _) => { if (OpenWindows.TryGetValue(title, out var open) && open == w) OpenWindows.Remove(title); };
         }
         if (Owner != null) w.Show(Owner); else w.Show();
-        if (alignBottomToOwner && Owner is { } owner)
+        if (at == null && alignBottomToOwner && Owner is { } owner)
         {
             var scale = owner.RenderScaling;
             w.Position = new PixelPoint(

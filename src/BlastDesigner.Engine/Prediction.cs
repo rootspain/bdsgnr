@@ -77,13 +77,37 @@ public static class Fragmentation
     public sealed record Result(double RockFactor, double PowderFactor, double ChargePerHole, double Rws, double X50Cm, double Uniformity,
         double X20Cm, double X80Cm, double OversizePct, double FinesPct, List<(double SizeCm, double PassingPct)> Curve, List<(double SizeCm, double PassingPct)> Swebrec);
 
-    /// <summary>Cunningham rock factor from the rock-mass description, joint factor, density and strength.</summary>
+    /// <summary>Allowed range of the rock factor A (Cunningham): values outside it are cut to it.</summary>
+    public const double MinRockFactor = 0, MaxRockFactor = 25;
+    /// <summary>Usual range of A: outside it the value is accepted but flagged.</summary>
+    public const double UsualMinRockFactor = 0.8, UsualMaxRockFactor = 22;
+    /// <summary>Allowed range of the Protodyakonov strength f (σc = 10·f MPa).</summary>
+    public const double MinProtodyakonov = 0, MaxProtodyakonov = 50;
+    /// <summary>Usual range of f: from loose ground (0.3) up to 40.</summary>
+    public const double UsualMinProtodyakonov = 0.3, UsualMaxProtodyakonov = 40;
+
+    /// <summary>
+    /// Cunningham rock factor from the rock-mass description, joint factor, density and strength (or the one typed in),
+    /// within <see cref="MinRockFactor"/>…<see cref="MaxRockFactor"/>.
+    /// </summary>
     public static double RockFactor(FragmentationModel m, double densityTm3)
     {
-        if (m.RockFactor > 0) return m.RockFactor;
+        if (m.RockFactor > 0) return Math.Min(m.RockFactor, MaxRockFactor);
         var rdi = 25 * densityTm3 - 50;
         var hf = m.YoungsModulus < 50 ? m.YoungsModulus / 3 : m.Ucs / 5;
-        return 0.06 * (m.RockMassDescription + m.JointFactor + rdi + hf);
+        return Math.Clamp(0.06 * (m.RockMassDescription + m.JointFactor + rdi + hf), MinRockFactor, MaxRockFactor);
+    }
+
+    /// <summary>
+    /// The Protodyakonov f that gives the rock factor <paramref name="a"/> with this rock mass: the Cunningham formula
+    /// solved for HF = σc/5 = 2f. Null when f does not enter it (Young's modulus below 50 GPa, HF = E/3). Not limited
+    /// to the allowed range of f.
+    /// </summary>
+    public static double? ProtodyakonovFor(double a, FragmentationModel m, double densityTm3)
+    {
+        if (m.YoungsModulus < 50) return null;
+        var rdi = 25 * densityTm3 - 50;
+        return (a / 0.06 - m.RockMassDescription - m.JointFactor - rdi) / 2;
     }
 
     /// <summary>Kuz-Ram mean fragment size X50 in cm.</summary>

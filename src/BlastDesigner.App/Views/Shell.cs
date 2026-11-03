@@ -675,7 +675,6 @@ public sealed class Inspector : DockPanel
         Check("Grid", v => v.ShowGrid, v => v.ShowGrid = !v.ShowGrid);
         Check("Axes", v => v.ShowAxes, v => v.ShowAxes = !v.ShowAxes);
         Check("Hole legend", v => v.ShowHoleLegend, v => v.ShowHoleLegend = !v.ShowHoleLegend);
-        Check("Tie legend", v => v.ShowTieLegend, v => v.ShowTieLegend = !v.ShowTieLegend);
         _visibility.Children.Add(grid);
 
         _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Holes"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });

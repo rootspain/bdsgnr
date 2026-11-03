@@ -270,6 +270,26 @@ public class TimingTests
         Assert.All(holes, h => Assert.Null(h.SurfaceTimeMs));
     }
 
+    /// <summary>A point placed in the middle of a tied row turns the ties behind it to run away from it.</summary>
+    [Fact]
+    public void OrientTiesFromInitiation_TurnsTiesAwayFromThePoint()
+    {
+        var (p, holes, ip) = Row(5);
+        var c17 = p.Products.First(x => x.DelayMs == 17 && x.Kind == ProductKind.SurfaceConnector);
+        for (int i = 1; i < holes.Count; i++) Timing.Connect(p, holes[i - 1].Id, holes[i].Id, c17);
+        var lone = p.Add(new Hole { Label = "far", Collar = new Vec3(100, 100, 0), Length = 10 });
+        var other = p.Add(new Hole { Label = "far2", Collar = new Vec3(105, 100, 0), Length = 10 });
+        Timing.Connect(p, other.Id, lone.Id, c17);
+        ip.Position = holes[2].Collar;
+        ip.HoleId = holes[2].Id;
+        Assert.Equal(2, Timing.OrientTiesFromInitiation(p));
+        Timing.Solve(p);
+        Assert.Equal(new double?[] { 34, 17, 0, 17, 34 }, holes.Select(h => h.SurfaceTimeMs).ToArray());
+        // a tie the point does not reach keeps its direction
+        Assert.Contains(p.Ties, t => t.FromId == other.Id && t.ToId == lone.Id);
+        Assert.Equal(0, Timing.OrientTiesFromInitiation(p));
+    }
+
     /// <summary>A bound point and its hole move together either way; a deleted hole takes the point, a deleted point leaves the hole.</summary>
     [Fact]
     public void InitiationLinks_PointAndHoleStayTogether()
@@ -584,6 +604,43 @@ public class FileFormatTests
         {
             foreach (var f in Directory.GetFiles(Path.GetTempPath(), Path.GetFileName(path) + "*")) File.Delete(f);
         }
+    }
+
+    [Fact]
+    public void Fragmentation_RockFactorStaysWithinItsAllowedRange()
+    {
+        Assert.Equal(25, Fragmentation.RockFactor(new FragmentationModel { RockFactor = 40 }, 2.6));
+        Assert.Equal(9, Fragmentation.RockFactor(new FragmentationModel { RockFactor = 9 }, 2.6));
+        // calculated: a very strong, very jointed rock would give 0.06·(0 + 200 + 15 + 50) = 15.9; more is cut to 25
+        Assert.Equal(25, Fragmentation.RockFactor(new FragmentationModel { RockFactor = 0, RockMassDescription = 0, JointFactor = 400, Ucs = 250 }, 2.6));
+        Assert.Equal(0, Fragmentation.RockFactor(new FragmentationModel { RockFactor = 0, RockMassDescription = 0, JointFactor = 0, Ucs = 0, YoungsModulus = 0 }, 1.0));
+    }
+
+    [Fact]
+    public void Fragmentation_ProtodyakonovForSolvesTheRockFactorBack()
+    {
+        var m = new FragmentationModel { RockFactor = 0, RockMassDescription = 50, JointFactor = 0, YoungsModulus = 50 };
+        var f = Fragmentation.ProtodyakonovFor(6, m, 2.6)!.Value;
+        Assert.Equal(17.5, f, 9);
+        m.Ucs = f * 10;
+        Assert.Equal(6, Fragmentation.RockFactor(m, 2.6), 9);
+        // f does not enter A below 50 GPa
+        Assert.Null(Fragmentation.ProtodyakonovFor(6, new FragmentationModel { YoungsModulus = 30 }, 2.6));
+    }
+
+    [Fact]
+    public void FragmentationPreset_SavesAndLoadsTheInputs()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + FragmentationPreset.Extension);
+        try
+        {
+            FragmentationPreset.Save(path, new FragmentationModel { RockFactor = 0, Ucs = 140, JointFactor = 35, RockMassDescription = 0, OversizeCm = 90 });
+            var m = FragmentationPreset.Load(path);
+            Assert.Equal((0.0, 140.0, 35.0, 0.0, 90.0), (m.RockFactor, m.Ucs, m.JointFactor, m.RockMassDescription, m.OversizeCm));
+            File.WriteAllText(path, "{\"rockFactor\": 3}");
+            Assert.Throws<InvalidDataException>(() => FragmentationPreset.Load(path));
+        }
+        finally { File.Delete(path); }
     }
 
     [Fact]

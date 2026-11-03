@@ -424,7 +424,7 @@ public sealed class MainWindow : Window
         Chip("Labels", v?.ShowText == true, () => _vm.ToggleView(x => x.ShowText = !x.ShowText), "Hole labels and times");
         Chip("Depths", v != null && !v.CollarsOnly, () => _vm.ToggleView(x => x.CollarsOnly = !x.CollarsOnly), "Hole depth lines from collar to toe; off shows collars only");
         Chip("Ties", v?.ShowTies == true, () => _vm.ToggleView(x => x.ShowTies = !x.ShowTies), "Surface ties");
-        if (_vm.AnalysisOverlays.Count > 0)
+        if (_vm.HasAnalysisDisplay)
         {
             var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan (Esc)"));
             _chips.Children.Add(clear);
@@ -567,7 +567,7 @@ public sealed class MainWindow : Window
                 _vm.ActiveTool?.Cancel();
                 if (_vm.ActiveTool is not SelectTool) _vm.SelectTool();
                 else if (_vm.HasSelection) _vm.Doc?.ClearSelection();
-                else if (_vm.AnalysisOverlays.Count > 0) { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); }
+                else if (_vm.HasAnalysisDisplay) { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); }
             };
         if (a == null) return;
         if (_vm.Doc == null && e.Key is not (Key.N or Key.O or Key.K) && m != KeyModifiers.Alt) return;

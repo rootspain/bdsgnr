@@ -227,6 +227,39 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
     buttons.First(b => (b.Tag as string) == "shape:0").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     w.GetLogicalDescendants().OfType<ToggleSwitch>().First(t => t.Name == "onPlan").IsChecked = false; Pump();
     if (vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.FirstMovementOverlay>().Any()) throw new Exception("arrows left on the plan after switching off");
+    // the arrows follow an initiation point moved with its hole, and the hole moved under its point
+    var start = vm.Project.Holes.Where(h => h.FiringTimeMs != null).OrderBy(h => h.FiringTimeMs).First();
+    var startId = start.Id;
+    vm.Change("Smoke point on the first hole", p => p.Add(new InitiationPoint { Position = start.Collar, HoleId = startId, Label = "IPM" }));
+    var ipm = vm.Project.Entities.OfType<InitiationPoint>().First(i => i.Label == "IPM");
+    string Arrows() => string.Join(";", view.ProjectSource!() is { } pr ? new BlastDesigner.Rendering.FirstMovementOverlay().Arrows(pr).Select(a => $"{a.Position.X:0.00},{a.Position.Y:0.00},{a.DirX:0.000},{a.DirY:0.000}") : Array.Empty<string>());
+    string WindowArrows() => string.Join(";", view.OptionsSource!().Overlays.OfType<BlastDesigner.Rendering.FirstMovementOverlay>().First().Arrows(vm.Project!).Select(a => $"{a.Position.X:0.00},{a.Position.Y:0.00},{a.DirX:0.000},{a.DirY:0.000}"));
+    var before = WindowArrows();
+    vm.Doc!.Select(new[] { ipm.Id }); vm.MoveSelection(new Vec3(3, 2, 0)); Pump();
+    if (((Hole)vm.Project.FindEntity(startId)!).Collar != vm.Project.Entities.OfType<InitiationPoint>().First(i => i.Label == "IPM").Position) throw new Exception("the hole did not follow its initiation point");
+    var afterPoint = WindowArrows();
+    if (afterPoint == before) throw new Exception("the first-movement arrows were not recalculated after moving the initiation point");
+    if (afterPoint != Arrows()) throw new Exception("the window's arrows differ from a fresh calculation after moving the initiation point");
+    vm.Doc.Select(new[] { startId }); vm.MoveSelection(new Vec3(-3, -2, 0)); Pump();
+    var afterHole = WindowArrows();
+    if (afterHole == afterPoint || afterHole != Arrows()) throw new Exception("the first-movement arrows were not recalculated after moving the hole");
+    // while the point is dragged its hole moves with it on screen, and the arrows are drawn from where they are
+    vm.SelectTool(); Pump();
+    ipm = vm.Project.Entities.OfType<InitiationPoint>().First(i => i.Label == "IPM");
+    vm.Doc.Select(new[] { ipm.Id });
+    var (px, py) = vm.View.Camera.ToScreen(ipm.Position);
+    vm.ActiveTool!.PointerPressed(new ToolPointer { X = px, Y = py - 10, World = ipm.Position, Snapped = ipm.Position, Hit = ipm, Left = true, ClickCount = 1 });
+    var to = ipm.Position + new Vec3(4, 0, 0);
+    vm.ActiveTool.PointerMoved(new ToolPointer { X = px + 60, Y = py - 10, World = to, Snapped = to, Left = true });
+    var drag = vm.View.Preview;
+    if (drag.Moving == null || !drag.Moving.Contains(startId)) throw new Exception("the hole under the dragged initiation point is not dragged with it");
+    var still = string.Join(";", new BlastDesigner.Rendering.FirstMovementOverlay().Arrows(vm.Project).Select(a => $"{a.DirX:0.000},{a.DirY:0.000}"));
+    // what the plan draws during the drag: the arrows from the shifted positions
+    var shifted = FirstMovement.Arrows(BlastDesigner.Engine.TimingDelaunay.Build(FirstMovement.Inputs(vm.Project, new HashSet<Guid>(drag.Moving), drag.MoveOffset)));
+    if (string.Join(";", shifted.Select(a => $"{a.DirX:0.000},{a.DirY:0.000}")) == still) throw new Exception($"the arrows do not change while the point is dragged (offset {drag.MoveOffset})");
+    vm.ActiveTool.Cancel(); vm.View.Preview.Clear(); Pump();
+    for (int i = 0; i < 10 && vm.Project!.Entities.OfType<InitiationPoint>().Any(x => x.Label == "IPM"); i++) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
     w.Close(); Pump();
 });
 Step("clear overlays", vm.ClearOverlays);
@@ -562,6 +595,118 @@ Step("visualization window: the scrub bar shrinks with the window, no x3, half s
     if (row.DesiredSize.Width > w.Bounds.Width + 0.5) throw new Exception($"at the smallest width the top row needs {row.DesiredSize.Width:0}, the window has {w.Bounds.Width:0}");
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "30b_visualization_narrow.png"));
+    BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
+});
+Step("fragmentation inputs: rock factor A and Protodyakonov f, linked through the strength", () =>
+{
+    var form = new FragmentationForm(vm.Project!);
+    var w = new Window { Width = 640, Height = 760, Content = form, Background = BlastDesigner.App.Services.Look.Ground };
+    w.Show(); Pump();
+    TextBox Box(string name) => form.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(b => b.Name == name) ?? throw new Exception("no field " + name);
+    void Type(string name, string text) { var b = Box(name); b.Text = text; b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
+    double Shown(string name) => double.Parse(Box(name).Text!.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture);
+    TextBlock Warning(string name) => form.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == name);
+    // f sets the strength and A follows from it
+    Type("protodyakonovF", "15");
+    if (form.Draft.Ucs != 150 || form.Draft.RockFactor != 0) throw new Exception($"f = 15 should give σc 150 MPa and a calculated A: σc {form.Draft.Ucs}, A {form.Draft.RockFactor}");
+    var expected = Fragmentation.RockFactor(form.Draft, vm.Project!.Design.RockDensity);
+    if (Math.Abs(Shown("rockFactorA") - expected) > 0.01) throw new Exception($"A shows {Box("rockFactorA").Text}, calculated {expected:0.##}");
+    var calc = form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "calcFromF");
+    if (calc.IsVisible) throw new Exception("Calculate from f offered while A is calculated");
+    // A typed in moves f while it is typed (no Enter): massive rock, ρ 2.6: A 6 = 0.06·(50 + 15 + 2f), f 17.5
+    if (vm.Project.Design.RockDensity != 2.6 || form.Draft.RockMassDescription != 50 || form.Draft.YoungsModulus < 50) throw new Exception("the sample's rock is not the one this check assumes");
+    Box("rockFactorA").Text = "6"; Pump();
+    if (Math.Abs(form.Draft.Ucs - 175) > 1e-6 || form.Draft.RockFactor != 0 || Math.Abs(Shown("protodyakonovF") - 17.5) > 1e-9 || Box("rockFactorA").Text != "6")
+        throw new Exception($"A 6 typed in should give f 17.5 at once: σc {form.Draft.Ucs}, f shown {Box("protodyakonovF").Text}, A {Box("rockFactorA").Text}");
+    // and f typed in moves A the same way
+    Box("protodyakonovF").Text = "10"; Pump();
+    if (Math.Abs(Shown("rockFactorA") - 0.06 * (50 + 15 + 20)) > 0.01) throw new Exception("f 10 typed in should give A 5.1 at once: " + Box("rockFactorA").Text);
+    // A 9 needs f 42.5 here: within the allowed 0…50, so f follows (and is flagged above the usual 40)
+    Type("rockFactorA", "9");
+    if (form.Draft.RockFactor != 0 || Math.Abs(Shown("protodyakonovF") - 42.5) > 1e-9 || !Warning("protodyakonovFWarning").IsVisible)
+        throw new Exception($"A 9 should give f 42.5: A {form.Draft.RockFactor}, f {Box("protodyakonovF").Text}");
+    // an A that f cannot give with this rock mass (f would be 67.5) is kept as typed, f goes as near as it can and the field says why
+    Type("rockFactorA", "12");
+    if (form.Draft.RockFactor != 12 || form.RockFactor != 12 || !calc.IsVisible || Shown("protodyakonovF") != 50 || !Warning("rockFactorAWarning").IsVisible)
+        throw new Exception($"A 12 cannot come from f here: kept {form.Draft.RockFactor}, f {Box("protodyakonovF").Text}");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "31_fragmentation_inputs.png"));
+    calc.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    // back to A from f, which went to 50 for the A 12: 0.06·(50 + 15 + 100)
+    if (form.Draft.RockFactor != 0 || Math.Abs(Shown("rockFactorA") - 9.9) > 0.01) throw new Exception("Calculate from f did not bring the calculated A back: " + Box("rockFactorA").Text);
+    // hard limits cut an entry to 0…50 (f) and 0…25 (A); outside the usual range (f 0.3…40, A 0.8…22) the field is flagged
+    Type("protodyakonovF", "60");
+    if (form.Draft.Ucs != 500 || Box("protodyakonovF").Text != "50" || !Warning("protodyakonovFWarning").IsVisible) throw new Exception($"f 60 should be cut to 50 and said so: σc {form.Draft.Ucs}, shown {Box("protodyakonovF").Text}");
+    Type("protodyakonovF", "0,2");
+    if (Math.Abs(form.Draft.Ucs - 2) > 1e-9 || !Warning("protodyakonovFWarning").IsVisible) throw new Exception("f 0.2 should be taken and flagged");
+    Type("protodyakonovF", "15");
+    if (Warning("protodyakonovFWarning").IsVisible) throw new Exception("f 15 flagged");
+    Type("rockFactorA", "30");
+    if (form.Draft.RockFactor != 25 || !Warning("rockFactorAWarning").IsVisible) throw new Exception($"A 30 should be cut to 25: {form.Draft.RockFactor}");
+    Type("rockFactorA", "0,5");
+    if (form.Draft.RockFactor != 0.5 || !Warning("rockFactorAWarning").IsVisible) throw new Exception("A 0.5 should be taken and flagged");
+    Type("rockFactorA", "6");
+    if (Warning("rockFactorAWarning").IsVisible) throw new Exception("A 6 flagged");
+    calc.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    // the jointed mass shows its joint factor, the others hide it
+    var jointed = form.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "mass:Jointed");
+    jointed.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!Box("jointFactor").IsEffectivelyVisible || form.Draft.RockMassDescription != 0) throw new Exception("jointed mass: the joint factor field should show, RMD 0");
+    // a preset keeps the inputs and brings them back into another window
+    Type("protodyakonovF", "7"); Type("oversize", "80");
+    var preset = Path.Combine(outDir, "smoke" + BlastDesigner.IO.FragmentationPreset.Extension);
+    if (form.GetLogicalDescendants().OfType<Button>().Count(b => b.Name is "savePreset" or "loadPreset") != 2) throw new Exception("no preset buttons in the window");
+    form.SavePreset(preset);
+    w.Close(); Pump();
+    var again = new FragmentationForm(vm.Project!);
+    var w2 = new Window { Width = 640, Height = 760, Content = again, Background = BlastDesigner.App.Services.Look.Ground };
+    w2.Show(); Pump();
+    again.LoadPreset(preset); Pump();
+    if (again.Draft.Ucs != 70 || again.Draft.OversizeCm != 80 || again.Draft.RockMassDescription != 0 || again.Draft.RockFactor != 0)
+        throw new Exception($"preset not loaded: σc {again.Draft.Ucs}, oversize {again.Draft.OversizeCm}, RMD {again.Draft.RockMassDescription}, A {again.Draft.RockFactor}");
+    if (again.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "protodyakonovF").Text != "7") throw new Exception("the loaded preset is not shown");
+    w2.Close(); Pump();
+});
+Step("exceptions window: Highlight rings the holes, Clear analysis on the plan removes them", () =>
+{
+    vm.ClearOverlays(); Pump();
+    BlastDesigner.App.Views.AnalysisWindows.Exceptions(vm); Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var highlight = w.GetLogicalDescendants().OfType<Button>().First(b => b.Content as string == BlastDesigner.App.Services.Loc.T("Highlight"));
+    highlight.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    var clearText = "✕ " + BlastDesigner.App.Services.Loc.Ui("Clear analysis");
+    Button? Clear() => window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Content as string == clearText || (b.Content as TextBlock)?.Text == clearText);
+    // the sample may have no exceptions: then a highlight from another check window
+    if (vm.Highlight.Ids.Count == 0) { Console.WriteLine("     (no exceptions in the sample: one hole highlighted directly)"); vm.SetHighlight(new[] { vm.Project!.Holes.First().Id }); Pump(); }
+    var clear = Clear() ?? throw new Exception("no Clear analysis button on the plan while holes are highlighted");
+    clear.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (vm.Highlight.Ids.Count > 0) throw new Exception("Clear analysis left the highlight");
+    if (Clear() != null) throw new Exception("Clear analysis still shown after clearing");
+    w.Close(); Pump();
+});
+Step("visualization window: the chosen speed, interval and switches come back next time, also in another project", () =>
+{
+    vm.VisualizeTiming(); Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    w.GetLogicalDescendants().OfType<RadioButton>().First(r => (r.Content as string) == "0.5x").IsChecked = true;
+    w.GetLogicalDescendants().OfType<NumericUpDown>().First().Value = 40;
+    foreach (var c in w.GetLogicalDescendants().OfType<CheckBox>()) c.IsChecked = false;
+    Pump();
+    BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
+    var saved = BlastDesigner.IO.ProgramSettings.Load();
+    if (saved.PlaybackSpeed != 0.5 || saved.IsochroneIntervalMs != 40 || saved.ShowIsochrones || saved.ColourHolesByTime)
+        throw new Exception($"not saved: speed {saved.PlaybackSpeed}, interval {saved.IsochroneIntervalMs}, isochrones {saved.ShowIsochrones}, colour {saved.ColourHolesByTime}");
+    vm.VisualizeTiming(); Pump();
+    w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    if (w.GetLogicalDescendants().OfType<RadioButton>().First(r => r.IsChecked == true).Content as string != "0.5x"
+        || w.GetLogicalDescendants().OfType<NumericUpDown>().First().Value != 40
+        || w.GetLogicalDescendants().OfType<CheckBox>().Any(c => c.IsChecked == true))
+        throw new Exception("the window did not open with the values chosen last time");
+    // back to the defaults for the other steps
+    w.GetLogicalDescendants().OfType<RadioButton>().First(r => (r.Content as string) == "1x").IsChecked = true;
+    w.GetLogicalDescendants().OfType<NumericUpDown>().First().Value = 25;
+    foreach (var c in w.GetLogicalDescendants().OfType<CheckBox>()) c.IsChecked = true;
+    Pump();
     BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
 });
 Step("loading dialog", () => { var hole = vm.Project!.Holes.First(h => h.Decks.Count > 1); _ = HoleLoadingWindow.Show(vm, hole, 5); });
@@ -1508,6 +1653,14 @@ Step("the Ties button opens the initiation catalogue, whose position goes to the
     if (vm.ActiveTool is not TieTool || win.Title != BlastDesigner.App.Services.Loc.T(TiePaletteWindow.Title)) throw new Exception("the Ties button should give the tie tool and the catalogue: " + win.Title);
     win.Position = new PixelPoint(win.Position.X + 30, win.Position.Y + 20); Pump();
     if (!settings.Window.TryGetValue(TiePaletteWindow.PositionKey, out var pos) || pos != $"{win.Position.X},{win.Position.Y}") throw new Exception("catalogue position not in the settings: " + pos);
+    var left = win.Position;
+    win.Close(); vm.SelectTool(); Pump();
+    // opened again, it is where it was left, and stays there
+    vm.TieToolWithPalette(); Pump();
+    win = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Pump();
+    if (win.Position != left) throw new Exception($"the catalogue opened at {win.Position}, not where it was left ({left})");
+    if (settings.Window[TiePaletteWindow.PositionKey] != $"{left.X},{left.Y}") throw new Exception("opening the catalogue changed its saved place: " + settings.Window[TiePaletteWindow.PositionKey]);
     win.Close(); vm.SelectTool();
 });
 Step("initiation catalogue: Type → Subtype → Family → Variant, user-defined delay, the window stays put", () =>

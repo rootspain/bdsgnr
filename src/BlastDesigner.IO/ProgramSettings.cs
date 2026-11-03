@@ -70,6 +70,14 @@ public sealed class ProgramSettings
     public bool UseSurveyModel { get; set; } = true;
     /// <summary>Frames per second in the corner of the plan (Program settings ▸ Display).</summary>
     public bool ShowFps { get; set; }
+    /// <summary>Visualization window: playback speed (0.1, 0.5 or 1 — times the blast's own clock).</summary>
+    public double PlaybackSpeed { get; set; } = 1;
+    /// <summary>Visualization window: isochrone interval, ms.</summary>
+    public double IsochroneIntervalMs { get; set; } = 25;
+    /// <summary>Visualization window: draw the isochrones.</summary>
+    public bool ShowIsochrones { get; set; } = true;
+    /// <summary>Visualization window: colour the holes by their firing time.</summary>
+    public bool ColourHolesByTime { get; set; } = true;
     /// <summary>No settings file existed when these settings were loaded: a new installation.</summary>
     [System.Text.Json.Serialization.JsonIgnore] public bool IsNewInstallation { get; private set; }
     public string Author { get; set; } = Environment.UserName;

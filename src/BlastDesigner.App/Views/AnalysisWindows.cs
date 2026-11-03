@@ -112,19 +112,21 @@ public static class AnalysisWindows
         Timing.Solve(p);
         var timed = p.Holes.Where(h => h.FiringTimeMs.HasValue).ToList();
         if (timed.Count == 0) { _ = Dialogs.Info(Loc.T("No hole is initiated. Add an initiation point and ties, or electronic times.")); return; }
-        var overlay = new TimingContourOverlay { IntervalMs = 25 };
+        // what was chosen in the window last time, in any project
+        var s = vm.Settings;
+        var overlay = new TimingContourOverlay { IntervalMs = s.IsochroneIntervalMs };
         vm.ShowOverlay(overlay);
         var max = timed.Max(h => h.FiringTimeMs!.Value);
         var min = timed.Min(h => h.FiringTimeMs!.Value);
         var playbackEnd = max > min ? max : max + 1;
         var slider = new Slider { Minimum = min, Maximum = playbackEnd, Value = playbackEnd, MinWidth = 60, VerticalAlignment = VerticalAlignment.Center };
         var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 140 };
-        var interval = new NumericUpDown { Value = 25, Minimum = 1, Maximum = 1000, Width = 120, FormatString = "0" };
-        var contours = new CheckBox { Content = Loc.T("Isochrones"), IsChecked = true };
-        var colour = new CheckBox { Content = Loc.T("Colour by time"), IsChecked = true };
+        var interval = new NumericUpDown { Value = (decimal)Math.Clamp(s.IsochroneIntervalMs, 1, 1000), Minimum = 1, Maximum = 1000, Width = 120, FormatString = "0" };
+        var contours = new CheckBox { Content = Loc.T("Isochrones"), IsChecked = s.ShowIsochrones };
+        var colour = new CheckBox { Content = Loc.T("Colour by time"), IsChecked = s.ColourHolesByTime };
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
         // playback runs on the blast's own clock: 1x shows 1 ms of firing per 1 ms, 0.1x ten times slower
-        var playbackSpeed = 1.0;
+        var playbackSpeed = s.PlaybackSpeed is 0.1 or 0.5 ? s.PlaybackSpeed : 1.0;
         var clock = new System.Diagnostics.Stopwatch();
         var play = new Button { Content = "▶ " + Loc.T("Play") };
         void SetPlaying(bool isPlaying) => play.Content = (isPlaying ? "Ⅱ " + Loc.T("Pause") : "▶ " + Loc.T("Play"));
@@ -135,6 +137,9 @@ public static class AnalysisWindows
             overlay.IntervalMs = (double)(interval.Value ?? 25);
             overlay.Contours = contours.IsChecked == true;
             overlay.ColourHoles = colour.IsChecked == true;
+            s.IsochroneIntervalMs = overlay.IntervalMs;
+            s.ShowIsochrones = overlay.Contours;
+            s.ColourHolesByTime = overlay.ColourHoles;
             var fired = timed.Count(h => h.FiringTimeMs <= vm.AnimationTime);
             label.Text = Loc.F("{0:0} ms — {1}/{2} holes", vm.AnimationTime, fired, timed.Count);
             vm.View.Redraw();
@@ -175,12 +180,12 @@ public static class AnalysisWindows
             slider.Value = min;
             SetPlaying(false);
         };
-        var speed1 = new RadioButton { Content = "0.1x", GroupName = "TimingPlaybackSpeed" };
-        var speed2 = new RadioButton { Content = "0.5x", GroupName = "TimingPlaybackSpeed" };
-        var speed4 = new RadioButton { Content = "1x", GroupName = "TimingPlaybackSpeed", IsChecked = true };
-        speed1.IsCheckedChanged += (_, _) => { if (speed1.IsChecked == true) playbackSpeed = 0.1; };
-        speed2.IsCheckedChanged += (_, _) => { if (speed2.IsChecked == true) playbackSpeed = 0.5; };
-        speed4.IsCheckedChanged += (_, _) => { if (speed4.IsChecked == true) playbackSpeed = 1; };
+        var speed1 = new RadioButton { Content = "0.1x", GroupName = "TimingPlaybackSpeed", IsChecked = playbackSpeed == 0.1 };
+        var speed2 = new RadioButton { Content = "0.5x", GroupName = "TimingPlaybackSpeed", IsChecked = playbackSpeed == 0.5 };
+        var speed4 = new RadioButton { Content = "1x", GroupName = "TimingPlaybackSpeed", IsChecked = playbackSpeed == 1 };
+        speed1.IsCheckedChanged += (_, _) => { if (speed1.IsChecked == true) s.PlaybackSpeed = playbackSpeed = 0.1; };
+        speed2.IsCheckedChanged += (_, _) => { if (speed2.IsChecked == true) s.PlaybackSpeed = playbackSpeed = 0.5; };
+        speed4.IsCheckedChanged += (_, _) => { if (speed4.IsChecked == true) s.PlaybackSpeed = playbackSpeed = 1; };
         Grid.SetColumn(slider, 1);
         var panel = new StackPanel
         {
@@ -218,7 +223,7 @@ public static class AnalysisWindows
         var w = Dialogs.ShowWindow("Visualization", panel, width, height, alignBottomToOwner: true);
         w.MinWidth = width / 2;
         w.MinHeight = height / 2;
-        w.Closed += (_, _) => { timer.Stop(); vm.ClearOverlays(); };
+        w.Closed += (_, _) => { timer.Stop(); vm.ClearOverlays(); s.Save(); };
     }
 
     public static void TimeEnvelope(MainViewModel vm)
@@ -441,7 +446,7 @@ public static class AnalysisWindows
         }
         var ids = rows.Select(r => p.Holes.First(h => h.Label == r[0]).Id).ToList();
         var content = Table(new[] { "Hole", "Problem" }, rows);
-        Dialogs.ShowWindow("Exceptions view", WithButtons(content, ("Select these holes", () => vm.Doc!.Select(ids)), ("Highlight", () => { vm.Highlight.Ids.Clear(); foreach (var id in ids) vm.Highlight.Ids.Add(id); vm.View.Redraw(); })), 640, 480);
+        Dialogs.ShowWindow("Exceptions view", WithButtons(content, ("Select these holes", () => vm.Doc!.Select(ids)), ("Highlight", () => vm.SetHighlight(ids))), 640, 480);
     }
 
     /// <summary>Front row: true burden of each front-row hole to the crest line.</summary>
@@ -541,8 +546,15 @@ public static class AnalysisWindows
         var view = SecondaryViewport(vm, () =>
         {
             var o = vm.BuildSceneOptions();
-            return new SceneOptions { Selection = o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, Overlays = new IOverlay[] { overlay } };
+            // a drag on the main plan shows here too: the dragged holes and the arrows from their new places
+            var drag = vm.View.Preview;
+            return new SceneOptions
+            {
+                Selection = o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, Overlays = new IOverlay[] { overlay },
+                MovedEntities = drag.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null, MoveOffset = drag.MoveOffset
+            };
         });
+        vm.DragPreview += view.Redraw;
         var arrowCount = overlay.Arrows(p).Count;
         var size = new TextBlock { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, MinWidth = 54, TextAlignment = TextAlignment.Center, FontFamily = Look.Mono, Foreground = Look.Text, Name = "arrowSize" };
         var shapeChips = new List<Button>();
@@ -622,7 +634,7 @@ public static class AnalysisWindows
         export.Click += async (_, _) =>
         {
             var path = await Dialogs.SaveFile("First movement", "first-movement.csv", "csv", ("CSV", new[] { "*.csv" }));
-            if (path != null) File.WriteAllText(path, BlastDesigner.Engine.FirstMovement.ToCsv(overlay.Arrows(p)) + Environment.NewLine);
+            if (path != null) File.WriteAllText(path, BlastDesigner.Engine.FirstMovement.ToCsv(overlay.Arrows(vm.Project!)) + Environment.NewLine);
         };
 
         var header = new Border
@@ -670,7 +682,7 @@ public static class AnalysisWindows
         var w = Dialogs.ShowWindow("First movement", dock, 900, 640);
         w.MinWidth = 560;
         w.MinHeight = 360;
-        w.Closed += (_, _) => { if (_firstMovementOpen == planOverlay) _firstMovementOpen = null; };
+        w.Closed += (_, _) => { if (_firstMovementOpen == planOverlay) _firstMovementOpen = null; vm.DragPreview -= view.Redraw; };
     }
 
     // ---- secondary viewports -----------------------------------------------------------

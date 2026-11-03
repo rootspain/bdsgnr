@@ -11,6 +11,12 @@ public interface IOverlay
     void Draw(SKCanvas canvas, Camera camera, BlastProject project);
 }
 
+/// <summary>An overlay computed from object positions: while objects are dragged it is drawn from their shifted positions.</summary>
+public interface IMovePreviewOverlay : IOverlay
+{
+    void Draw(SKCanvas canvas, Camera camera, BlastProject project, ISet<Guid>? moved, Vec3 offset);
+}
+
 public sealed class SceneOptions
 {
     public ISet<Guid> Selection { get; init; } = new HashSet<Guid>();
@@ -290,7 +296,9 @@ public static class PlanRenderer
             EndMove(mc);
         }
 
-        foreach (var o in opt.Overlays) o.Draw(canvas, cam, project);
+        foreach (var o in opt.Overlays)
+            if (o is IMovePreviewOverlay mp) mp.Draw(canvas, cam, project, opt.MovedEntities, opt.MoveOffset);
+            else o.Draw(canvas, cam, project);
 
         if (view.ShowAxes) DrawAxes(canvas, cam, stroke, text);
         if (opt.DrawNorthArrow) DrawNorth(canvas, cam, stroke, fill, text);

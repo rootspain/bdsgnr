@@ -339,15 +339,13 @@ public sealed partial class MainViewModel
         var tol = await Dialogs.PromptNumber("Check for duplicates", Loc.T("Distance tolerance (m)"), Project!.Design.DuplicateTolerance);
         if (tol is not double t) return;
         var pairs = HoleDesign.FindDuplicates(Project.Holes.ToList(), t);
-        Highlight.Ids.Clear();
-        foreach (var (a, b) in pairs) { Highlight.Ids.Add(a.Id); Highlight.Ids.Add(b.Id); }
-        View.Redraw();
+        SetHighlight(pairs.SelectMany(x => new[] { x.A.Id, x.B.Id }));
         if (pairs.Count == 0) { await Dialogs.Info(Loc.T("No duplicate holes found.")); return; }
         if (await Dialogs.Confirm(Loc.F("{0} duplicate pairs found (highlighted). Delete the second hole of each pair?", pairs.Count)))
         {
             var remove = pairs.Select(x => x.B.Id).ToHashSet();
             Change("Delete duplicate holes", p => p.Entities.RemoveAll(e => remove.Contains(e.Id)));
-            Highlight.Ids.Clear();
+            SetHighlight(Array.Empty<Guid>());
         }
     }
 
@@ -606,9 +604,16 @@ public sealed partial class MainViewModel
             if (InitiationLinks.PointOn(Project!, hole.Id) is { } taken) { SetStatus(Loc.F("Hole {0} already has initiation point {1}", hole.Label, taken.Label)); return; }
             var n = Project!.Entities.OfType<InitiationPoint>().Count() + 1;
             var holeId = hole.Id;
-            Change("Add initiation point", p => p.Add(new InitiationPoint { Position = hole.Collar, HoleId = holeId, Label = $"IP{n}", IsElectronic = electronic }, p.GetOrCreateLayer(StandardLayers.Ties, 0xFFDC2626, "Design")));
+            // the existing ties are turned to run away from the new start, in the same undo step
+            var turned = 0;
+            Change("Add initiation point", p =>
+            {
+                p.Add(new InitiationPoint { Position = hole.Collar, HoleId = holeId, Label = $"IP{n}", IsElectronic = electronic }, p.GetOrCreateLayer(StandardLayers.Ties, 0xFFDC2626, "Design"));
+                turned = Timing.OrientTiesFromInitiation(p);
+            });
             // on to the ties from its hole, with the catalogue of what they are made with, as the Ties button does
             TieToolWithPalette(Project!.FindEntity(holeId));
+            if (turned > 0) SetStatus(Loc.F("Ties turned to run from the initiation point: {0}", turned));
         }));
 
     public async void AutoTieUp()

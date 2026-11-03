@@ -9,6 +9,16 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.2.2 — 2026-11-01
 
 ### New
+- **The Fragmentation inputs window is redone**: cards of fields and a live X50, X80, oversize and fines
+  prediction for the blast. The rock factor has two fields: A by the international classification (Cunningham) and
+  f by Protodyakonov; f sets the strength σc = 10·f MPa and A is calculated from it and the rock mass (powdery,
+  jointed, massive), and an A typed in recalculates f; the fields follow each other as they are typed. When f
+  cannot give the A typed in with this rock mass, A is kept as typed. The fields take f from 0 to 50 and
+  A from 0 to 25; outside the usual range (f 0.3–40,
+  A 0.8–22) the field is highlighted. The inputs can be saved to a preset (.bdfrag file) and loaded
+  into another blast.
+- The Visualization window remembers the speed, the isochrone interval and the Isochrones and Colour by time
+  switches: they apply at the next start and in other blasts.
 - **Recognized bench elements in layers of their own.** Apply in the Bench elements window puts crests, toes,
   contours and block outlines in layers in the class colours, so each type is shown or hidden in the layers panel.
   Setting a line's type by hand in Properties moves it the same way.
@@ -46,6 +56,14 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   hole counts as initiated in every check. Moving the hole moves the point, moving the point moves the hole; deleting
   the hole deletes the point, deleting the point leaves the hole. In projects of earlier versions a point standing on a
   collar is bound to that hole on opening.
+- The first-movement arrows are recalculated when an initiation point or its hole is moved, also live while it is
+  dragged (on the plan and in the First movement window); a bound point and its hole are dragged together.
+- The Tie legend switch is gone from the Visibility tab.
+- Placing an initiation point on a hole turns the existing ties so the signal runs away from it: each tie points from
+  the hole the signal reaches first to the other (one undo step).
+- The First movement button on the Analysis tab is called Rock movement.
+- Holes ringed by Highlight (Exceptions, depth checks, duplicates and the other check windows) are cleared by Clear
+  analysis on the viewport or Esc, like the other analysis displays.
 - A row can be taken by its line (with rows shown): a selected row is dragged by the line between its holes, a click
   on the line of an unselected row selects its holes.
 - Tie tool: with "Tie chain" on its panel (on by default) a line from hole to hole ties every hole on its way in turn

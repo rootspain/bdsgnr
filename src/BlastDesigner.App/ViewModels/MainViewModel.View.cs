@@ -313,6 +313,21 @@ public sealed partial class MainViewModel
         OverlaysChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Rings round the holes on the plan (the Highlight buttons of the check windows); like the analysis displays, they
+    /// go with Clear analysis or Esc.
+    /// </summary>
+    public void SetHighlight(IEnumerable<Guid> ids)
+    {
+        Highlight.Ids.Clear();
+        foreach (var id in ids) Highlight.Ids.Add(id);
+        View.Redraw();
+        OverlaysChanged?.Invoke();
+    }
+
+    /// <summary>An analysis display or a highlight is on the plan.</summary>
+    public bool HasAnalysisDisplay => AnalysisOverlays.Count > 0 || Highlight.Ids.Count > 0;
+
     public void ClearOverlays()
     {
         AnalysisOverlays.Clear();

@@ -136,12 +136,7 @@ public static class Version6Windows
         return sp;
     }
 
-    private static void Highlight(MainViewModel vm, IEnumerable<Guid> ids)
-    {
-        vm.Highlight.Ids.Clear();
-        foreach (var id in ids) vm.Highlight.Ids.Add(id);
-        vm.View.Redraw();
-    }
+    private static void Highlight(MainViewModel vm, IEnumerable<Guid> ids) => vm.SetHighlight(ids);
 
     private static string F(double v, string fmt = "0.00") => double.IsNaN(v) || double.IsInfinity(v) ? "" : v.ToString(fmt, CultureInfo.CurrentCulture);
 

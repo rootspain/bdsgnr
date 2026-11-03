@@ -246,7 +246,8 @@ public static class FirstMovement
     /// Point and time of every hole as the triangulation is fed: the middle of the first
     /// firing charge at its firing time. Holes without a primed deck use the collar; holes without a time are left out.
     /// </summary>
-    public static List<(Vec3 Point, double Time)> Inputs(BlastProject project)
+    /// <summary>Firing point and time of every timed hole; the <paramref name="moved"/> holes shifted by <paramref name="offset"/> (a drag in progress).</summary>
+    public static List<(Vec3 Point, double Time)> Inputs(BlastProject project, ISet<Guid>? moved = null, Vec3 offset = default)
     {
         var list = new List<(Vec3, double)>();
         foreach (var h in project.Holes)
@@ -254,6 +255,7 @@ public static class FirstMovement
             if (h.FiringTimeMs is not double t) continue;
             var first = Charging.Primers(h).OrderBy(p => Charging.PrimerDelay(project, p.Primer)).FirstOrDefault();
             var point = first.Deck != null ? h.PointAtDepth((first.Deck.Top + first.Deck.Bottom) / 2) : h.Collar;
+            if (moved != null && moved.Contains(h.Id)) point += offset;
             list.Add((point, t));
         }
         return list;

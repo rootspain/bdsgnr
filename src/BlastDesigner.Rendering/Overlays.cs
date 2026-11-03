@@ -210,7 +210,7 @@ public sealed class TimingContourOverlay : IOverlay
 /// the time gradient; fill colour = hue of the screen direction, black outline; size in metres; big 7-point arrows when
 /// they cover less than 30 % of the triangulated area. Clipped to closed blast boundaries.
 /// </summary>
-public sealed class FirstMovementOverlay : IOverlay
+public sealed class FirstMovementOverlay : IMovePreviewOverlay
 {
     public enum ArrowShape { Arrow, Triangle, Auto }
 
@@ -224,10 +224,13 @@ public sealed class FirstMovementOverlay : IOverlay
     TimingDelaunay? _delaunay;
     List<FirstMovement.Arrow> _arrows = new();
 
-    /// <summary>Current triangulation (rebuilt when hole positions or times change).</summary>
-    public TimingDelaunay Delaunay(BlastProject project)
+    /// <summary>
+    /// Current triangulation (rebuilt when hole positions or times change), with the <paramref name="moved"/> holes
+    /// shifted by <paramref name="offset"/> while they are dragged.
+    /// </summary>
+    public TimingDelaunay Delaunay(BlastProject project, ISet<Guid>? moved = null, Vec3 offset = default)
     {
-        var inputs = FirstMovement.Inputs(project);
+        var inputs = FirstMovement.Inputs(project, moved, offset);
         if (_delaunay == null || _inputs == null || !inputs.SequenceEqual(_inputs))
         {
             _inputs = inputs;
@@ -239,9 +242,11 @@ public sealed class FirstMovementOverlay : IOverlay
 
     public IReadOnlyList<FirstMovement.Arrow> Arrows(BlastProject project) { Delaunay(project); return _arrows; }
 
-    public void Draw(SKCanvas c, Camera cam, BlastProject project)
+    public void Draw(SKCanvas c, Camera cam, BlastProject project) => Draw(c, cam, project, null, default);
+
+    public void Draw(SKCanvas c, Camera cam, BlastProject project, ISet<Guid>? moved, Vec3 offset)
     {
-        var d = Delaunay(project);
+        var d = Delaunay(project, moved, offset);
         if (_arrows.Count == 0) return;
         var large = Shape == ArrowShape.Arrow || (Shape == ArrowShape.Auto && FirstMovement.UseLargeArrows(d, ArrowSize));
         var bounds = project.Entities.OfType<PolylineEntity>().Where(p => p.Closed && p.Kind == LineKind.Boundary && p.Points.Count > 2).ToList();

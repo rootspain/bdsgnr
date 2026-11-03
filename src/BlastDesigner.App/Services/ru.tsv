@@ -1784,7 +1784,7 @@ ui:Timing overlap	Совпадение времён
 ui:Logging report	Отчёт регистрации
 ui:Blast dynamics	Динамика взрыва
 ui:Angle of initiation	Угол инициирования
-ui:First movement	Первое движение
+ui:First movement	Движение ГМ
 ui:Burden relief	Разгрузка ЛНС
 ui:Time envelope	Огибающая
 ui:Charge vs time	Заряд по времени
@@ -1920,7 +1920,7 @@ Tracks and points	Траектории и точки
 Expand	Расширить
 Simplify	Упростить
 ui:Clear analysis	Убрать анализ
-ui:Remove maps, isochrones and arrows from the plan (Esc)	Убрать с плана карты, изолинии и стрелки (Esc)
+ui:Remove maps, isochrones and arrows from the plan (Esc)	Убрать с плана карты, изолинии, стрелки и подсветку скважин (Esc)
 No firing times: add an initiation point and ties, or electronic times.	Нет времён взрывания: добавьте точку инициирования и связи или задайте времена ЭСИ.
 Chart could not be drawn:	Не удалось нарисовать график:
 At least {0} points are needed	Нужно не меньше {0} точек
@@ -2489,3 +2489,50 @@ Click the hole the electronic blast opens from.	Щёлкните скважин�
 Click the hole the blast is initiated at; the ties then go on from it.	Щёлкните скважину, в которой инициируется взрыв; связи пойдут от неё.
 Place the initiation point on a hole	Точку инициирования нужно поставить на скважину
 Hole {0} already has initiation point {1}	На скважине {0} уже стоит точка инициирования {1}
+Ties turned to run from the initiation point: {0}	Связи развёрнуты от точки инициирования: {0}
+ui:cm	см
+ui:GPa	ГПа
+ui:{0} cm	{0} см
+ui:Oversize	Негабарит
+ui:Fines	Мелочь
+ui:Calculate from f	Рассчитать по f
+ui:Kuz-Ram: mean size by Cunningham, Rosin-Rammler and Swebrec curves	Kuz-Ram: средний размер куска по Каннингему, кривые Розина–Раммлера и Swebrec
+ui:A — international (Cunningham)	A — международная (Каннингем)
+ui:f — by Protodyakonov	f — по Протодьяконову
+ui:f sets the rock strength σc = 10·f MPa; A is calculated from it and the rock mass: A = 0.06·(RMD + JF + RDI + HF). A typed in is used as it is.	f задаёт прочность породы σсж = 10·f МПа; A рассчитывается по ней и описанию массива: A = 0,06·(RMD + JF + RDI + HF). Введённое вручную A используется как есть.
+ui:Rock factor	Коэффициент породы
+ui:Rock mass	Массив
+ui:Drilling	Бурение
+ui:Drilling accuracy (standard deviation)	Точность бурения (ср. кв. отклонение)
+ui:Size distribution	Гранулометрия
+ui:Largest in-situ block	Наибольший блок в массиве
+ui:Oversize above	Негабарит крупнее
+ui:Fines below	Мелочь мельче
+ui:Prediction for the blast	Прогноз по блоку
+ui:Powdery, friable	Рыхлый, сыпучий
+ui:Jointed	Трещиноватый
+ui:Massive	Массивный
+ui:Joint factor JF = JPS + JPA	Фактор трещиноватости JF = JPS + JPA
+ui:Young's modulus E	Модуль Юнга E
+ui:Rock density {0} t/m³ (Design data); RDI = 25·ρ − 50 = {1}	Плотность породы {0} т/м³ (данные проекта); RDI = 25·ρ − 50 = {1}
+ui:Typed in	Задан вручную
+ui:Calculated from f and the rock mass	Рассчитан по f и описанию массива
+ui:HF = E/3 = {0} (E below 50 GPa)	HF = E/3 = {0} (E ниже 50 ГПа)
+ui:HF = σc/5 = 2f = {0}	HF = σсж/5 = 2f = {0}
+ui:σc ≈ {0} MPa	σсж ≈ {0} МПа
+ui:Load the holes to see the prediction: it needs the powder factor and the charge per hole.	Зарядите скважины, чтобы увидеть прогноз: нужны удельный расход и заряд на скважину.
+Fragmentation preset	Пресет фрагментации
+Save fragmentation preset	Сохранить пресет фрагментации
+Load fragmentation preset	Загрузить пресет фрагментации
+ui:Load preset…	Загрузить пресет…
+ui:Save preset…	Сохранить пресет…
+ui:Put the inputs saved in a preset file in this window	Подставить в окно значения из файла пресета
+ui:Save these inputs to a file, to load them into another blast	Сохранить эти значения в файл, чтобы загрузить их в другом взрыве
+ui:Saved: {0}	Сохранено: {0}
+ui:Loaded: {0}	Загружено: {0}
+ui:The file is not a fragmentation preset.	Файл не является пресетом фрагментации.
+ui:Allowed {0}–{1}: {2} taken	Допустимо {0}–{1}: принято {2}
+ui:Outside the usual range {0}–{1}	Вне обычного диапазона {0}–{1}
+ui:Linked with f and the rock mass	Связан с f и описанием массива
+ui:f does not enter A while E is below 50 GPa: A is kept as typed	При E ниже 50 ГПа f не входит в A: A оставлен как введён
+ui:With this rock mass f would be {0}: A is kept as typed	При таком массиве f было бы {0}: A оставлен как введён

@@ -77,6 +77,9 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Raised when panels (layers, table, properties) must re-read the model.</summary>
     public event Action? ModelRefreshed;
+    /// <summary>Objects are being dragged on the plan (the preview offset changed): views drawn from it redraw.</summary>
+    public event Action? DragPreview;
+    public void RaiseDragPreview() => DragPreview?.Invoke();
     public event Action? SelectionRefreshed;
     public event Action? ToolChanged;
 

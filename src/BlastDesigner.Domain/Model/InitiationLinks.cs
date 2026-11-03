@@ -61,6 +61,19 @@ public static class InitiationLinks
         Apply(p, Array.Empty<State>());
     }
 
+    /// <summary>The objects with the points and holes bound to them: what moves when they are moved.</summary>
+    public static List<Guid> WithLinked(BlastProject p, IEnumerable<Guid> ids)
+    {
+        var set = ids.ToHashSet();
+        foreach (var ip in p.Entities.OfType<InitiationPoint>())
+        {
+            if (ip.HoleId is not Guid hid) continue;
+            if (set.Contains(ip.Id) && p.FindEntity(hid) is Hole { Locked: false }) set.Add(hid);
+            else if (set.Contains(hid)) set.Add(ip.Id);
+        }
+        return set.ToList();
+    }
+
     /// <summary>The point bound to the hole, if any.</summary>
     public static InitiationPoint? PointOn(BlastProject p, Guid holeId) =>
         p.Entities.OfType<InitiationPoint>().FirstOrDefault(i => i.HoleId == holeId);

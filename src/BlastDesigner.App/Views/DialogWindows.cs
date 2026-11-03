@@ -254,18 +254,24 @@ public static class TiePaletteWindow
         if (_open != null) { Fill(vm); _open.Activate(); return; }
         _panel = new StackPanel { Spacing = 14, Margin = new Thickness(16, 14, 16, 18) };
         Fill(vm);
-        _open = Dialogs.ShowWindow(Title, new ScrollViewer { Content = _panel, Background = Look.Ground }, 380, 640);
-        _open.Background = Look.Ground;
-        // where it was left last time (settings file), if that spot is still on a screen
+        // where it was left last time (settings file), if that spot is still on a screen; it opens there directly,
+        // so the centring of a new window does not move it (and write the centre over the saved place)
+        PixelPoint? at = null;
         if (vm.Settings.Window.TryGetValue(PositionKey, out var saved) && saved.Split(',') is [var sx, var sy]
-            && int.TryParse(sx, out var x) && int.TryParse(sy, out var y) && _open.Screens.ScreenFromPoint(new PixelPoint(x + 40, y + 20)) != null)
-            _open.Position = new PixelPoint(x, y);
+            && int.TryParse(sx, out var x) && int.TryParse(sy, out var y) && OnScreen(new PixelPoint(x + 40, y + 20)))
+            at = new PixelPoint(x, y);
+        _open = Dialogs.ShowWindow(Title, new ScrollViewer { Content = _panel, Background = Look.Ground }, 380, 640, at: at);
+        _open.Background = Look.Ground;
         _open.PositionChanged += (_, e) => vm.Settings.Window[PositionKey] = $"{e.Point.X},{e.Point.Y}";
         _open.Closed += (_, _) => { _open = null; _panel = null; vm.Settings.Save(); };
     }
 
     /// <summary>The window's content, for the UI smoke test.</summary>
     public static Control? Content => _panel;
+
+    /// <summary>Whether the point is on one of the screens (true when the screens are not known, as without a display).</summary>
+    private static bool OnScreen(PixelPoint p) =>
+        Dialogs.Owner?.Screens is not { } screens || screens.All.Count == 0 || screens.ScreenFromPoint(p) != null;
 
     private static string TypeOf(MainViewModel vm) =>
         vm.TieSystem ?? (vm.ActiveTieDelayMs != null ? "User" : Systems.FirstOrDefault(s => s.Kind == vm.ActiveConnector?.Kind).Key ?? "ShockTube");

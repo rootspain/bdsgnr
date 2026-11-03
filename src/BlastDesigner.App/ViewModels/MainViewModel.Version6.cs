@@ -119,7 +119,11 @@ public sealed partial class MainViewModel
 
     public Task EditTolerances() => EditPart("Design tolerances", p => p.Tolerances, (p, v) => p.Tolerances = v);
     public Task EditFlyrockModel() => EditPart("Flyrock constants", p => p.Flyrock, (p, v) => p.Flyrock = v);
-    public Task EditFragmentationModel() => EditPart("Fragmentation inputs", p => p.Fragmentation, (p, v) => p.Fragmentation = v);
+    public async Task EditFragmentationModel()
+    {
+        if (Doc == null) return;
+        if (await FragmentationWindow.Show(this) is { } edited) Change("Fragmentation inputs", p => p.Fragmentation = edited);
+    }
     public Task EditCoordinates() => EditPart("Site coordinate system", p => p.Coordinates, (p, v) => p.Coordinates = v);
 
     // ---- holes --------------------------------------------------------------------------
