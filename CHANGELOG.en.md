@@ -6,7 +6,7 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.2.2 — 2026-11-01
+## 0.2.3 — 2026-11-03
 
 ### New
 - **The Fragmentation inputs window is redone**: cards of fields and a live X50, X80, oversize and fines
@@ -19,25 +19,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   into another blast.
 - The Visualization window remembers the speed, the isochrone interval and the Isochrones and Colour by time
   switches: they apply at the next start and in other blasts.
-- **Recognized bench elements in layers of their own.** Apply in the Bench elements window puts crests, toes,
-  contours and block outlines in layers in the class colours, so each type is shown or hidden in the layers panel.
-  Setting a line's type by hand in Properties moves it the same way.
-- **Surface wireframe setting**: Program settings ▸ Viewport ▸ Surface wireframe — Always, Hide while rotating
-  or moving (the default), Only when selected or Never.
-- **Surface kind Face.** "Build the surface from the survey" in the Bench elements window puts the faces between
-  the recognized crests and toes into a surface of their own, "Faces", of this kind, and the platforms between the
-  faces into "Benches" of kind Bench; the colours are in Program settings ▸ Viewport ▸ Surface colours.
-- Frame rate in the corner of the plan: Program settings ▸ Viewport ▸ FPS, off by default.
-- **Add holes** in the properties of a timing line: the holes with an electronic detonator that are on no timing line
-  yet join this line, are programmed from it and selected. "Select assigned" there selects the holes the line fires.
-- An OK button in the start assistant opens the file selected in the list.
-- In the program settings a click on a colour swatch opens a colour picker: spectrum, hue, hex.
 
 ### Changed
-- **The plan and the 3D view are several times faster**, especially a blast over a mine survey and moving
-  the mouse over a large project.
-- The Survey ribbon tab and the Survey layer group are now called "Topography".
-- In the layers panel the Topography group comes before Drawing, layers without a group are at the bottom.
 - **Initiation catalogue** replaces the tie palette: chosen down Type (shock tube, cord delay, detonating cord,
   electric, harness wire, EBS detonators, user defined) → Subtype (product kind) → Family → Variant (delay), with
   the current choice on top. Products in Available resources get a Family field (without it the family comes from
@@ -73,6 +56,32 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - Pattern tool: blast direction, edge offset, number prefix and start number are on its panel; the Pattern
   properties window no longer opens after the outline is drawn. Tool panel fields stay on one line; the panel
   widens up to the view and the fields scroll beyond that.
+
+### Fixed
+- Drawing tools showed an empty label box by the cursor before the first point.
+
+## 0.2.2 — 2026-11-01
+
+### New
+- **Recognized bench elements in layers of their own.** Apply in the Bench elements window puts crests, toes,
+  contours and block outlines in layers in the class colours, so each type is shown or hidden in the layers panel.
+  Setting a line's type by hand in Properties moves it the same way.
+- **Surface wireframe setting**: Program settings ▸ Viewport ▸ Surface wireframe — Always, Hide while rotating
+  or moving (the default), Only when selected or Never.
+- **Surface kind Face.** "Build the surface from the survey" in the Bench elements window puts the faces between
+  the recognized crests and toes into a surface of their own, "Faces", of this kind, and the platforms between the
+  faces into "Benches" of kind Bench; the colours are in Program settings ▸ Viewport ▸ Surface colours.
+- Frame rate in the corner of the plan: Program settings ▸ Viewport ▸ FPS, off by default.
+- **Add holes** in the properties of a timing line: the holes with an electronic detonator that are on no timing line
+  yet join this line, are programmed from it and selected. "Select assigned" there selects the holes the line fires.
+- An OK button in the start assistant opens the file selected in the list.
+- In the program settings a click on a colour swatch opens a colour picker: spectrum, hue, hex.
+
+### Changed
+- **The plan and the 3D view are several times faster**, especially a blast over a mine survey and moving
+  the mouse over a large project.
+- The Survey ribbon tab and the Survey layer group are now called "Topography".
+- In the layers panel the Topography group comes before Drawing, layers without a group are at the bottom.
 - Settings window: Apply applies and saves the settings and keeps the window open; the new OK button applies and
   closes. Buttons in order: Apply, Cancel, OK.
 - The program no longer picks the discrete GPU itself: on laptops the integrated one is usually faster.
@@ -84,7 +93,6 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the old way is kept as "Create surface without breaklines". Surfaces built before need to be built again.
 - Timing contours stopped short of a row farther from its neighbour than three design burdens or spacings: the
   distance between the rows on the ground now counts.
-- Drawing tools showed an empty label box by the cursor before the first point.
 - An occasional drawing error while using tools ("Collection was modified").
 
 ## 0.2.1 — 2026-11-01

@@ -80,7 +80,7 @@ public static class ProjectFile
         // the layer group "Survey" was renamed; keeps one group when new survey layers are added to an old project
         foreach (var l in p.Layers)
             if (l.Group == "Survey") l.Group = StandardLayers.TopographyGroup;
-        // an initiation point standing on a hole is bound to it (before 0.2.2 it only shared the position)
+        // an initiation point standing on a hole is bound to it (before 0.2.3 it only shared the position)
         InitiationLinks.Normalize(p);
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;
     }
