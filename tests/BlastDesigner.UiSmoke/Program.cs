@@ -25,6 +25,21 @@ AppBuilder.Configure<App>()
 
 // this version's notes count as seen: the start must not show them (nor save these settings over the real ones)
 var settings = new ProgramSettings { ShowStartupAssistant = false, Language = args.Length > 1 ? args[1] : "ru", LastSeenVersion = Changelog.Current.ToString() };
+// The real settings.json is kept as it is for the whole run: several steps save settings (full screen, the
+// initiation catalogue's position on close) and would leave the smoke settings in the user's file. It is put back at
+// the end, on any exit and after a crash.
+var realSettings = File.Exists(ProgramSettings.SettingsPath) ? File.ReadAllBytes(ProgramSettings.SettingsPath) : null;
+void RestoreSettings()
+{
+    try
+    {
+        if (realSettings != null) File.WriteAllBytes(ProgramSettings.SettingsPath, realSettings);
+        else if (File.Exists(ProgramSettings.SettingsPath)) File.Delete(ProgramSettings.SettingsPath);
+    }
+    catch (Exception ex) { Console.WriteLine("could not put the settings back: " + ex.Message); }
+}
+AppDomain.CurrentDomain.ProcessExit += (_, _) => RestoreSettings();
+AppDomain.CurrentDomain.UnhandledException += (_, _) => RestoreSettings();
 // usage statistics of the smoke run go to its own folder
 UsageLog.Folder = Path.Combine(outDir, "usage");
 if (Directory.Exists(UsageLog.Folder)) Directory.Delete(UsageLog.Folder, true);
@@ -382,6 +397,36 @@ for (int stage = 0; stage < 7; stage++)
 Step("pattern tool panel", () => { window.Ribbon.Select(2); vm.PatternTool(); });
 Shot("31_pattern_tool");
 Step("back to select", vm.SelectTool);
+Step("pattern tool: direction, offset, prefix and start number on its panel, no dialog after the outline", () =>
+{
+    vm.PatternTool(); Pump();
+    TextBox Box(string name) => window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == name) ?? throw new Exception("no field " + name + " on the pattern panel");
+    foreach (var name in new[] { "patternDirection", "patternOffset", "patternPrefix", "patternStart" }) Box(name);
+    // all the fields on one line (a narrow window scrolls them instead of wrapping)
+    var tops = new[] { "patternDirection", "patternOffset", "patternPrefix", "patternStart" }.Select(n => Box(n).TranslatePoint(new Point(0, 0), window)!.Value.Y).Distinct().ToList();
+    if (tops.Count != 1) throw new Exception("the pattern fields are on more than one line");
+    var prefix = Box("patternPrefix"); prefix.Text = "S"; prefix.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent));
+    var start = Box("patternStart"); start.Text = "700"; start.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent));
+    Pump();
+    var before = vm.Project!.Holes.Count();
+    var dialog = BlastDesigner.App.Services.Dialogs.LastShown;
+    var x0 = vm.Project.Holes.Max(h => h.Collar.X) + 30;
+    var y0 = vm.Project.Holes.Min(h => h.Collar.Y);
+    foreach (var (x, y) in new[] { (x0, y0), (x0 + 20, y0), (x0 + 20, y0 + 16), (x0, y0 + 16) })
+    {
+        var w = new BlastDesigner.Domain.Geometry.Vec3(x, y, 300);
+        vm.ActiveTool!.PointerPressed(new ToolPointer { World = w, Snapped = w, Left = true, ClickCount = 1 });
+    }
+    vm.ActiveTool!.KeyDown(Avalonia.Input.Key.Enter, Avalonia.Input.KeyModifiers.None);
+    for (int i = 0; i < 20; i++) Pump();
+    if (BlastDesigner.App.Services.Dialogs.LastShown != dialog && BlastDesigner.App.Services.Dialogs.LastShown?.IsVisible == true) throw new Exception("a dialog opened after the outline: " + BlastDesigner.App.Services.Dialogs.LastShown.Title);
+    var added = vm.Project.Holes.Skip(before).ToList();
+    if (added.Count == 0) throw new Exception("no holes from the pattern tool");
+    if (!added.Any(h => h.Label == "S700") || added.Any(h => !h.Label.StartsWith("S"))) throw new Exception("labels not from the panel: " + string.Join(",", added.Take(5).Select(h => h.Label)));
+    if (vm.PatternStartNumber != null) throw new Exception("the start number should return to the next free one");
+    vm.Undo();
+    vm.SelectTool();
+});
 Step("dark plan zoomed", () => { vm.Doc!.Select(vm.Project!.Rows[2].HoleIds); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); });
 Shot("32_dark_plan");
 Step("dark 3d", () => { vm.ZoomAll(); vm.View3D(); });
@@ -409,7 +454,56 @@ Step("dropdown buttons open menus", () =>
     window.Ribbon.Select(0); Pump();
     buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
     Click(BlastDesigner.App.Services.Loc.Ui("Import"), 5);
-    Click(BlastDesigner.App.Services.Loc.Ui("Drawing: polyline (others in the list)") + " (W)", 8);
+    string DrawTip(string header) => BlastDesigner.App.Services.Loc.F(BlastDesigner.App.Services.Loc.Ui("Drawing: {0} (others in the list)"), BlastDesigner.App.Services.Loc.T(header).ToLower(System.Globalization.CultureInfo.CurrentCulture)) + " (W)";
+    Click(DrawTip("Polyline"), 8);
+    {
+        var drawButton = buttons.First(x => Avalonia.Controls.ToolTip.GetTip(x) as string == DrawTip("Polyline"));
+        drawButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent)); Pump();
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "36b_drawing_tools.png"));
+        BlastDesigner.App.Views.Ui.LastMenu?.Close(); Pump();
+    }
+    // every drawing tool of the list has its icon, and the one picked becomes the button's tool (icon, tip, key W)
+    if (vm.DrawingTools().Any(e => e.Icon == null)) throw new Exception("a drawing tool without an icon");
+    // the point and the north point light up too (their tools were named by the translated kind)
+    foreach (var header in new[] { "Point", "North point" })
+    {
+        vm.DrawingTools().First(e => e.Header == header).Action!(); Pump();
+        var bs = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
+        var btn = bs.First(x => Avalonia.Controls.ToolTip.GetTip(x) as string == DrawTip(header));
+        if (btn.GetLogicalDescendants().OfType<Avalonia.Controls.Shapes.Path>().FirstOrDefault()?.Stroke != BlastDesigner.App.Services.Look.Accent) throw new Exception(header + " on: its icon is not in the accent colour");
+    }
+    vm.SelectTool(); Pump();
+    // holding the left button on the icon opens the list, and the release then starts nothing
+    {
+        var drawButton = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().First(x => (Avalonia.Controls.ToolTip.GetTip(x) as string)?.EndsWith(" (W)") == true && x.GetLogicalDescendants().OfType<Avalonia.Controls.Shapes.Path>().Count() >= 2);
+        BlastDesigner.App.Views.Ui.LastMenu?.Close();
+        var at = drawButton.TranslatePoint(new Point(12, drawButton.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(at, Avalonia.Input.MouseButton.Left); Pump();
+        ContextMenu? held;
+        try
+        {
+            for (int i = 0; i < 12; i++) { Thread.Sleep(50); Pump(); }
+            held = BlastDesigner.App.Views.Ui.LastMenu is { IsOpen: true } m ? m : null;
+        }
+        finally { window.MouseUp(at, Avalonia.Input.MouseButton.Left); Pump(); }
+        if (held == null) throw new Exception("holding the drawing button did not open its list");
+        if (vm.ActiveTool is not SelectTool) throw new Exception("the release after a hold started a tool: " + vm.ActiveTool?.Name);
+        held.Close(); Pump();
+    }
+    var order = string.Join(",", vm.DrawingTools().Select(e => e.Header));
+    if (order != "Point,Polyline,Polygon,Circle,Arrow,Text,Dimension,North point") throw new Exception("drawing tools order: " + order);
+    vm.DrawingTools().First(e => e.Header == "Circle").Action!(); Pump();
+    if (vm.ActiveTool?.Name != "Circle" || vm.DrawingTool != "Circle") throw new Exception("picking Circle did not start it");
+    buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
+    if (!buttons.Any(x => Avalonia.Controls.ToolTip.GetTip(x) as string == DrawTip("Circle"))) throw new Exception("the drawing button does not show the circle");
+    // the active tool's icon in the accent colour
+    var circleButton = buttons.First(x => Avalonia.Controls.ToolTip.GetTip(x) as string == DrawTip("Circle"));
+    if (circleButton.GetLogicalDescendants().OfType<Avalonia.Controls.Shapes.Path>().FirstOrDefault()?.Stroke != BlastDesigner.App.Services.Look.Accent) throw new Exception("the active drawing tool's icon is not in the accent colour");
+    vm.SelectTool(); Pump();
+    vm.RunDrawingTool();
+    if (vm.ActiveTool?.Name != "Circle") throw new Exception("the drawing button / key W should start the circle again");
+    vm.DrawingTools().First(e => e.Header == "Polyline").Action!(); vm.SelectTool(); Pump();
 });
 Step("analysis maps toggle and clear", () =>
 {
@@ -1089,7 +1183,7 @@ Step("ribbon scrolls with the mouse wheel", () =>
     window.Width = 900; Pump();
     window.Ribbon.Select(5); Pump();
     window.Width = 700; Pump();
-    var strips = window.GetLogicalDescendants().OfType<Avalonia.Controls.ScrollViewer>().Where(s => s.Content is Avalonia.Controls.StackPanel p && p.Orientation == Avalonia.Layout.Orientation.Horizontal && s.Extent.Width > s.Viewport.Width + 10).ToList();
+    var strips = window.GetLogicalDescendants().OfType<Avalonia.Controls.ScrollViewer>().Where(s => s.IsEffectivelyVisible && s.Content is Avalonia.Controls.StackPanel { Children.Count: > 0 } p && p.Orientation == Avalonia.Layout.Orientation.Horizontal && s.Extent.Width > s.Viewport.Width + 10).ToList();
     if (strips.Count < 2) throw new Exception($"expected tabs and ribbon to overflow at 700 px, found {strips.Count}");
     foreach (var sv in strips) {
     var before = sv.Offset.X;
@@ -1104,7 +1198,7 @@ Step("ribbon scrolls with the mouse wheel", () =>
 Step("ribbon drags with the left button", () =>
 {
     window.Width = 700; window.Ribbon.Select(5); Pump();
-    var strips = window.Ribbon.GetLogicalDescendants().OfType<Avalonia.Controls.ScrollViewer>().Where(s => s.Content is Avalonia.Controls.StackPanel p && p.Orientation == Avalonia.Layout.Orientation.Horizontal && s.Extent.Width > s.Viewport.Width + 10).ToList();
+    var strips = window.Ribbon.GetLogicalDescendants().OfType<Avalonia.Controls.ScrollViewer>().Where(s => s.IsEffectivelyVisible && s.Content is Avalonia.Controls.StackPanel { Children.Count: > 0 } p && p.Orientation == Avalonia.Layout.Orientation.Horizontal && s.Extent.Width > s.Viewport.Width + 10).ToList();
     var groups = strips.Last();
     groups.Offset = new Avalonia.Vector(0, 0); Pump();
     var stage = window.Ribbon.Current;
@@ -1248,17 +1342,204 @@ Step("tool windows open once", () =>
     if (BlastDesigner.App.Services.Dialogs.LastShown == first) throw new Exception("closed window was reused");
     BlastDesigner.App.Services.Dialogs.LastShown?.Close(); vm.ClearOverlays();
 });
-Step("tie palette stays put when a connector is picked", () =>
+Step("tie tool: a line from one hole to another ties every hole on the way, in order, in one undo step", () =>
 {
-    vm.Change("Add connector", p => p.Products.Add(new BlastDesigner.Domain.Model.Product { Name = "SC 17", Kind = BlastDesigner.Domain.Model.ProductKind.SurfaceConnector, DelayMs = 17 }));
+    // beside the blast, a little off the straight line (within the pick radius), and one hole well off it
+    var x0 = vm.Project!.Holes.Max(h => h.Collar.X) + 100;
+    var y0 = vm.Project.Holes.Min(h => h.Collar.Y);
+    var tiesBefore = vm.Project.Ties.Count();
+    var ids = new List<Guid>();
+    vm.Change("Smoke holes in a line", p =>
+    {
+        for (int i = 0; i < 5; i++) { var h = new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + i * 5, y0 + 0.03 * (i % 2), 100), Label = "L" + (i + 1) }; p.Add(h); ids.Add(h.Id); }
+        p.Add(new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + 10, y0 + 6, 100), Label = "off" });
+    });
+    vm.Doc!.Select(ids); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
+    vm.SetTool(new TieTool(vm)); Pump();
+    void Click(Guid id)
+    {
+        var h = (Hole)vm.Project!.FindEntity(id)!;
+        var (x, y) = vm.View.Camera.ToScreen(h.Collar);
+        vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar, Left = true, ClickCount = 1 });
+    }
+    Click(ids[0]); Click(ids[4]); Pump();
+    var ties = vm.Project!.Ties.Where(t => ids.Contains(t.FromId) || ids.Contains(t.ToId)).ToList();
+    if (ties.Count != 4) throw new Exception($"{ties.Count} ties instead of 4 through the holes on the line");
+    for (int i = 1; i < 5; i++)
+        if (!ties.Any(t => t.FromId == ids[i - 1] && t.ToId == ids[i])) throw new Exception($"no tie from hole {i} to {i + 1}");
+    // the last hole again finishes the entry; a new chain may start at a tied hole but tie no hole already tied
+    Click(ids[4]);
+    Click(ids[0]); Click(ids[2]); Pump();
+    if (vm.Project.Ties.Count(t => ids.Contains(t.FromId) || ids.Contains(t.ToId)) != 4) throw new Exception("a tie went to a hole already tied");
+    // a hole whose ties only leave it takes a tie in
+    Click(ids[0]);
+    Click(ids[4]); Click(ids[0]); Pump();
+    if (!vm.Project.Ties.Any(t => t.FromId == ids[4] && t.ToId == ids[0])) throw new Exception("no tie to a hole whose ties only leave it");
+    vm.ActiveTool!.Cancel();
+    vm.Undo();
+    vm.Undo();
+    if (vm.Project.Ties.Count() != tiesBefore) throw new Exception("one undo should remove all the ties of the line");
+    // Tie chain off on the panel: one tie from the first hole to the last
+    var chainBox = window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == "tieChain") ?? throw new Exception("no Tie chain box on the tie panel");
+    if (chainBox.IsChecked != true) throw new Exception("Tie chain should be on by default");
+    chainBox.IsChecked = false; Pump();
+    vm.ActiveTool!.Cancel();
+    var stepsBefore = vm.Doc!.UndoNames.Count;
+    Click(ids[0]); Click(ids[4]); Pump();
+    if (vm.Doc.UndoNames.Count != stepsBefore + 1) throw new Exception("one tie should be one undo step");
+    var single = vm.Project.Ties.Where(t => ids.Contains(t.FromId) || ids.Contains(t.ToId)).ToList();
+    if (single.Count != 1 || single[0].FromId != ids[0] || single[0].ToId != ids[4]) throw new Exception($"with the chain off: {single.Count} ties, expected one from the first hole to the last");
+    vm.Undo();
+    chainBox.IsChecked = true; Pump();
+    vm.Undo();
+    vm.SelectTool();
+});
+Step("select tool: a selected row of holes is dragged with the mouse on the plan", () =>
+{
+    vm.SelectTool(); Pump();
+    var row = vm.Project!.Rows[0];
+    var ids = row.HoleIds.ToList();
+    vm.Doc!.Select(ids); vm.ZoomSelection(); vm.PlanView(); Pump();
+    var hole = (Hole)vm.Project.FindEntity(ids[ids.Count / 2])!;
+    var before = ids.ToDictionary(id => id, id => ((Hole)vm.Project.FindEntity(id)!).Collar);
+    var (sx, sy) = vm.View.Camera.ToScreen(hole.Collar);
+    var origin = vm.View.TranslatePoint(new Point(0, 0), window)!.Value;
+    var start = new Point(origin.X + sx, origin.Y + sy);
+    window.MouseDown(start, Avalonia.Input.MouseButton.Left); Pump();
+    for (int k = 1; k <= 10; k++) { window.MouseMove(new Point(start.X + 6 * k, start.Y + 3 * k), Avalonia.Input.RawInputModifiers.LeftMouseButton); Pump(); }
+    window.MouseUp(new Point(start.X + 60, start.Y + 30), Avalonia.Input.MouseButton.Left); Pump();
+    var moved = ids.Count(id => Vec3.Distance2D(((Hole)vm.Project.FindEntity(id)!).Collar, before[id]) > 0.01);
+    if (moved != ids.Count) throw new Exception($"{moved} of the row's {ids.Count} holes moved with the drag");
+    vm.Undo();
+    // grabbed by its line between two holes (rows shown): the whole row moves
+    var showRows = vm.Project.View.ShowRows;
+    vm.Project.View.ShowRows = true;
+    vm.Doc.Select(ids); Pump();
+    var h0 = (Hole)vm.Project.FindEntity(ids[0])!; var h1 = (Hole)vm.Project.FindEntity(ids[1])!;
+    var (mx, my) = vm.View.Camera.ToScreen(Vec3.Lerp(h0.Collar, h1.Collar, 0.5));
+    var mid = new Point(origin.X + mx, origin.Y + my);
+    window.MouseDown(mid, Avalonia.Input.MouseButton.Left); Pump();
+    for (int k = 1; k <= 10; k++) { window.MouseMove(new Point(mid.X + 5 * k, mid.Y - 4 * k), Avalonia.Input.RawInputModifiers.LeftMouseButton); Pump(); }
+    window.MouseUp(new Point(mid.X + 50, mid.Y - 40), Avalonia.Input.MouseButton.Left); Pump();
+    moved = ids.Count(id => Vec3.Distance2D(((Hole)vm.Project.FindEntity(id)!).Collar, before[id]) > 0.01);
+    if (moved != ids.Count) throw new Exception($"grabbed by its line, {moved} of the row's {ids.Count} holes moved");
+    vm.Undo();
+    // a click on the line of a row that is not selected selects its holes (with the ties along it hidden: a click on
+    // a tie selects the tie)
+    var showTies = vm.Project.View.ShowTies;
+    vm.Project.View.ShowTies = false;
+    vm.Doc.ClearSelection();
+    vm.Project.View.ShowRows = true; vm.Project.View.ShowTies = false; Pump();
+    // another spot of the line than the drag started at: a press there again in time would be a double click
+    var (qx, qy) = vm.View.Camera.ToScreen(Vec3.Lerp((Hole)vm.Project.FindEntity(ids[1])! is var g1 ? g1.Collar : default, ((Hole)vm.Project.FindEntity(ids[2])!).Collar, 0.4));
+    var spot = new Point(origin.X + qx, origin.Y + qy);
+    window.MouseDown(spot, Avalonia.Input.MouseButton.Left); Pump();
+    window.MouseUp(spot, Avalonia.Input.MouseButton.Left); Pump();
+    if (!vm.Doc.Selection.SetEquals(ids)) throw new Exception($"a click on the row line selected {vm.Doc.Selection.Count} objects ({string.Join(",", vm.Doc.SelectedEntities.Select(e => e.KindName))}), not the row's {ids.Count} holes");
+    vm.Project.View.ShowRows = showRows;
+    vm.Project.View.ShowTies = showTies;
+    vm.Doc.ClearSelection();
+});
+Step("polyline tool: no label by the cursor before the first point, the distance after it", () =>
+{
+    vm.DrawPolylineTool(false); Pump();
+    var at = vm.Project!.Holes.First().Collar + new Vec3(5, 5, 0);
+    vm.ActiveTool!.PointerMoved(new ToolPointer { World = at, Snapped = at });
+    if (vm.View.Preview.Labels.Any()) throw new Exception("a label by the cursor before the first point: '" + vm.View.Preview.Labels[0].Text + "'");
+    vm.ActiveTool.PointerPressed(new ToolPointer { World = at, Snapped = at, Left = true, ClickCount = 1 });
+    var next = at + new Vec3(10, 0, 0);
+    vm.ActiveTool.PointerMoved(new ToolPointer { World = next, Snapped = next });
+    if (!vm.View.Preview.Labels.Any(l => l.Text.Length > 0)) throw new Exception("no distance label after the first point");
+    // a second point, then a click on it again finishes the line
+    var lines = vm.Project.Entities.OfType<PolylineEntity>().Count();
+    var (nx, ny) = vm.View.Camera.ToScreen(next);
+    vm.ActiveTool.PointerPressed(new ToolPointer { X = nx, Y = ny, World = next, Snapped = next, Left = true, ClickCount = 1 });
+    vm.ActiveTool.PointerPressed(new ToolPointer { X = nx + 2, Y = ny + 1, World = next, Snapped = next, Left = true, ClickCount = 1 }); Pump();
+    var made = vm.Project.Entities.OfType<PolylineEntity>().Skip(lines).ToList();
+    if (made.Count != 1 || made[0].Points.Count != 2) throw new Exception($"a click on the last point should finish the line: {made.Count} lines, {made.FirstOrDefault()?.Points.Count} points");
+    vm.Undo();
+    vm.ActiveTool?.Cancel(); vm.SelectTool();
+});
+Step("an initiation point on a hole is picked by its star's rays, the hole by its middle", () =>
+{
+    var hole = vm.Project!.Holes.First(h => !h.IsDummy);
+    var ip = new InitiationPoint { Position = hole.Collar, Label = "IPX" };
+    vm.Change("Smoke initiation point on a hole", p => p.Add(ip));
+    vm.Doc!.Select(new[] { hole.Id }); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); Pump();
+    var (x, y) = vm.View.Camera.ToScreen(hole.Collar);
+    if (vm.View.HitTest(x, y)?.Id != hole.Id) throw new Exception("the middle should pick the hole");
+    var onRay = vm.View.HitTest(x, y - BlastDesigner.Rendering.PlanRenderer.InitiationStarRadius * 0.7);
+    if (onRay?.Id != ip.Id) throw new Exception("a ray of the star should pick the initiation point, picked " + onRay?.KindName);
+    // the tie tool starts at the point from anywhere on the star, its middle too
+    var tiedIds = vm.Project.Ties.SelectMany(t => new[] { t.FromId, t.ToId }).ToHashSet();
+    var other = vm.Project.Holes.Where(h => !h.IsDummy && h.Id != hole.Id && !tiedIds.Contains(h.Id)).OrderBy(h => Vec3.Distance(h.Collar, hole.Collar)).First();
+    vm.SetTool(new TieTool(vm)); Pump();
+    var (ox, oy) = vm.View.Camera.ToScreen(other.Collar);
+    vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = hole.Collar, Snapped = hole.Collar, Left = true, ClickCount = 1 });
+    vm.ActiveTool.PointerPressed(new ToolPointer { X = ox, Y = oy, World = other.Collar, Snapped = other.Collar, Left = true, ClickCount = 1 }); Pump();
+    var fromStar = vm.Project.Ties.FirstOrDefault(t => t.ToId == other.Id);
+    if (fromStar?.FromId != ip.Id) throw new Exception("a tie started on the star's middle should come from the initiation point, not " + (fromStar == null ? "nothing" : vm.Project.FindEntity(fromStar.FromId)?.KindName));
+    vm.ActiveTool?.Cancel(); vm.SelectTool();
+    vm.Undo();
+    vm.Undo();
+    // an initiation point is placed only on a hole
+    vm.InitiationPointTool(false); Pump();
+    var points = vm.Project.Entities.OfType<InitiationPoint>().Count();
+    var at = hole.Collar + new Vec3(3, 3, 0);
+    vm.ActiveTool!.PointerPressed(new ToolPointer { World = at, Snapped = at, Left = true, ClickCount = 1 }); Pump();
+    if (vm.Project.Entities.OfType<InitiationPoint>().Count() != points) throw new Exception("an initiation point placed off the holes");
+    // on a hole it is bound to it and goes on to the tie tool, chained from that hole, with the initiation catalogue
+    vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = hole.Collar, Snapped = hole.Collar, Left = true, ClickCount = 1 }); Pump();
+    var placed = vm.Project.Entities.OfType<InitiationPoint>().LastOrDefault();
+    if (placed?.HoleId != hole.Id) throw new Exception("the initiation point should be bound to the hole it was placed on");
+    var catalogue = BlastDesigner.App.Services.Dialogs.LastShown;
+    if (vm.ActiveTool is not TieTool || catalogue?.Title != BlastDesigner.App.Services.Loc.T(TiePaletteWindow.Title) || !catalogue.IsVisible) throw new Exception("after the initiation point: the tie tool and the catalogue");
+    var next = vm.Project.Holes.Where(h => !h.IsDummy && h.Id != hole.Id && !vm.Project.Ties.Any(t => t.FromId == h.Id || t.ToId == h.Id)).OrderBy(h => Vec3.Distance(h.Collar, hole.Collar)).First();
+    var (nx, ny) = vm.View.Camera.ToScreen(next.Collar);
+    vm.ActiveTool.PointerPressed(new ToolPointer { X = nx, Y = ny, World = next.Collar, Snapped = next.Collar, Left = true, ClickCount = 1 }); Pump();
+    if (vm.Project.Ties.FirstOrDefault(t => t.ToId == next.Id)?.FromId != hole.Id) throw new Exception("the first tie after placing the point should go from its hole");
+    if (next.FiringTimeMs == null) throw new Exception("the hole tied from the point's hole is not initiated");
+    catalogue.Close(); vm.SelectTool(); vm.Undo(); vm.Undo();
+});
+Step("the Ties button opens the initiation catalogue, whose position goes to the settings", () =>
+{
+    vm.TieToolWithPalette(); Pump();
+    var win = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("no initiation catalogue");
+    if (vm.ActiveTool is not TieTool || win.Title != BlastDesigner.App.Services.Loc.T(TiePaletteWindow.Title)) throw new Exception("the Ties button should give the tie tool and the catalogue: " + win.Title);
+    win.Position = new PixelPoint(win.Position.X + 30, win.Position.Y + 20); Pump();
+    if (!settings.Window.TryGetValue(TiePaletteWindow.PositionKey, out var pos) || pos != $"{win.Position.X},{win.Position.Y}") throw new Exception("catalogue position not in the settings: " + pos);
+    win.Close(); vm.SelectTool();
+});
+Step("initiation catalogue: Type → Subtype → Family → Variant, user-defined delay, the window stays put", () =>
+{
     vm.ShowTiePalette(); Pump();
-    var win = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("tie palette did not open");
-    var buttons = win.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().Where(b => b.Content is Avalonia.Controls.StackPanel).ToList();
-    if (buttons.Count < 2) throw new Exception($"palette should list connectors, found {buttons.Count} buttons");
-    buttons[^1].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent)); Pump();
-    if (BlastDesigner.App.Services.Dialogs.LastShown != win) throw new Exception("picking a connector recreated the palette window");
-    if (!win.IsVisible) throw new Exception("palette window closed after picking a connector");
-    win.Close(); vm.SelectTool(); vm.Undo();
+    var win = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("initiation catalogue did not open");
+    Button Chip(string tag) => win.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => (b.Tag as string) == tag) ?? throw new Exception("no " + tag + " in the catalogue");
+    void Press(string tag) { Chip(tag).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    var types = win.GetLogicalDescendants().OfType<Button>().Count(b => (b.Tag as string)?.StartsWith("type:") == true);
+    if (types != 7) throw new Exception($"{types} types instead of 7");
+    // Electric: subtype electric detonators, their family, and its variants by delay
+    Press("type:Electric");
+    if (BlastDesigner.App.Services.Dialogs.LastShown != win || !win.IsVisible) throw new Exception("choosing a type recreated or closed the catalogue");
+    if (vm.ActiveConnector?.Kind != ProductKind.ElectricDetonator) throw new Exception("Electric did not pick an electric detonator");
+    Chip("subtype:" + ProductKind.ElectricDetonator); Chip("family:Electric detonator");
+    var variants = win.GetLogicalDescendants().OfType<Button>().Where(b => (b.Tag as string)?.StartsWith("variant:") == true).ToList();
+    if (variants.Count != vm.Project!.Products.Count(p => p.Kind == ProductKind.ElectricDetonator && p.FamilyName == "Electric detonator")) throw new Exception($"{variants.Count} variants of the electric detonator family");
+    var last = vm.Project.Products.Where(p => p.Kind == ProductKind.ElectricDetonator).OrderBy(p => p.DelayMs).Last();
+    Press("variant:" + last.Id);
+    if (vm.ActiveConnector?.Id != last.Id) throw new Exception("the variant was not taken");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39d_initiation_catalogue.png"));
+    // user defined: a delay of its own on the new ties
+    Press("type:User");
+    var delay = win.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "tieUserDelay") ?? throw new Exception("no delay for the user-defined type");
+    delay.Text = "33"; delay.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    if (vm.ActiveTieDelayMs != 33 || vm.ActiveConnector != null) throw new Exception("the user-defined delay was not taken");
+    // back to the shock tube connectors for the steps after
+    Press("type:ShockTube");
+    if (vm.ActiveTieDelayMs != null || vm.ActiveConnector?.Kind != ProductKind.SurfaceConnector) throw new Exception("shock tube did not go back to a connector");
+    if (!win.IsVisible) throw new Exception("the catalogue closed");
+    win.Close(); vm.SelectTool();
 });
 Step("hidden objects are not selectable", () =>
 {
@@ -1542,6 +1823,7 @@ Step("DXF import window: hidden layers as chips with a note, toggles, Import ret
     if (!task.IsCompleted || task.Result?.HiddenLayers != CadHiddenLayers.Skip) throw new Exception("Import did not return the chosen options");
 });
 UsageLog.Stop();
+RestoreSettings();
 
 Console.WriteLine(failures == 0 ? "SMOKE PASSED" : $"SMOKE FAILED ({failures})");
 return failures == 0 ? 0 : 1;

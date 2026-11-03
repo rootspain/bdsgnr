@@ -258,6 +258,14 @@ public sealed class Viewport : Control
                 return SegmentsDistance(new[] { d.Start, d.End }, false, sx, sy);
             case CircleEntity c:
                 return SegmentsDistance(c.ToPolygon(36), true, sx, sy);
+            case InitiationPoint ip:
+            {
+                // The star picks it, ahead of the hole it sits on (drawn over it); its see-through middle picks the hole.
+                var (x, y) = Camera.ToScreen(ip.Position);
+                var dist = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
+                var star = BlastDesigner.Rendering.PlanRenderer.InitiationStarRadius * 0.8;
+                return dist > star ? dist - star : dist < BlastDesigner.Rendering.PlanRenderer.InitiationStarHole ? 1 : -3;
+            }
             case SurfaceEntity:
                 return double.MaxValue;
             default:

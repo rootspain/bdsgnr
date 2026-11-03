@@ -45,11 +45,15 @@ public sealed partial class MainViewModel
         // Paste with a small offset so copies are visible next to the originals.
         var offset = new Vec3(Project!.Design.Spacing, -Project.Design.Burden, 0);
         var ids = new List<Guid>();
+        // new ids up front, so a pasted initiation point goes on the pasted copy of its hole; one without it is not pasted
+        var newIds = entities.ToDictionary(e => e.Id, _ => Guid.NewGuid());
+        entities.RemoveAll(e => e is InitiationPoint { HoleId: Guid hid } && !newIds.ContainsKey(hid));
         Change("Paste", p =>
         {
             foreach (var e in entities)
             {
-                e.Id = Guid.NewGuid();
+                e.Id = newIds[e.Id];
+                if (e is InitiationPoint { HoleId: Guid hole } ip) ip.HoleId = newIds[hole];
                 e.Translate(offset);
                 if (p.FindLayer(e.LayerId) == null) e.LayerId = p.DefaultLayer.Id;
                 if (e is Hole h) { h.Label = NextHoleLabel(); h.RowId = null; }

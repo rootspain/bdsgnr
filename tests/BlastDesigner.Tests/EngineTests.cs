@@ -187,6 +187,48 @@ public class ChargingTests
 
 public class TimingTests
 {
+    /// <summary>
+    /// Tie delays by initiation system: a connector or cord relay its delay, detonating cord its length over its VOD,
+    /// electric wiring and harness wire nothing, a user-defined tie its own delay.
+    /// </summary>
+    [Fact]
+    public void TieDelay_ByInitiationSystem()
+    {
+        var p = BlastProject.CreateNew();
+        var a = p.Add(new Hole { Collar = new Vec3(0, 0, 100) });
+        var b = p.Add(new Hole { Collar = new Vec3(13, 0, 100) });
+        Product Of(ProductKind k) => p.Products.First(x => x.Kind == k);
+        double Delay(Product? product, double? own = null) => Timing.TieDelay(p, Timing.Connect(p, a.Id, b.Id, product, own));
+        Assert.Equal(25, Delay(p.Products.First(x => x.Kind == ProductKind.SurfaceConnector && x.DelayMs == 25)));
+        Assert.Equal(17, Delay(p.Products.First(x => x.Kind == ProductKind.CordRelay && x.DelayMs == 17)));
+        Assert.Equal(13 / 6500.0 * 1000, Delay(Of(ProductKind.DetonatingCord)), 6);
+        Assert.Equal(0, Delay(Of(ProductKind.ElectricDetonator)));
+        Assert.Equal(0, Delay(Of(ProductKind.HarnessWire)));
+        Assert.Equal(33, Delay(null, 33));
+    }
+
+    /// <summary>An electric round: harness wire takes the current to every hole at once, each fires at its detonator's delay.</summary>
+    [Fact]
+    public void Solve_ElectricRoundFiresByDetonatorDelay()
+    {
+        var p = BlastProject.CreateNew();
+        var wire = p.Products.First(x => x.Kind == ProductKind.HarnessWire);
+        var dets = p.Products.Where(x => x.Kind == ProductKind.ElectricDetonator).OrderBy(x => x.DelayMs).ToList();
+        var ip = p.Add(new InitiationPoint { Position = new Vec3(-5, 0, 100) });
+        var holes = new List<Hole>();
+        for (int i = 0; i < 2; i++)
+        {
+            var h = p.Add(new Hole { Collar = new Vec3(i * 5, 0, 100), Length = 10 });
+            h.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = p.Products.First(x => x.IsExplosive).Id, Primers = { new Primer { Depth = 9, DetonatorId = dets[i].Id } } });
+            holes.Add(h);
+        }
+        Timing.Connect(p, ip.Id, holes[0].Id, wire);
+        Timing.Connect(p, holes[0].Id, holes[1].Id, wire);
+        Timing.Solve(p);
+        Assert.Equal(dets[0].DelayMs, holes[0].FiringTimeMs);
+        Assert.Equal(dets[1].DelayMs, holes[1].FiringTimeMs);
+    }
+
     private static (BlastProject P, List<Hole> Holes, InitiationPoint Ip) Row(int n)
     {
         var p = BlastProject.CreateNew();
@@ -207,6 +249,74 @@ public class TimingTests
         Assert.Equal(new double?[] { 0, 17, 34, 51 }, holes.Select(h => h.SurfaceTimeMs).ToArray());
         Assert.Equal(500 + 51, holes[3].FiringTimeMs);
         Assert.Equal(new int?[] { 1, 2, 3, 4 }, holes.Select(h => h.FiringSequence).ToArray());
+    }
+
+    /// <summary>An initiation point bound to a hole starts it; the ties go on from the hole.</summary>
+    [Fact]
+    public void Solve_BoundInitiationPointStartsItsHole()
+    {
+        var (p, holes, ip) = Row(3);
+        var c17 = p.Products.First(x => x.DelayMs == 17 && x.Kind == ProductKind.SurfaceConnector);
+        ip.Position = holes[1].Collar;
+        ip.HoleId = holes[1].Id;
+        Timing.Connect(p, holes[1].Id, holes[0].Id, c17);
+        Timing.Connect(p, holes[1].Id, holes[2].Id, c17);
+        Timing.Solve(p);
+        Assert.Equal(new double?[] { 17, 0, 17 }, holes.Select(h => h.SurfaceTimeMs).ToArray());
+        Assert.Equal(holes[1].Label, ip.Hole);
+        // unbound, standing on the same spot, it starts nothing: the signal goes only along ties
+        ip.HoleId = null;
+        Timing.Solve(p);
+        Assert.All(holes, h => Assert.Null(h.SurfaceTimeMs));
+    }
+
+    /// <summary>A bound point and its hole move together either way; a deleted hole takes the point, a deleted point leaves the hole.</summary>
+    [Fact]
+    public void InitiationLinks_PointAndHoleStayTogether()
+    {
+        var (p, holes, ip) = Row(3);
+        ip.Position = holes[1].Collar;
+        ip.HoleId = holes[1].Id;
+        var doc = new Document(p);
+        var d = new Vec3(2, 1, 0);
+        doc.Execute("Move hole", pr => pr.FindEntity(holes[1].Id)!.Translate(d));
+        var h1 = (Hole)doc.Project.FindEntity(holes[1].Id)!;
+        var point = doc.Project.Entities.OfType<InitiationPoint>().Single();
+        Assert.Equal(h1.Collar, point.Position);
+        doc.Execute("Move point", pr => pr.FindEntity(point.Id)!.Translate(d));
+        Assert.Equal(new Vec3(5 + 4, 2, 0), h1.Collar);
+        Assert.Equal(h1.Collar, point.Position);
+        // both moved together stay together
+        doc.Execute("Move both", pr => { pr.FindEntity(point.Id)!.Translate(d); pr.FindEntity(h1.Id)!.Translate(d); });
+        Assert.Equal(h1.Collar, point.Position);
+        Assert.Equal(new Vec3(5 + 6, 3, 0), h1.Collar);
+        // a locked hole keeps its place and the point with it
+        h1.Locked = true;
+        doc.Execute("Move point", pr => pr.FindEntity(point.Id)!.Translate(d));
+        Assert.Equal(new Vec3(5 + 6, 3, 0), h1.Collar);
+        Assert.Equal(h1.Collar, point.Position);
+        h1.Locked = false;
+        doc.Execute("Delete point", pr => pr.Entities.RemoveAll(e => e is InitiationPoint));
+        Assert.Equal(3, doc.Project.Holes.Count());
+        doc.Undo();
+        Timing.Connect(doc.Project, doc.Project.Entities.OfType<InitiationPoint>().Single().Id, holes[0].Id, null, 0);
+        doc.Execute("Delete hole", pr => pr.Entities.RemoveAll(e => e.Id == holes[1].Id));
+        Assert.Empty(doc.Project.Entities.OfType<InitiationPoint>());
+        Assert.Empty(doc.Project.Ties);
+        Assert.Equal(2, doc.Project.Holes.Count());
+    }
+
+    /// <summary>A point of an older file standing on a collar is bound to that hole when the project is loaded.</summary>
+    [Fact]
+    public void InitiationLinks_NormalizeBindsPointOnCollar()
+    {
+        var (p, holes, ip) = Row(3);
+        var off = p.Add(new InitiationPoint { Position = new Vec3(100, 100, 0) });
+        ip.Position = holes[2].Collar + new Vec3(0.004, 0, 0);
+        InitiationLinks.Normalize(p);
+        Assert.Equal(holes[2].Id, ip.HoleId);
+        Assert.Equal(holes[2].Collar, ip.Position);
+        Assert.Null(off.HoleId);
     }
 
     [Fact]

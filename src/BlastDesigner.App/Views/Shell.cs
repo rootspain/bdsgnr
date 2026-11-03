@@ -132,6 +132,9 @@ public static class Ui
     /// <summary>The last menu opened by <see cref="DropDown"/> (used by the UI smoke test).</summary>
     public static ContextMenu? LastMenu { get; private set; }
 
+    /// <summary>Records a menu opened elsewhere as the last one (for the UI smoke test).</summary>
+    public static void Remember(ContextMenu menu) => LastMenu = menu;
+
     public static void DropDown(Button b, Func<IEnumerable<MenuEntry>> items, PlacementMode placement = PlacementMode.BottomEdgeAlignedLeft)
     {
         b.Click += (_, _) =>
@@ -437,8 +440,10 @@ public sealed class ToolPanel : Border
 {
     private readonly MainViewModel _vm;
     private readonly TextBlock _title = new() { FontWeight = FontWeight.SemiBold, Foreground = Look.Text };
-    private readonly TextBlock _hint = new() { FontSize = 11, Foreground = Look.Faint, MaxWidth = 360, TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly TextBlock _hint = new() { FontSize = 11, Foreground = Look.Faint, MaxWidth = 360, HorizontalAlignment = HorizontalAlignment.Left, TextTrimming = TextTrimming.CharacterEllipsis };
+    // the fields stay on one line; a narrow window scrolls them sideways instead of wrapping them
     private readonly StackPanel _fields = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
+    private readonly ScrollViewer _fieldsScroll;
 
     public ToolPanel(MainViewModel vm)
     {
@@ -450,7 +455,8 @@ public sealed class ToolPanel : Border
         Padding = new Thickness(14, 8, 10, 8);
         HorizontalAlignment = HorizontalAlignment.Center;
         VerticalAlignment = VerticalAlignment.Bottom;
-        Margin = new Thickness(170, 0, 170, 16);
+        // as wide as its fields need, up to the width of the viewport; beyond that the fields scroll
+        Margin = new Thickness(16, 0, 16, 16);
         BoxShadow = BoxShadows.Parse("0 8 24 0 #73000000");
         var done = new Button
         {
@@ -464,9 +470,17 @@ public sealed class ToolPanel : Border
         done.Click += (_, _) => Ui.Safe(_vm.CompleteTool);
         var cancel = Outline(Loc.Ui("Cancel"), "Esc", () => { _vm.ActiveTool?.Cancel(); _vm.SelectTool(); });
         var coords = Outline(Loc.Ui("Coordinates"), "Tab", () => _ = _vm.EnterCoordinates());
-        var body = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 12, LineSpacing = 6, VerticalAlignment = VerticalAlignment.Center };
-        body.Children.Add(new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children = { _title, _hint } });
-        body.Children.Add(_fields);
+        _fieldsScroll = new ScrollViewer
+        {
+            Content = _fields,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Padding = new Thickness(0, 0, 0, 4),
+            Name = "toolFields"
+        };
+        var body = new StackPanel { Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        body.Children.Add(new StackPanel { Children = { _title, _hint } });
+        body.Children.Add(_fieldsScroll);
         body.Children.Add(Ui.Row(6, coords, cancel, done));
         Child = body;
         IsVisible = false;
@@ -493,7 +507,7 @@ public sealed class ToolPanel : Border
     {
         var tool = _vm.ActiveTool;
         IsVisible = tool != null && tool is not SelectTool && _vm.Project != null;
-        if (!IsVisible) return;
+        if (!IsVisible) { _fields.Children.Clear(); return; }
         _title.Text = Loc.T(tool!.Name);
         _hint.Text = Loc.T(tool.Hint);
         ToolTip.SetTip(_hint, _hint.Text);
@@ -510,19 +524,42 @@ public sealed class ToolPanel : Border
                 var combo = new ComboBox { ItemsSource = Enum.GetValues<PatternType>().Select(x => Loc.Enum(x)).ToList(), SelectedIndex = (int)d.Pattern, Width = 120, Height = 26 };
                 combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) _vm.Change("Design data", p => p.Design.Pattern = (PatternType)combo.SelectedIndex); };
                 _fields.Children.Add(Labelled("Pattern", combo));
+                // what the pattern dialog used to ask after the outline was drawn
+                _fields.Children.Add(Field("Direction, °", _vm.Project.Header.BlastOrientation, v => _vm.Change("Blast orientation", p => p.Header.BlastOrientation = v), "patternDirection"));
+                _fields.Children.Add(Field("Edge offset, m", _vm.PatternEdgeOffset, v => _vm.PatternEdgeOffset = v, "patternOffset"));
+                _fields.Children.Add(TextField("Number prefix", _vm.PatternLabelPrefix, v => _vm.PatternLabelPrefix = v, "patternPrefix"));
+                _fields.Children.Add(Field("Start number", _vm.NextPatternNumber, v => _vm.PatternStartNumber = Math.Max(0, (int)Math.Round(v)), "patternStart"));
             }
+        }
+        if (tool.Name == "Tie")
+        {
+            var chain = new CheckBox { Content = Loc.Ui("Tie chain"), IsChecked = _vm.TieChain, Name = "tieChain", VerticalAlignment = VerticalAlignment.Center };
+            ToolTip.SetTip(chain, Loc.Ui("On: ties go in turn through the holes on the line. Off: one tie from the first hole to the last"));
+            chain.IsCheckedChanged += (_, _) => _vm.TieChain = chain.IsChecked == true;
+            _fields.Children.Add(chain);
         }
         if (tool.Name is "Set" or "Row set")
             _fields.Children.Add(Field("Step, ms", _vm.Project.Electronic.HoleIntervalMs, v => _vm.Change("Electronic settings", p => p.Electronic.HoleIntervalMs = v)));
+        _fieldsScroll.IsVisible = _fields.Children.Count > 0;
     }
 
     private static Control Labelled(string label, Control c) =>
         new StackPanel { Spacing = 2, Children = { new TextBlock { Text = Loc.Ui(label), FontSize = 10.5, Foreground = Look.Faint }, c } };
 
-    private static Control Field(string label, double value, Action<double> set)
+    private static Control TextField(string label, string value, Action<string> set, string name)
+    {
+        var box = new TextBox { Text = value, Width = 92, Height = 26, MinHeight = 26, Padding = new Thickness(8, 2), FontFamily = Look.Mono, FontSize = 12, Background = Look.Field, Name = name };
+        void Commit() { if ((box.Text ?? "") != value) { value = box.Text ?? ""; Ui.Safe(() => set(value)); } }
+        box.LostFocus += (_, _) => Commit();
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(); e.Handled = true; } };
+        return Labelled(label, box);
+    }
+
+    private static Control Field(string label, double value, Action<double> set, string? name = null)
     {
         var box = new TextBox
         {
+            Name = name,
             Text = value.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture),
             Width = 92,
             Height = 26,

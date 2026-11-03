@@ -297,13 +297,82 @@ public sealed class MainWindow : Window
             ToolTip.SetTip(b, $"{Loc.Ui(tip)} ({key})");
             if (icon == "polyline")
             {
-                Ui.DropDown(b, () => _vm.DrawingTools().Select(e => e.Action == null ? e : MenuEntry.Item(e.Header, () => { e.Action(); OnToolChanged(); })), PlacementMode.RightEdgeAlignedTop);
+                // Split button: the icon starts the current drawing tool, the small triangle on the right opens the list;
+                // a tool picked there becomes the button's tool (its icon and tip). Without a pointer (keyboard) it opens the list.
+                content.Children.Add(new Avalonia.Controls.Shapes.Path
+                {
+                    Data = Geometry.Parse("M0,0 L4,3.5 L0,7 Z"), Fill = Look.Muted, Width = 4, Height = 7,
+                    HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 2, 0), IsHitTestVisible = false
+                });
+                _drawButton = b;
+                _drawIcon = (Border)content.Children[0];
+                double pressX = -1;
+                var heldOpen = false;
+                void OpenDrawMenu()
+                {
+                    var menu = new ContextMenu
+                    {
+                        ItemsSource = MenuEntry.Build(_vm.DrawingTools().Select(e => e.Action == null ? e : MenuEntry.Item(e.Header, () => { e.Action(); OnToolChanged(); }).WithIcon(e.Icon!))),
+                        Placement = PlacementMode.RightEdgeAlignedTop,
+                        PlacementTarget = b
+                    };
+                    menu.Open(b);
+                    Ui.Remember(menu);
+                }
+                // holding the left button on it opens the list too, as on the triangle; the release then starts nothing
+                var press = 0;
+                void EndHold() => press++;
+                b.AddHandler(PointerPressedEvent, (_, e) =>
+                {
+                    pressX = e.GetPosition(b).X;
+                    heldOpen = false;
+                    if (!e.GetCurrentPoint(b).Properties.IsLeftButtonPressed) return;
+                    var mine = ++press;
+                    _ = Task.Delay(400).ContinueWith(_ => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                    {
+                        if (mine != press) return;
+                        heldOpen = true;
+                        OpenDrawMenu();
+                    }));
+                }, Avalonia.Interactivity.RoutingStrategies.Tunnel, true);
+                b.AddHandler(PointerReleasedEvent, (_, _) => EndHold(), Avalonia.Interactivity.RoutingStrategies.Tunnel, true);
+                b.AddHandler(PointerCaptureLostEvent, (_, _) => EndHold(), Avalonia.Interactivity.RoutingStrategies.Tunnel, true);
+                b.Click += (_, _) =>
+                {
+                    EndHold();
+                    var x = pressX;
+                    pressX = -1;
+                    if (heldOpen) { heldOpen = false; return; }
+                    if (x >= 0 && x < b.Bounds.Width - 12)
+                    {
+                        UsageLog.Track(UsageLog.Button, _vm.DrawingTool, "rail");
+                        Ui.Safe(_vm.RunDrawingTool);
+                        OnToolChanged();
+                        return;
+                    }
+                    OpenDrawMenu();
+                };
+                UpdateDrawButton();
             }
             else b.Click += (_, _) => { UsageLog.Track(UsageLog.Button, tip, "rail"); Ui.Safe(action); OnToolChanged(); };
             _railButtons.Add((b, tool));
             panel.Children.Add(b);
         }
         return new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 1, 0), Child = panel };
+    }
+
+    private Button? _drawButton;
+    private Border? _drawIcon;
+
+    /// <summary>Shows the current drawing tool on the rail's drawing button: its icon, tip and highlight.</summary>
+    private void UpdateDrawButton()
+    {
+        if (_drawButton == null || _drawIcon == null) return;
+        var t = _vm.CurrentDrawingTool;
+        _drawIcon.Child = Look.Icon(t.Icon, 18, Look.TextSoft);
+        ToolTip.SetTip(_drawButton, Loc.F(Loc.Ui("Drawing: {0} (others in the list)"), Loc.T(t.Header).ToLower(System.Globalization.CultureInfo.CurrentCulture)) + " (W)");
+        var i = _railButtons.FindIndex(r => r.Button == _drawButton);
+        if (i >= 0) _railButtons[i] = (_drawButton, t.Tool);
     }
 
     private Control BuildPlanOverlay()
@@ -469,7 +538,7 @@ public sealed class MainWindow : Window
             Key.O => () => _vm.SetTool(new RotateTool(_vm, false)),
             Key.N => () => _vm.SetTool(new RotateTool(_vm, true)),
             Key.M => _vm.MeasureTool,
-            Key.W => () => _vm.DrawPolylineTool(false),
+            Key.W => _vm.RunDrawingTool,
             Key.S => _vm.ToggleSnap,
             Key.G => () => _vm.ToggleView(v => v.ShowGrid = !v.ShowGrid),
             Key.D => () => _vm.HoleTool(),
@@ -631,12 +700,16 @@ public sealed class MainWindow : Window
 
     private void OnToolChanged()
     {
+        UpdateDrawButton();
         var name = _vm.ActiveTool?.Name;
         foreach (var (b, tool) in _railButtons)
         {
             var active = tool != null && tool == name;
             b.Background = active ? Look.Line : Brushes.Transparent;
             b.BorderBrush = Look.Accent;
+            // the icon of the active tool in the accent colour
+            if (b.Content is Panel { Children.Count: > 0 } c && c.Children[0] is Border { Child: Viewbox { Child: Avalonia.Controls.Shapes.Path icon } })
+                icon.Stroke = active ? Look.Accent : Look.TextSoft;
         }
         _toolPanel.Refresh();
         _ribbon.Refresh();

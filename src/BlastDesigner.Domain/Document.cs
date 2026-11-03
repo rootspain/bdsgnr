@@ -48,9 +48,12 @@ public sealed class Document
     {
         var before = Snapshot();
         var selectionBefore = Selection.ToArray();
+        var links = InitiationLinks.Capture(Project);
         try
         {
             change(Project);
+            // initiation points stay on their holes, whatever the change moved or deleted
+            InitiationLinks.Apply(Project, links);
         }
         catch
         {

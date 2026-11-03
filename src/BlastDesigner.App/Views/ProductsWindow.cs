@@ -46,9 +46,10 @@ public sealed class ProductsEditor : DockPanel
         ("Stemming", new[] { ProductKind.Stemming }),
         ("Gas bags", new[] { ProductKind.GasBag }),
         ("Boosters", new[] { ProductKind.Booster }),
-        ("Detonators", new[] { ProductKind.DownholeDetonator, ProductKind.ElectronicDetonator }),
+        ("Detonators", new[] { ProductKind.DownholeDetonator, ProductKind.ElectronicDetonator, ProductKind.ElectricDetonator }),
         ("Surface connectors", new[] { ProductKind.SurfaceConnector }),
-        ("Detonating cord", new[] { ProductKind.DetonatingCord }),
+        ("Detonating cord", new[] { ProductKind.DetonatingCord, ProductKind.CordRelay }),
+        ("Harness wire", new[] { ProductKind.HarnessWire }),
         ("Other", new[] { ProductKind.Other })
     };
 
@@ -255,7 +256,8 @@ public sealed class ProductsEditor : DockPanel
         ProductKind.BulkExplosive or ProductKind.Stemming => N(p.Density, "0.00") + " " + L("g/cm³"),
         ProductKind.PackagedExplosive => N(p.UnitMass, "0.0#") + " " + L("kg"),
         ProductKind.Booster => N(p.UnitMass * 1000, "0") + " " + L("g"),
-        ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.SurfaceConnector => N(p.DelayMs, "0") + " " + L("ms"),
+        ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => N(p.DelayMs, "0") + " " + L("ms"),
+        ProductKind.DetonatingCord => N(p.Vod, "0") + " " + L("m/s"),
         _ => ""
     };
 
@@ -457,7 +459,9 @@ public sealed class ProductsEditor : DockPanel
             Labeled("Name", Text("name", p.Name, v => { p.Name = v; title.Text = string.IsNullOrWhiteSpace(v) ? L("(no name)") : v; })),
             Fields(
                 Labeled("Manufacturer", Text("manufacturer", p.Manufacturer, v => p.Manufacturer = v)),
-                Labeled("Kind", kind))));
+                Labeled("Kind", kind)),
+            // the products of one kind and family are the variants of it in the initiation catalogue
+            Fields(Labeled("Family", Text("family", p.Family, v => p.Family = v)), new Border())));
 
         var fields = KindFields(p);
         if (fields.Count > 0) _props.Children.Add(Section("Parameters", fields.ToArray()));
@@ -494,7 +498,8 @@ public sealed class ProductsEditor : DockPanel
             ProductKind.PackagedExplosive => new() { Fields(Density(), Strength(), Energy(), Vod(), UnitMass("Cartridge mass", "kg", 1), UnitLength()), Water() },
             ProductKind.Stemming => new() { Fields(Density(), new Border()) },
             ProductKind.Booster => new() { Fields(UnitMass("Mass", "g", 1000), Density(), Energy(), Vod()) },
-            ProductKind.DownholeDetonator or ProductKind.SurfaceConnector => new() { Fields(Delay(), new Border()) },
+            ProductKind.DownholeDetonator or ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => new() { Fields(Delay(), new Border()) },
+            ProductKind.HarnessWire => new(),
             ProductKind.ElectronicDetonator => new() { Fields(Labeled("Default delay", Number("delay", p.DelayMs, v => p.DelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true)), new Border()) },
             ProductKind.DetonatingCord => new() { Fields(UnitMass("Core load", "g/m", 1000), Vod()) },
             ProductKind.GasBag => new(),
@@ -567,6 +572,9 @@ public sealed class ProductsEditor : DockPanel
             case ProductKind.ElectronicDetonator: p.Color = 0xFF00897B; break;
             case ProductKind.SurfaceConnector: p.DelayMs = 25; p.Color = 0xFFFFEB3B; break;
             case ProductKind.DetonatingCord: p.UnitMass = 0.01; p.Vod = 6500; p.Color = 0xFFFF5722; break;
+            case ProductKind.CordRelay: p.DelayMs = 25; p.Color = 0xFFFFB300; break;
+            case ProductKind.ElectricDetonator: p.DelayMs = 25; p.Color = 0xFF5C6BC0; break;
+            case ProductKind.HarnessWire: p.Color = 0xFF78909C; break;
         }
         var last = Products.FindLastIndex(x => x.Kind == kind);
         Products.Insert(last < 0 ? Products.Count : last + 1, p);
@@ -712,7 +720,7 @@ public sealed class ProductsEditor : DockPanel
     }
 
     private static bool Same(Product a, Product b) =>
-        a.Name == b.Name && a.Manufacturer == b.Manufacturer && a.Kind == b.Kind && a.Density == b.Density && a.RelativeWeightStrength == b.RelativeWeightStrength
+        a.Name == b.Name && a.Manufacturer == b.Manufacturer && a.Family == b.Family && a.Kind == b.Kind && a.Density == b.Density && a.RelativeWeightStrength == b.RelativeWeightStrength
         && a.Energy == b.Energy && a.Vod == b.Vod && a.DelayMs == b.DelayMs && a.UnitMass == b.UnitMass && a.UnitLength == b.UnitLength
         && a.WaterResistant == b.WaterResistant && a.Cost == b.Cost && a.Color == b.Color;
 

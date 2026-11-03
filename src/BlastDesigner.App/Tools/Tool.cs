@@ -153,6 +153,17 @@ public sealed class PickPointsTool : Tool
     {
         if (!p.Left) return;
         if (p.ClickCount >= 2 && _points.Count >= _min) { Finish(); return; }
+        // a click on the last point (within the pick radius on screen) finishes, as a double click does;
+        // with too few points yet it adds nothing rather than the same point twice
+        if (_points.Count > 0)
+        {
+            var (lx, ly) = View.Camera.ToScreen(_points[^1]);
+            if (Math.Sqrt((lx - p.X) * (lx - p.X) + (ly - p.Y) * (ly - p.Y)) <= View.TargetRadius)
+            {
+                if (_points.Count >= _min) Finish();
+                return;
+            }
+        }
         _points.Add(p.Snapped);
         if (_points.Count >= _max) Finish();
         UpdatePreview();

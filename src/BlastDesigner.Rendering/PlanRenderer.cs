@@ -229,8 +229,8 @@ public static class PlanRenderer
                 case DimensionEntity d:
                     DrawDimension(canvas, cam, d, stroke, text);
                     break;
-                case InitiationPoint ip:
-                    DrawInitiationPoint(canvas, cam, ip, color, text);
+                case InitiationPoint:
+                    // drawn after the holes: an initiation point usually sits on one
                     break;
                 case TimingLineEntity tl:
                     DrawTimingLine(canvas, cam, tl, selected || e.Color != null ? color : (SKColor?)null, text);
@@ -267,6 +267,12 @@ public static class PlanRenderer
             EndMove(mc);
         }
         if (view.ShowBurdenMarker) DrawBurdenMarkers(canvas, cam, project, holes, text);
+        foreach (var ip in entities.OfType<InitiationPoint>())
+        {
+            var mc = BeginMove(ip);
+            DrawInitiationPoint(canvas, cam, ip, opt.Selection.Contains(ip.Id) ? opt.SelectionColor : ColorOf(ip), text, opt.Selection.Contains(ip.Id));
+            EndMove(mc);
+        }
         var holeLabels = new TextBatch();
         foreach (var h in holes)
         {
@@ -534,23 +540,31 @@ public static class PlanRenderer
         text.Color = oldColor;
     }
 
-    private static void DrawInitiationPoint(SKCanvas c, Camera cam, InitiationPoint ip, SKColor color, SKPaint text)
+    /// <summary>Outer radius of the initiation point star, px: large enough to stick out from under the hole it sits on.</summary>
+    public const float InitiationStarRadius = 16;
+    /// <summary>Radius of the see-through middle of the star, px: the collar of the hole under it shows (and is picked) there.</summary>
+    public const float InitiationStarHole = 5.5f;
+
+    private static void DrawInitiationPoint(SKCanvas c, Camera cam, InitiationPoint ip, SKColor color, SKPaint text, bool selected = false)
     {
         var (x, y) = cam.ToScreen(ip.Position);
-        using var p = new SKPaint { IsAntialias = true, Color = Adapt(ip.IsElectronic ? new SKColor(0xFF00897B) : new SKColor(0xFFDC2626)), Style = SKPaintStyle.Fill };
+        using var p = new SKPaint { IsAntialias = true, Color = selected ? color : Adapt(ip.IsElectronic ? new SKColor(0xFF00897B) : new SKColor(0xFFDC2626)), Style = SKPaintStyle.Fill };
         using var path = new SKPath();
         for (int i = 0; i < 10; i++)
         {
-            var r = i % 2 == 0 ? 9f : 4f;
+            var r = i % 2 == 0 ? InitiationStarRadius : InitiationStarRadius * 0.44f;
             var a = -Math.PI / 2 + i * Math.PI / 5;
             var px = x + (float)(r * Math.Cos(a));
             var py = y + (float)(r * Math.Sin(a));
             if (i == 0) path.MoveTo(px, py); else path.LineTo(px, py);
         }
         path.Close();
+        // a see-through middle, so the hole the point sits on stays visible
+        path.AddCircle(x, y, InitiationStarHole);
+        path.FillType = SKPathFillType.EvenOdd;
         c.DrawPath(path, p);
         text.Color = p.Color;
-        c.DrawText($"{ip.Label} {ip.StartTimeMs:0} {T("ms")}", x + 10, y - 8, text);
+        c.DrawText($"{ip.Label} {ip.StartTimeMs:0} {T("ms")}", x + InitiationStarRadius + 2, y - 10, text);
         text.Color = color;
     }
 
@@ -828,9 +842,7 @@ public static class PlanRenderer
                 if (cam.Scale > 4)
                 {
                     var (x, y) = cam.ToScreen(Vec3.Lerp(a, b, 0.5));
-                    // the tie delay (Timing.TieDelay) without searching the products again
-                    var delay = product != null && t.DelayMs == 0 ? product.DelayMs : t.DelayMs;
-                    labels.Add(delay.ToString("0"), x + 2, y - 2, col, 9);
+                    labels.Add(Timing.TieDelay(project, t, a, b).ToString("0"), x + 2, y - 2, col, 9);
                 }
             }
             arrows.Flush(c);

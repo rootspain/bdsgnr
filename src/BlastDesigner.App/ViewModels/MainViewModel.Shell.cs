@@ -140,7 +140,7 @@ public sealed partial class MainViewModel
         new Stage("Initiation", new()
         {
             G("Tie-up", Tb("Ties", "tie", "Tie", "T", true), Tb("Initiation point", "star", "Lead-in", "I", true),
-                Tb("Dummy hole", "dummy", "Dummy hole"), M("Tie palette", "palette", "Tools/Ties/Show palette"), M("Automatic tie-up", "auto", "Tools/Ties/Automatic tie-up…"),
+                Tb("Dummy hole", "dummy", "Dummy hole"), M("Initiation catalogue", "palette", "Tools/Ties/Show palette"), M("Automatic tie-up", "auto", "Tools/Ties/Automatic tie-up…"),
                 M("Connect in order", "tie", "Tools/Ties/Connect selected holes in order"), M("Flip ties", "flip", "Tools/Ties/Flip selected ties"), M("Delete ties", "close", "Tools/Ties/Delete tie up")),
             G("Electronic", Tb("Time by click", "clock", "Set hole time", "E", true), Tb("Along row", "row", "Row set", big: true),
                 Tb("Timing line", "iso", "Timing line"), Tb("Opening point", "point", "Opening point"), Locked("V pattern", "vee"), Locked("Encoding sequence", "ebs"), Locked("i-kon loggers", "ebs")),
@@ -193,19 +193,37 @@ public sealed partial class MainViewModel
         ("orbit", "Rotate 3D", "O", true, () => SetTool(new RotateTool(this, false)), "Rotate"),
         ("north", "North up / rotate plan", "N", false, () => SetTool(new RotateTool(this, true)), "North"),
         ("measure", "Measure", "M", true, MeasureTool, "Measure"),
-        ("polyline", "Drawing: polyline (others in the list)", "W", false, () => DrawPolylineTool(false), "Polyline"),
+        ("polyline", "Drawing: polyline (others in the list)", "W", false, RunDrawingTool, "Polyline"),
         ("snap", "Snap to objects", "S", true, ToggleSnap, null),
         ("gridi", "Coordinate grid", "G", false, () => ToggleView(v => v.ShowGrid = !v.ShowGrid), null),
         ("layers", "Layers", "F7", false, () => Window.ShowInspectorTab(1), null)
     };
 
-    /// <summary>Drawing tools offered by the rail's drawing button.</summary>
-    public IEnumerable<MenuEntry> DrawingTools() => new[]
+    /// <summary>Drawing tools of the rail's drawing button: header, icon, tool name (for the highlight) and how to start it.</summary>
+    public (string Header, string Icon, string Tool, Action Start)[] DrawingToolList => new (string, string, string, Action)[]
     {
-        Item("Point", () => DrawPointTool(PointKind.General)), Item("Text", DrawTextTool), Item("Arrow", DrawArrowTool),
-        Item("Polyline", () => DrawPolylineTool(false)), Item("Polygon", () => DrawPolylineTool(true)), Item("Circle", DrawCircleTool),
-        Item("Dimension", DrawDimensionTool), Item("North point", () => DrawPointTool(PointKind.NorthPoint))
+        ("Point", "point", "Point", () => DrawPointTool(PointKind.General)),
+        ("Polyline", "polyline", "Polyline", () => DrawPolylineTool(false)),
+        ("Polygon", "polygon", "Polygon", () => DrawPolylineTool(true)),
+        ("Circle", "circle", "Circle", DrawCircleTool),
+        ("Arrow", "arrow", "Arrow", DrawArrowTool),
+        ("Text", "text", "Text", DrawTextTool),
+        ("Dimension", "dimension", "Dimension", DrawDimensionTool),
+        ("North point", "northmark", "North point", () => DrawPointTool(PointKind.NorthPoint))
     };
+
+    /// <summary>The drawing tool the rail button shows and starts (the last one picked from its list).</summary>
+    public string DrawingTool { get; private set; } = "Polyline";
+
+    public (string Header, string Icon, string Tool, Action Start) CurrentDrawingTool =>
+        DrawingToolList.FirstOrDefault(t => t.Header == DrawingTool) is { Header: not null } t ? t : DrawingToolList.First(x => x.Header == "Polyline");
+
+    /// <summary>The rail's drawing button and key W: the current drawing tool.</summary>
+    public void RunDrawingTool() => CurrentDrawingTool.Start();
+
+    /// <summary>Drawing tools offered by the rail's drawing button; picking one makes it the button's tool.</summary>
+    public IEnumerable<MenuEntry> DrawingTools() => DrawingToolList.Select(t =>
+        Item(t.Header, () => { DrawingTool = t.Header; t.Start(); }).WithIcon(t.Icon));
 
     public List<QuickFilter> QuickFilters() => new()
     {

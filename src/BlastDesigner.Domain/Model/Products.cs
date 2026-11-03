@@ -11,6 +11,12 @@ public enum ProductKind
     SurfaceConnector,
     ElectronicDetonator,
     DetonatingCord,
+    /// <summary>Delay relay on detonating cord (surface).</summary>
+    CordRelay,
+    /// <summary>Electric delay detonator (in the hole; fired through the wiring).</summary>
+    ElectricDetonator,
+    /// <summary>Harness wire connecting electric detonators (no delay of its own).</summary>
+    HarnessWire,
     Other
 }
 
@@ -20,6 +26,11 @@ public sealed class Product
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
     public string Manufacturer { get; set; } = string.Empty;
+    /// <summary>
+    /// Product family, e.g. "Exel Connectadet": the products of one kind and family are the variants (delays) of it in
+    /// the initiation catalogue. Empty: the name without its delay (<see cref="FamilyName"/>).
+    /// </summary>
+    public string Family { get; set; } = string.Empty;
     public ProductKind Kind { get; set; }
     /// <summary>Density, g/cm³ (for explosives and stemming).</summary>
     public double Density { get; set; } = 1.0;
@@ -42,9 +53,14 @@ public sealed class Product
 
     public bool IsExplosive => Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive;
     public bool IsColumnProduct => Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive or ProductKind.Stemming or ProductKind.GasBag;
-    public bool IsDetonator => Kind is ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator;
+    public bool IsDetonator => Kind is ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.ElectricDetonator;
 
     public override string ToString() => Name;
+
+    /// <summary>The family, or without one the name less a trailing delay ("Surface connector 17 ms" → "Surface connector").</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string FamilyName => !string.IsNullOrWhiteSpace(Family) ? Family.Trim()
+        : System.Text.RegularExpressions.Regex.Replace(Name, @"\s*\d+(?:[.,]\d+)?\s*(?:ms|мс)?\s*$", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim() is { Length: > 0 } n ? n : Name;
 
     public Product Clone() => (Product)MemberwiseClone();
 
@@ -60,15 +76,22 @@ public sealed class Product
         new() { Name = "Gas bag", Kind = ProductKind.GasBag, Density = 0, Cost = 5, Color = 0xFFE0F7FA },
         new() { Name = "Booster 400 g", Kind = ProductKind.Booster, UnitMass = 0.4, Density = 1.6, Energy = 5.0, Cost = 6, Color = 0xFFD32F2F },
         new() { Name = "Booster 900 g", Kind = ProductKind.Booster, UnitMass = 0.9, Density = 1.6, Energy = 5.0, Cost = 11, Color = 0xFFB71C1C },
-        new() { Name = "Downhole det 500 ms", Kind = ProductKind.DownholeDetonator, DelayMs = 500, Cost = 4, Color = 0xFF1976D2 },
-        new() { Name = "Downhole det 400 ms", Kind = ProductKind.DownholeDetonator, DelayMs = 400, Cost = 4, Color = 0xFF1565C0 },
-        new() { Name = "Electronic detonator", Kind = ProductKind.ElectronicDetonator, DelayMs = 0, Cost = 25, Color = 0xFF00897B },
-        new() { Name = "Surface connector 17 ms", Kind = ProductKind.SurfaceConnector, DelayMs = 17, Cost = 3, Color = 0xFFFFEB3B },
-        new() { Name = "Surface connector 25 ms", Kind = ProductKind.SurfaceConnector, DelayMs = 25, Cost = 3, Color = 0xFFF44336 },
-        new() { Name = "Surface connector 42 ms", Kind = ProductKind.SurfaceConnector, DelayMs = 42, Cost = 3, Color = 0xFFFFFFFF },
-        new() { Name = "Surface connector 67 ms", Kind = ProductKind.SurfaceConnector, DelayMs = 67, Cost = 3, Color = 0xFF4CAF50 },
-        new() { Name = "Surface connector 109 ms", Kind = ProductKind.SurfaceConnector, DelayMs = 109, Cost = 3, Color = 0xFF2196F3 },
-        new() { Name = "Surface connector 0 ms", Kind = ProductKind.SurfaceConnector, DelayMs = 0, Cost = 3, Color = 0xFF9C27B0 },
+        new() { Name = "Downhole det 500 ms", Family = "Downhole detonator", Kind = ProductKind.DownholeDetonator, DelayMs = 500, Cost = 4, Color = 0xFF1976D2 },
+        new() { Name = "Downhole det 400 ms", Family = "Downhole detonator", Kind = ProductKind.DownholeDetonator, DelayMs = 400, Cost = 4, Color = 0xFF1565C0 },
+        new() { Name = "Electronic detonator", Family = "Electronic detonator", Kind = ProductKind.ElectronicDetonator, DelayMs = 0, Cost = 25, Color = 0xFF00897B },
+        new() { Name = "Surface connector 17 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 17, Cost = 3, Color = 0xFFFFEB3B },
+        new() { Name = "Surface connector 25 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 25, Cost = 3, Color = 0xFFF44336 },
+        new() { Name = "Surface connector 42 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 42, Cost = 3, Color = 0xFFFFFFFF },
+        new() { Name = "Surface connector 67 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 67, Cost = 3, Color = 0xFF4CAF50 },
+        new() { Name = "Surface connector 109 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 109, Cost = 3, Color = 0xFF2196F3 },
+        new() { Name = "Surface connector 0 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 0, Cost = 3, Color = 0xFF9C27B0 },
+        new() { Name = "Detonating cord 10 g/m", Family = "Detonating cord", Kind = ProductKind.DetonatingCord, UnitMass = 0.01, Vod = 6500, Cost = 0.8, Color = 0xFFFF5722 },
+        new() { Name = "Cord relay 17 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 17, Cost = 3, Color = 0xFFFFB300 },
+        new() { Name = "Cord relay 25 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 25, Cost = 3, Color = 0xFFE53935 },
+        new() { Name = "Cord relay 42 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 42, Cost = 3, Color = 0xFF8D6E63 },
+        new() { Name = "Electric detonator 25 ms", Family = "Electric detonator", Kind = ProductKind.ElectricDetonator, DelayMs = 25, Cost = 3, Color = 0xFF5C6BC0 },
+        new() { Name = "Electric detonator 500 ms", Family = "Electric detonator", Kind = ProductKind.ElectricDetonator, DelayMs = 500, Cost = 3, Color = 0xFF3949AB },
+        new() { Name = "Harness wire", Family = "Harness wire", Kind = ProductKind.HarnessWire, Cost = 0.2, Color = 0xFF78909C },
     };
 }
 

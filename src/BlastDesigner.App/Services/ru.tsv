@@ -2443,3 +2443,49 @@ Select the holes this timing line programs	Выделить скважины, к
 The timing line programs no holes	Линия времени не инициирует ни одной скважины
 Timing line: {0} holes selected	Линия времени: выделено скважин {0}
 Build the surface from the survey (all its lines as breaklines; faces and bench platforms as surfaces of their kinds)	Построить поверхность по съёмке (все её линии — структурные; откосы и площадки уступов — отдельными поверхностями своих типов)
+ui:Direction, °	Отбойка, °
+ui:Edge offset, m	Отступ, м
+ui:Number prefix	Префикс
+ui:Start number	Нач. номер
+Click the hole the signal comes from, then the hole it goes to; holes on the way get a tie each. Shift keeps chaining from the last hole. The connector is chosen in the tie palette.	Щёлкните скважину, откуда идёт сигнал, затем куда; скважины на пути линии связываются по очереди. Shift продолжает цепочку. Замедлитель выбирается в палитре СИ.
+Add ties	Добавить связи
+{0} ties added through the holes on the line	Добавлено связей: {0}, через скважины на линии
+ui:Tie chain	Цепочка связей
+ui:On: ties go in turn through the holes on the line. Off: one tie from the first hole to the last	Включено: связи идут по очереди через скважины на линии. Выключено: одна связь от начальной скважины до конечной
+Connections	Соединения
+Initiation system	Система инициации
+Shock tube	УВТ
+Cord delay	Замедление шнура
+Electric	Электрич.
+Harness wire	Harness wire
+EBS detonators	Детонаторы EBS
+User defined	Определённое пользователем
+Time, ms	Время, мс
+Product family	Семейство продуктов
+Product choice	Выбор продукта
+No products of this family in Available resources	В «Доступных ресурсах» нет продуктов этого семейства
+{0} ms	{0} мс
+m/s	м/с
+Cord relay	Реле ДШ
+Electric detonator	Электродетонатор
+ui:Harness wire	Harness wire
+Detonating cord system	Детонирующий шнур
+Click the hole the signal comes from, then the holes it goes to; holes on the way get a tie each. Click the last hole again to finish. Holes the signal already reaches (a tie comes in or an initiation point stands on them) are skipped. The connector is chosen in the tie palette.	Щёлкните скважину, откуда идёт сигнал, затем скважины, куда он идёт; скважины на пути линии связываются по очереди. Повторный щелчок по последней скважине завершает ввод. Скважины, куда сигнал уже приходит (входит связь или стоит точка инициирования), пропускаются. Замедлитель выбирается в палитре СИ.
+Tie entry finished	Ввод связей завершён
+Hole {0} is already tied	Скважина {0} уже связана
+Initiation catalogue	Каталог СИ
+ui:Initiation catalogue	Каталог СИ
+Subtype	Подтип
+Family	Семейство
+Variant	Вариант
+Delay	Замедление
+A tie without a connector	Связь без замедлителя
+{0} var.	вариантов: {0}
+ui:Family	Семейство
+ui:Drawing: {0} (others in the list)	Рисование: {0} (остальное — в списке)
+Click points; a click on the last point, a double-click or Enter finishes, Backspace removes the last point.	Щёлкайте точки; щелчок по последней точке, двойной щелчок или Enter — завершить, Backspace — удалить последнюю.
+Click two points to dimension. Left to right: the brackets go down; right to left: up.	Щёлкните две точки для размера. Слева направо — скобки вниз, справа налево — скобки вверх.
+Click the hole the electronic blast opens from.	Щёлкните скважину, с которой открывается электронное взрывание.
+Click the hole the blast is initiated at; the ties then go on from it.	Щёлкните скважину, в которой инициируется взрыв; связи пойдут от неё.
+Place the initiation point on a hole	Точку инициирования нужно поставить на скважину
+Hole {0} already has initiation point {1}	На скважине {0} уже стоит точка инициирования {1}

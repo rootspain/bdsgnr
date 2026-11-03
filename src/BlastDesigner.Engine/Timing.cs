@@ -6,12 +6,31 @@ namespace BlastDesigner.Engine;
 /// <summary>Firing-time solver and timing edit operations (pyrotechnic tie-ups and electronic programming).</summary>
 public static class Timing
 {
-    public static double TieDelay(BlastProject project, TieEntity tie) =>
-        tie.ProductId is Guid pid && project.FindProduct(pid) is { } p && tie.DelayMs == 0 ? p.DelayMs : tie.DelayMs;
+    /// <summary>
+    /// Delay of a tie: its own when set (user defined), else by its product: a connector or cord relay its nominal delay,
+    /// detonating cord the time the cord takes from end to end (length over its VOD), electric wiring, harness wire and
+    /// electronic connections none (the delay is in the hole or programmed). The ends are looked up when not given.
+    /// </summary>
+    public static double TieDelay(BlastProject project, TieEntity tie, Vec3? from = null, Vec3? to = null)
+    {
+        if (tie.DelayMs != 0 || tie.ProductId is not Guid pid || project.FindProduct(pid) is not { } p) return tie.DelayMs;
+        switch (p.Kind)
+        {
+            case ProductKind.DetonatingCord:
+                if (p.Vod <= 0) return 0;
+                var a = from ?? PositionOf(project, tie.FromId);
+                var b = to ?? PositionOf(project, tie.ToId);
+                return a is Vec3 pa && b is Vec3 pb ? Vec3.Distance(pa, pb) / p.Vod * 1000 : 0;
+            case ProductKind.ElectricDetonator or ProductKind.HarnessWire or ProductKind.ElectronicDetonator:
+                return 0;
+            default:
+                return p.DelayMs;
+        }
+    }
 
     /// <summary>
     /// Computes surface arrival, in-hole delay and firing time of every hole.
-    /// Surface signals start at initiation points and travel along ties (earliest arrival wins);
+    /// Surface signals start at initiation points (and the hole one is bound to) and travel along ties (earliest arrival wins);
     /// electronic holes fire at their programmed time.
     /// </summary>
     public static void Solve(BlastProject project)
@@ -20,18 +39,22 @@ public static class Timing
         var ips = project.Entities.OfType<InitiationPoint>().ToDictionary(i => i.Id);
         var ties = project.Ties.ToList();
 
-        // Resolve tie end positions for drawing.
+        // Resolve tie end positions for drawing (through a table: a search of the whole project per tie end was slow
+        // for a blast over a survey).
+        var positions = new Dictionary<Guid, Vec3>();
+        foreach (var h in holes.Values) positions[h.Id] = h.Collar;
+        foreach (var ip in ips.Values) positions[ip.Id] = ip.Position;
         foreach (var t in ties)
         {
-            t.FromPos = PositionOf(project, t.FromId) ?? t.FromPos;
-            t.ToPos = PositionOf(project, t.ToId) ?? t.ToPos;
+            if (positions.TryGetValue(t.FromId, out var f)) t.FromPos = f;
+            if (positions.TryGetValue(t.ToId, out var e)) t.ToPos = e;
         }
 
         var adj = new Dictionary<Guid, List<(Guid To, double Delay)>>();
         foreach (var t in ties)
         {
             if (!adj.TryGetValue(t.FromId, out var list)) adj[t.FromId] = list = new();
-            list.Add((t.ToId, TieDelay(project, t)));
+            list.Add((t.ToId, TieDelay(project, t, t.FromPos, t.ToPos)));
         }
 
         var arrival = new Dictionary<Guid, double>();
@@ -41,6 +64,13 @@ public static class Timing
             var t0 = ip.StartTimeMs + ip.LeadInDelayMs;
             arrival[ip.Id] = t0;
             pq.Enqueue(ip.Id, t0);
+            // a point standing on a hole starts it: they are one node of the tie-up, the ties go on from the hole
+            ip.SetHoleLabel(null);
+            if (ip.HoleId is Guid hid && holes.TryGetValue(hid, out var on))
+            {
+                ip.SetHoleLabel(on.Label);
+                if (!arrival.TryGetValue(hid, out var cur) || t0 < cur) { arrival[hid] = t0; pq.Enqueue(hid, t0); }
+            }
         }
         while (pq.TryDequeue(out var node, out var time))
         {
@@ -136,9 +166,9 @@ public static class Timing
         foreach (var row in rows)
         {
             var anchor = row.OrderBy(h => Vec3.Distance2D(h.Collar, ip.Position)).First();
-            if (prevAnchor == null) Connect(project, ip.Id, anchor.Id, null, 0);
-            else Connect(project, prevAnchor.Id, anchor.Id, rowConnector);
-            count++;
+            // a point standing on the anchor starts it without a tie
+            if (prevAnchor == null) { if (ip.HoleId != anchor.Id) { Connect(project, ip.Id, anchor.Id, null, 0); count++; } }
+            else { Connect(project, prevAnchor.Id, anchor.Id, rowConnector); count++; }
             var idx = row.IndexOf(anchor);
             for (int i = idx; i < row.Count - 1; i++) { Connect(project, row[i].Id, row[i + 1].Id, holeConnector); count++; }
             for (int i = idx; i > 0; i--) { Connect(project, row[i].Id, row[i - 1].Id, holeConnector); count++; }

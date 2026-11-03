@@ -323,7 +323,7 @@ public sealed partial class MainViewModel
         }),
         ("Loading tools", new()
         {
-            ("★", "Lead-in", () => InitiationPointTool(false), "Lead-in"), ("↗", "Tie", () => SetTool(new TieTool(this)), "Tie"),
+            ("★", "Lead-in", () => InitiationPointTool(false), "Lead-in"), ("↗", "Tie", TieToolWithPalette, "Tie"),
             ("○", "Dummy hole", () => HoleTool(true), "Dummy hole"), ("⏱", "In-hole delay", InholeDelayTool, "In-hole delay"),
             ("⚙", "Loading rules", Run(EditLoadingRules), null), ("▮", "Loading", LoadingTool, "Loading"), ("⚡", "Apply loading rules", Run(ApplyLoadingRules), null)
         }),

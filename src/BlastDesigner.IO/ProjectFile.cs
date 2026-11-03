@@ -80,6 +80,8 @@ public static class ProjectFile
         // the layer group "Survey" was renamed; keeps one group when new survey layers are added to an old project
         foreach (var l in p.Layers)
             if (l.Group == "Survey") l.Group = StandardLayers.TopographyGroup;
+        // an initiation point standing on a hole is bound to it (before 0.2.2 it only shared the position)
+        InitiationLinks.Normalize(p);
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;
     }
 
@@ -150,6 +152,8 @@ public static class ProjectFile
             if (idMap.TryGetValue(t.FromId, out var f)) t.FromId = f;
             if (idMap.TryGetValue(t.ToId, out var to)) t.ToId = to;
         }
+        foreach (var ip in source.Entities.OfType<InitiationPoint>())
+            if (ip.HoleId is Guid hid && idMap.TryGetValue(hid, out var nh)) ip.HoleId = nh;
         foreach (var r in source.Rows)
         {
             r.HoleIds = r.HoleIds.Select(id => idMap.GetValueOrDefault(id, id)).ToList();

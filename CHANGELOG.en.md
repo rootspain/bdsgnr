@@ -28,6 +28,33 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the mouse over a large project.
 - The Survey ribbon tab and the Survey layer group are now called "Topography".
 - In the layers panel the Topography group comes before Drawing, layers without a group are at the bottom.
+- **Initiation catalogue** replaces the tie palette: chosen down Type (shock tube, cord delay, detonating cord,
+  electric, harness wire, EBS detonators, user defined) → Subtype (product kind) → Family → Variant (delay), with
+  the current choice on top. Products in Available resources get a Family field (without it the family comes from
+  the name). Tie delays follow the type: detonating cord by its length and VOD, electric wiring 0 ms (the delay is in
+  the hole's detonator). New kinds Cord relay, Electric detonator and Harness wire; new projects get examples. The
+  Ties button opens the catalogue, as does placing an initiation point; its position is remembered.
+- Drawing button on the left rail: the tools are listed with icons; the triangle on the right or holding the left
+  button opens the list, a click
+  on the icon starts the tool picked last, which the button shows (and key W starts). The active tool's icon on the
+  rail is in the accent colour.
+- Drawing a polyline, polygon or other geometry finishes with a click on its last point.
+- The initiation point star is larger and drawn over the hole, with a see-through circle in the middle that shows the
+  hole under it; a click on the star's rays picks the point, a click in the middle the hole.
+- An initiation point is placed on a hole and bound to it: it initiates that hole and the ties go on from the hole
+  (placing it opens the Tie tool with a chain from it; a click on the star starts a tie from the hole as well). The
+  hole counts as initiated in every check. Moving the hole moves the point, moving the point moves the hole; deleting
+  the hole deletes the point, deleting the point leaves the hole. In projects of earlier versions a point standing on a
+  collar is bound to that hole on opening.
+- A row can be taken by its line (with rows shown): a selected row is dragged by the line between its holes, a click
+  on the line of an unselected row selects its holes.
+- Tie tool: with "Tie chain" on its panel (on by default) a line from hole to hole ties every hole on its way in turn
+  (within the pick radius); without it, one tie from the first hole to the last. A second click on the last hole
+  finishes the entry; no tie goes to a hole the signal already reaches (a tie comes in or an
+  initiation point stands on it); a hole whose ties only leave it takes one.
+- Pattern tool: blast direction, edge offset, number prefix and start number are on its panel; the Pattern
+  properties window no longer opens after the outline is drawn. Tool panel fields stay on one line; the panel
+  widens up to the view and the fields scroll beyond that.
 - Settings window: Apply applies and saves the settings and keeps the window open; the new OK button applies and
   closes. Buttons in order: Apply, Cancel, OK.
 - The program no longer picks the discrete GPU itself: on laptops the integrated one is usually faster.
@@ -39,6 +66,7 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the old way is kept as "Create surface without breaklines". Surfaces built before need to be built again.
 - Timing contours stopped short of a row farther from its neighbour than three design burdens or spacings: the
   distance between the rows on the ground now counts.
+- Drawing tools showed an empty label box by the cursor before the first point.
 - An occasional drawing error while using tools ("Collection was modified").
 
 ## 0.2.1 — 2026-11-01

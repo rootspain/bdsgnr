@@ -282,10 +282,20 @@ public sealed class TieEntity : Entity
     public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(new[] { FromPos, ToPos }, p, false);
 }
 
-/// <summary>Point where the blast is initiated (lead-in / opening point). Its start time and lead-in delay seed the timing solve.</summary>
+/// <summary>
+/// Point where the blast is initiated (lead-in / opening point). Its start time and lead-in delay seed the timing solve.
+/// Placed on a hole it is bound to it (<see cref="HoleId"/>): it starts that hole and the ties go on from the hole;
+/// the two move together and the point goes with a deleted hole (<see cref="InitiationLinks"/>).
+/// </summary>
 public sealed class InitiationPoint : Entity
 {
     public Vec3 Position { get; set; }
+    /// <summary>Hole the point stands on, null for a point of its own (tied to its first hole).</summary>
+    public Guid? HoleId { get; set; }
+    private string? _holeLabel;
+    /// <summary>Label of the hole the point stands on, for the properties panel (set by the timing solve).</summary>
+    [JsonIgnore] public string? Hole => _holeLabel;
+    public void SetHoleLabel(string? label) => _holeLabel = label;
     public string Label { get; set; } = "IP1";
     /// <summary>Time the lead-in fires, ms.</summary>
     public double StartTimeMs { get; set; }

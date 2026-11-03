@@ -71,6 +71,7 @@ public sealed class PreviewOverlay : IOverlay
         }
         foreach (var (p, t) in Labels)
         {
+            if (string.IsNullOrEmpty(t)) continue;
             var (x, y) = cam.ToScreen(p);
             using var bg = new SKPaint { Color = PlanRenderer.DarkMode ? new SKColor(0xEE20242A) : new SKColor(0xDDFFFFFF) };
             var w = text.MeasureText(t);

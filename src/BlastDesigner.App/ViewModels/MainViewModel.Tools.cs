@@ -37,9 +37,10 @@ public sealed partial class MainViewModel
         return false;
     }
 
-    private static string DistLabel(IReadOnlyList<Vec3> pts, Vec3 h)
+    private static string? DistLabel(IReadOnlyList<Vec3> pts, Vec3 h)
     {
-        if (pts.Count == 0) return string.Empty;
+        // nothing to measure before the first point (an empty label left its bare background by the cursor)
+        if (pts.Count == 0) return null;
         var last = pts[^1];
         var total = GeoMath.Length(pts) + Vec3.Distance(last, h);
         return $"{Vec3.Distance2D(last, h):0.00} m  {GeoMath.Bearing(last, h):0.0}°  Σ {total:0.00} m";
@@ -48,14 +49,29 @@ public sealed partial class MainViewModel
     // ---- drawing tools -----------------------------------------------------------------
 
     public void DrawPolylineTool(bool closed, LineKind kind = LineKind.General) =>
-        SetTool(new PickPointsTool(this, closed ? "Polygon" : "Polyline", "Click points; double-click or Enter to finish, Backspace removes the last point.", closed ? 3 : 2, int.MaxValue, closed, pts =>
+        SetTool(new PickPointsTool(this, closed ? "Polygon" : "Polyline", "Click points; a click on the last point, a double-click or Enter finishes, Backspace removes the last point.", closed ? 3 : 2, int.MaxValue, closed, pts =>
         {
             var layer = kind == LineKind.Boundary ? Project!.GetOrCreateLayer(StandardLayers.Boundary, 0xFF16A34A, "Design") : null;
             Change(closed ? "Add polygon" : "Add polyline", p => p.Add(new PolylineEntity { Points = pts, Closed = closed, Kind = kind }, layer));
         }) { Measure = DistLabel });
 
+    /// <summary>
+    /// Name of the point tool of a kind: the English name the toolbars and the rail know it by (so its button lights up
+    /// while it is on), translated for the tool panel like every tool name.
+    /// </summary>
+    public static string PointToolName(PointKind kind) => kind switch
+    {
+        PointKind.General => "Point",
+        PointKind.Survey => "Survey point",
+        PointKind.GradePeg => "Grade peg",
+        PointKind.Monitoring => "Monitoring point",
+        PointKind.SurveyStation => "Survey station",
+        PointKind.NorthPoint => "North point",
+        _ => "Centre of mass"
+    };
+
     public void DrawPointTool(PointKind kind) =>
-        SetTool(new PickPointsTool(this, Loc.Enum(kind), "Click to place points.", 1, 1, false, async pts =>
+        SetTool(new PickPointsTool(this, PointToolName(kind), "Click to place points.", 1, 1, false, async pts =>
         {
             var label = kind is PointKind.Monitoring or PointKind.SurveyStation ? await Dialogs.Prompt(Loc.Enum(kind), Loc.T("Label"), Loc.Enum(kind)) ?? "" : "";
             var layer = kind is PointKind.Survey or PointKind.SurveyStation or PointKind.GradePeg ? Project!.GetOrCreateLayer(StandardLayers.Survey, 0xFF7C3AED, StandardLayers.TopographyGroup) : null;
@@ -80,7 +96,7 @@ public sealed partial class MainViewModel
             Change("Add arrow", p => p.Add(new ArrowEntity { Start = pts[0], End = pts[1] }, p.GetOrCreateLayer(StandardLayers.Annotation)))));
 
     public void DrawDimensionTool() =>
-        SetTool(new PickPointsTool(this, "Dimension", "Click two points to dimension.", 2, 2, false, pts =>
+        SetTool(new PickPointsTool(this, "Dimension", "Click two points to dimension. Left to right: the brackets go down; right to left: up.", 2, 2, false, pts =>
             Change("Add dimension", p => p.Add(new DimensionEntity { Start = pts[0], End = pts[1], Offset = 12 / View.Camera.Scale }, p.GetOrCreateLayer(StandardLayers.Annotation))))
         { Measure = DistLabel });
 
@@ -149,25 +165,37 @@ public sealed partial class MainViewModel
     }
 
     public void PatternTool() =>
-        SetTool(new PickPointsTool(this, "Pattern", "Click the pattern boundary; double-click to finish. The pattern fills the polygon.", 3, int.MaxValue, true, async pts => await FillPolygon(pts))
+        SetTool(new PickPointsTool(this, "Pattern", "Click the pattern boundary; double-click to finish. The pattern fills the polygon.", 3, int.MaxValue, true, async pts => await FillPolygon(pts, false))
         { Extra = { MenuEntry.Item("Set pattern properties..", Run(EditDesignData)) }, Measure = DistLabel });
 
     public async Task FillSelectedPolygon()
     {
         var poly = Doc?.SelectedEntities.OfType<PolylineEntity>().FirstOrDefault(p => p.Closed);
         if (poly == null) { await Dialogs.Info(Loc.T("Select a closed polygon first.")); return; }
-        await FillPolygon(poly.Points);
+        await FillPolygon(poly.Points, true);
     }
 
-    private async Task FillPolygon(IReadOnlyList<Vec3> polygon)
+    /// <summary>Pattern tool panel: fields kept for the session (the project has no place for them).</summary>
+    public double PatternEdgeOffset { get; set; }
+    public string PatternLabelPrefix { get; set; } = string.Empty;
+    /// <summary>First hole number of the next pattern; null: the next free number.</summary>
+    public int? PatternStartNumber { get; set; }
+    public int NextPatternNumber => PatternStartNumber ?? (int.TryParse(NextHoleLabel(), out var n) ? n : 1);
+
+    /// <summary>
+    /// Fills a polygon with the pattern. The pattern tool takes its values from its panel; filling a selected polygon,
+    /// which has no panel, asks for them.
+    /// </summary>
+    private async Task FillPolygon(IReadOnlyList<Vec3> polygon, bool ask)
     {
         var d = Project!.Design;
-        var pp = await Dialogs.EditObject("Pattern properties", new PatternParameters
+        var pp = new PatternParameters
         {
             Burden = d.Burden, Spacing = d.Spacing, Pattern = d.Pattern, Orientation = Project.Header.BlastOrientation,
-            StartNumber = int.TryParse(NextHoleLabel(), out var n) ? n : 1
-        });
-        if (pp == null) return;
+            EdgeOffset = PatternEdgeOffset, LabelPrefix = PatternLabelPrefix, StartNumber = NextPatternNumber
+        };
+        if (ask && await Dialogs.EditObject("Pattern properties", pp) is not { } edited) return;
+        if (ask) { PatternEdgeOffset = pp.EdgeOffset; PatternLabelPrefix = pp.LabelPrefix; }
         var hp = NewHoleParameters();
         int count = 0;
         Change("Pattern", p =>
@@ -185,6 +213,9 @@ public sealed partial class MainViewModel
                 p.Add(new PolylineEntity { Points = polygon.ToList(), Closed = true, Kind = LineKind.Boundary }, p.GetOrCreateLayer(StandardLayers.Boundary, 0xFF16A34A, "Design"));
             count = holes.Count;
         });
+        // the next pattern starts after these holes again; the panel shows it
+        PatternStartNumber = null;
+        ToolChanged?.Invoke();
         SetStatus(Loc.F("{0} holes created", count));
     }
 
@@ -567,11 +598,17 @@ public sealed partial class MainViewModel
     // ---- timing -------------------------------------------------------------------------
 
     public void InitiationPointTool(bool electronic) =>
-        SetTool(new PickPointsTool(this, electronic ? "Opening point" : "Lead-in", electronic ? "Click to place the electronic opening point." : "Click to place the initiation point, then use the Tie tool from it to the first hole.", 1, 1, false, pts =>
+        SetTool(new PickPointsTool(this, electronic ? "Opening point" : "Lead-in", electronic ? "Click the hole the electronic blast opens from." : "Click the hole the blast is initiated at; the ties then go on from it.", 1, 1, false, pts =>
         {
+            // the point is placed on a hole and bound to it
+            var (sx, sy) = View.Camera.ToScreen(pts[0]);
+            if (View.HitTest(sx, sy, accept: e => e is Hole) is not Hole hole) { SetStatus(Loc.T("Place the initiation point on a hole")); return; }
+            if (InitiationLinks.PointOn(Project!, hole.Id) is { } taken) { SetStatus(Loc.F("Hole {0} already has initiation point {1}", hole.Label, taken.Label)); return; }
             var n = Project!.Entities.OfType<InitiationPoint>().Count() + 1;
-            Change("Add initiation point", p => p.Add(new InitiationPoint { Position = pts[0], Label = $"IP{n}", IsElectronic = electronic }, p.GetOrCreateLayer(StandardLayers.Ties, 0xFFDC2626, "Design")));
-            SetTool(new TieTool(this));
+            var holeId = hole.Id;
+            Change("Add initiation point", p => p.Add(new InitiationPoint { Position = hole.Collar, HoleId = holeId, Label = $"IP{n}", IsElectronic = electronic }, p.GetOrCreateLayer(StandardLayers.Ties, 0xFFDC2626, "Design")));
+            // on to the ties from its hole, with the catalogue of what they are made with, as the Ties button does
+            TieToolWithPalette(Project!.FindEntity(holeId));
         }));
 
     public async void AutoTieUp()
@@ -619,6 +656,16 @@ public sealed partial class MainViewModel
     }
 
     public void ShowTiePalette() => TiePaletteWindow.Show(this);
+
+    /// <summary>The Ties button: the tie tool together with its palette (what the ties are made with).</summary>
+    public void TieToolWithPalette() => TieToolWithPalette(null);
+
+    /// <summary>The tie tool with its palette, with a chain already started at <paramref name="start"/> when given.</summary>
+    public void TieToolWithPalette(Entity? start)
+    {
+        SetTool(new TieTool(this, start));
+        ShowTiePalette();
+    }
 
     public void RowSetTool() => SetTool(new TimeSetTool(this, true));
     public void SetTimeTool() => SetTool(new TimeSetTool(this, false));

@@ -57,6 +57,16 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Connector chosen in the tie palette; null means a 0 ms connection.</summary>
     public Product? ActiveConnector { get; set; }
     public HashSet<Guid> HiddenEntities { get; } = new();
+    /// <summary>Tie tool panel ▸ Tie chain: a line ties the holes on its way in turn; off, one tie from start to end.</summary>
+    public bool TieChain { get; set; } = true;
+    /// <summary>Tie palette ▸ User defined: the delay new ties get instead of a product's; null uses the connector.</summary>
+    public double? ActiveTieDelayMs { get; set; }
+    /// <summary>Tie palette ▸ Initiation system chosen (a <see cref="Views.TiePaletteWindow"/> system key).</summary>
+    public string? TieSystem { get; set; }
+    /// <summary>Initiation catalogue: subtype (product kind) chosen for each type (initiation system).</summary>
+    public Dictionary<string, ProductKind> TieSubtypes { get; } = new();
+    /// <summary>Initiation catalogue: family chosen for each subtype.</summary>
+    public Dictionary<ProductKind, string> TieFamilyChoice { get; } = new();
     public HighlightOverlay Highlight { get; } = new();
     public List<IOverlay> AnalysisOverlays { get; } = new();
     public double? AnimationTime { get; set; }

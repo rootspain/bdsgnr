@@ -16,6 +16,8 @@ public sealed class SelectTool : Tool
     private ToolPointer? _down;
     private bool _dragging;
     private bool _moving;
+    /// <summary>Row whose line was pressed (between its holes): a drag moves it when selected, a click selects it.</summary>
+    private HoleRow? _row;
     /// <summary>Offset of the last drag preview.</summary>
     private Vec3? _shown;
 
@@ -31,6 +33,16 @@ public sealed class SelectTool : Tool
         _shown = null;
         _dragging = false;
         _moving = p.Hit != null && Vm.Doc!.Selection.Contains(p.Hit.Id) && !p.Modifiers.HasFlag(KeyModifiers.Shift) && !p.Modifiers.HasFlag(KeyModifiers.Control);
+        // the line of a row, with nothing else under the cursor than a surface (picked by area) or a tie along the
+        // row: a selected row is dragged by it, an unselected one is selected by a click on it (a tie keeps its click)
+        var free = !p.Modifiers.HasFlag(KeyModifiers.Shift) && !p.Modifiers.HasFlag(KeyModifiers.Control);
+        _row = p.Hit is null or SurfaceEntity || (p.Hit is TieEntity && !Vm.Doc!.Selection.Contains(p.Hit.Id)) ? RowAt(p.X, p.Y) : null;
+        if (_row != null)
+        {
+            var selected = _row.HoleIds.All(Vm.Doc!.Selection.Contains);
+            if (selected && free) _moving = true;
+            else if (p.Hit is TieEntity) _row = null;
+        }
         if (p.ClickCount >= 2 && p.Hit != null)
         {
             Vm.Doc!.Select(new[] { p.Hit.Id });
@@ -79,6 +91,14 @@ public sealed class SelectTool : Tool
             return;
         }
         _down = null;
+        // a click on the line of a row selects its holes
+        if (!_dragging && _row != null)
+        {
+            Vm.Doc!.Select(_row.HoleIds, mode);
+            _row = null;
+            ShowProperties();
+            return;
+        }
         if (_dragging)
         {
             var crossing = p.X < down.X;
@@ -88,6 +108,31 @@ public sealed class SelectTool : Tool
         }
         Vm.Doc!.Select(p.Hit != null ? new[] { p.Hit.Id } : Array.Empty<Guid>(), p.Hit == null && mode != SelectionMode.Replace ? SelectionMode.Add : mode);
         ShowProperties();
+    }
+
+    /// <summary>
+    /// Row whose line (through its holes, in order) passes within the pick radius of the screen point, when rows are
+    /// shown; the nearest one.
+    /// </summary>
+    private HoleRow? RowAt(double sx, double sy)
+    {
+        var p = Vm.Project!;
+        if (!p.View.ShowRows) return null;
+        var cam = View.Camera;
+        HoleRow? best = null;
+        double bestD = View.TargetRadius;
+        foreach (var row in p.Rows)
+        {
+            var pts = row.HoleIds.Select(id => p.FindEntity(id)).OfType<Hole>().Select(h => cam.ToScreen(h.Collar)).ToList();
+            for (int i = 1; i < pts.Count; i++)
+            {
+                double ax = pts[i - 1].X, ay = pts[i - 1].Y, dx = pts[i].X - ax, dy = pts[i].Y - ay, l2 = dx * dx + dy * dy;
+                var t = l2 > 0 ? Math.Clamp(((sx - ax) * dx + (sy - ay) * dy) / l2, 0, 1) : 0;
+                var d = Math.Sqrt(Math.Pow(ax + t * dx - sx, 2) + Math.Pow(ay + t * dy - sy, 2));
+                if (d < bestD) { bestD = d; best = row; }
+            }
+        }
+        return best;
     }
 
     /// <summary>Selecting something on the plan shows its properties in the right panel.</summary>
@@ -105,7 +150,7 @@ public sealed class SelectTool : Tool
     {
         var down = _down!;
         var cam = View.Camera;
-        var handle = down.Hit switch
+        var handle = _row != null ? down.World : down.Hit switch
         {
             Hole h => h.Collar,
             { } e => e.GetVertices().DefaultIfEmpty(down.World).MinBy(v =>
@@ -238,10 +283,10 @@ public sealed class TieTool : Tool
 {
     private Entity? _from;
 
-    public TieTool(MainViewModel vm) : base(vm) { }
+    public TieTool(MainViewModel vm, Entity? start = null) : base(vm) { _from = start; }
 
     public override string Name => "Tie";
-    public override string Hint => "Click the hole the signal comes from, then the hole it goes to. Shift keeps chaining from the last hole. The connector is chosen in the tie palette.";
+    public override string Hint => "Click the hole the signal comes from, then the holes it goes to; holes on the way get a tie each. Click the last hole again to finish. Holes the signal already reaches (a tie comes in or an initiation point stands on them) are skipped. The connector is chosen in the tie palette.";
 
     /// <summary>
     /// Hole or initiation point under the cursor. Other objects are skipped: an initiation point is often placed on a
@@ -249,26 +294,87 @@ public sealed class TieTool : Tool
     /// </summary>
     private Entity? Target(ToolPointer p) => View.HitTest(p.X, p.Y, accept: e => e is Hole or InitiationPoint);
 
+    /// <summary>
+    /// Where a tie starts: a click anywhere on the star of an initiation point, its see-through middle included, starts
+    /// at the hole the point stands on (the ties go on from that hole), at the point itself when it stands on none.
+    /// </summary>
+    private Entity? Start(ToolPointer p)
+    {
+        if (View.HitTest(p.X, p.Y, accept: e => e is InitiationPoint) is not InitiationPoint ip) return Target(p);
+        return ip.HoleId is Guid hid && Vm.Project!.FindEntity(hid) is Hole h ? h : ip;
+    }
+
     public override void PointerPressed(ToolPointer p)
     {
         if (!p.Left) return;
+        if (_from == null) { _from = Start(p); return; }
         if (Target(p) is not { } hit) return;
-        if (_from == null) { _from = hit; return; }
-        if (hit.Id == _from.Id) return;
-        var from = _from;
-        var to = hit;
-        var connector = Vm.ActiveConnector;
-        Vm.Change("Add tie", pr => Timing.Connect(pr, from.Id, to.Id, connector));
-        _from = to;
+        // the last hole again finishes the entry; the next click starts a new chain
+        if (hit.Id == _from.Id) { _from = null; Preview.Clear(); Vm.SetStatus(Loc.T("Tie entry finished")); return; }
+        // a hole the signal already reaches through a tie gets no second one
+        if (Tied(hit)) { Vm.SetStatus(Loc.F("Hole {0} is already tied", (hit as Hole)?.Label ?? "")); return; }
+        Connect(_from, hit);
+        _from = hit;
+    }
+
+    /// <summary>
+    /// Whether the signal already reaches the hole: a tie ends at it or an initiation point stands on it. A chain may
+    /// start there, but no tie may go to it. Ties that only leave the hole do not count.
+    /// </summary>
+    private bool Tied(Entity e) => e is Hole && (Vm.Project!.Ties.Any(t => t.ToId == e.Id) || InitiationLinks.PointOn(Vm.Project, e.Id) != null);
+
+    /// <summary>
+    /// Ties from <paramref name="from"/> to <paramref name="to"/> through every hole on the way: within the pick radius
+    /// (pixels, status bar) of the line on the screen, in their order along it; one tie each, one undo step.
+    /// </summary>
+    private void Connect(Entity from, Entity to)
+    {
+        var chain = new List<Guid> { from.Id };
+        if (Vm.TieChain) chain.AddRange(HolesOnTheWay(from, to).Select(h => h.Id));
+        chain.Add(to.Id);
+        // a user-defined delay goes on the tie itself, without a product
+        var delay = Vm.ActiveTieDelayMs;
+        var connector = delay == null ? Vm.ActiveConnector : null;
+        Vm.Change(chain.Count > 2 ? "Add ties" : "Add tie", pr =>
+        {
+            for (int i = 1; i < chain.Count; i++) Timing.Connect(pr, chain[i - 1], chain[i], connector, delay);
+        });
+        if (chain.Count > 2) Vm.SetStatus(Loc.F("{0} ties added through the holes on the line", chain.Count - 1));
+    }
+
+    /// <summary>Shown holes whose collar lies within the pick radius of the screen line between the two, ordered along it.</summary>
+    private List<Hole> HolesOnTheWay(Entity from, Entity to)
+    {
+        var p = Vm.Project!;
+        if (Timing.PositionOf(p, from.Id) is not Vec3 a || Timing.PositionOf(p, to.Id) is not Vec3 b) return new();
+        var cam = View.Camera;
+        var (ax, ay) = cam.ToScreen(a);
+        var (bx, by) = cam.ToScreen(b);
+        double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+        if (len2 < 1) return new();
+        var visible = p.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
+        // holes already tied are passed over, as a click on them does nothing
+        var tied = p.Ties.Select(t => t.ToId).ToHashSet();
+        foreach (var ip in p.Entities.OfType<InitiationPoint>()) if (ip.HoleId is Guid hid) tied.Add(hid);
+        var found = new List<(double T, Hole H)>();
+        foreach (var h in p.Holes)
+        {
+            if (h.Id == from.Id || h.Id == to.Id || !visible.Contains(h.LayerId) || Vm.HiddenEntities.Contains(h.Id) || !BlastDesigner.Rendering.PlanRenderer.HoleVisible(p.View, h)) continue;
+            if (tied.Contains(h.Id)) continue;
+            var (x, y) = cam.ToScreen(h.Collar);
+            var t = ((x - ax) * dx + (y - ay) * dy) / len2;
+            if (t <= 0 || t >= 1) continue;
+            if (Math.Abs((x - ax) * dy - (y - ay) * dx) / Math.Sqrt(len2) <= View.TargetRadius) found.Add((t, h));
+        }
+        return found.OrderBy(f => f.T).Select(f => f.H).ToList();
     }
 
     public override void PointerReleased(ToolPointer p)
     {
         // Drag release on another hole creates the tie too.
-        if (_from != null && Target(p) is Hole h && h.Id != _from.Id && !p.Modifiers.HasFlag(KeyModifiers.Shift) && Preview.Lines.Count > 0)
+        if (_from != null && Target(p) is Hole h && h.Id != _from.Id && !Tied(h) && !p.Modifiers.HasFlag(KeyModifiers.Shift) && Preview.Lines.Count > 0)
         {
-            var from = _from;
-            Vm.Change("Add tie", pr => Timing.Connect(pr, from.Id, h.Id, Vm.ActiveConnector));
+            Connect(_from, h);
             _from = h;
         }
     }
@@ -278,9 +384,18 @@ public sealed class TieTool : Tool
         Preview.Lines.Clear();
         if (_from == null) return;
         var a = Timing.PositionOf(Vm.Project!, _from.Id) ?? p.World;
-        Preview.Lines.Add((new[] { a, Target(p) is Hole h ? h.Collar : p.World }, false, new SKColor(Vm.ActiveConnector?.Color ?? 0xFFDC2626)));
+        var colour = new SKColor(Vm.ActiveConnector?.Color ?? 0xFFDC2626);
+        Preview.Markers.Clear();
+        if (Target(p) is Hole h && h.Id != _from.Id && !Tied(h))
+        {
+            // through the holes on the way, which get a tie each
+            var way = Vm.TieChain ? HolesOnTheWay(_from, h) : new List<Hole>();
+            Preview.Lines.Add((new[] { a }.Concat(way.Select(x => x.Collar)).Append(h.Collar).ToList(), false, colour));
+            foreach (var x in way) Preview.Markers.Add((x.Collar, colour));
+        }
+        else Preview.Lines.Add((new[] { a, p.World }, false, colour));
         Preview.Labels.Clear();
-        Preview.Labels.Add((p.World, Vm.ActiveConnector?.Name ?? "0 ms"));
+        Preview.Labels.Add((p.World, Vm.ActiveTieDelayMs is double ms ? Loc.F("{0} ms", ms.ToString("0.#")) : Vm.ActiveConnector?.Name ?? "0 ms"));
     }
 
     protected override bool HasPendingInput => _from != null;
@@ -293,7 +408,7 @@ public sealed class TieTool : Tool
 
     public override IEnumerable<MenuEntry> ContextMenu(ToolPointer p)
     {
-        yield return MenuEntry.Item("Show tie palette", Vm.ShowTiePalette);
+        yield return MenuEntry.Item("Initiation catalogue", Vm.ShowTiePalette);
         yield return MenuEntry.Item("Automatic tie-up", Vm.AutoTieUp);
         yield return MenuEntry.Item("Connect multiple holes", Vm.ConnectSelectedInOrder);
         yield return MenuEntry.Item("Flip selected ties", Vm.FlipTies);
