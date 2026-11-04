@@ -293,6 +293,103 @@ public sealed class ViewState
     public bool ShowBurdenMarker { get; set; }
     /// <summary>Measure-while-drilling hardness drawn along the hole track.</summary>
     public bool ShowProfile { get; set; }
+    /// <summary>
+    /// Hole labels drawn left and right of the collar, top to bottom (<see cref="HoleLabelLayout"/>); whether each one is
+    /// drawn is its own switch above.
+    /// </summary>
+    public List<HoleLabel> LabelsLeft { get; set; } = HoleLabelLayout.DefaultLeft.ToList();
+    public List<HoleLabel> LabelsRight { get; set; } = HoleLabelLayout.DefaultRight.ToList();
+}
+
+/// <summary>A value written next to a hole on the plan.</summary>
+public enum HoleLabel
+{
+    Number, Length, Diameter, Elevation, Angle, Bearing, Temperature, ExplosiveMass, DeckMasses, DeckSequence, DetonatorId, Type,
+    HoleOrder, SurfaceTime, InholeDelay, HoleTime
+}
+
+/// <summary>Which side of the collar each hole label is on and in what order, and whether it is switched on.</summary>
+public static class HoleLabelLayout
+{
+    public static readonly HoleLabel[] DefaultLeft =
+    {
+        HoleLabel.HoleOrder, HoleLabel.HoleTime, HoleLabel.SurfaceTime, HoleLabel.InholeDelay, HoleLabel.DeckSequence,
+        HoleLabel.DetonatorId, HoleLabel.Type, HoleLabel.Temperature
+    };
+    public static readonly HoleLabel[] DefaultRight =
+    {
+        HoleLabel.Number, HoleLabel.Length, HoleLabel.Diameter, HoleLabel.Elevation, HoleLabel.Angle, HoleLabel.Bearing,
+        HoleLabel.ExplosiveMass, HoleLabel.DeckMasses
+    };
+
+    /// <summary>
+    /// Both sides as stored, each label once (on the side it is first found); a label on neither side (a file from
+    /// before the layout, or a label added since) goes to the end of its default side.
+    /// </summary>
+    public static (List<HoleLabel> Left, List<HoleLabel> Right) Sides(ViewState v)
+    {
+        var seen = new HashSet<HoleLabel>();
+        var left = (v.LabelsLeft ?? new()).Where(l => Enum.IsDefined(l) && seen.Add(l)).ToList();
+        var right = (v.LabelsRight ?? new()).Where(l => Enum.IsDefined(l) && seen.Add(l)).ToList();
+        foreach (var l in Enum.GetValues<HoleLabel>())
+            if (!seen.Contains(l)) (DefaultLeft.Contains(l) ? left : right).Add(l);
+        return (left, right);
+    }
+
+    /// <summary>Puts a label on a side at an index of that side (counted without the label itself).</summary>
+    public static void Move(ViewState v, HoleLabel label, bool right, int index)
+    {
+        var (l, r) = Sides(v);
+        l.Remove(label);
+        r.Remove(label);
+        var to = right ? r : l;
+        to.Insert(Math.Clamp(index, 0, to.Count), label);
+        v.LabelsLeft = l;
+        v.LabelsRight = r;
+    }
+
+    public static void Reset(ViewState v)
+    {
+        v.LabelsLeft = DefaultLeft.ToList();
+        v.LabelsRight = DefaultRight.ToList();
+    }
+
+    /// <summary>The switch of a label that is a bit of <see cref="ViewState.HoleLabels"/>; null for the timing labels.</summary>
+    public static HoleLabelMode? Flag(HoleLabel l) => l switch
+    {
+        HoleLabel.Number => HoleLabelMode.Label,
+        HoleLabel.Length => HoleLabelMode.Length,
+        HoleLabel.Diameter => HoleLabelMode.Diameter,
+        HoleLabel.Elevation => HoleLabelMode.CollarZ,
+        HoleLabel.Angle => HoleLabelMode.Angle,
+        HoleLabel.Bearing => HoleLabelMode.Bearing,
+        HoleLabel.Temperature => HoleLabelMode.Temperature,
+        HoleLabel.ExplosiveMass => HoleLabelMode.Charge,
+        HoleLabel.DeckMasses => HoleLabelMode.DeckMasses,
+        HoleLabel.DeckSequence => HoleLabelMode.DeckSequence,
+        HoleLabel.DetonatorId => HoleLabelMode.DetonatorId,
+        HoleLabel.Type => HoleLabelMode.Type,
+        _ => null
+    };
+
+    /// <summary>The timing label mode of a timing label; null for the others.</summary>
+    public static TimingLabelMode? Timing(HoleLabel l) => l switch
+    {
+        HoleLabel.HoleOrder => TimingLabelMode.HoleSequence,
+        HoleLabel.SurfaceTime => TimingLabelMode.SurfaceTime,
+        HoleLabel.InholeDelay => TimingLabelMode.DelayNumber,
+        HoleLabel.HoleTime => TimingLabelMode.InholeTime,
+        _ => null
+    };
+
+    public static bool IsShown(ViewState v, HoleLabel l) => Flag(l) is { } f ? v.HoleLabels.HasFlag(f) : Timing(l) switch
+    {
+        TimingLabelMode.SurfaceTime => v.ShowSurfaceTimeLabel || v.TimingLabels == TimingLabelMode.SurfaceTime,
+        TimingLabelMode.InholeTime => v.ShowHoleTimeLabel || v.TimingLabels == TimingLabelMode.InholeTime,
+        TimingLabelMode.DelayNumber => v.ShowInholeDelayLabel || v.TimingLabels == TimingLabelMode.DelayNumber,
+        TimingLabelMode.HoleSequence => v.ShowHoleSequenceLabel || v.TimingLabels == TimingLabelMode.HoleSequence,
+        _ => false
+    };
 }
 
 [Flags]

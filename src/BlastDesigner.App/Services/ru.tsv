@@ -2517,9 +2517,6 @@ ui:Young's modulus E	Модуль Юнга E
 ui:Rock density {0} t/m³ (Design data); RDI = 25·ρ − 50 = {1}	Плотность породы {0} т/м³ (данные проекта); RDI = 25·ρ − 50 = {1}
 ui:Typed in	Задан вручную
 ui:Calculated from f and the rock mass	Рассчитан по f и описанию массива
-ui:HF = E/3 = {0} (E below 50 GPa)	HF = E/3 = {0} (E ниже 50 ГПа)
-ui:HF = σc/5 = 2f = {0}	HF = σсж/5 = 2f = {0}
-ui:σc ≈ {0} MPa	σсж ≈ {0} МПа
 ui:Load the holes to see the prediction: it needs the powder factor and the charge per hole.	Зарядите скважины, чтобы увидеть прогноз: нужны удельный расход и заряд на скважину.
 Fragmentation preset	Пресет фрагментации
 Save fragmentation preset	Сохранить пресет фрагментации
@@ -2536,7 +2533,7 @@ ui:Outside the usual range {0}–{1}	Вне обычного диапазона 
 ui:Linked with f and the rock mass	Связан с f и описанием массива
 ui:f does not enter A while E is below 50 GPa: A is kept as typed	При E ниже 50 ГПа f не входит в A: A оставлен как введён
 ui:With this rock mass f would be {0}: A is kept as typed	При таком массиве f было бы {0}: A оставлен как введён
-ui:Plan, 3D and printed plans: the hole number in blue top right of the collar. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it.	План, 3D и печатный план: номер синим справа сверху от устья. По нему скважины различают в таблице, листах заряжания, отчётах и отчёте регистрации ЭДС, по нему же ищут скважину.
+ui:Plan, 3D and printed plans: the hole number, in blue. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it.	План, 3D и печатный план: номер скважины, синим. По нему скважины различают в таблице, листах заряжания, отчётах и отчёте регистрации ЭДС, по нему же ищут скважину.
 ui:Plan and 3D: "L" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length.	План и 3D: «L» у устья — замеренная длина, если есть замер, иначе проектная. Используется в расчёте колонки заряда и забойки, в метрах бурения и стоимости бурения, при подборе правил заряжания по длине.
 ui:Plan and 3D: "Ø" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter.	План и 3D: «Ø» в мм у устья. Определяет погонную массу и массу ВВ, минимальную забойку (в диаметрах), прогноз дробления и подбор правил заряжания по диаметру.
 ui:Plan and 3D: "Z", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast.	План и 3D: «Z» — отметка устья. Используется при расчёте длины до подошвы уступа в проекте, на разрезах и в объёме блока.
@@ -2554,12 +2551,12 @@ ui:Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; 
 ui:Plan: a dashed violet line with "B" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction.	План: фиолетовый пунктир с «B» от скважин первого ряда до ближайшей точки бровки. Нужна линия бровки; эта же ЛСПП используется проверкой ЛСПП и прогнозом разлёта от откоса.
 ui:Plan and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay.	План и 3D: масса каждого заряда ВВ в кг сверху вниз. Показывает, как разделён рассредоточенный заряд; каждый заряд учитывается отдельно в заряде на замедление.
 ui:Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.	План и 3D: крепость пород по данным MWD вдоль трассы, от синего (мягкие) до красного (крепкие), только у скважин с данными. Правила заряжания по нему подставляют продукт для крепких или мягких пород и удлиняют забойку в мягком устье.
-ui:Plan and 3D: the firing order of the hole top left of the collar, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis.	План и 3D: порядковый номер взрывания слева сверху от устья, по расчёту замедлений. Для проверки последовательности инициирования; этот же порядок используется в анимации взрыва и анализе первого движения.
+ui:Plan and 3D: the firing order of the hole, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis.	План и 3D: порядковый номер взрывания, по расчёту замедлений. Для проверки последовательности инициирования; этот же порядок используется в анимации взрыва и анализе первого движения.
 ui:Plan and 3D: the firing order of the decks in the hole, top to bottom ("2-1" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes.	План и 3D: порядок взрывания зарядов в скважине сверху вниз («2-1» — нижний срабатывает первым), только у скважин с двумя и более боевиками в разных зарядах. Для проверки внутрискважинных замедлений рассредоточенных зарядов.
-ui:Plan and 3D: the in-hole detonator delay in ms, in red under the collar. It is added to the surface time to give the hole firing time.	План и 3D: замедление внутрискважинного детонатора в мс, красным под устьем. Прибавляется к времени поверхностной сети и даёт время взрывания скважины.
-ui:Plan and 3D: the time the surface signal reaches the collar in ms, in red under the collar. Comes from the ties and connectors; part of the hole firing time.	План и 3D: время прихода сигнала поверхностной сети к устью в мс, красным под устьем. Считается по связям и поверхностным замедлителям; часть времени взрывания скважины.
+ui:Plan and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time.	План и 3D: замедление внутрискважинного детонатора в мс, красным. Прибавляется к времени поверхностной сети и даёт время взрывания скважины.
+ui:Plan and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time.	План и 3D: время прихода сигнала поверхностной сети к устью в мс, красным. Считается по связям и поверхностным замедлителям; часть времени взрывания скважины.
 ui:Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator.	План и 3D: идентификатор зарегистрированного электронного детонатора, только у скважин, где он есть. Используется в отчёте регистрации ЭДС и для поиска скважины по детонатору.
-ui:Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red under the collar. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.	План и 3D: время взрывания скважины в мс (поверхностная сеть плюс внутрискважинное замедление), красным под устьем. По нему считаются сейсмика (заряд в окне замедления), изохроны, анимация взрыва и первое движение.
+ui:Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.	План и 3D: время взрывания скважины в мс (поверхностная сеть плюс внутрискважинное замедление), красным. По нему считаются сейсмика (заряд в окне замедления), изохроны, анимация взрыва и первое движение.
 ui:Plan and 3D: "T" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.	План и 3D: «T» и номер типа скважины. Тип задаёт цвет скважины, по нему подбираются правила заряжания и инициирования и фильтруются показываемые скважины.
 ui:I (highest strength)	I (в высшей степени крепкие)
 ui:Quartzites, basalts (extremely strong).	Кварциты, базальты (в высшей степени крепкие).
@@ -2605,3 +2602,12 @@ ui:A = {0}: weaker than {1}.	A = {0}: слабее, чем {1}.
 ui:A = {0}: stronger than {1}.	A = {0}: крепче, чем {1}.
 ui:A = {0}: between {1} and {2}.	A = {0}: между {1} и {2}.
 ui:{0}: f = {1}. {2}	{0}: f = {1}. {2}
+ui:Hole labels	Подписи скважин
+ui:Default order	Порядок по умолчанию
+ui:Put every label back on its usual side and in its usual order	Вернуть все подписи на их обычную сторону и в обычном порядке
+ui:Drag a label to the other side or along its side: the order is the order at the hole, top to bottom.	Перетащите подпись на другую сторону или выше/ниже: порядок в колонке — порядок у скважины сверху вниз.
+ui:Left	Слева
+ui:Right	Справа
+ui:Drag a label here	Перетащите подпись сюда
+ui:Move to the left side	Перенести влево
+ui:Move to the right side	Перенести вправо

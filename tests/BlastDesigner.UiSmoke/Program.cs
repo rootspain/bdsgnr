@@ -168,8 +168,39 @@ Step("visibility tab lists objects", () =>
     var boxes = window.GetLogicalDescendants().OfType<CheckBox>().Where(c => c.IsEffectivelyVisible && c.Content is string t && t.EndsWith(")")).ToList();
     if (boxes.Count == 0) throw new Exception("no object kinds on the Visibility tab");
 });
+Step("hole labels in two columns", () =>
+{
+    // each label in the column of its side, in its order; the arrow of a row puts it at the end of the other side
+    var p = vm.Project!;
+    Control Named(string name) => window.GetLogicalDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name && c.IsEffectivelyVisible) ?? throw new Exception("no " + name + " on the Visibility tab");
+    var right = Named("labelsRight");
+    if (!right.GetLogicalDescendants().OfType<Control>().Any(c => c.Name == "labelNumber")) throw new Exception("the hole number should start on the right");
+    var move = window.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "moveLabelNumber");
+    move.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    var (left, _) = HoleLabelLayout.Sides(p.View);
+    if (left[^1] != HoleLabel.Number) throw new Exception($"the arrow should move the number to the end of the left side: {string.Join(", ", left)}");
+    if (!Named("labelsLeft").GetLogicalDescendants().OfType<Control>().Any(c => c.Name == "labelNumber")) throw new Exception("the left column should show the number after the move");
+    vm.ToggleView(HoleLabelLayout.Reset); Pump();
+    Named("labelsLeft").BringIntoView(); Pump();
+});
+Shot("02c_hole_labels");
 Shot("02b_visibility_tab");
 Step("back to properties", () => window.ShowInspectorTab(0));
+Step("layer list on the properties tab", () =>
+{
+    // shows the layer of the selection; picking another moves the selection there as one undo step
+    ComboBox Combo() => window.GetLogicalDescendants().OfType<ComboBox>().FirstOrDefault(c => c.Name == "selectionLayer" && c.IsEffectivelyVisible) ?? throw new Exception("no layer list on the Properties tab");
+    var p = vm.Project!;
+    var ids = vm.Doc!.Selection.ToHashSet();
+    var from = p.Entities.First(e => ids.Contains(e.Id)).LayerId;
+    if (Combo().SelectedIndex != p.Layers.FindIndex(l => l.Id == from)) throw new Exception($"the layer list should show the layer of the selection: {Combo().SelectedIndex}");
+    var to = p.Layers.First(l => l.Id != from);
+    Combo().SelectedIndex = p.Layers.IndexOf(to); Pump();
+    if (p.Entities.Where(e => ids.Contains(e.Id)).Any(e => e.LayerId != to.Id)) throw new Exception("picking a layer should move the selection to it");
+    if (Combo().SelectedIndex != p.Layers.IndexOf(to)) throw new Exception("the layer list should show the new layer");
+    vm.Undo(); Pump();
+    if (vm.Project!.Entities.Where(e => ids.Contains(e.Id)).Any(e => e.LayerId != from)) throw new Exception("undo should bring the selection back to its layer");
+});
 Step("mixed values and flag merge", () =>
 {
     var a = new Hole { Length = 10, Diameter = 102, Exceptions = HoleException.Wet };
@@ -1146,8 +1177,12 @@ Step("visibility: hole items in two columns", () =>
     window.ShowInspectorTab(0); Pump(); window.ShowInspectorTab(2); Pump();
     var grids = window.GetLogicalDescendants().OfType<Avalonia.Controls.Primitives.UniformGrid>().Where(g => g.Columns == 2).ToList();
     var labels = grids.SelectMany(g => g.Children.OfType<CheckBox>()).Select(c => (c.Content as TextBlock)?.Text).ToList();
-    foreach (var name in new[] { "Temperature", "Dip track", "Actual track", "Grade point", "Deviation", "Burden marker", "Deck masses", "MWD profile", "Deck sequence", "Surface time", "Detonator ID", "Bearing", "Collar" })
+    foreach (var name in new[] { "Dip track", "Actual track", "Grade point", "Deviation", "Burden marker", "MWD profile", "Collar" })
         if (!labels.Contains(BlastDesigner.App.Services.Loc.Ui(name))) throw new Exception($"{name} missing from the two-column lists");
+    // the labels written at the hole are rows of the side columns
+    var rows = window.GetLogicalDescendants().OfType<Control>().Select(c => c.Name).ToHashSet();
+    foreach (var l in Enum.GetValues<HoleLabel>())
+        if (!rows.Contains("label" + l)) throw new Exception($"{l} missing from the hole label columns");
     var sv = grids[0].GetLogicalAncestors().OfType<ScrollViewer>().First();
     foreach (var e in sv.GetLogicalDescendants().OfType<Expander>()) e.IsExpanded = false;
     sv.Offset = new Vector(0, 230); Pump();

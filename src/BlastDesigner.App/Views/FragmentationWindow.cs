@@ -49,7 +49,7 @@ public sealed class FragmentationForm : DockPanel
 
     private readonly BlastProject _p;
     private readonly TextBox _a, _f, _jf, _e, _drill, _max, _over, _fines;
-    private readonly TextBlock _fHint = Small(), _presetNote = Small();
+    private readonly TextBlock _presetNote = Small();
     /// <summary>
     /// Sliders under A and f: one step for each value of their table, for A also the whole numbers inside its rows
     /// (<see cref="Stops"/>); the other field takes the matching value of the other table (<see cref="Matching"/>).
@@ -410,7 +410,7 @@ public sealed class FragmentationForm : DockPanel
         _fCategory.Name = "protodyakonovFCategory";
         _aCategory.Foreground = _fCategory.Foreground = Look.TextSoft;
         var a = new StackPanel { Spacing = 4, Children = { Label("A — international (Cunningham)"), _a, _aSlider, _aCategory, _aWarn } };
-        var f = new StackPanel { Spacing = 4, Children = { Label("f — by Protodyakonov"), _f, _fSlider, _fCategory, _fWarn, _fHint } };
+        var f = new StackPanel { Spacing = 4, Children = { Label("f — by Protodyakonov"), _f, _fSlider, _fCategory, _fWarn } };
         var fields = Fields(2, a, f);
         return Section("Rock factor", new Border
         {
@@ -567,8 +567,6 @@ public sealed class FragmentationForm : DockPanel
         Show(_max, Draft.MaxBlockCm, "0.#");
         Show(_over, Draft.OversizeCm, "0.#");
         Show(_fines, Draft.FinesCm, "0.##");
-        var hf = Draft.YoungsModulus < 50 ? Loc.F(L("HF = E/3 = {0} (E below 50 GPa)"), N(Draft.YoungsModulus / 3, "0.#")) : Loc.F(L("HF = σc/5 = 2f = {0}"), N(Draft.Ucs / 5, "0.#"));
-        _fHint.Text = Loc.F(L("σc ≈ {0} MPa"), N(Draft.Ucs, "0")) + " · " + hf;
         // each slider at the step of its value
         _movingSliders = true;
         _aSlider.Value = StepOf(AStops, RockFactor);

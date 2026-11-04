@@ -6,6 +6,37 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.2.4 — 2026-11-04
+
+### New
+- **Sliders under the A and f fields** of the Fragmentation inputs window. The A slider steps along the rock type
+  table from 0 to 18 (the row bounds and the whole numbers inside the rows), the f slider along the Protodyakonov
+  category bounds from 0 to 20. Under each field is the rock type or category the value falls in, with its range and
+  example rocks; a value between table rows is described as weaker than, stronger than or between them.
+- The minimum top stemming (in hole diameters) can be changed right in the Stemming check line of the hole loading
+  window. It is kept in the program settings and applies to every loading check and to the warnings on the plan
+  (25 diameters by default).
+- The items of the Visibility tab have tooltips: where the item shows, what it is for and which calculations use the
+  same data.
+
+### Changed
+- **A and f are matched by tables, not by the Cunningham formula.** A by the rock type table: soft 0.6–2, medium
+  strength 3–7, strong 8–12, extremely strong 13–18. f by the 15 Protodyakonov categories (X–I, f 0.3–20). A value typed
+  in sets the other field by its share of its table's range, rounded to a whole number. When the value is at least the
+  minimum of its table and the other would round to 0, the other field gets the minimum of its table. A value below
+  the minimum of its table gives 0 in the other field.
+- An A set in the fragmentation window is used in the prediction as it is, 0 too. In files of earlier versions A = 0
+  is still calculated from the rock mass description.
+- "Outside the usual range" in the fragmentation window follows the table ranges (A 0.6–18, f 0.3–20); the warning
+  and the field are highlighted in red.
+- Esc closes any dialog or tool window as Cancel (it presses the window's Cancel button when there is one). Windows
+  without an input field (Quantities, Dashboard) take the focus themselves, so Esc closes them instead of reaching the
+  plan.
+- The theme preview in the program settings changes the plan background at once; the plan redraws when the theme or
+  the accent colour changes.
+- With Collar switched off, selected holes are drawn without a collar too, and holes are not snapped to.
+- The stage row of the ribbon is lower.
+
 ## 0.2.3 — 2026-11-03
 
 ### New

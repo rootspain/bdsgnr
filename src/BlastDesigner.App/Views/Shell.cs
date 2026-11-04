@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
@@ -657,19 +658,6 @@ public sealed class Inspector : DockPanel
             cb.IsCheckedChanged += (_, _) => { if (cb.IsChecked != get(p.View)) _vm.ToggleView(toggle); };
             Add(cb);
         }
-        void LabelCheck(string label, HoleLabelMode flag, string? tip = null) =>
-            Check(label, v => v.HoleLabels.HasFlag(flag), v => v.HoleLabels ^= flag, ui: true, tip: tip);
-        void TimingCheck(string label, TimingLabelMode mode, string? tip = null)
-        {
-            var cb = new CheckBox { Content = Loc.Ui(label), IsChecked = _vm.IsTimingLabelVisible(mode) };
-            if (tip != null) ToolTip.SetTip(cb, Loc.Ui(tip));
-            cb.IsCheckedChanged += (_, _) =>
-            {
-                if (cb.IsChecked != _vm.IsTimingLabelVisible(mode))
-                    _vm.ToggleTimingLabel(mode);
-            };
-            Add(cb);
-        }
         _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Show"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         grid = Columns();
         Check("Ties", v => v.ShowTies, v => v.ShowTies = !v.ShowTies);
@@ -680,22 +668,12 @@ public sealed class Inspector : DockPanel
         Check("Hole legend", v => v.ShowHoleLegend, v => v.ShowHoleLegend = !v.ShowHoleLegend);
         _visibility.Children.Add(grid);
 
+        _visibility.Children.Add(HoleLabelsHeader());
+        _visibility.Children.Add(_labelHost);
+        BuildLabelColumns();
+
         _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Holes"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         grid = Columns();
-        LabelCheck("Hole number", HoleLabelMode.Label,
-            tip: "Plan, 3D and printed plans: the hole number in blue top right of the collar. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it.");
-        LabelCheck("Length", HoleLabelMode.Length,
-            tip: "Plan and 3D: \"L\" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length.");
-        LabelCheck("Diameter", HoleLabelMode.Diameter,
-            tip: "Plan and 3D: \"Ø\" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter.");
-        LabelCheck("Elevation", HoleLabelMode.CollarZ,
-            tip: "Plan and 3D: \"Z\", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast.");
-        LabelCheck("Angle", HoleLabelMode.Angle,
-            tip: "Plan and 3D: \"α\", the angle from vertical. Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check.");
-        LabelCheck("Bearing", HoleLabelMode.Bearing,
-            tip: "Plan and 3D: \"Az\", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check.");
-        LabelCheck("Temperature", HoleLabelMode.Temperature,
-            tip: "Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations.");
         Check("Hole track", v => !v.CollarsOnly, v => v.CollarsOnly = !v.CollarsOnly, ui: true,
             tip: "Plan and 3D: the line from collar to toe with a dot at the toe. Shows the direction and inclination of the holes; display only, the calculations use the hole data whether it is on or off.");
         Check("Collar", v => v.ShowCollars, v => v.ShowCollars = !v.ShowCollars, ui: true,
@@ -710,28 +688,10 @@ public sealed class Inspector : DockPanel
             tip: "Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction.");
         Check("Deviation", v => v.ShowDeviation, v => v.ShowDeviation = !v.ShowDeviation, ui: true,
             tip: "Plan and 3D: red lines with \"Δ\" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check.");
-        LabelCheck("Explosive mass", HoleLabelMode.Charge,
-            tip: "Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration.");
         Check("Burden marker", v => v.ShowBurdenMarker, v => v.ShowBurdenMarker = !v.ShowBurdenMarker, ui: true,
             tip: "Plan: a dashed violet line with \"B\" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction.");
-        LabelCheck("Deck masses", HoleLabelMode.DeckMasses,
-            tip: "Plan and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay.");
         Check("MWD profile", v => v.ShowProfile, v => v.ShowProfile = !v.ShowProfile, ui: true,
             tip: "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.");
-        TimingCheck("Hole order", TimingLabelMode.HoleSequence,
-            tip: "Plan and 3D: the firing order of the hole top left of the collar, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis.");
-        LabelCheck("Deck sequence", HoleLabelMode.DeckSequence,
-            tip: "Plan and 3D: the firing order of the decks in the hole, top to bottom (\"2-1\" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes.");
-        TimingCheck("In-hole delay", TimingLabelMode.DelayNumber,
-            tip: "Plan and 3D: the in-hole detonator delay in ms, in red under the collar. It is added to the surface time to give the hole firing time.");
-        TimingCheck("Surface time", TimingLabelMode.SurfaceTime,
-            tip: "Plan and 3D: the time the surface signal reaches the collar in ms, in red under the collar. Comes from the ties and connectors; part of the hole firing time.");
-        LabelCheck("Detonator ID", HoleLabelMode.DetonatorId,
-            tip: "Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator.");
-        TimingCheck("Hole time", TimingLabelMode.InholeTime,
-            tip: "Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red under the collar. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.");
-        LabelCheck("Hole type", HoleLabelMode.Type,
-            tip: "Plan and 3D: \"T\" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.");
         _visibility.Children.Add(grid);
         _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole types"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         foreach (var t in p.Design.HoleTypes)
@@ -765,6 +725,247 @@ public sealed class Inspector : DockPanel
             surfaces.Expanded += (_, _) => _surfacesOpen = true;
             surfaces.Collapsed += (_, _) => _surfacesOpen = false;
             _visibility.Children.Add(surfaces);
+        }
+    }
+
+    /// <summary>Name and tip of each hole label: where it shows, what it is for and which calculations use the same data.</summary>
+    private static readonly Dictionary<HoleLabel, (string Name, string Tip)> LabelInfo = new()
+    {
+        [HoleLabel.Number] = ("Hole number", "Plan, 3D and printed plans: the hole number, in blue. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it."),
+        [HoleLabel.Length] = ("Length", "Plan and 3D: \"L\" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length."),
+        [HoleLabel.Diameter] = ("Diameter", "Plan and 3D: \"Ø\" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter."),
+        [HoleLabel.Elevation] = ("Elevation", "Plan and 3D: \"Z\", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast."),
+        [HoleLabel.Angle] = ("Angle", "Plan and 3D: \"α\", the angle from vertical. Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check."),
+        [HoleLabel.Bearing] = ("Bearing", "Plan and 3D: \"Az\", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check."),
+        [HoleLabel.Temperature] = ("Temperature", "Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations."),
+        [HoleLabel.ExplosiveMass] = ("Explosive mass", "Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration."),
+        [HoleLabel.DeckMasses] = ("Deck masses", "Plan and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay."),
+        [HoleLabel.HoleOrder] = ("Hole order", "Plan and 3D: the firing order of the hole, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis."),
+        [HoleLabel.DeckSequence] = ("Deck sequence", "Plan and 3D: the firing order of the decks in the hole, top to bottom (\"2-1\" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes."),
+        [HoleLabel.InholeDelay] = ("In-hole delay", "Plan and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time."),
+        [HoleLabel.SurfaceTime] = ("Surface time", "Plan and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time."),
+        [HoleLabel.DetonatorId] = ("Detonator ID", "Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator."),
+        [HoleLabel.HoleTime] = ("Hole time", "Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it."),
+        [HoleLabel.Type] = ("Hole type", "Plan and 3D: \"T\" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.")
+    };
+
+    // ---- hole labels: two sides of the collar, each in the order it is drawn -------------------------------------
+
+    private readonly Border _labelHost = new();
+    private Grid? _labelGrid;
+    private readonly List<Control>[] _labelRows = { new(), new() };
+    private readonly Border?[] _labelColumns = new Border?[2];
+    /// <summary>The row pressed (it starts a drag once the pointer moves) and whether a drag is on.</summary>
+    private (HoleLabel Label, bool Right, int Index, Point At)? _labelPress;
+    private bool _labelDragging;
+    private (bool Right, int Index)? _labelDrop;
+
+    private Control HoleLabelsHeader()
+    {
+        var reset = Ui.Chip(Loc.Ui("Default order"), () => ChangeLabels(HoleLabelLayout.Reset), tip: Loc.Ui("Put every label back on its usual side and in its usual order"));
+        reset.Height = 24;
+        var title = new TextBlock { Text = Loc.Ui("Hole labels"), Foreground = Look.Faint, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        var hint = new TextBlock
+        {
+            Text = Loc.Ui("Drag a label to the other side or along its side: the order is the order at the hole, top to bottom."),
+            Foreground = Look.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 6)
+        };
+        var top = new DockPanel { Margin = new Thickness(0, 10, 0, 0) };
+        DockPanel.SetDock(reset, Dock.Right);
+        top.Children.Add(reset);
+        top.Children.Add(title);
+        return new StackPanel { Children = { top, hint } };
+    }
+
+    /// <summary>The colour the label has on the plan: the number blue, the times red, the rest the text colour.</summary>
+    private static IBrush LabelColor(HoleLabel l) => l switch
+    {
+        HoleLabel.Number => Look.Blue,
+        HoleLabel.SurfaceTime or HoleLabel.InholeDelay or HoleLabel.HoleTime => new SolidColorBrush(Color.FromUInt32(0xFFEF4444)),
+        _ => Look.TextSoft
+    };
+
+    /// <summary>A change of the layout, then the columns again (after the event that made it).</summary>
+    private void ChangeLabels(Action<ViewState> change)
+    {
+        _vm.ToggleView(change);
+        Avalonia.Threading.Dispatcher.UIThread.Post(BuildLabelColumns);
+    }
+
+    private void ToggleLabel(HoleLabel l)
+    {
+        if (HoleLabelLayout.Flag(l) is { } f) _vm.ToggleView(v => v.HoleLabels ^= f);
+        else if (HoleLabelLayout.Timing(l) is { } t) _vm.ToggleTimingLabel(t);
+        Avalonia.Threading.Dispatcher.UIThread.Post(BuildLabelColumns);
+    }
+
+    private void BuildLabelColumns()
+    {
+        var p = _vm.Project;
+        if (p == null) return;
+        var (left, right) = HoleLabelLayout.Sides(p.View);
+        _labelPress = null;
+        _labelDragging = false;
+        _labelDrop = null;
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,6,*") };
+        for (int side = 0; side < 2; side++)
+        {
+            var list = side == 0 ? left : right;
+            var rows = _labelRows[side];
+            rows.Clear();
+            var stack = new StackPanel { Spacing = 1 };
+            var shown = list.Count(l => HoleLabelLayout.IsShown(p.View, l));
+            var head = new DockPanel { Margin = new Thickness(4, 0, 4, 4) };
+            var count = new TextBlock { Text = $"{shown}/{list.Count}", Foreground = Look.Faint, FontSize = 11 };
+            DockPanel.SetDock(count, Dock.Right);
+            head.Children.Add(count);
+            head.Children.Add(new TextBlock { Text = Loc.Ui(side == 0 ? "Left" : "Right"), Foreground = Look.Muted, FontSize = 11, FontWeight = FontWeight.SemiBold });
+            stack.Children.Add(head);
+            for (int i = 0; i < list.Count; i++)
+            {
+                var row = LabelRow(p.View, list[i], side == 1, i, list.Count);
+                rows.Add(row);
+                stack.Children.Add(row);
+            }
+            if (list.Count == 0) stack.Children.Add(new TextBlock { Text = Loc.Ui("Drag a label here"), Foreground = Look.Faint, FontSize = 11, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Margin = new Thickness(4, 14) });
+            var column = new Border
+            {
+                Name = side == 0 ? "labelsLeft" : "labelsRight",
+                Background = Look.Field, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(3, 6, 3, 4), Child = stack
+            };
+            _labelColumns[side] = column;
+            Grid.SetColumn(column, side * 2);
+            grid.Children.Add(column);
+        }
+        _labelGrid = grid;
+        _labelHost.Child = grid;
+    }
+
+    private Control LabelRow(ViewState view, HoleLabel label, bool right, int index, int count)
+    {
+        var (name, tip) = LabelInfo[label];
+        var on = HoleLabelLayout.IsShown(view, label);
+        var check = new CheckBox { IsChecked = on, MinWidth = 0, MinHeight = 0, Width = 20, Height = 22, Padding = new Thickness(0), Margin = new Thickness(0, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetName(check, Loc.Ui(name));
+        check.IsCheckedChanged += (_, _) => { if (check.IsChecked != HoleLabelLayout.IsShown(_vm.Project!.View, label)) ToggleLabel(label); };
+        var dot = new Border { Width = 6, Height = 6, CornerRadius = new CornerRadius(3), Background = LabelColor(label), Opacity = on ? 1 : 0.4, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center };
+        var text = new TextBlock { Text = Loc.Ui(name), FontSize = 12, Foreground = on ? Look.Text : Look.Muted, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3) };
+        var grip = new TextBlock { Text = "⋮⋮", FontSize = 9, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 1, 0) };
+        var line = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*") };
+        Grid.SetColumn(check, 1); Grid.SetColumn(dot, 2); Grid.SetColumn(text, 3);
+        line.Children.Add(grip); line.Children.Add(check); line.Children.Add(dot); line.Children.Add(text);
+
+        Button Small(string icon, string what, bool enabled, Action click)
+        {
+            var b = new Button { Content = Look.Icon(icon, 12, Look.TextSoft, 2), Width = 20, Height = 20, MinWidth = 0, MinHeight = 0, Padding = new Thickness(0), IsEnabled = enabled, VerticalAlignment = VerticalAlignment.Center };
+            b.Classes.Add("flat");
+            ToolTip.SetTip(b, Loc.Ui(what));
+            AutomationProperties.SetName(b, Loc.Ui(what));
+            b.Click += (_, _) => Ui.Safe(click);
+            return b;
+        }
+        // shown over the end of the name while the pointer is on the row; a long name takes a second line in a narrow panel
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Background = Look.Hover, IsVisible = false };
+        var move = Small(right ? "left" : "right", right ? "Move to the left side" : "Move to the right side", true,
+            () => ChangeLabels(v => HoleLabelLayout.Move(v, label, !right, int.MaxValue)));
+        move.Name = "moveLabel" + label;
+        if (right) buttons.Children.Add(move);
+        buttons.Children.Add(Small("up", "Move up", index > 0, () => ChangeLabels(v => HoleLabelLayout.Move(v, label, right, index - 1))));
+        buttons.Children.Add(Small("down", "Move down", index < count - 1, () => ChangeLabels(v => HoleLabelLayout.Move(v, label, right, index + 1))));
+        if (!right) buttons.Children.Add(move);
+
+        // where a dragged label would go: a line over this row, or under it for the end of the side
+        var above = new Border { Height = 2, Background = Look.Accent, VerticalAlignment = VerticalAlignment.Top, IsVisible = false, IsHitTestVisible = false, Margin = new Thickness(0, -2, 0, 0) };
+        var below = new Border { Height = 2, Background = Look.Accent, VerticalAlignment = VerticalAlignment.Bottom, IsVisible = false, IsHitTestVisible = false, Margin = new Thickness(0, 0, 0, -2) };
+        var row = new Border
+        {
+            Name = "label" + label,
+            MinHeight = 26, CornerRadius = new CornerRadius(5), Padding = new Thickness(2, 0), Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand),
+            Tag = (above, below),
+            Child = new Panel { Children = { line, buttons, above, below } }
+        };
+        ToolTip.SetTip(row, Loc.Ui(tip));
+        ToolTip.SetShowDelay(row, 700);
+        row.PointerEntered += (_, _) => { if (!_labelDragging) { row.Background = Look.Hover; buttons.IsVisible = true; } };
+        row.PointerExited += (_, _) => { if (!_labelDragging) { row.Background = Brushes.Transparent; buttons.IsVisible = false; } };
+        // the check box and the buttons take their own presses: a press anywhere else picks the row up
+        row.PointerPressed += (_, e) =>
+        {
+            if (_labelGrid == null || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
+            _labelPress = (label, right, index, e.GetPosition(_labelGrid));
+            e.Pointer.Capture(row);
+            e.Handled = true;
+        };
+        row.PointerMoved += (_, e) =>
+        {
+            if (_labelPress is not { } press || _labelGrid == null) return;
+            var at = e.GetPosition(_labelGrid);
+            if (!_labelDragging)
+            {
+                if (Math.Abs(at.X - press.At.X) + Math.Abs(at.Y - press.At.Y) < 5) return;
+                _labelDragging = true;
+                row.Opacity = 0.45;
+                buttons.IsVisible = false;
+            }
+            ShowLabelDrop(DropAt(at));
+        };
+        row.PointerReleased += (_, e) =>
+        {
+            if (_labelPress is not { } press) return;
+            var dragged = _labelDragging;
+            var drop = _labelDrop;
+            _labelPress = null;
+            _labelDragging = false;
+            e.Pointer.Capture(null);
+            // a click on the name switches the label, like its check box
+            if (!dragged) { ToggleLabel(label); return; }
+            ShowLabelDrop(null);
+            row.Opacity = 1;
+            if (drop is not { } d) return;
+            // the place was counted with the label still in it: past its old place on its own side is one less
+            var to = d.Index;
+            if (d.Right == press.Right && press.Index < to) to--;
+            if (d.Right == press.Right && to == press.Index) return;
+            ChangeLabels(v => HoleLabelLayout.Move(v, label, d.Right, to));
+        };
+        row.PointerCaptureLost += (_, _) =>
+        {
+            if (!_labelDragging) return;
+            _labelPress = null;
+            _labelDragging = false;
+            row.Opacity = 1;
+            ShowLabelDrop(null);
+        };
+        return row;
+    }
+
+    /// <summary>The side under a point of the columns and the place in it: before the first row whose middle is below.</summary>
+    private (bool Right, int Index) DropAt(Point at)
+    {
+        var right = at.X > _labelGrid!.Bounds.Width / 2;
+        var rows = _labelRows[right ? 1 : 0];
+        for (int i = 0; i < rows.Count; i++)
+            if (rows[i].TranslatePoint(new Point(0, rows[i].Bounds.Height / 2), _labelGrid) is { } mid && at.Y < mid.Y) return (right, i);
+        return (right, rows.Count);
+    }
+
+    private void ShowLabelDrop((bool Right, int Index)? drop)
+    {
+        _labelDrop = drop;
+        for (int side = 0; side < 2; side++)
+        {
+            var rows = _labelRows[side];
+            var here = drop is { } d && d.Right == (side == 1);
+            var index = drop?.Index ?? -1;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var (above, below) = ((Border, Border))rows[i].Tag!;
+                above.IsVisible = here && index == i;
+                below.IsVisible = here && index == rows.Count && i == rows.Count - 1;
+            }
+            // an empty side shows by its outline that it takes the label
+            if (_labelColumns[side] is { } column) column.BorderBrush = here && rows.Count == 0 ? Look.Accent : Look.Line;
         }
     }
 

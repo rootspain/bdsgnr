@@ -617,8 +617,12 @@ public sealed class Viewport : Control
         if (project == null) return;
         // the camera takes its size at render time; before the first frame (a window just opened) take it from the layout
         if (Bounds.Width >= 1 && Bounds.Height >= 1) { Camera.Width = Bounds.Width; Camera.Height = Bounds.Height; }
+        // only what is drawn: hidden layers, display switches, hole filters and hidden objects do not count
+        var visibleLayers = project.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
+        var hidden = OptionsSource?.Invoke().HiddenEntities;
         var b = Bounds3.Empty;
-        foreach (var e in project.Entities) if (e is not TieEntity) b.Add(e.GetBounds());
+        foreach (var e in project.Entities)
+            if (e is not TieEntity && visibleLayers.Contains(e.LayerId) && Shown(project, e, hidden)) b.Add(e.GetBounds());
         if (b.IsEmpty) { Camera.Target = Vec3.Zero; Camera.Scale = 5; }
         else Camera.Fit(b);
         CameraChanged?.Invoke();

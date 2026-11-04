@@ -976,51 +976,57 @@ public static class PlanRenderer
         var selected = opt.Selection.Contains(h.Id);
         text.Color = selected ? opt.SelectionColor : Ink;
         text.TextSize = 10;
-        var lines = new List<string>();
-        var m = view.HoleLabels;
-        var numbered = m.HasFlag(HoleLabelMode.Label);
-        if (numbered)
+        // each side top to bottom in the order of its list, the column centred on the collar; a label with nothing to
+        // say for this hole (no time yet, no detonator) leaves no gap
+        var (left, right) = HoleLabelLayout.Sides(view);
+        var number = selected ? opt.SelectionColor : new SKColor(_dark ? 0xFF60A5FAu : 0xFF1D4ED8u);
+        var timing = selected ? opt.SelectionColor : Adapt(new SKColor(0xFFB91C1C));
+        var ink = text.Color;
+        void Column(List<HoleLabel> side, bool onRight)
         {
-            // Hole number top right of the collar in blue, mirroring the hole order top left.
-            text.Color = selected ? opt.SelectionColor : new SKColor(_dark ? 0xFF60A5FAu : 0xFF1D4ED8u);
-            batch.Add(h.Label, x + r + 1, y - r - 2, text.Color, text.TextSize);
-            text.Color = selected ? opt.SelectionColor : Ink;
+            var lines = new List<(string Text, SKColor Color)>();
+            foreach (var l in side)
+                if (HoleLabelLayout.IsShown(view, l))
+                    foreach (var t in LabelText(project, h, l))
+                        lines.Add((t, l == HoleLabel.Number ? number : l is HoleLabel.SurfaceTime or HoleLabel.InholeDelay or HoleLabel.HoleTime ? timing : ink));
+            // 11 px a line; the first baseline puts the middle of the column at the collar centre
+            var top = y - lines.Count * 11 / 2f + 8;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var lx = onRight ? x + r + 2 : x - r - 2 - text.MeasureText(lines[i].Text);
+                batch.Add(lines[i].Text, lx, top + i * 11, lines[i].Color, text.TextSize);
+            }
         }
-        if (m.HasFlag(HoleLabelMode.Length)) lines.Add($"L {h.EffectiveLength:0.0}");
-        if (m.HasFlag(HoleLabelMode.Diameter)) lines.Add($"Ø {h.Diameter:0}");
-        if (m.HasFlag(HoleLabelMode.Angle)) lines.Add($"α {h.Angle:0}°");
-        if (m.HasFlag(HoleLabelMode.Bearing)) lines.Add($"Az {h.Bearing:0}°");
-        if (m.HasFlag(HoleLabelMode.CollarZ)) lines.Add($"Z {h.Collar.Z:0.0}");
-        if (m.HasFlag(HoleLabelMode.Charge)) lines.Add($"{Charging.ExplosiveMass(project, h):0.0} kg");
-        if (m.HasFlag(HoleLabelMode.DeckMasses))
-            foreach (var d in h.Decks.OrderBy(d => d.Top))
-                if (project.FindProduct(d.ProductId) is { IsExplosive: true }) lines.Add($"▪ {Charging.DeckMass(project, h, d):0.0} kg");
-        if (m.HasFlag(HoleLabelMode.DeckSequence) && DeckSequence(project, h) is string seq) lines.Add(F("Decks: {0}", seq));
-        if (m.HasFlag(HoleLabelMode.Temperature) && h.Temperature is double temp) lines.Add($"{temp:0} °C");
-        if (m.HasFlag(HoleLabelMode.DetonatorId) && !string.IsNullOrWhiteSpace(h.DetonatorId)) lines.Add(h.DetonatorId);
-        if (m.HasFlag(HoleLabelMode.Type)) lines.Add($"T{h.HoleType}");
-        // the other labels follow on the right, under the number
-        var first = numbered ? y - r + 9 : y - r;
-        for (int i = 0; i < lines.Count; i++) batch.Add(lines[i], x + r + 2, first + i * 11, text.Color, text.TextSize);
-
-        var timingLabels = new List<string>();
-        if ((view.ShowSurfaceTimeLabel || view.TimingLabels == TimingLabelMode.SurfaceTime) && h.SurfaceTimeMs is double s) timingLabels.Add($"{s:0}");
-        if ((view.ShowHoleTimeLabel || view.TimingLabels == TimingLabelMode.InholeTime) && h.FiringTimeMs is double f) timingLabels.Add($"{f:0}");
-        if ((view.ShowInholeDelayLabel || view.TimingLabels == TimingLabelMode.DelayNumber) && h.InholeDelayMs > 0) timingLabels.Add($"{h.InholeDelayMs:0}");
-        if ((view.ShowHoleSequenceLabel || view.TimingLabels == TimingLabelMode.HoleSequence) && h.FiringSequence is int sequence)
-        {
-            // Top left of the collar, clear of the labels on the right and the times below.
-            var order = sequence.ToString();
-            batch.Add(order, x - r - text.MeasureText(order) - 1, y - r - 2, text.Color, text.TextSize);
-        }
-        for (int i = 0; i < timingLabels.Count; i++)
-        {
-            var timing = timingLabels[i];
-            text.Color = Adapt(new SKColor(0xFFB91C1C));
-            var w = text.MeasureText(timing);
-            batch.Add(timing, x - w / 2, y + r + 11 + i * 11, text.Color, text.TextSize);
-        }
+        Column(left, false);
+        Column(right, true);
         text.TextSize = 11;
+    }
+
+    /// <summary>The lines of one label for a hole: none when the hole has no such value.</summary>
+    private static IEnumerable<string> LabelText(BlastProject project, Hole h, HoleLabel l)
+    {
+        switch (l)
+        {
+            case HoleLabel.Number: yield return h.Label; break;
+            case HoleLabel.Length: yield return $"L {h.EffectiveLength:0.0}"; break;
+            case HoleLabel.Diameter: yield return $"Ø {h.Diameter:0}"; break;
+            case HoleLabel.Angle: yield return $"α {h.Angle:0}°"; break;
+            case HoleLabel.Bearing: yield return $"Az {h.Bearing:0}°"; break;
+            case HoleLabel.Elevation: yield return $"Z {h.Collar.Z:0.0}"; break;
+            case HoleLabel.ExplosiveMass: yield return $"{Charging.ExplosiveMass(project, h):0.0} kg"; break;
+            case HoleLabel.DeckMasses:
+                foreach (var d in h.Decks.OrderBy(d => d.Top))
+                    if (project.FindProduct(d.ProductId) is { IsExplosive: true }) yield return $"▪ {Charging.DeckMass(project, h, d):0.0} kg";
+                break;
+            case HoleLabel.DeckSequence: if (DeckSequence(project, h) is string seq) yield return F("Decks: {0}", seq); break;
+            case HoleLabel.Temperature: if (h.Temperature is double temp) yield return $"{temp:0} °C"; break;
+            case HoleLabel.DetonatorId: if (!string.IsNullOrWhiteSpace(h.DetonatorId)) yield return h.DetonatorId; break;
+            case HoleLabel.Type: yield return $"T{h.HoleType}"; break;
+            case HoleLabel.HoleOrder: if (h.FiringSequence is int sequence) yield return sequence.ToString(); break;
+            case HoleLabel.SurfaceTime: if (h.SurfaceTimeMs is double s) yield return $"{s:0}"; break;
+            case HoleLabel.InholeDelay: if (h.InholeDelayMs > 0) yield return $"{h.InholeDelayMs:0}"; break;
+            case HoleLabel.HoleTime: if (h.FiringTimeMs is double f) yield return $"{f:0}"; break;
+        }
     }
 
     /// <summary>
@@ -1285,6 +1291,8 @@ public static class PlanRenderer
     private static void DrawHoleLegend(SKCanvas c, BlastProject project, List<Hole> holes, SKPaint fill, SKPaint text)
     {
         var used = holes.Select(h => h.HoleType).Distinct().OrderBy(x => x).ToList();
+        // one type (or none) tells nothing a legend is for
+        if (used.Count <= 1) return;
         float x = 10, y = 20 + _topInset;
         foreach (var t in used)
         {

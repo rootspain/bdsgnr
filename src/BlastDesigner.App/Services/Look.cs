@@ -168,6 +168,7 @@ public static class Look
         ["down"] = "M6 9l6 6 6-6",
         ["up"] = "M6 15l6-6 6 6",
         ["right"] = "M9 6l6 6-6 6",
+        ["left"] = "M15 6l-6 6 6 6",
         ["plus"] = "M12 5v14 M5 12h14",
         ["split"] = "M4 12h16 M8 8l4-4 4 4 M8 16l4 4 4-4",
         ["trash"] = "M4 7h16 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3",

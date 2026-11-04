@@ -165,7 +165,7 @@ public sealed class PropertiesPanel : DockPanel
         if (sel.Any(e => e.GetType() != first.GetType()))
         {
             _header.Text = Loc.F("{0} objects", sel.Count);
-            _content.Content = new TextBlock { Text = string.Join("\n", sel.GroupBy(e => Loc.T(e.KindName)).Select(g => $"{g.Key}: {g.Count()}")), Margin = new Thickness(6) };
+            _content.Content = new StackPanel { Children = { LayerRow(doc, sel), new TextBlock { Text = string.Join("\n", sel.GroupBy(e => Loc.T(e.KindName)).Select(g => $"{g.Key}: {g.Count()}")), Margin = new Thickness(6) } } };
             return;
         }
         _header.Text = sel.Count == 1 ? Loc.T(first.KindName) : $"{Loc.T(first.KindName)} × {sel.Count}";
@@ -188,7 +188,7 @@ public sealed class PropertiesPanel : DockPanel
                 }
             });
         };
-        var panel = new StackPanel();
+        var panel = new StackPanel { Children = { LayerRow(doc, sel) } };
         if (first is Hole hole)
         {
             panel.Children.Add(new TextBlock { Text = Loc.T("Charge"), Classes = { "caption" } });
@@ -214,6 +214,43 @@ public sealed class PropertiesPanel : DockPanel
         }
         panel.Children.Add(grid);
         _content.Content = panel;
+    }
+
+    /// <summary>
+    /// The layer of the selection, laid out like a row of the property grid: picking another one moves the selection
+    /// there; several layers show as mixed.
+    /// </summary>
+    private Control LayerRow(Document doc, List<Entity> sel)
+    {
+        var layers = doc.Project.Layers;
+        var mixed = sel.Any(e => e.LayerId != sel[0].LayerId);
+        var combo = new ComboBox
+        {
+            Name = "selectionLayer",
+            ItemsSource = layers.ToList(),
+            // a template, not ready controls: the box then draws the chosen layer like any other item
+            // (no layer while the box is taken down with the panel)
+            ItemTemplate = new FuncDataTemplate<Layer>((l, _) => l == null ? new TextBlock() : Ui.Row(8,
+                new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromUInt32(l.Color)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center },
+                new TextBlock { Text = Loc.Name(l.Name), VerticalAlignment = VerticalAlignment.Center })),
+            SelectedIndex = mixed ? -1 : layers.FindIndex(l => l.Id == sel[0].LayerId),
+            PlaceholderText = Loc.T("(mixed)"),
+            MinWidth = 160,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            IsEnabled = !doc.IsReadOnly,
+            Margin = new Thickness(0, 2)
+        };
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (combo.SelectedIndex < 0) return;
+            var layer = layers[combo.SelectedIndex];
+            if (sel.Any(e => e.LayerId != layer.Id)) _vm.MoveSelectionToLayer(layer);
+        };
+        var label = new TextBlock { Text = Loc.T("Layer"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 8, 2) };
+        Grid.SetColumn(combo, 1);
+        // the columns and margin of the property grid under it, so the row lines up with its fields
+        return new Grid { ColumnDefinitions = new ColumnDefinitions("2*,3*"), Margin = new Thickness(4, 4, 4, 0), Children = { label, combo } };
     }
 
     private static string ChargeText(BlastProject p, Hole h)
