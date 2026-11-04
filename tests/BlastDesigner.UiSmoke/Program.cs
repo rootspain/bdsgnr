@@ -597,7 +597,7 @@ Step("visualization window: the scrub bar shrinks with the window, no x3, half s
     w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "30b_visualization_narrow.png"));
     BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
 });
-Step("fragmentation inputs: rock factor A and Protodyakonov f, linked through the strength", () =>
+Step("fragmentation inputs: rock factor A and Protodyakonov f, matched by the blastability table", () =>
 {
     var form = new FragmentationForm(vm.Project!);
     var w = new Window { Width = 640, Height = 760, Content = form, Background = BlastDesigner.App.Services.Look.Ground };
@@ -606,35 +606,74 @@ Step("fragmentation inputs: rock factor A and Protodyakonov f, linked through th
     void Type(string name, string text) { var b = Box(name); b.Text = text; b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
     double Shown(string name) => double.Parse(Box(name).Text!.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture);
     TextBlock Warning(string name) => form.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == name);
-    // f sets the strength and A follows from it
+    Slider Slide(string name) => form.GetLogicalDescendants().OfType<Slider>().First(x => x.Name == name);
+    // f sets the strength; A takes the same share of the range of the A table, rounded: f 15 is 75 % of 0.3…20,
+    // 75 % of A 0.6…18 is 13.6, A 14; no formula
     Type("protodyakonovF", "15");
-    if (form.Draft.Ucs != 150 || form.Draft.RockFactor != 0) throw new Exception($"f = 15 should give σc 150 MPa and a calculated A: σc {form.Draft.Ucs}, A {form.Draft.RockFactor}");
-    var expected = Fragmentation.RockFactor(form.Draft, vm.Project!.Design.RockDensity);
-    if (Math.Abs(Shown("rockFactorA") - expected) > 0.01) throw new Exception($"A shows {Box("rockFactorA").Text}, calculated {expected:0.##}");
-    var calc = form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "calcFromF");
-    if (calc.IsVisible) throw new Exception("Calculate from f offered while A is calculated");
-    // A typed in moves f while it is typed (no Enter): massive rock, ρ 2.6: A 6 = 0.06·(50 + 15 + 2f), f 17.5
-    if (vm.Project.Design.RockDensity != 2.6 || form.Draft.RockMassDescription != 50 || form.Draft.YoungsModulus < 50) throw new Exception("the sample's rock is not the one this check assumes");
-    Box("rockFactorA").Text = "6"; Pump();
-    if (Math.Abs(form.Draft.Ucs - 175) > 1e-6 || form.Draft.RockFactor != 0 || Math.Abs(Shown("protodyakonovF") - 17.5) > 1e-9 || Box("rockFactorA").Text != "6")
-        throw new Exception($"A 6 typed in should give f 17.5 at once: σc {form.Draft.Ucs}, f shown {Box("protodyakonovF").Text}, A {Box("rockFactorA").Text}");
-    // and f typed in moves A the same way
-    Box("protodyakonovF").Text = "10"; Pump();
-    if (Math.Abs(Shown("rockFactorA") - 0.06 * (50 + 15 + 20)) > 0.01) throw new Exception("f 10 typed in should give A 5.1 at once: " + Box("rockFactorA").Text);
-    // A 9 needs f 42.5 here: within the allowed 0…50, so f follows (and is flagged above the usual 40)
-    Type("rockFactorA", "9");
-    if (form.Draft.RockFactor != 0 || Math.Abs(Shown("protodyakonovF") - 42.5) > 1e-9 || !Warning("protodyakonovFWarning").IsVisible)
-        throw new Exception($"A 9 should give f 42.5: A {form.Draft.RockFactor}, f {Box("protodyakonovF").Text}");
-    // an A that f cannot give with this rock mass (f would be 67.5) is kept as typed, f goes as near as it can and the field says why
-    Type("rockFactorA", "12");
-    if (form.Draft.RockFactor != 12 || form.RockFactor != 12 || !calc.IsVisible || Shown("protodyakonovF") != 50 || !Warning("rockFactorAWarning").IsVisible)
-        throw new Exception($"A 12 cannot come from f here: kept {form.Draft.RockFactor}, f {Box("protodyakonovF").Text}");
+    if (form.Draft.Ucs != 150 || form.Draft.RockFactor != 14 || !form.Draft.RockFactorSet || Shown("rockFactorA") != 14)
+        throw new Exception($"f 15 should give σc 150 MPa and A 14 from the table: σc {form.Draft.Ucs}, A {form.Draft.RockFactor}");
+    if (form.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "calcFromF")) throw new Exception("Calculate from f is still offered");
+    // A typed in puts the matching f while it is typed (no Enter): A 4 is 20 % of 0.6…18, f 4.1, rounded 4
+    Box("rockFactorA").Text = "4"; Pump();
+    if (form.Draft.RockFactor != 4 || Math.Abs(form.Draft.Ucs - 40) > 1e-9 || Shown("protodyakonovF") != 4 || Box("rockFactorA").Text != "4")
+        throw new Exception($"A 4 typed in should give f 4 at once: σc {form.Draft.Ucs}, f shown {Box("protodyakonovF").Text}, A {Box("rockFactorA").Text}");
+    // the rock mass no longer moves A
+    var massive = form.Draft.RockFactor;
+    var jointedChip = form.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "mass:Jointed");
+    jointedChip.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (form.Draft.RockFactor != massive || form.RockFactor != massive) throw new Exception("the rock mass changed A: " + form.RockFactor);
+    form.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "mass:Massive").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    // the sliders go in steps of 1, one for each value of their table: 0, the MinVal of each row, the last MaxVal; A also
+    // the MaxVal of each row and the whole numbers inside the rows (A 0, 0.6, 1, 2, 3 … 18; f 0, 0.3 … 20); moving one
+    // puts in the matching value of the other table; each describes its value under it
+    var aSlider = Slide("rockFactorASlider");
+    var fSlider = Slide("protodyakonovFSlider");
+    if (ToolTip.GetTip(aSlider) != null || ToolTip.GetTip(fSlider) != null) throw new Exception("the sliders still have tooltips");
+    aSlider.Value = 0; Pump();
+    if (form.RockFactor != 0 || !form.Draft.RockFactorSet || form.Draft.Ucs != 0 || fSlider.Value != 0)
+        throw new Exception($"the left end should be A 0, f 0: A {form.RockFactor}, f {Box("protodyakonovF").Text}, f slider {fSlider.Value}");
+    if (aSlider.Maximum != 19 || fSlider.Maximum != 15 || aSlider.TickFrequency != 1 || fSlider.TickFrequency != 1) throw new Exception($"slider steps: A {aSlider.Maximum}, f {fSlider.Maximum}");
+    // a value within its table never leaves the other 0: A 0.6 would round f 0.3 to 0, f takes 0.3 (its lowest)
+    aSlider.Value = 1; Pump();
+    if (form.RockFactor != 0.6 || Math.Abs(form.Draft.Ucs - 3) > 1e-9) throw new Exception($"A 0.6 should give f 0.3, not 0: f {form.Draft.Ucs / 10}");
+    // below its table the other one stays 0 by the rounding: A 0.4 gives f 0
+    Box("rockFactorA").Text = "0,4"; Pump();
+    if (form.Draft.Ucs != 0) throw new Exception($"A 0.4 should give f 0: f {form.Draft.Ucs / 10}");
+    fSlider.Value = 5; Pump();
+    if (Math.Abs(form.Draft.Ucs - 10) > 1e-9 || form.RockFactor != 1 || aSlider.Value != 2) throw new Exception($"f step 5 should be f 1 (VII), A 1.2 rounded 1: f {form.Draft.Ucs / 10}, A {form.RockFactor}");
+    aSlider.Value = 2; Pump();
+    if (form.RockFactor != 1) throw new Exception($"A step 2 should be A 1 (inside soft rock 0.6–2): {form.RockFactor}");
+    aSlider.Value = 4; Pump();
+    if (Math.Abs(form.Draft.Ucs - 30) > 1e-9 || form.RockFactor != 3 || fSlider.Value != 8) throw new Exception($"A step 4 should be A 3, f 3.0 rounded 3: f {form.Draft.Ucs / 10}, A {form.RockFactor}, f slider {fSlider.Value}");
+    // a value typed puts the slider at the last step not above it, 0 below the first MinVal
+    Box("rockFactorA").Text = "0,4"; Pump();
+    if (aSlider.Value != 0) throw new Exception($"A 0.4 should put the slider at 0: {aSlider.Value}");
+    Box("rockFactorA").Text = "15,5"; Pump();
+    if (aSlider.Value != 16) throw new Exception($"A 15.5 should put the slider at 15: {aSlider.Value}");
+    aSlider.Value = aSlider.Maximum; Pump();
+    if (form.RockFactor != 18) throw new Exception($"A last step should be A 18: {form.RockFactor}");
+    // the ends match each other, and f → A → f comes back: f 15 gives A 14, A 14 gives f 15
+    if (form.Draft.Ucs != 200) throw new Exception($"A 18 should give f 20: {form.Draft.Ucs / 10}");
+    Type("protodyakonovF", "15");
+    if (form.RockFactor != 14) throw new Exception($"f 15 should give A 14: {form.RockFactor}");
+    Type("rockFactorA", "13");
+    Type("rockFactorA", "14");
+    if (form.Draft.Ucs != 150) throw new Exception($"A 14 should give f 15 back: {form.Draft.Ucs / 10}");
+    // A between the ranges of the table (7…8) says between which rock types it is
+    Box("rockFactorA").Text = "7,5"; Pump();
+    var between = form.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "rockFactorACategory").Text ?? "";
+    if (!between.Contains(BlastDesigner.App.Services.Loc.Ui("Medium strength")) || !between.Contains(BlastDesigner.App.Services.Loc.Ui("Strong rock")))
+        throw new Exception("A 7.5 should read between medium strength and strong rock: " + between);
+    fSlider.Value = fSlider.Maximum; Pump();
+    if (form.Draft.Ucs != 200 || form.Draft.RockFactor != 18 || aSlider.Value != aSlider.Maximum) throw new Exception($"the f slider end should be f 20 (I), A 18: A {form.Draft.RockFactor}, slider {aSlider.Value}");
+    // under f the Protodyakonov category, under A the rock type
+    string Described(string name) => form.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == name).Text ?? "";
+    if (!Described("protodyakonovFCategory").StartsWith(BlastDesigner.App.Services.Loc.Ui("I (highest strength)"))
+        || !Described("rockFactorACategory").Contains(BlastDesigner.App.Services.Loc.Ui("Extremely strong rock")))
+        throw new Exception("f 20 should read category I and extremely strong rock: " + Described("protodyakonovFCategory") + " | " + Described("rockFactorACategory"));
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "31_fragmentation_inputs.png"));
-    calc.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
-    // back to A from f, which went to 50 for the A 12: 0.06·(50 + 15 + 100)
-    if (form.Draft.RockFactor != 0 || Math.Abs(Shown("rockFactorA") - 9.9) > 0.01) throw new Exception("Calculate from f did not bring the calculated A back: " + Box("rockFactorA").Text);
-    // hard limits cut an entry to 0…50 (f) and 0…25 (A); outside the usual range (f 0.3…40, A 0.8…22) the field is flagged
+    // hard limits cut an entry to 0…50 (f) and 0…25 (A); outside the range of the table (f 0.3…20, A 0.6…18) the field is flagged
     Type("protodyakonovF", "60");
     if (form.Draft.Ucs != 500 || Box("protodyakonovF").Text != "50" || !Warning("protodyakonovFWarning").IsVisible) throw new Exception($"f 60 should be cut to 50 and said so: σc {form.Draft.Ucs}, shown {Box("protodyakonovF").Text}");
     Type("protodyakonovF", "0,2");
@@ -645,9 +684,12 @@ Step("fragmentation inputs: rock factor A and Protodyakonov f, linked through th
     if (form.Draft.RockFactor != 25 || !Warning("rockFactorAWarning").IsVisible) throw new Exception($"A 30 should be cut to 25: {form.Draft.RockFactor}");
     Type("rockFactorA", "0,5");
     if (form.Draft.RockFactor != 0.5 || !Warning("rockFactorAWarning").IsVisible) throw new Exception("A 0.5 should be taken and flagged");
+    Type("rockFactorA", "0,6");
+    if (Warning("rockFactorAWarning").IsVisible) throw new Exception("A 0.6, the lowest A of the table, flagged");
+    Type("rockFactorA", "20");
+    if (!Warning("rockFactorAWarning").IsVisible) throw new Exception("A 20, above the table, not flagged");
     Type("rockFactorA", "6");
     if (Warning("rockFactorAWarning").IsVisible) throw new Exception("A 6 flagged");
-    calc.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     // the jointed mass shows its joint factor, the others hide it
     var jointed = form.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "mass:Jointed");
     jointed.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
@@ -662,7 +704,7 @@ Step("fragmentation inputs: rock factor A and Protodyakonov f, linked through th
     var w2 = new Window { Width = 640, Height = 760, Content = again, Background = BlastDesigner.App.Services.Look.Ground };
     w2.Show(); Pump();
     again.LoadPreset(preset); Pump();
-    if (again.Draft.Ucs != 70 || again.Draft.OversizeCm != 80 || again.Draft.RockMassDescription != 0 || again.Draft.RockFactor != 0)
+    if (again.Draft.Ucs != 70 || again.Draft.OversizeCm != 80 || again.Draft.RockMassDescription != 0 || again.Draft.RockFactor != 7 || !again.Draft.RockFactorSet)
         throw new Exception($"preset not loaded: σc {again.Draft.Ucs}, oversize {again.Draft.OversizeCm}, RMD {again.Draft.RockMassDescription}, A {again.Draft.RockFactor}");
     if (again.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "protodyakonovF").Text != "7") throw new Exception("the loaded preset is not shown");
     w2.Close(); Pump();

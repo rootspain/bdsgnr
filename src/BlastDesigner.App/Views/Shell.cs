@@ -181,7 +181,7 @@ public sealed class RibbonBar : DockPanel
     {
         _vm = vm;
         _stages = vm.BuildStages();
-        var nav = new DockPanel { Background = Look.Panel, Height = 38 };
+        var nav = new DockPanel { Background = Look.Panel, Height = 30 };
         var hint = new TextBlock { Text = Loc.Ui("Alt+1…7 — switch stage"), Foreground = Look.Faint, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0) };
         DockPanel.SetDock(hint, Dock.Right);
         nav.Children.Add(hint);
@@ -217,7 +217,7 @@ public sealed class RibbonBar : DockPanel
             {
                 Content = Ui.Row(6, new TextBlock { Text = (i + 1).ToString(), FontFamily = Look.Mono, FontSize = 10, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
                     new TextBlock { Text = Loc.Ui(_stages[i].Name), FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal, Foreground = active ? Look.Accent : Look.Muted }),
-                Height = 38,
+                Height = 30,
                 Padding = new Thickness(14, 0),
                 CornerRadius = new CornerRadius(6, 6, 0, 0),
                 Background = active ? Look.Ribbon : Brushes.Transparent,
@@ -649,17 +649,20 @@ public sealed class Inspector : DockPanel
             cb.VerticalAlignment = VerticalAlignment.Top;
             grid!.Children.Add(cb);
         }
-        void Check(string label, Func<ViewState, bool> get, Action<ViewState> toggle, bool ui = false)
+        // tip: where the item shows, what it is for and which calculations use the same data
+        void Check(string label, Func<ViewState, bool> get, Action<ViewState> toggle, bool ui = false, string? tip = null)
         {
             var cb = new CheckBox { Content = ui ? Loc.Ui(label) : Loc.T(label), IsChecked = get(p.View) };
+            if (tip != null) ToolTip.SetTip(cb, Loc.Ui(tip));
             cb.IsCheckedChanged += (_, _) => { if (cb.IsChecked != get(p.View)) _vm.ToggleView(toggle); };
             Add(cb);
         }
-        void LabelCheck(string label, HoleLabelMode flag) =>
-            Check(label, v => v.HoleLabels.HasFlag(flag), v => v.HoleLabels ^= flag, ui: true);
-        void TimingCheck(string label, TimingLabelMode mode)
+        void LabelCheck(string label, HoleLabelMode flag, string? tip = null) =>
+            Check(label, v => v.HoleLabels.HasFlag(flag), v => v.HoleLabels ^= flag, ui: true, tip: tip);
+        void TimingCheck(string label, TimingLabelMode mode, string? tip = null)
         {
             var cb = new CheckBox { Content = Loc.Ui(label), IsChecked = _vm.IsTimingLabelVisible(mode) };
+            if (tip != null) ToolTip.SetTip(cb, Loc.Ui(tip));
             cb.IsCheckedChanged += (_, _) =>
             {
                 if (cb.IsChecked != _vm.IsTimingLabelVisible(mode))
@@ -679,31 +682,56 @@ public sealed class Inspector : DockPanel
 
         _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Holes"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         grid = Columns();
-        LabelCheck("Hole number", HoleLabelMode.Label);
-        LabelCheck("Length", HoleLabelMode.Length);
-        LabelCheck("Diameter", HoleLabelMode.Diameter);
-        LabelCheck("Elevation", HoleLabelMode.CollarZ);
-        LabelCheck("Angle", HoleLabelMode.Angle);
-        LabelCheck("Bearing", HoleLabelMode.Bearing);
-        LabelCheck("Temperature", HoleLabelMode.Temperature);
-        Check("Hole track", v => !v.CollarsOnly, v => v.CollarsOnly = !v.CollarsOnly, ui: true);
-        Check("Collar", v => v.ShowCollars, v => v.ShowCollars = !v.ShowCollars, ui: true);
-        Check("Dip track", v => v.ShowDipTrack, v => v.ShowDipTrack = !v.ShowDipTrack, ui: true);
-        Check("Charge track", v => v.ShowLoading, v => v.ShowLoading = !v.ShowLoading, ui: true);
-        Check("Actual track", v => v.ShowActualTrack, v => v.ShowActualTrack = !v.ShowActualTrack, ui: true);
-        Check("Grade point", v => v.ShowGradePoint, v => v.ShowGradePoint = !v.ShowGradePoint, ui: true);
-        Check("Deviation", v => v.ShowDeviation, v => v.ShowDeviation = !v.ShowDeviation, ui: true);
-        LabelCheck("Explosive mass", HoleLabelMode.Charge);
-        Check("Burden marker", v => v.ShowBurdenMarker, v => v.ShowBurdenMarker = !v.ShowBurdenMarker, ui: true);
-        LabelCheck("Deck masses", HoleLabelMode.DeckMasses);
-        Check("MWD profile", v => v.ShowProfile, v => v.ShowProfile = !v.ShowProfile, ui: true);
-        TimingCheck("Hole order", TimingLabelMode.HoleSequence);
-        LabelCheck("Deck sequence", HoleLabelMode.DeckSequence);
-        TimingCheck("In-hole delay", TimingLabelMode.DelayNumber);
-        TimingCheck("Surface time", TimingLabelMode.SurfaceTime);
-        LabelCheck("Detonator ID", HoleLabelMode.DetonatorId);
-        TimingCheck("Hole time", TimingLabelMode.InholeTime);
-        LabelCheck("Hole type", HoleLabelMode.Type);
+        LabelCheck("Hole number", HoleLabelMode.Label,
+            tip: "Plan, 3D and printed plans: the hole number in blue top right of the collar. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it.");
+        LabelCheck("Length", HoleLabelMode.Length,
+            tip: "Plan and 3D: \"L\" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length.");
+        LabelCheck("Diameter", HoleLabelMode.Diameter,
+            tip: "Plan and 3D: \"Ø\" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter.");
+        LabelCheck("Elevation", HoleLabelMode.CollarZ,
+            tip: "Plan and 3D: \"Z\", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast.");
+        LabelCheck("Angle", HoleLabelMode.Angle,
+            tip: "Plan and 3D: \"α\", the angle from vertical. Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check.");
+        LabelCheck("Bearing", HoleLabelMode.Bearing,
+            tip: "Plan and 3D: \"Az\", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check.");
+        LabelCheck("Temperature", HoleLabelMode.Temperature,
+            tip: "Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations.");
+        Check("Hole track", v => !v.CollarsOnly, v => v.CollarsOnly = !v.CollarsOnly, ui: true,
+            tip: "Plan and 3D: the line from collar to toe with a dot at the toe. Shows the direction and inclination of the holes; display only, the calculations use the hole data whether it is on or off.");
+        Check("Collar", v => v.ShowCollars, v => v.ShowCollars = !v.ShowCollars, ui: true,
+            tip: "Plan and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only.");
+        Check("Dip track", v => v.ShowDipTrack, v => v.ShowDipTrack = !v.ShowDipTrack, ui: true,
+            tip: "Plan and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check.");
+        Check("Charge track", v => v.ShowLoading, v => v.ShowLoading = !v.ShowLoading, ui: true,
+            tip: "Plan and 3D: the decks along the hole in their product colours, and the collar filled with the explosive colour. Shows the loaded column; the same decks give the explosive mass, quantities, costs and the vibration charge.");
+        Check("Actual track", v => v.ShowActualTrack, v => v.ShowActualTrack = !v.ShowActualTrack, ui: true,
+            tip: "Plan and 3D: the surveyed bore track, dashed orange, only for surveyed holes. Used by the drilling tolerance check (toe, angle and bearing deviation) and the dashboard quality figures.");
+        Check("Grade point", v => v.ShowGradePoint, v => v.ShowGradePoint = !v.ShowGradePoint, ui: true,
+            tip: "Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction.");
+        Check("Deviation", v => v.ShowDeviation, v => v.ShowDeviation = !v.ShowDeviation, ui: true,
+            tip: "Plan and 3D: red lines with \"Δ\" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check.");
+        LabelCheck("Explosive mass", HoleLabelMode.Charge,
+            tip: "Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration.");
+        Check("Burden marker", v => v.ShowBurdenMarker, v => v.ShowBurdenMarker = !v.ShowBurdenMarker, ui: true,
+            tip: "Plan: a dashed violet line with \"B\" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction.");
+        LabelCheck("Deck masses", HoleLabelMode.DeckMasses,
+            tip: "Plan and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay.");
+        Check("MWD profile", v => v.ShowProfile, v => v.ShowProfile = !v.ShowProfile, ui: true,
+            tip: "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.");
+        TimingCheck("Hole order", TimingLabelMode.HoleSequence,
+            tip: "Plan and 3D: the firing order of the hole top left of the collar, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis.");
+        LabelCheck("Deck sequence", HoleLabelMode.DeckSequence,
+            tip: "Plan and 3D: the firing order of the decks in the hole, top to bottom (\"2-1\" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes.");
+        TimingCheck("In-hole delay", TimingLabelMode.DelayNumber,
+            tip: "Plan and 3D: the in-hole detonator delay in ms, in red under the collar. It is added to the surface time to give the hole firing time.");
+        TimingCheck("Surface time", TimingLabelMode.SurfaceTime,
+            tip: "Plan and 3D: the time the surface signal reaches the collar in ms, in red under the collar. Comes from the ties and connectors; part of the hole firing time.");
+        LabelCheck("Detonator ID", HoleLabelMode.DetonatorId,
+            tip: "Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator.");
+        TimingCheck("Hole time", TimingLabelMode.InholeTime,
+            tip: "Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red under the collar. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.");
+        LabelCheck("Hole type", HoleLabelMode.Type,
+            tip: "Plan and 3D: \"T\" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.");
         _visibility.Children.Add(grid);
         _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole types"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         foreach (var t in p.Design.HoleTypes)

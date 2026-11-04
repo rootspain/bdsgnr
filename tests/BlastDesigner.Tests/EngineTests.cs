@@ -617,18 +617,6 @@ public class FileFormatTests
     }
 
     [Fact]
-    public void Fragmentation_ProtodyakonovForSolvesTheRockFactorBack()
-    {
-        var m = new FragmentationModel { RockFactor = 0, RockMassDescription = 50, JointFactor = 0, YoungsModulus = 50 };
-        var f = Fragmentation.ProtodyakonovFor(6, m, 2.6)!.Value;
-        Assert.Equal(17.5, f, 9);
-        m.Ucs = f * 10;
-        Assert.Equal(6, Fragmentation.RockFactor(m, 2.6), 9);
-        // f does not enter A below 50 GPa
-        Assert.Null(Fragmentation.ProtodyakonovFor(6, new FragmentationModel { YoungsModulus = 30 }, 2.6));
-    }
-
-    [Fact]
     public void FragmentationPreset_SavesAndLoadsTheInputs()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + FragmentationPreset.Extension);

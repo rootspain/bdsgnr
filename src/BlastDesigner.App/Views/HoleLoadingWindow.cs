@@ -420,6 +420,12 @@ public static class HoleLoadingWindow
             Content = editor
         };
         editor.Closing = ok => { editor.Applied = ok; w.Close(); };
+        editor.StoreMinStemming = diameters =>
+        {
+            vm.Settings.MinStemmingDiameters = Charging.MinStemmingDiameters = diameters;
+            vm.Settings.Save();
+            vm.View.Redraw();
+        };
         editor.StoreRule = rule => vm.Change("Save loading rule", p =>
         {
             var i = p.LoadingRules.FindIndex(r => r.Id == rule.Id);
@@ -512,6 +518,8 @@ public sealed class HoleLoadingEditor : DockPanel
     public List<(bool Ok, string Text)> Checks { get; } = new();
 
     public Action<bool>? Closing { get; set; }
+    /// <summary>Takes the minimum stemming in diameters edited in its check and keeps it in the program settings.</summary>
+    public Action<double>? StoreMinStemming { get; set; }
 
     private Deck? Sel => Selected >= 0 && Selected < Decks.Count ? Decks[Selected] : null;
 
@@ -1252,12 +1260,14 @@ public sealed class HoleLoadingEditor : DockPanel
 
         _checks.Children.Clear();
         Checks.Clear();
-        void Check(bool ok, string text)
+        TextBlock CheckText(string text) => new() { Text = text, FontSize = 12.5, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+        void Check(bool ok, string text, params Control[] content)
         {
             Checks.Add((ok, text));
-            _checks.Children.Add(Ui.Row(8,
-            Look.Icon(ok ? "okc" : "warn", 15, ok ? Ok : Warn),
-            new TextBlock { Text = text, FontSize = 12.5, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center }));
+            var row = Ui.Row(8, Look.Icon(ok ? "okc" : "warn", 15, ok ? Ok : Warn));
+            if (content.Length == 0) row.Children.Add(CheckText(text));
+            else foreach (var c in content) row.Children.Add(c);
+            _checks.Children.Add(row);
         }
         var noPrimer = expl.Count(d => d.Primers.Count == 0);
         Check(noPrimer == 0 && expl.Count > 0, expl.Count == 0 ? L("No explosive in the hole, nowhere to put a primer")
@@ -1269,10 +1279,57 @@ public sealed class HoleLoadingEditor : DockPanel
             : Loc.F("The column does not cover {0} m of {1} m", N(gap), N(len)));
         var minStem = Charging.MinStemming(hole);
         var stemLen = Decks.Count > 0 ? stem : 0;
-        Check(stemLen >= minStem - 1e-6, stemLen >= minStem - 1e-6 ? Loc.F("Stemming {0} m, at least 25 diameters", N(stemLen))
-            : Loc.F("Stemming {0} m, less than 25 diameters ({1} m)", N(stemLen), N(minStem)));
+        var diameters = N(Charging.MinStemmingDiameters, "0.#");
+        var stemOk = stemLen >= minStem - 1e-6;
+        // the minimum to the centimetre: rounded to 0.1 m a stemming equal to it could read as longer than the minimum shown
+        var stemFormat = stemOk ? "Stemming {0} m, at least {1} diameters" : "Stemming {0} m, less than {1} diameters ({2} m)";
+        // the number of diameters is a field inside the sentence: the text around it comes from the same translation
+        var parts = Loc.T(stemFormat).Split("{1}");
+        object[] args = { N(stemLen), diameters, N(minStem, "0.0#") };
+        Check(stemOk, string.Format(Loc.T(stemFormat), args),
+            CheckText(string.Format(parts[0], args).TrimEnd()), MinStemmingBox(), CheckText(parts.Length > 1 ? string.Format(parts[1], args).TrimStart() : ""));
         foreach (var issue in Charging.Validate(_p, hole).Where(s => !s.Contains("no primer", StringComparison.Ordinal)))
             Check(false, issue);
+    }
+
+    /// <summary>Minimum stemming in hole diameters, edited in its check; a program setting, not part of the hole.</summary>
+    private TextBox MinStemmingBox()
+    {
+        const string name = "minStemming";
+        var box = new TextBox
+        {
+            Name = name,
+            Text = N(Charging.MinStemmingDiameters, "0.#"),
+            Width = 48,
+            Height = 24,
+            MinHeight = 24,
+            Padding = new Thickness(6, 2),
+            FontFamily = Look.Mono,
+            FontSize = 12.5,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = Look.Field,
+            BorderBrush = Look.LineStrong
+        };
+        ToolTip.SetTip(box, L("Minimum top stemming in hole diameters; kept in the program settings"));
+        var text = box.Text;
+        void Commit(bool keepFocus)
+        {
+            if (box.Text == text) { if (keepFocus) box.SelectAll(); return; }
+            text = box.Text;
+            if (Parse(box.Text) is double v) StoreMinStemming?.Invoke(Math.Clamp(v, 0, 100));
+            if (keepFocus) _refocus = name;
+            Refresh();
+        }
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None) { Commit(true); e.Handled = true; } };
+        box.LostFocus += (_, _) => Commit(false);
+        if (_refocus == name)
+        {
+            _refocus = null;
+            box.AttachedToVisualTree += (_, _) => { box.Focus(); box.SelectAll(); };
+        }
+        return box;
     }
 
     public void Refresh()

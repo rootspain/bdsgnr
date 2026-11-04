@@ -266,7 +266,7 @@ public sealed class MainWindow : Window
         var allMenu = Ui.Flat(Ui.Row(6, Look.Icon("menu", 16, Look.TextSoft), new TextBlock { Text = Loc.Ui("Menu"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }), Loc.Ui("All commands in the classic menu"));
         Ui.DropDown(allMenu, _vm.BuildMenu, PlacementMode.BottomEdgeAlignedRight);
         var settings = Ui.Flat(Look.Icon("gear", 18, Look.TextSoft), Loc.T("Program settings…"), () => _ = _vm.EditProgramSettings(), 34);
-        var help = Ui.Flat(Look.Icon("help", 18, Look.TextSoft), Loc.Ui("Help (F1)"), () => AnalysisWindows.Help(_vm), 34);
+        var help = Ui.Flat(Look.Icon("help", 18, Look.TextSoft), Loc.Ui("Help (F1)"), () => AnalysisWindows.Help(), 34);
 
         var bar = new DockPanel { Background = Look.Panel, Height = 48 };
         var left = Ui.Row(12, logo, quickBorder, blast);

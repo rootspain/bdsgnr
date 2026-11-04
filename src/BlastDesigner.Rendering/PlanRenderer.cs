@@ -252,7 +252,7 @@ public static class PlanRenderer
             byId = new Dictionary<Guid, Entity>(project.Entities.Count);
             foreach (var e in project.Entities) byId.TryAdd(e.Id, e);
         }
-        if (view.ShowTies) DrawTies(canvas, cam, project, entities.OfType<TieEntity>(), byId!, opt, stroke, fill, text);
+        if (view.ShowTies) DrawTies(canvas, cam, project, entities.OfType<TieEntity>(), byId!, opt, text);
         if (view.ShowRows) DrawRows(canvas, cam, project, byId!, stroke);
 
         var holes = entities.OfType<Hole>().Where(h => HoleVisible(view, h)).ToList();
@@ -283,8 +283,8 @@ public static class PlanRenderer
         foreach (var h in holes)
         {
             // labels of dragged holes follow them at once, the rest go into one batch
-            if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(canvas, cam, project, h, view, opt, text, own); own.Flush(canvas, text); EndMove(mc); }
-            else DrawHoleLabels(canvas, cam, project, h, view, opt, text, holeLabels);
+            if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(cam, project, h, view, opt, text, own); own.Flush(canvas, text); EndMove(mc); }
+            else DrawHoleLabels(cam, project, h, view, opt, text, holeLabels);
         }
         holeLabels.Flush(canvas, text);
         var productsKey = ProductsKey(project);
@@ -308,7 +308,7 @@ public static class PlanRenderer
             DrawElevationScale(canvas, cam, r.Min, r.Max, text);
             text.TextSize = 11;
         }
-        if (view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, cam, project, holes, fill, text);
+        if (view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, project, holes, fill, text);
         if (view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, fill, text);
         if (opt.DrawSummaryBlock && project.Summary.Visible) DrawSummary(canvas, cam, project, fill, stroke, text);
     }
@@ -325,6 +325,7 @@ public static class PlanRenderer
         if (h.Decks.Count == 0) return false;
         var key = new HashCode();
         key.Add(productsKey);
+        key.Add(Charging.MinStemmingDiameters);
         key.Add(h.Length); key.Add(h.ActualLength); key.Add(h.WaterDepth); key.Add(h.Diameter); key.Add(h.BoreTrack?.Count);
         foreach (var d in h.Decks) { key.Add(d.Top); key.Add(d.Bottom); key.Add(d.ProductId); key.Add(d.Primers.Count); }
         var k = key.ToHashCode();
@@ -808,7 +809,7 @@ public static class PlanRenderer
         return result.ToArray();
     }
 
-    private static void DrawTies(SKCanvas c, Camera cam, BlastProject project, IEnumerable<TieEntity> ties, IReadOnlyDictionary<Guid, Entity> byId, SceneOptions opt, SKPaint stroke, SKPaint fill, SKPaint text)
+    private static void DrawTies(SKCanvas c, Camera cam, BlastProject project, IEnumerable<TieEntity> ties, IReadOnlyDictionary<Guid, Entity> byId, SceneOptions opt, SKPaint text)
     {
         static Vec3? PositionOf(IReadOnlyDictionary<Guid, Entity> byId, Guid id) => byId.TryGetValue(id, out var e) ? e switch
         {
@@ -944,7 +945,8 @@ public static class PlanRenderer
                 var exp = h.Decks.Select(d => project.FindProduct(d.ProductId)).FirstOrDefault(p => p?.IsExplosive == true);
                 if (exp != null) fill.Color = new SKColor(exp.Color);
             }
-            if (view.ShowCollars || selected)
+            // collars switched off stay off for selected holes too
+            if (view.ShowCollars)
             {
                 c.DrawCircle(x, y, r, fill);
                 c.DrawCircle(x, y, r, stroke);
@@ -963,7 +965,7 @@ public static class PlanRenderer
         }
     }
 
-    private static void DrawHoleLabels(SKCanvas c, Camera cam, BlastProject project, Hole h, ViewState view, SceneOptions opt, SKPaint text, TextBatch batch)
+    private static void DrawHoleLabels(Camera cam, BlastProject project, Hole h, ViewState view, SceneOptions opt, SKPaint text, TextBatch batch)
     {
         if (cam.Scale < 1.2) return;
         var (x, y) = cam.ToScreen(h.Collar);
@@ -1280,7 +1282,7 @@ public static class PlanRenderer
         c.DrawText($"{metres:0.##} m", x, y - 6, text);
     }
 
-    private static void DrawHoleLegend(SKCanvas c, Camera cam, BlastProject project, List<Hole> holes, SKPaint fill, SKPaint text)
+    private static void DrawHoleLegend(SKCanvas c, BlastProject project, List<Hole> holes, SKPaint fill, SKPaint text)
     {
         var used = holes.Select(h => h.HoleType).Distinct().OrderBy(x => x).ToList();
         float x = 10, y = 20 + _topInset;

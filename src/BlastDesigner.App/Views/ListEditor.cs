@@ -55,7 +55,7 @@ public sealed class ListEditor<T> : Grid where T : class
         _grid.PropertyEdited += _ =>
         {
             var i = _list.SelectedIndex;
-            if (i >= 0 && _list.ItemsSource is List<string> names && i < names.Count && Selected is { } s && names[i] != _display(s)) Reload(i, keepGrid: true);
+            if (i >= 0 && _list.ItemsSource is List<string> names && i < names.Count && Selected is { } s && names[i] != _display(s)) Reload(i);
             Changed?.Invoke();
         };
         Reload(Items.Count > 0 ? 0 : -1);
@@ -92,7 +92,7 @@ public sealed class ListEditor<T> : Grid where T : class
         Changed?.Invoke();
     }
 
-    public void Reload(int select = -1, bool keepGrid = false)
+    public void Reload(int select = -1)
     {
         _list.ItemsSource = Items.Select(_display).ToList();
         _list.SelectedIndex = select;

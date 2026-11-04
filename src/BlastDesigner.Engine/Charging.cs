@@ -188,8 +188,11 @@ public static class Charging
         return result.Where(d => d.Bottom > d.Top + 1e-6 && d.Top < toLength).Select(d => { d.Bottom = Math.Min(d.Bottom, toLength); return d; }).ToList();
     }
 
-    /// <summary>Shortest top stemming accepted without a warning: 25 hole diameters, m.</summary>
-    public static double MinStemming(Hole h) => 25 * h.Diameter / 1000;
+    /// <summary>Shortest top stemming accepted without a warning, in hole diameters (edited in its check in the hole loading window, kept in the program settings).</summary>
+    public static double MinStemmingDiameters { get; set; } = 25;
+
+    /// <summary>Shortest top stemming accepted without a warning: <see cref="MinStemmingDiameters"/> hole diameters, m.</summary>
+    public static double MinStemming(Hole h) => MinStemmingDiameters * h.Diameter / 1000;
 
     /// <summary>Length of the hole not covered by any deck (above, between and below the decks), m.</summary>
     public static double ColumnGap(Hole h)
@@ -201,7 +204,7 @@ public static class Charging
 
     /// <summary>
     /// Whether a charged hole fails any of the loading checks shown in the hole loading window: a primer in every
-    /// explosive deck, the column covering the whole depth, stemming of at least 25 diameters, and <see cref="Validate"/>.
+    /// explosive deck, the column covering the whole depth, stemming of at least <see cref="MinStemmingDiameters"/> diameters, and <see cref="Validate"/>.
     /// An uncharged hole has nothing to warn about.
     /// </summary>
     public static bool HasLoadingWarning(BlastProject project, Hole h)

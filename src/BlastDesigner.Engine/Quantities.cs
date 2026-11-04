@@ -89,7 +89,7 @@ public static class Quantities
         }
 
         var drilled = real.Sum(h => h.EffectiveLength);
-        var (b, s) = PatternEstimate(project, real);
+        var (b, s) = PatternEstimate(project);
         return new QuantityReport
         {
             HoleCount = real.Count,
@@ -169,7 +169,7 @@ public static class Quantities
     }
 
     /// <summary>Average burden and spacing from rows (spacing along rows, burden between rows).</summary>
-    public static (double Burden, double Spacing) PatternEstimate(BlastProject project, IReadOnlyList<Hole> holes)
+    public static (double Burden, double Spacing) PatternEstimate(BlastProject project)
     {
         var spacings = new List<double>();
         var rowCentres = new List<List<Hole>>();

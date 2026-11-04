@@ -1994,8 +1994,8 @@ ui:Every explosive deck has a primer	В каждом заряде ВВ есть 
 Explosive decks without a primer: {0}	Интервалов с ВВ без боевика: {0}
 The column covers the whole depth {0} m	Колонка покрывает всю глубину {0} м
 The column does not cover {0} m of {1} m	Колонка не покрывает {0} м из {1} м
-Stemming {0} m, at least 25 diameters	Забойка {0} м, не меньше 25 диаметров
-Stemming {0} m, less than 25 diameters ({1} m)	Забойка {0} м, меньше 25 диаметров ({1} м)
+Stemming {0} m, at least {1} diameters	Забойка {0} м, не меньше {1} диаметров
+Stemming {0} m, less than {1} diameters ({2} m)	Забойка {0} м, меньше {1} диаметров ({2} м)
 ui:Save as rule	Сохранить как правило
 ui:Save the current column as a loading rule	Сохранить текущую конструкцию как правило
 Save loading rule	Сохранить правило зарядки
@@ -2172,6 +2172,7 @@ ui:Cursor coordinates in the status bar	Координаты курсора в �
 ui:Key S in the viewport	Клавиша S во вьюпорте
 ui:Pick radius	Радиус захвата
 ui:Snapping reaches 1.5 times as far	Привязка срабатывает в 1,5 раза дальше
+ui:Minimum top stemming in hole diameters; kept in the program settings	Минимальная верхняя забойка в диаметрах скважины; сохраняется в настройках программы
 ui:Autosave	Автосохранение
 ui:min	мин
 ui:0 — off	0 — выключено
@@ -2499,7 +2500,6 @@ ui:Calculate from f	Рассчитать по f
 ui:Kuz-Ram: mean size by Cunningham, Rosin-Rammler and Swebrec curves	Kuz-Ram: средний размер куска по Каннингему, кривые Розина–Раммлера и Swebrec
 ui:A — international (Cunningham)	A — международная (Каннингем)
 ui:f — by Protodyakonov	f — по Протодьяконову
-ui:f sets the rock strength σc = 10·f MPa; A is calculated from it and the rock mass: A = 0.06·(RMD + JF + RDI + HF). A typed in is used as it is.	f задаёт прочность породы σсж = 10·f МПа; A рассчитывается по ней и описанию массива: A = 0,06·(RMD + JF + RDI + HF). Введённое вручную A используется как есть.
 ui:Rock factor	Коэффициент породы
 ui:Rock mass	Массив
 ui:Drilling	Бурение
@@ -2511,7 +2511,7 @@ ui:Fines below	Мелочь мельче
 ui:Prediction for the blast	Прогноз по блоку
 ui:Powdery, friable	Рыхлый, сыпучий
 ui:Jointed	Трещиноватый
-ui:Massive	Массивный
+ui:Massive	Монолитный
 ui:Joint factor JF = JPS + JPA	Фактор трещиноватости JF = JPS + JPA
 ui:Young's modulus E	Модуль Юнга E
 ui:Rock density {0} t/m³ (Design data); RDI = 25·ρ − 50 = {1}	Плотность породы {0} т/м³ (данные проекта); RDI = 25·ρ − 50 = {1}
@@ -2536,3 +2536,72 @@ ui:Outside the usual range {0}–{1}	Вне обычного диапазона 
 ui:Linked with f and the rock mass	Связан с f и описанием массива
 ui:f does not enter A while E is below 50 GPa: A is kept as typed	При E ниже 50 ГПа f не входит в A: A оставлен как введён
 ui:With this rock mass f would be {0}: A is kept as typed	При таком массиве f было бы {0}: A оставлен как введён
+ui:Plan, 3D and printed plans: the hole number in blue top right of the collar. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it.	План, 3D и печатный план: номер синим справа сверху от устья. По нему скважины различают в таблице, листах заряжания, отчётах и отчёте регистрации ЭДС, по нему же ищут скважину.
+ui:Plan and 3D: "L" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length.	План и 3D: «L» у устья — замеренная длина, если есть замер, иначе проектная. Используется в расчёте колонки заряда и забойки, в метрах бурения и стоимости бурения, при подборе правил заряжания по длине.
+ui:Plan and 3D: "Ø" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter.	План и 3D: «Ø» в мм у устья. Определяет погонную массу и массу ВВ, минимальную забойку (в диаметрах), прогноз дробления и подбор правил заряжания по диаметру.
+ui:Plan and 3D: "Z", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast.	План и 3D: «Z» — отметка устья. Используется при расчёте длины до подошвы уступа в проекте, на разрезах и в объёме блока.
+ui:Plan and 3D: "α", the angle from vertical. Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check.	План и 3D: «α» — угол от вертикали. Определяет положение забоя; используется для высоты уступа в прогнозе дробления, разлёте и проверке допусков бурения.
+ui:Plan and 3D: "Az", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check.	План и 3D: «Az» — азимут наклона по часовой от севера. Определяет положение забоя наклонной скважины; используется в проверке допусков бурения.
+ui:Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations.	План и 3D: замеренная температура в °C, только у скважин с замером. Нужна, чтобы видеть горячие или реакционные породы перед заряжанием; в расчётах не участвует.
+ui:Plan and 3D: the line from collar to toe with a dot at the toe. Shows the direction and inclination of the holes; display only, the calculations use the hole data whether it is on or off.	План и 3D: линия от устья до забоя с точкой в забое. Показывает направление и наклон скважин; только отображение, расчёты используют данные скважин независимо от галочки.
+ui:Plan and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only.	План и 3D: кружок устья, заливка по состоянию скважины (проектная — пустая, пробуренная — бледная, заряженная — сплошная). Выключено — устья не видны и у выделенных скважин, выбирать скважины по-прежнему можно. Только отображение.
+ui:Plan and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check.	План и 3D: толстая бирюзовая линия до замеренной глубины с отметкой на конце, только у замеренных скважин. Замеренная длина заменяет проектную в заряжании, ведомости и проверке допусков.
+ui:Plan and 3D: the decks along the hole in their product colours, and the collar filled with the explosive colour. Shows the loaded column; the same decks give the explosive mass, quantities, costs and the vibration charge.	План и 3D: интервалы колонки по длине скважины цветами продуктов, устье заливается цветом ВВ. Показывает конструкцию заряда; по этим же интервалам считаются масса ВВ, ведомость, стоимость и заряд для сейсмики.
+ui:Plan and 3D: the surveyed bore track, dashed orange, only for surveyed holes. Used by the drilling tolerance check (toe, angle and bearing deviation) and the dashboard quality figures.	План и 3D: фактическая траектория по инклинометрии, оранжевый пунктир, только у снятых скважин. Используется проверкой допусков бурения (отклонение забоя, угла и азимута) и показателями качества в сводке.
+ui:Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction.	План и 3D: зелёный ромб в точке пересечения скважины с проектной подошвой (длина минус перебур). Показывает подошву уступа; высота уступа по ней используется в ведомости, объёмах и прогнозе дробления.
+ui:Plan and 3D: red lines with "Δ" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check.	План и 3D: красные линии с «Δ» от проектного устья к фактическому и от проектного забоя к фактическому. Эти же отклонения сравниваются с допусками в проверке допусков бурения.
+ui:Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration.	План и 3D: масса ВВ скважины в кг. Считается по колонке заряда; из неё складываются ведомость, удельный расход, стоимость и максимальный заряд на замедление для сейсмики.
+ui:Plan: a dashed violet line with "B" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction.	План: фиолетовый пунктир с «B» от скважин первого ряда до ближайшей точки бровки. Нужна линия бровки; эта же ЛСПП используется проверкой ЛСПП и прогнозом разлёта от откоса.
+ui:Plan and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay.	План и 3D: масса каждого заряда ВВ в кг сверху вниз. Показывает, как разделён рассредоточенный заряд; каждый заряд учитывается отдельно в заряде на замедление.
+ui:Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.	План и 3D: крепость пород по данным MWD вдоль трассы, от синего (мягкие) до красного (крепкие), только у скважин с данными. Правила заряжания по нему подставляют продукт для крепких или мягких пород и удлиняют забойку в мягком устье.
+ui:Plan and 3D: the firing order of the hole top left of the collar, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis.	План и 3D: порядковый номер взрывания слева сверху от устья, по расчёту замедлений. Для проверки последовательности инициирования; этот же порядок используется в анимации взрыва и анализе первого движения.
+ui:Plan and 3D: the firing order of the decks in the hole, top to bottom ("2-1" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes.	План и 3D: порядок взрывания зарядов в скважине сверху вниз («2-1» — нижний срабатывает первым), только у скважин с двумя и более боевиками в разных зарядах. Для проверки внутрискважинных замедлений рассредоточенных зарядов.
+ui:Plan and 3D: the in-hole detonator delay in ms, in red under the collar. It is added to the surface time to give the hole firing time.	План и 3D: замедление внутрискважинного детонатора в мс, красным под устьем. Прибавляется к времени поверхностной сети и даёт время взрывания скважины.
+ui:Plan and 3D: the time the surface signal reaches the collar in ms, in red under the collar. Comes from the ties and connectors; part of the hole firing time.	План и 3D: время прихода сигнала поверхностной сети к устью в мс, красным под устьем. Считается по связям и поверхностным замедлителям; часть времени взрывания скважины.
+ui:Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator.	План и 3D: идентификатор зарегистрированного электронного детонатора, только у скважин, где он есть. Используется в отчёте регистрации ЭДС и для поиска скважины по детонатору.
+ui:Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red under the collar. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.	План и 3D: время взрывания скважины в мс (поверхностная сеть плюс внутрискважинное замедление), красным под устьем. По нему считаются сейсмика (заряд в окне замедления), изохроны, анимация взрыва и первое движение.
+ui:Plan and 3D: "T" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.	План и 3D: «T» и номер типа скважины. Тип задаёт цвет скважины, по нему подбираются правила заряжания и инициирования и фильтруются показываемые скважины.
+ui:I (highest strength)	I (в высшей степени крепкие)
+ui:Quartzites, basalts (extremely strong).	Кварциты, базальты (в высшей степени крепкие).
+ui:II (very strong)	II (очень крепкие)
+ui:Dense granites, quartz porphyry, siliceous shale.	Плотные граниты, кварцевый порфир, кремнистый сланец.
+ui:III (strong)	III (крепкие)
+ui:Very strong granite, quartz ore veins, iron ore.	Очень крепкий гранит, кварцевые рудные жилы, железная руда.
+ui:IIIa (strong)	IIIа (крепкие)
+ui:Strong limestones, marble, dolomite.	Крепкие известняки, мрамор, доломит.
+ui:IV (fairly strong)	IV (довольно крепкие)
+ui:Ordinary sandstone, iron ore.	Обыкновенный песчаник, железная руда.
+ui:IVa (fairly strong)	IVа (довольно крепкие)
+ui:Sandy shales.	Песчанистые сланцы.
+ui:V (medium)	V (средние)
+ui:Strong clay shale, soft sandstone and limestone.	Крепкий глинистый сланец, мягкий песчаник/известняк.
+ui:Va (medium)	Vа (средние)
+ui:Soft shales, dense marl.	Мягкие сланцы, плотный мергель.
+ui:VI (fairly soft)	VI (довольно мягкие)
+ui:Soft shale, chalk, gypsum, rock salt, anthracite, frozen ground.	Мягкий сланец, мел, гипс, каменная соль, антрацит, мёрзлый грунт.
+ui:VIa (fairly soft)	VIа (довольно мягкие)
+ui:Compacted pebbles, dense hard coal, hard clay.	Слежавшаяся галька, плотный каменный уголь, твёрдая глина.
+ui:VII (soft)	VII (мягкие)
+ui:Dense clay, soft brown coal.	Плотная глина, мягкий бурый уголь.
+ui:VIIa (soft)	VIIа (мягкие)
+ui:Loess, light loam with admixtures, gravel.	Лёсс, лёгкий суглинок с примесями, гравий.
+ui:VIII (earthy)	VIII (землистые)
+ui:Ordinary soil, peat, wet sand.	Обычный грунт, торф, влажный песок.
+ui:IX (loose)	IX (сыпучие)
+ui:Loose sand, screes.	Рыхлый песок, осыпи.
+ui:X (quick)	X (плывучие)
+ui:Quicksands, swampy and strongly liquefied ground.	Плывуны, болотистые и сильно разжиженные грунты.
+ui:{0}: A = {1}–{2}. {3}	{0}: A = {1}–{2}. {3}
+ui:Extremely strong rock	Экстремально крепкие
+ui:Ferruginous quartzites (corundum, porphyry), tough rock.	Железистые кварциты (корунды, порфиры), вязкие скальные породы.
+ui:Strong rock	Крепкие породы
+ui:Dense granites, quartzites, massive igneous rock.	Плотные граниты, кварциты, магматические монолиты.
+ui:Medium strength	Средняя прочность
+ui:Sedimentary rock, jointed dolomites and limestones.	Осадочные породы, трещиноватые доломиты/известняки.
+ui:Soft rock	Мягкие породы
+ui:Shelly limestone, weak shales, coal.	Известняк-ракушечник, слабые сланцы, уголь.
+ui:{0} (A = {1}–{2})	«{0}» (A = {1}–{2})
+ui:A = {0}: weaker than {1}.	A = {0}: слабее, чем {1}.
+ui:A = {0}: stronger than {1}.	A = {0}: крепче, чем {1}.
+ui:A = {0}: between {1} and {2}.	A = {0}: между {1} и {2}.
+ui:{0}: f = {1}. {2}	{0}: f = {1}. {2}

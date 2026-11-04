@@ -72,6 +72,19 @@ public sealed class Viewport : Control
 
     public void Redraw() => InvalidateVisual();
 
+    // The plan is drawn by hand, so recoloured theme brushes and a new plan background do not redraw it by themselves.
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        Services.Look.ThemeChanged += Redraw;
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        Services.Look.ThemeChanged -= Redraw;
+        base.OnDetachedFromVisualTree(e);
+    }
+
     // While the camera moves the frame leaves out the costliest details; one full frame follows when it has settled.
     private const double SettleMs = 200;
     private long _cameraMovedAt;
@@ -325,6 +338,8 @@ public sealed class Viewport : Control
         foreach (var e in project.Entities)
         {
             if (e is SurfaceEntity or TieEntity) continue;
+            // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
+            if (e is Hole && !project.View.ShowCollars) continue;
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden)) continue;
             var verts = e is Hole h ? new[] { h.Collar } : e.GetVertices();
             foreach (var v in verts)
@@ -352,6 +367,8 @@ public sealed class Viewport : Control
         foreach (var e in project.Entities)
         {
             if (e is SurfaceEntity or TieEntity || dragged.Contains(e.Id)) continue;
+            // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
+            if (e is Hole && !project.View.ShowCollars) continue;
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden)) continue;
             var verts = e is Hole h ? new[] { h.Collar } : e.GetVertices();
             foreach (var v in verts)

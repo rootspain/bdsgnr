@@ -187,7 +187,7 @@ public static class TextImportWindow
 /// <summary>Tools ▸ Report designer: choose sections and layout of the PDF report.</summary>
 public static class ReportDesignerWindow
 {
-    public static async Task<ReportOptions?> Show(BlastProject project)
+    public static async Task<ReportOptions?> Show()
     {
         var opt = new ReportOptions { Title = Loc.T("Blast report") };
         var title = new TextBox { Text = opt.Title, MinWidth = 300 };

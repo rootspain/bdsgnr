@@ -290,7 +290,7 @@ public sealed partial class MainViewModel
         View.Redraw();
     }
 
-    public Task EditProgramSettings() => SettingsWindow.Show(Settings, ApplyProgramSettings);
+    public Task EditProgramSettings() => SettingsWindow.Show(Settings, ApplyProgramSettings, s => PreviewBackground = s?.BackgroundColor);
 
     /// <summary>Takes the settings edited in the settings window (Apply and OK) and saves them.</summary>
     private void ApplyProgramSettings(ProgramSettings edited)

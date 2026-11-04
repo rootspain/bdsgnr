@@ -77,8 +77,13 @@ public sealed class FlyrockModel
 /// <summary>Kuz-Ram / Swebrec fragmentation inputs that are not derived from the design.</summary>
 public sealed class FragmentationModel
 {
-    /// <summary>Rock factor A (Cunningham). 0 = derive from the rock mass description below.</summary>
+    /// <summary>Rock factor A (Cunningham). 0 = derive from the rock mass description below, unless <see cref="RockFactorSet"/>.</summary>
     public double RockFactor { get; set; } = 8;
+    /// <summary>
+    /// A was set in the fragmentation window (typed in, or taken from the blastability table with f) and is used as it
+    /// is, 0 too. Older files leave it false: there A 0 is calculated from the rock mass.
+    /// </summary>
+    public bool RockFactorSet { get; set; }
     /// <summary>Rock mass description: 10 powdery, 50 massive, or the joint factor when jointed.</summary>
     public double RockMassDescription { get; set; } = 50;
     public double JointFactor { get; set; }

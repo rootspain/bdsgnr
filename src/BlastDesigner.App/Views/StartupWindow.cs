@@ -99,7 +99,7 @@ public sealed class StartupForm : DockPanel
             Cursor = new Cursor(StandardCursorType.Hand),
             VerticalAlignment = VerticalAlignment.Center
         };
-        help.Click += (_, _) => AnalysisWindows.Help(null);
+        help.Click += (_, _) => AnalysisWindows.Help();
         // opens the file selected in the list, the same as a double click or Enter
         _ok = new Button
         {

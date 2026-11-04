@@ -174,13 +174,16 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Name of the ribbon stage that is open ("Layout", "Loading"…); the viewport adapts what it shows to it.</summary>
     public string? ActiveStage { get; set; }
 
+    /// <summary>Plan background shown while the settings window previews a theme; null outside the preview.</summary>
+    public uint? PreviewBackground { get; set; }
+
     public SceneOptions BuildSceneOptions()
     {
         var overlays = new List<IOverlay>(AnalysisOverlays) { Highlight };
         return new SceneOptions
         {
             Selection = Doc?.Selection ?? new HashSet<Guid>(),
-            Background = new SKColor(Settings.BackgroundColor),
+            Background = new SKColor(PreviewBackground ?? Settings.BackgroundColor),
             SelectionColor = new SKColor(Settings.SelectionColor),
             CollarPixels = (float)Settings.CollarSizePixels,
             Overlays = overlays,

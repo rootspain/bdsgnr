@@ -17,10 +17,13 @@ namespace BlastDesigner.App.Views;
 /// </summary>
 public static class SettingsWindow
 {
-    /// <summary>Calls <paramref name="apply"/> with the edited copy on Apply and on OK; returns that copy on OK, null on Cancel.</summary>
-    public static async Task<ProgramSettings?> Show(ProgramSettings settings, Action<ProgramSettings>? apply = null)
+    /// <summary>
+    /// Calls <paramref name="apply"/> with the edited copy on Apply and on OK; returns that copy on OK, null on Cancel.
+    /// <paramref name="preview"/> gets the edited copy on every theme preview and null when the window closes.
+    /// </summary>
+    public static async Task<ProgramSettings?> Show(ProgramSettings settings, Action<ProgramSettings>? apply = null, Action<ProgramSettings?>? preview = null)
     {
-        var form = new SettingsForm(settings) { ApplyTo = apply };
+        var form = new SettingsForm(settings) { ApplyTo = apply, PreviewTo = preview };
         var w = new Window
         {
             Title = Loc.T("Program settings"),
@@ -33,7 +36,11 @@ public static class SettingsWindow
             Content = form
         };
         form.Closing = ok => { form.Applied = ok; w.Close(); };
-        w.Closed += (_, _) => { if (!form.Applied) Look.ApplyTheme(settings.IsLight, settings.AccentColor); };
+        w.Closed += (_, _) =>
+        {
+            preview?.Invoke(null);
+            if (!form.Applied) Look.ApplyTheme(settings.IsLight, settings.AccentColor);
+        };
         await Dialogs.ShowModal(w);
         return form.Applied ? form.Edited : null;
     }
@@ -77,6 +84,8 @@ public sealed class SettingsForm : DockPanel
     public Action<bool>? Closing { get; set; }
     /// <summary>Applies and saves the edited copy (Apply and OK).</summary>
     public Action<ProgramSettings>? ApplyTo { get; set; }
+    /// <summary>Shows the edited copy in the program before it is applied (the plan background of a previewed theme).</summary>
+    public Action<ProgramSettings>? PreviewTo { get; set; }
 
     /// <summary>Apply: the program takes the settings, the window stays open for more changes.</summary>
     public void Apply()
@@ -90,7 +99,11 @@ public sealed class SettingsForm : DockPanel
     private static double? Parse(string? s) =>
         double.TryParse((s ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
 
-    private void Preview() => Look.ApplyTheme(Edited.IsLight, Edited.AccentColor);
+    private void Preview()
+    {
+        PreviewTo?.Invoke(Edited);
+        Look.ApplyTheme(Edited.IsLight, Edited.AccentColor);
+    }
 
     // ---------- layout ----------
 

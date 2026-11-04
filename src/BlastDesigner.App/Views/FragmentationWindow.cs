@@ -38,9 +38,9 @@ public static class FragmentationWindow
 
 /// <summary>
 /// Content of the fragmentation inputs window. Public so the UI smoke test can reach it.
-/// The rock factor has two fields: A (Cunningham, the international classification) and f (Protodyakonov). f is the
-/// rock strength: σc = 10·f MPa, and A follows from it and the rock mass, A = 0.06·(RMD + JF + RDI + HF) with
-/// HF = σc/5 = 2f (E/3 for a Young's modulus below 50 GPa). A typed in is used as it is until "Calculate from f".
+/// The rock factor has two fields: A (Cunningham, the international classification) and f (Protodyakonov, the rock
+/// strength σc = 10·f MPa). They are not converted into each other by a formula: entering one puts in the other the
+/// matching value of the other table (<see cref="RockTypes"/> for A, <see cref="Categories"/> for f, see <see cref="Matching"/>).
 /// </summary>
 public sealed class FragmentationForm : DockPanel
 {
@@ -49,44 +49,162 @@ public sealed class FragmentationForm : DockPanel
 
     private readonly BlastProject _p;
     private readonly TextBox _a, _f, _jf, _e, _drill, _max, _over, _fines;
-    private readonly TextBlock _aSource = Small(), _fHint = Small(), _presetNote = Small();
+    private readonly TextBlock _fHint = Small(), _presetNote = Small();
+    /// <summary>
+    /// Sliders under A and f: one step for each value of their table, for A also the whole numbers inside its rows
+    /// (<see cref="Stops"/>); the other field takes the matching value of the other table (<see cref="Matching"/>).
+    /// </summary>
+    private readonly Slider _aSlider, _fSlider;
+    /// <summary>Under each slider, what its current value is: the rock type under A, the Protodyakonov category under f.</summary>
+    private readonly TextBlock _aCategory = Small(), _fCategory = Small();
+    /// <summary>The refresh moves the sliders: their change is not an entry then.</summary>
+    private bool _movingSliders;
+
+    /// <summary>A row of the A or f table: the rock type (category), its description and the range of values it covers.</summary>
+    private readonly record struct RockRow(string RockType, string Description, double MinVal, double MaxVal);
+
+    /// <summary>Typical values of the rock factor A by rock type, weakest first.</summary>
+    private static readonly RockRow[] RockTypes =
+    {
+        new("Soft rock", "Shelly limestone, weak shales, coal.", 0.6, 2),
+        new("Medium strength", "Sedimentary rock, jointed dolomites and limestones.", 3, 7),
+        new("Strong rock", "Dense granites, quartzites, massive igneous rock.", 8, 12),
+        new("Extremely strong rock", "Ferruginous quartzites (corundum, porphyry), tough rock.", 13, 18),
+    };
+
+    /// <summary>
+    /// Protodyakonov strength categories X…I, weakest first: f of the category up to the f of the next one (the
+    /// strongest one has its own f only) and examples of the rock.
+    /// </summary>
+    private static readonly RockRow[] Categories =
+    {
+        new("X (quick)", "Quicksands, swampy and strongly liquefied ground.", 0.3, 0.5),
+        new("IX (loose)", "Loose sand, screes.", 0.5, 0.6),
+        new("VIII (earthy)", "Ordinary soil, peat, wet sand.", 0.6, 0.8),
+        new("VIIa (soft)", "Loess, light loam with admixtures, gravel.", 0.8, 1),
+        new("VII (soft)", "Dense clay, soft brown coal.", 1, 1.5),
+        new("VIa (fairly soft)", "Compacted pebbles, dense hard coal, hard clay.", 1.5, 2),
+        new("VI (fairly soft)", "Soft shale, chalk, gypsum, rock salt, anthracite, frozen ground.", 2, 3),
+        new("Va (medium)", "Soft shales, dense marl.", 3, 4),
+        new("V (medium)", "Strong clay shale, soft sandstone and limestone.", 4, 5),
+        new("IVa (fairly strong)", "Sandy shales.", 5, 6),
+        new("IV (fairly strong)", "Ordinary sandstone, iron ore.", 6, 8),
+        new("IIIa (strong)", "Strong limestones, marble, dolomite.", 8, 10),
+        new("III (strong)", "Very strong granite, quartz ore veins, iron ore.", 10, 15),
+        new("II (very strong)", "Dense granites, quartz porphyry, siliceous shale.", 15, 20),
+        new("I (highest strength)", "Quartzites, basalts (extremely strong).", 20, 20),
+    };
+
+    /// <summary>Index of the row of a table a value falls in (MinVal ≤ value): the last one starting at or below it, the first one below the table.</summary>
+    private static int RowOf(RockRow[] table, double value) => Math.Max(0, Array.FindLastIndex(table, r => value >= r.MinVal));
+
+    /// <summary>
+    /// The value of table <paramref name="to"/> matching a value of table <paramref name="from"/>: the value's share of
+    /// the whole range of <paramref name="from"/> (lowest MinVal…highest MaxVal) taken of the whole range of
+    /// <paramref name="to"/>, rounded to a whole number; 0 for 0. A value within its table that rounds the other to 0
+    /// gets the lowest MinVal of <paramref name="to"/> instead.
+    /// </summary>
+    private static double Matching(double value, RockRow[] from, RockRow[] to)
+    {
+        if (value <= 0) return 0;
+        double fromMin = from.Min(r => r.MinVal), fromMax = from.Max(r => r.MaxVal);
+        double toMin = to.Min(r => r.MinVal), toMax = to.Max(r => r.MaxVal);
+        var share = (value - fromMin) / (fromMax - fromMin);
+        var matching = Math.Max(0, Math.Round(toMin + share * (toMax - toMin), MidpointRounding.AwayFromZero));
+        return matching == 0 && value >= fromMin ? toMin : matching;
+    }
+
+    /// <summary>The Protodyakonov category of a value of f, with its range of f and its examples.</summary>
+    private static string CategoryText(double f)
+    {
+        var c = Categories[RowOf(Categories, f)];
+        var range = c.MaxVal > c.MinVal ? N(c.MinVal, "0.#") + "–" + N(c.MaxVal, "0.#") : N(c.MinVal, "0.#");
+        return Loc.F(L("{0}: f = {1}. {2}"), L(c.RockType), range, L(c.Description));
+    }
+
+    /// <summary>
+    /// The rock type of a value of A with its range of A and rock mass; a value outside every range says which types it
+    /// lies between, or that it is weaker than the softest or stronger than the strongest one.
+    /// </summary>
+    private static string RockTypeText(double a)
+    {
+        string Range(RockRow r) => Loc.F(L("{0} (A = {1}–{2})"), L(r.RockType), N(r.MinVal, "0.#"), N(r.MaxVal, "0.#"));
+        int i = Array.FindLastIndex(RockTypes, r => a >= r.MinVal);
+        if (i < 0) return Loc.F(L("A = {0}: weaker than {1}."), N(a, "0.##"), Range(RockTypes[0]));
+        var t = RockTypes[i];
+        if (a < t.MaxVal) return Loc.F(L("{0}: A = {1}–{2}. {3}"), L(t.RockType), N(t.MinVal, "0.#"), N(t.MaxVal, "0.#"), L(t.Description));
+        if (i == RockTypes.Length - 1) return Loc.F(L("A = {0}: stronger than {1}."), N(a, "0.##"), Range(t));
+        return Loc.F(L("A = {0}: between {1} and {2}."), N(a, "0.##"), Range(t), Range(RockTypes[i + 1]));
+    }
+
+    /// <summary>
+    /// The values a slider steps along: 0, the MinVal of each row of its table and the MaxVal of the last one; with
+    /// <paramref name="whole"/> also the MaxVal of each row and the whole numbers inside the rows.
+    /// </summary>
+    private static double[] Stops(RockRow[] table, bool whole)
+    {
+        var stops = table.Select(r => r.MinVal).Prepend(0).Append(table[^1].MaxVal);
+        if (whole)
+            stops = stops.Concat(table.SelectMany(r => Enumerable.Range((int)Math.Floor(r.MinVal) + 1, Math.Max(0, (int)Math.Ceiling(r.MaxVal) - (int)Math.Floor(r.MinVal) - 1)).Select(k => (double)k).Append(r.MaxVal)));
+        return stops.Distinct().Order().ToArray();
+    }
+    private static readonly double[] AStops = Stops(RockTypes, whole: true), FStops = Stops(Categories, whole: false);
+
+    /// <summary>The step of a slider a value is at: the last of the <paramref name="stops"/> not above it, 0 below them.</summary>
+    private static int StepOf(double[] stops, double value) => Math.Max(0, Array.FindLastIndex(stops, v => value >= v));
+
+    /// <summary>A slider under a rock factor field, one step of 1 for each of the <paramref name="stops"/>; moving it enters the value of the step.</summary>
+    private Slider RockSlider(string name, double[] stops, Action<double> enter)
+    {
+        var s = new Slider { Name = name, Minimum = 0, Maximum = stops.Length - 1, TickFrequency = 1, SmallChange = 1, LargeChange = 1, IsSnapToTickEnabled = true, Margin = new Thickness(0, -4, 0, -6) };
+        s.ValueChanged += (_, e) => { if (!_movingSliders) enter(stops[Math.Clamp((int)Math.Round(e.NewValue), 0, stops.Length - 1)]); };
+        return s;
+    }
+
+    /// <summary>The A slider moved: A of its step, f matching it.</summary>
+    private void SetAStep(double a) => SetPair(a, Matching(a, RockTypes, Categories));
+
+    /// <summary>The f slider moved: f of its step, A matching it.</summary>
+    private void SetFStep(double f) => SetPair(Matching(f, Categories, RockTypes), f);
+
+    /// <summary>A and f put in together by a slider.</summary>
+    private void SetPair(double a, double f)
+    {
+        _aCut = _fCut = null;
+        Draft.Ucs = f * 10;
+        Draft.RockFactor = a;
+        Draft.RockFactorSet = true;
+        Refresh();
+    }
     /// <summary>Under A and f: a value outside the usual range, or one cut to the allowed range.</summary>
     private readonly TextBlock _aWarn = Small(), _fWarn = Small();
     /// <summary>What the last entry was cut to the allowed range from, shown until the next entry.</summary>
     private string? _aCut, _fCut;
-    /// <summary>Why an A typed in stays apart from f (f cannot give it), shown while it is typed in.</summary>
-    private string? _aNote;
     /// <summary>The field being typed in: the refresh leaves its text alone.</summary>
     private TextBox? _typing;
 
-    /// <summary>
-    /// A typed in: within 0…25 (0 = calculate from f). f follows it when the rock mass lets it, A then stays calculated
-    /// from f; otherwise A is kept as typed and f goes to the nearest value it can have.
-    /// </summary>
+    /// <summary>f typed in: within 0…50; A becomes the matching A (<see cref="Matching"/>).</summary>
+    private void SetF(double v)
+    {
+        var c = Math.Clamp(v, Fragmentation.MinProtodyakonov, Fragmentation.MaxProtodyakonov);
+        _fCut = c != v ? Loc.F(L("Allowed {0}–{1}: {2} taken"), N(Fragmentation.MinProtodyakonov, "0"), N(Fragmentation.MaxProtodyakonov, "0"), N(c, "0.##")) : null;
+        Draft.Ucs = c * 10;
+        Draft.RockFactor = Matching(c, Categories, RockTypes);
+        Draft.RockFactorSet = true;
+        Refresh();
+    }
+
+    /// <summary>A typed in: within 0…25, 0 too; f becomes the matching f (<see cref="Matching"/>).</summary>
     private void SetA(double v)
     {
         var c = Math.Clamp(v, Fragmentation.MinRockFactor, Fragmentation.MaxRockFactor);
         _aCut = c != v ? Loc.F(L("Allowed {0}–{1}: {2} taken"), N(Fragmentation.MinRockFactor, "0"), N(Fragmentation.MaxRockFactor, "0"), N(c, "0.##")) : null;
-        _aNote = null;
-        if (c <= 0) { Draft.RockFactor = 0; Refresh(); return; }
-        var f = Fragmentation.ProtodyakonovFor(c, Draft, _p.Design.RockDensity);
-        if (f is double fv && fv >= Fragmentation.MinProtodyakonov && fv <= Fragmentation.MaxProtodyakonov)
-        {
-            Draft.Ucs = fv * 10;
-            Draft.RockFactor = 0;
-        }
-        else
-        {
-            Draft.RockFactor = c;
-            if (f is double far) Draft.Ucs = Math.Clamp(far, Fragmentation.MinProtodyakonov, Fragmentation.MaxProtodyakonov) * 10;
-            _aNote = f == null
-                ? L("f does not enter A while E is below 50 GPa: A is kept as typed")
-                : Loc.F(L("With this rock mass f would be {0}: A is kept as typed"), N(f.Value, "0.#"));
-        }
+        Draft.RockFactor = c;
+        Draft.RockFactorSet = true;
+        Draft.Ucs = Matching(c, RockTypes, Categories) * 10;
         Refresh();
     }
-    private static readonly IBrush Warn = new SolidColorBrush(Color.FromUInt32(0xFFF0C13A));
-    private readonly Button _calc;
+    private static readonly IBrush Warn = new SolidColorBrush(Color.FromUInt32(0xFFE5484D));
     private readonly List<Button> _massChips = new();
     private readonly StackPanel _jfRow = new() { Spacing = 4 };
     private readonly Grid _preview = new() { ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), ColumnSpacing = 10 };
@@ -98,38 +216,18 @@ public sealed class FragmentationForm : DockPanel
         Draft = ProjectJson.DeepClone(project.Fragmentation);
         ReadMass();
 
-        // hard limits cut the entry to the allowed range (A 0 = calculate from f); soft ones only flag it (Refresh)
-        // the two rock factor fields follow each other while either is typed in (live)
+        // hard limits cut the entry to the allowed range; soft ones only flag it (Refresh)
+        // entering one rock factor puts the table value in the other while it is typed in (live)
         _a = Number("rockFactorA", null, SetA, live: true);
-        _f = Number("protodyakonovF", null, v =>
-        {
-            var c = Math.Clamp(v, Fragmentation.MinProtodyakonov, Fragmentation.MaxProtodyakonov);
-            _fCut = c != v ? Loc.F(L("Allowed {0}–{1}: {2} taken"), N(Fragmentation.MinProtodyakonov, "0"), N(Fragmentation.MaxProtodyakonov, "0"), N(c, "0.##")) : null;
-            Draft.Ucs = c * 10;
-            Draft.RockFactor = 0;
-            _aNote = null;
-            Refresh();
-        }, live: true);
+        _f = Number("protodyakonovF", null, SetF, live: true);
+        _aSlider = RockSlider("rockFactorASlider", AStops, SetAStep);
+        _fSlider = RockSlider("protodyakonovFSlider", FStops, SetFStep);
         _jf = Number("jointFactor", null, v => { Draft.JointFactor = Math.Max(0, v); Refresh(); });
         _e = Number("youngsModulus", "GPa", v => { Draft.YoungsModulus = Math.Max(0, v); Refresh(); });
         _drill = Number("drillDeviation", "m", v => { Draft.DrillDeviation = Math.Max(0, v); Refresh(); });
         _max = Number("maxBlock", "cm", v => { Draft.MaxBlockCm = Math.Max(1, v); Refresh(); });
         _over = Number("oversize", "cm", v => { Draft.OversizeCm = Math.Max(0.1, v); Refresh(); });
         _fines = Number("fines", "cm", v => { Draft.FinesCm = Math.Max(0.01, v); Refresh(); });
-        _calc = new Button
-        {
-            Content = L("Calculate from f"),
-            Height = 26,
-            Padding = new Thickness(10, 0),
-            CornerRadius = new CornerRadius(6),
-            Background = Brushes.Transparent,
-            BorderBrush = Look.LineStrong,
-            BorderThickness = new Thickness(1),
-            FontSize = 12,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Name = "calcFromF"
-        };
-        _calc.Click += (_, _) => { Draft.RockFactor = 0; Refresh(); };
 
         var header = Header();
         SetDock(header, Dock.Top);
@@ -230,7 +328,6 @@ public sealed class FragmentationForm : DockPanel
     private Control Header()
     {
         var title = new TextBlock { Text = Loc.T("Fragmentation inputs"), FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Look.Text };
-        var sub = new TextBlock { Text = L("Kuz-Ram: mean size by Cunningham, Rosin-Rammler and Swebrec curves"), FontSize = 12, Foreground = Look.Muted, Margin = new Thickness(0, 2, 0, 0), TextWrapping = TextWrapping.Wrap };
         // presets: the inputs of a site in a file of their own, to load into another blast
         Button PresetButton(string icon, string text, string tip, Action click, string name)
         {
@@ -251,7 +348,7 @@ public sealed class FragmentationForm : DockPanel
         };
         _presetNote.Margin = new Thickness(0, 4, 0, 0);
         var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
-        var left = new StackPanel { Children = { title, sub, _presetNote } };
+        var left = new StackPanel { Children = { title, _presetNote } };
         Grid.SetColumn(presets, 1);
         g.Children.Add(left);
         g.Children.Add(presets);
@@ -309,9 +406,11 @@ public sealed class FragmentationForm : DockPanel
         _aWarn.Name = "rockFactorAWarning";
         _fWarn.Name = "protodyakonovFWarning";
         _aWarn.Foreground = _fWarn.Foreground = Warn;
-        var a = new StackPanel { Spacing = 4, Children = { Label("A — international (Cunningham)"), _a, _aWarn, Ui.Row(8, _aSource, _calc) } };
-        var f = new StackPanel { Spacing = 4, Children = { Label("f — by Protodyakonov"), _f, _fWarn, _fHint } };
-        _aSource.VerticalAlignment = VerticalAlignment.Center;
+        _aCategory.Name = "rockFactorACategory";
+        _fCategory.Name = "protodyakonovFCategory";
+        _aCategory.Foreground = _fCategory.Foreground = Look.TextSoft;
+        var a = new StackPanel { Spacing = 4, Children = { Label("A — international (Cunningham)"), _a, _aSlider, _aCategory, _aWarn } };
+        var f = new StackPanel { Spacing = 4, Children = { Label("f — by Protodyakonov"), _f, _fSlider, _fCategory, _fWarn, _fHint } };
         var fields = Fields(2, a, f);
         return Section("Rock factor", new Border
         {
@@ -325,12 +424,7 @@ public sealed class FragmentationForm : DockPanel
                 Spacing = 10,
                 Children =
                 {
-                    fields,
-                    new TextBlock
-                    {
-                        Text = L("f sets the rock strength σc = 10·f MPa; A is calculated from it and the rock mass: A = 0.06·(RMD + JF + RDI + HF). A typed in is used as it is."),
-                        FontSize = 11.5, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap
-                    }
+                    fields
                 }
             }
         });
@@ -465,7 +559,6 @@ public sealed class FragmentationForm : DockPanel
     /// <summary>Shows the draft: both rock factors, where A comes from, the rock mass and the prediction it gives.</summary>
     private void Refresh()
     {
-        var manual = Draft.RockFactor > 0;
         Show(_a, RockFactor, "0.##");
         Show(_f, ProtodyakonovF, "0.##");
         Show(_jf, Draft.JointFactor, "0.#");
@@ -474,13 +567,18 @@ public sealed class FragmentationForm : DockPanel
         Show(_max, Draft.MaxBlockCm, "0.#");
         Show(_over, Draft.OversizeCm, "0.#");
         Show(_fines, Draft.FinesCm, "0.##");
-        _aSource.Text = manual ? L("Typed in") : L("Linked with f and the rock mass");
-        _aSource.Foreground = manual ? Look.Accent : Look.Faint;
-        _calc.IsVisible = manual;
         var hf = Draft.YoungsModulus < 50 ? Loc.F(L("HF = E/3 = {0} (E below 50 GPa)"), N(Draft.YoungsModulus / 3, "0.#")) : Loc.F(L("HF = σc/5 = 2f = {0}"), N(Draft.Ucs / 5, "0.#"));
         _fHint.Text = Loc.F(L("σc ≈ {0} MPa"), N(Draft.Ucs, "0")) + " · " + hf;
-        Flag(_a, _aWarn, RockFactor, Fragmentation.UsualMinRockFactor, Fragmentation.UsualMaxRockFactor, _aCut ?? (manual ? _aNote : null));
-        Flag(_f, _fWarn, ProtodyakonovF, Fragmentation.UsualMinProtodyakonov, Fragmentation.UsualMaxProtodyakonov, _fCut);
+        // each slider at the step of its value
+        _movingSliders = true;
+        _aSlider.Value = StepOf(AStops, RockFactor);
+        _fSlider.Value = StepOf(FStops, ProtodyakonovF);
+        _movingSliders = false;
+        _aCategory.Text = RockTypeText(RockFactor);
+        _fCategory.Text = CategoryText(ProtodyakonovF);
+        // the usual range of each is the range of its table: lowest MinVal to highest MaxVal
+        Flag(_a, _aWarn, RockFactor, RockTypes.Min(r => r.MinVal), RockTypes.Max(r => r.MaxVal), _aCut);
+        Flag(_f, _fWarn, ProtodyakonovF, Categories.Min(r => r.MinVal), Categories.Max(r => r.MaxVal), _fCut);
         // a cut entry is said once; while typing the field keeps saying it
         if (_typing == null) _aCut = _fCut = null;
         for (int i = 0; i < _massChips.Count; i++) Ui.SetChip(_massChips[i], (int)_mass == i);

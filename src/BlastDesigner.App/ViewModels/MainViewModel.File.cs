@@ -385,7 +385,7 @@ public sealed partial class MainViewModel
     public async Task PrintReports()
     {
         if (Doc == null) return;
-        var opt = await ReportDesignerWindow.Show(Project!);
+        var opt = await ReportDesignerWindow.Show();
         if (opt == null) return;
         var path = await Dialogs.SaveFile("Save report", BaseName + "_report.pdf", ".pdf", ("PDF", new[] { "*.pdf" }));
         if (path == null) return;

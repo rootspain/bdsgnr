@@ -197,7 +197,7 @@ public sealed partial class MainViewModel
         var ordered = strata.OrderByDescending(s => s.ElevationAt(centre.X, centre.Y) ?? s.Vertices.Average(v => v.Z)).ToList();
         var ids = Doc!.SelectedHoles.Any() ? SelectedHoleIds() : Project.Holes.Select(h => h.Id).ToHashSet();
         int n = 0;
-        Change("Set material type from strata", p => n = Strata.AssignMaterialByToe(p, HolesById(p, ids), ordered));
+        Change("Set material type from strata", p => n = Strata.AssignMaterialByToe(HolesById(p, ids), ordered));
         SetStatus(Loc.F("{0} holes updated", n));
     }
 

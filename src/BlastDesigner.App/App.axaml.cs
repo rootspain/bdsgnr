@@ -1,5 +1,8 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.Views;
@@ -16,6 +19,26 @@ public partial class App : Application
         var settings = ProgramSettings.Load();
         Loc.Language = settings.Language;
         Look.ApplyTheme(settings.IsLight, settings.AccentColor);
+        // Esc closes every dialog and tool window as Cancel; the main window keeps it for the tools. What uses Esc itself
+        // (an open dropdown, a search box, a window's own Esc handling) marks it handled first, and this handler skips it.
+        InputElement.KeyDownEvent.AddClassHandler<Window>((w, e) =>
+        {
+            if (e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None || w is MainWindow) return;
+            e.Handled = true;
+            // the window's own Cancel button when it has one, so Esc does what Cancel does
+            var cancel = w.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.IsCancel && b.IsEffectivelyVisible && b.IsEffectivelyEnabled);
+            if (cancel != null) cancel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            else w.Close();
+        });
+        // A tool window with nothing focused (Quantities, Dashboard) would leave the keys with the control focused in the
+        // main window, and Esc would reach the plan instead of closing it: such a window takes the focus itself.
+        Window.WindowOpenedEvent.AddClassHandler<Window>((w, _) =>
+        {
+            if (w is MainWindow || w.FocusManager?.GetFocusedElement() != null) return;
+            w.Focusable = true;
+            w.Focus();
+        });
+        Engine.Charging.MinStemmingDiameters = settings.MinStemmingDiameters;
         Log.Info("Application started");
         if (settings.UsageLogging) UsageLog.Start(Changelog.Current.ToString());
         // what is still in memory reaches the file also when the program fails

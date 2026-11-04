@@ -35,6 +35,9 @@ public static class Look
 
     public static bool IsLight { get; private set; }
 
+    /// <summary>Raised after <see cref="ApplyTheme"/>: what draws the brushes itself (the plan) redraws.</summary>
+    public static event Action? ThemeChanged;
+
     /// <summary>Ground, Panel, Ribbon, Field, Line, LineStrong, Hover, Text, TextSoft, Muted, Faint, Blue.</summary>
     private static readonly uint[] DarkColors = { 0xFF15181C, 0xFF1B1E23, 0xFF20242A, 0xFF101215, 0xFF2C3138, 0xFF3A414A, 0xFF2A2F36, 0xFFE6E9ED, 0xFFC9CFD6, 0xFFA3ABB6, 0xFF8A929D, 0xFF4C9BFF };
     private static readonly uint[] LightColors = { 0xFFEEF0F3, 0xFFFFFFFF, 0xFFF6F7F9, 0xFFFFFFFF, 0xFFDDE1E6, 0xFFC4CBD3, 0xFFE8EBEF, 0xFF1B1F24, 0xFF353B43, 0xFF5B6470, 0xFF78818C, 0xFF2563EB };
@@ -53,11 +56,14 @@ public static class Look
         AccentPressed.Color = Mix(a, Colors.Black, 0.12);
         OnAccent.Color = Luminance(a) > 0.5 ? Color.FromUInt32(0xFF15181C) : Colors.White;
 
-        if (Application.Current is not { } app) return;
-        app.RequestedThemeVariant = light ? Avalonia.Styling.ThemeVariant.Light : Avalonia.Styling.ThemeVariant.Dark;
-        foreach (var fluent in app.Styles.OfType<Avalonia.Themes.Fluent.FluentTheme>())
-            foreach (var palette in fluent.Palettes.Values)
-                palette.Accent = a;
+        if (Application.Current is { } app)
+        {
+            app.RequestedThemeVariant = light ? Avalonia.Styling.ThemeVariant.Light : Avalonia.Styling.ThemeVariant.Dark;
+            foreach (var fluent in app.Styles.OfType<Avalonia.Themes.Fluent.FluentTheme>())
+                foreach (var palette in fluent.Palettes.Values)
+                    palette.Accent = a;
+        }
+        ThemeChanged?.Invoke();
     }
 
     public static double Luminance(Color c) => (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255;

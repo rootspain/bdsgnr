@@ -59,6 +59,8 @@ public sealed class ProgramSettings
 
     public uint SurfaceColor(string kind) =>
         SurfaceColors.TryGetValue(kind, out var c) ? c : DefaultSurfaceColors.TryGetValue(kind, out var d) ? d : 0xFF8A9BB0;
+    /// <summary>Shortest top stemming accepted by the loading check, in hole diameters.</summary>
+    public double MinStemmingDiameters { get; set; } = 25;
     public bool SnapToObjects { get; set; } = true;
     public double TargetRadiusPixels { get; set; } = 8;
     public bool ShowStartupAssistant { get; set; } = true;

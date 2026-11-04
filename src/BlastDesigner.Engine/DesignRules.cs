@@ -215,7 +215,7 @@ public static class Strata
     }
 
     /// <summary>Material type of each interval between intercepts: index of the strata surface above (1-based), 0 above the first.</summary>
-    public static int AssignMaterialByToe(BlastProject project, IEnumerable<Hole> holes, IReadOnlyList<SurfaceEntity> orderedTopDown)
+    public static int AssignMaterialByToe(IEnumerable<Hole> holes, IReadOnlyList<SurfaceEntity> orderedTopDown)
     {
         int n = 0;
         foreach (var h in holes)

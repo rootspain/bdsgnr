@@ -830,7 +830,7 @@ public static class AnalysisWindows
 
     // ---- help ------------------------------------------------------------------------------
 
-    public static void About(MainViewModel vm) => _ = Dialogs.Info(
+    public static void About() => _ = Dialogs.Info(
         $"Blast Designer {typeof(AnalysisWindows).Assembly.GetName().Version}\n" +
         Loc.T("Open-pit blast design: hole layout, charging, initiation timing, quantities, vibration and reports.") + "\n\n" +
         $".NET {Environment.Version} · {System.Runtime.InteropServices.RuntimeInformation.OSDescription}\n" +
@@ -838,13 +838,13 @@ public static class AnalysisWindows
 
     private static string Lines(params string[] lines) => string.Join(Environment.NewLine, lines.Select(Loc.T));
 
-    public static void KeyboardHelp(MainViewModel vm) => _ = Dialogs.Info(Lines(
+    public static void KeyboardHelp() => _ = Dialogs.Info(Lines(
         "Mouse: wheel zooms at the cursor, middle button pans, Shift+middle or Alt+left orbits in 3D, right click opens the tool menu.",
         "Select tool: click selects, drag a box (left to right = window, right to left = crossing), Shift adds, Ctrl toggles, drag a selected object to move it, double-click edits.",
         "Keys: Esc cancels the tool, Enter finishes a line, Backspace removes the last point, F zooms all, Delete deletes the selection, F1 opens help.",
         "Ctrl+N/O/S new/open/save, Ctrl+Z/Y undo/redo, Ctrl+X/C/V clipboard, Ctrl+A select all, Ctrl+E edit selected, Ctrl+P reports."), Loc.T("Keyboard and mouse"));
 
-    public static void Help(MainViewModel? vm) => _ = Dialogs.Info(Lines(
+    public static void Help() => _ = Dialogs.Info(Lines(
         "Typical workflow:",
         "1. File ▸ New, fill in the blast header.",
         "2. Import survey data (DXF, text) or draw the boundary and crest.",
