@@ -18,6 +18,14 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   (25 diameters by default).
 - The items of the Visibility tab have tooltips: where the item shows, what it is for and which calculations use the
   same data.
+- **Hole labels left and right of the collar.** On the Visibility tab the labels (number, length, diameter,
+  elevation, angle, bearing, explosive mass, order, times, detonator ID and others) are laid out in two columns, Left
+  and Right. A label moves to the other side or to another place in its column by dragging it, or with the up, down
+  and arrow buttons shown when the pointer is on its row. On the plan the labels switched on stand in columns on each
+  side of the collar in the same order. The layout is saved with the project; Default order brings back the usual one.
+  The hole graphics (track, collar, charge track, deviation and so on) stay as separate switches under Holes.
+- The Properties tab has a Layer list: it shows the layer of the selection (or "(mixed)"), and picking another layer
+  moves the selection there in one undo step.
 
 ### Changed
 - **A and f are matched by tables, not by the Cunningham formula.** A by the rock type table: soft 0.6–2, medium
@@ -36,6 +44,10 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the accent colour changes.
 - With Collar switched off, selected holes are drawn without a collar too, and holes are not snapped to.
 - The stage row of the ribbon is lower.
+- View everything (Home) fits only what is shown: objects on hidden layers, objects hidden by hand and those switched
+  off by display switches and hole filters do not count.
+- The hole legend on the plan is not shown when the holes shown are of one type or none.
+- The fragmentation window no longer shows the "σc ≈ … MPa · HF = …" line under the f field.
 
 ## 0.2.3 — 2026-11-03
 
