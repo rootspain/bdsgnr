@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using BlastDesigner.App.Services;
@@ -10,7 +11,13 @@ using BlastDesigner.Domain.Geometry;
 
 namespace BlastDesigner.App.Views;
 
-/// <summary>Reflection-based editor for the simple properties of an object (numbers, text, flags, enums, dates, colours, points).</summary>
+/// <summary>A group of fields of a <see cref="PropertyGrid"/>, its properties in the order given.</summary>
+public sealed record PropertySection(string Title, params string[] Names);
+
+/// <summary>
+/// Reflection-based editor for the simple properties of an object (numbers, text, flags, enums, dates, colours, points):
+/// a row for each, or with <see cref="Sections"/> folding groups of captioned fields, two to a row.
+/// </summary>
 public sealed class PropertyGrid : Grid
 {
     private object? _target;
@@ -30,7 +37,14 @@ public sealed class PropertyGrid : Grid
     /// <summary>For [Flags] properties with mixed bits: the bits the user actually changed.</summary>
     public Dictionary<string, long> FlagEdits { get; } = new();
 
-    private static string MixedText => Loc.T("(mixed)");
+    /// <summary>Lays the fields out in these groups; the last one also takes the properties no group names.</summary>
+    public IReadOnlyList<PropertySection>? Sections { get; set; }
+    /// <summary>Titles of the groups folded; shared with the next grid so a fold outlasts the selection.</summary>
+    public HashSet<string> Collapsed { get; set; } = new();
+    /// <summary>Unit shown in the field of a property, by property name.</summary>
+    public Dictionary<string, string> Units { get; } = new();
+
+    private string MixedText => Sections != null ? Loc.T("(mixed)").Trim('(', ')') : Loc.T("(mixed)");
 
     /// <summary>Prepares the grid for editing several objects: the first one is the template, differing values show as mixed.</summary>
     public void SetTargets(object template, IReadOnlyList<object> objects)
@@ -103,6 +117,7 @@ public sealed class PropertyGrid : Grid
         Children.Clear();
         RowDefinitions.Clear();
         if (target == null) return;
+        if (Sections != null) { BuildSections(target); return; }
         int row = 0;
         foreach (var p in target.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
@@ -115,11 +130,138 @@ public sealed class PropertyGrid : Grid
             SetRow(label, row);
             SetRow(editor, row);
             SetColumn(editor, 1);
+            editor.Name = "prop" + p.Name;
             editor.Margin = new Thickness(0, 2);
             editor.IsEnabled = !ReadOnly && p.SetMethod?.IsPublic == true;
             Children.Add(label);
             Children.Add(editor);
             row++;
+        }
+    }
+
+    private void BuildSections(object target)
+    {
+        Margin = default;
+        var cells = new List<(string Name, Control Cell, bool Wide)>();
+        foreach (var p in target.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            if (!Exclude.Contains(p.Name) && p.GetIndexParameters().Length == 0 && SectionCell(p, target) is var (cell, wide)) cells.Add((p.Name, cell, wide));
+        var body = new StackPanel { Spacing = 12 };
+        for (int i = 0; i < Sections!.Count; i++)
+        {
+            var names = Sections[i].Names;
+            var listed = names.SelectMany(n => cells.Where(c => c.Name == n));
+            if (i == Sections.Count - 1) listed = listed.Concat(cells.Where(c => !Sections.Any(s => s.Names.Contains(c.Name))));
+            var fields = listed.Select(c => (c.Cell, c.Wide)).ToList();
+            if (fields.Count > 0) body.Children.Add(Section(Sections[i].Title, fields));
+        }
+        SetColumnSpan(body, 2);
+        Children.Add(body);
+    }
+
+    /// <summary>A group: its title folds it, under it the fields two to a row, a wide one on a row of its own.</summary>
+    private Control Section(string title, List<(Control Cell, bool Wide)> fields)
+    {
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,8,*"), RowSpacing = 8, IsVisible = !Collapsed.Contains(title) };
+        int row = 0, column = 0;
+        foreach (var (cell, wide) in fields)
+        {
+            if (wide && column == 1) { row++; column = 0; }
+            while (g.RowDefinitions.Count <= row) g.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            SetRow(cell, row);
+            SetColumn(cell, column * 2);
+            if (wide) SetColumnSpan(cell, 3);
+            g.Children.Add(cell);
+            if (wide || column == 1) { row++; column = 0; }
+            else column = 1;
+        }
+        var chevron = new ContentControl { Content = Look.Icon(g.IsVisible ? "up" : "down", 13, Look.Faint), [DockPanel.DockProperty] = Dock.Right, VerticalAlignment = VerticalAlignment.Center };
+        var head = new Button
+        {
+            Name = "section" + title,
+            Height = 24,
+            Padding = new Thickness(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Content = new DockPanel
+            {
+                Children =
+                {
+                    chevron,
+                    new TextBlock { Text = Loc.Ui(title).ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue, VerticalAlignment = VerticalAlignment.Center }
+                }
+            }
+        };
+        head.Classes.Add("flat");
+        head.Click += (_, _) =>
+        {
+            g.IsVisible = !g.IsVisible;
+            chevron.Content = Look.Icon(g.IsVisible ? "up" : "down", 13, Look.Faint);
+            if (g.IsVisible) Collapsed.Remove(title);
+            else Collapsed.Add(title);
+        };
+        return new StackPanel { Spacing = 6, Children = { head, g } };
+    }
+
+    /// <summary>The field of a property in a group, its caption above it (beside a switch), and whether it takes a whole row.</summary>
+    private (Control Cell, bool Wide)? SectionCell(PropertyInfo p, object target)
+    {
+        var caption = Loc.Property(p.Name);
+        Units.TryGetValue(p.Name, out var unit);
+        if (p.GetCustomAttribute<JsonIgnoreAttribute>() != null && p.SetMethod == null)
+        {
+            var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
+            if (!(t.IsPrimitive || t == typeof(string) || t == typeof(Vec3) || t.IsEnum)) return null;
+            var v = p.GetValue(target);
+            return (Captioned(caption, new TextBlock { Text = v is double d ? d.ToString("0.###") : v?.ToString() ?? "", Foreground = Look.Muted }), false);
+        }
+        var editor = CreateEditor(p, target);
+        if (editor == null) return null;
+        editor.Name = "prop" + p.Name;
+        editor.IsEnabled = !ReadOnly && p.SetMethod?.IsPublic == true;
+        if (editor is ToggleSwitch or CheckBox)
+        {
+            editor.VerticalAlignment = VerticalAlignment.Center;
+            editor[DockPanel.DockProperty] = Dock.Right;
+            return (new DockPanel { MinHeight = 30, Children = { editor, new TextBlock { Text = caption, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap } } }, true);
+        }
+        Compact(editor);
+        var point = p.PropertyType == typeof(Vec3);
+        if (point) caption += " X · Y · Z";
+        if (unit != null && (point || editor is not TextBox)) caption += ", " + unit;
+        else if (unit != null && editor is TextBox box)
+            box.InnerRightContent = new TextBlock { Text = unit, FontSize = 11, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        return (Captioned(caption, editor), point || p.PropertyType == typeof(string) || editor is StackPanel);
+    }
+
+    private static Control Captioned(string caption, Control field) => new StackPanel
+    {
+        Spacing = 4,
+        Children = { new TextBlock { Text = caption, FontSize = 12, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap }, field }
+    };
+
+    /// <summary>A field made to fit a narrow panel, in the look of the input forms.</summary>
+    private static void Compact(Control editor)
+    {
+        editor.MinWidth = 0;
+        editor.Margin = default;
+        switch (editor)
+        {
+            case TextBox box:
+                box.Height = box.MinHeight = 30;
+                box.Padding = new Thickness(8, 4);
+                box.FontFamily = Look.Mono;
+                box.Background = Look.Field;
+                box.BorderBrush = Look.LineStrong;
+                break;
+            case ComboBox combo:
+                combo.MinHeight = 30;
+                combo.HorizontalAlignment = HorizontalAlignment.Stretch;
+                break;
+            case Grid parts:
+                foreach (var part in parts.Children) Compact(part);
+                break;
         }
     }
 
@@ -174,15 +316,24 @@ public sealed class PropertyGrid : Grid
         {
             var isInt = (under ?? type) == typeof(int);
             var tb = new TextBox { Text = mixed ? "" : Format(value), Watermark = mixed ? MixedText : under != null ? "—" : null };
-            tb.LostFocus += (_, _) =>
+            // the text taken: an edit can take the box away, which also takes its focus, and that is not a second edit
+            string? taken = null;
+            bool Commit()
             {
+                if (tb.Text == taken) return false;
                 var text = (tb.Text ?? "").Trim().Replace(',', '.');
-                if (mixed && text.Length == 0 && !Changed.Contains(p.Name)) return;
-                if (text.Length == 0 && under != null) { Set(p, null); return; }
-                if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) { tb.Text = Format(p.GetValue(target)); return; }
+                if (mixed && text.Length == 0 && !Changed.Contains(p.Name)) return false;
+                taken = tb.Text;
+                if (text.Length == 0 && under != null) { Set(p, null); return true; }
+                if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) { taken = null; tb.Text = Format(p.GetValue(target)); return false; }
                 object v = isInt ? (int)Math.Round(d) : d;
-                if (!Equals(p.GetValue(target), v) || mixed) Set(p, v);
-            };
+                if (Equals(p.GetValue(target), v) && !mixed) return false;
+                Set(p, v);
+                return true;
+            }
+            tb.LostFocus += (_, _) => Commit();
+            // Enter takes the number; with nothing to take it goes on to the window (the default button of a dialog)
+            tb.KeyDown += (_, e) => { if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && Commit()) e.Handled = true; };
             return tb;
         }
         if (type == typeof(uint) && p.Name.Contains("Color"))
@@ -201,6 +352,13 @@ public sealed class PropertyGrid : Grid
                 }
             };
             return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { swatch, tb } };
+        }
+        if (type == typeof(bool) && Sections != null)
+        {
+            var sw = new ToggleSwitch { IsChecked = mixed ? null : (bool?)value, IsThreeState = mixed, OnContent = "", OffContent = "", MinWidth = 0 };
+            if (mixed) ToolTip.SetTip(sw, MixedText);
+            sw.IsCheckedChanged += (_, _) => { if (sw.IsChecked != null) Set(p, sw.IsChecked == true); };
+            return sw;
         }
         if (type == typeof(bool) || under == typeof(bool))
         {

@@ -131,14 +131,44 @@ public static class Timing
     /// <summary>
     /// Turns the existing ties so the signal runs away from the initiation points (and the holes they stand on): the
     /// signal spreads from them along the ties in both directions, by the tie delays, and each tie is pointed from the
-    /// end it reaches first to the other. Ties no initiation point reaches, and ties whose ends it reaches at the same
-    /// time, keep their direction; no tie is pointed into an initiation point. Returns the number of ties turned.
+    /// end it reaches first to the other; of two ends reached at the same time (0 ms ties) from the one fewer ties away.
+    /// Ties no initiation point reaches, and ties with both ends alike, keep their direction; no tie is pointed into an
+    /// initiation point. With <paramref name="only"/> just those ties are turned (the signal still runs along all of
+    /// them). Returns the number of ties turned.
     /// </summary>
-    public static int OrientTiesFromInitiation(BlastProject project)
+    public static int OrientTiesFromInitiation(BlastProject project, ISet<Guid>? only = null)
     {
+        var arrival = Arrivals(project);
+        var ipIds = project.Entities.OfType<InitiationPoint>().Select(i => i.Id).ToHashSet();
+        int turned = 0;
+        foreach (var t in project.Ties.ToList())
+        {
+            if (ipIds.Contains(t.FromId) || (only != null && !only.Contains(t.Id))) continue;
+            var into = ipIds.Contains(t.ToId);
+            if (!into && (!arrival.TryGetValue(t.FromId, out var a) || !arrival.TryGetValue(t.ToId, out var b) || b.CompareTo(a) >= 0)) continue;
+            FlipTies(new[] { t });
+            turned++;
+        }
+        return turned;
+    }
+
+    /// <summary>The ties the signal of an initiation point reaches, whichever way they are drawn.</summary>
+    public static HashSet<Guid> ReachedTies(BlastProject project)
+    {
+        var arrival = Arrivals(project);
+        return project.Ties.Where(t => arrival.ContainsKey(t.FromId) && arrival.ContainsKey(t.ToId)).Select(t => t.Id).ToHashSet();
+    }
+
+    /// <summary>
+    /// When the signal of the initiation points gets to each hole and point it reaches, spreading along the ties in both
+    /// directions, and through how many ties.
+    /// </summary>
+    private static Dictionary<Guid, (double Time, int Ties)> Arrivals(BlastProject project)
+    {
+        var arrival = new Dictionary<Guid, (double Time, int Ties)>();
         var ties = project.Ties.ToList();
         var ips = project.Entities.OfType<InitiationPoint>().ToList();
-        if (ties.Count == 0 || ips.Count == 0) return 0;
+        if (ties.Count == 0 || ips.Count == 0) return arrival;
         var adj = new Dictionary<Guid, List<(Guid To, double Delay)>>();
         void Edge(Guid a, Guid b, double d)
         {
@@ -151,36 +181,25 @@ public static class Timing
             Edge(t.FromId, t.ToId, d);
             Edge(t.ToId, t.FromId, d);
         }
-        var arrival = new Dictionary<Guid, double>();
-        var pq = new PriorityQueue<Guid, double>();
-        void Seed(Guid id, double t0)
+        var pq = new PriorityQueue<Guid, (double Time, int Ties)>();
+        void Seed(Guid id, (double Time, int Ties) at)
         {
-            if (arrival.TryGetValue(id, out var cur) && cur <= t0) return;
-            arrival[id] = t0;
-            pq.Enqueue(id, t0);
+            if (arrival.TryGetValue(id, out var cur) && cur.CompareTo(at) <= 0) return;
+            arrival[id] = at;
+            pq.Enqueue(id, at);
         }
         foreach (var ip in ips)
         {
             var t0 = ip.StartTimeMs + ip.LeadInDelayMs;
-            Seed(ip.Id, t0);
-            if (ip.HoleId is Guid hid) Seed(hid, t0);
+            Seed(ip.Id, (t0, 0));
+            if (ip.HoleId is Guid hid) Seed(hid, (t0, 0));
         }
-        while (pq.TryDequeue(out var node, out var time))
+        while (pq.TryDequeue(out var node, out var at))
         {
-            if (arrival[node] < time || !adj.TryGetValue(node, out var edges)) continue;
-            foreach (var (to, delay) in edges) Seed(to, time + delay);
+            if (arrival[node].CompareTo(at) < 0 || !adj.TryGetValue(node, out var edges)) continue;
+            foreach (var (to, delay) in edges) Seed(to, (at.Time + delay, at.Ties + 1));
         }
-        var ipIds = ips.Select(i => i.Id).ToHashSet();
-        int turned = 0;
-        foreach (var t in ties)
-        {
-            if (ipIds.Contains(t.FromId)) continue;
-            var into = ipIds.Contains(t.ToId);
-            if (!into && (!arrival.TryGetValue(t.FromId, out var a) || !arrival.TryGetValue(t.ToId, out var b) || b >= a)) continue;
-            FlipTies(new[] { t });
-            turned++;
-        }
-        return turned;
+        return arrival;
     }
 
     public static void FlipTies(IEnumerable<TieEntity> ties)
@@ -324,6 +343,12 @@ public static class Timing
     }
 
     // ---- analysis --------------------------------------------------------
+
+    /// <summary>
+    /// Milliseconds of the blast shown per millisecond, to show <paramref name="durationMs"/> of it in
+    /// <paramref name="seconds"/>; 0 seconds is the blast's own clock.
+    /// </summary>
+    public static double PlaybackRate(double durationMs, double seconds) => seconds > 0 ? durationMs / (seconds * 1000) : 1;
 
     public sealed record EnvelopePoint(double TimeMs, int Holes, double ChargeKg);
 

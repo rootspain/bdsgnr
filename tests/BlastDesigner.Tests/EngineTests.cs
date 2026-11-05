@@ -290,6 +290,59 @@ public class TimingTests
         Assert.Equal(0, Timing.OrientTiesFromInitiation(p));
     }
 
+    /// <summary>The tie tool turns only the ties it adds: a tie drawn towards the point is turned, the others stay.</summary>
+    [Fact]
+    public void OrientTiesFromInitiation_OnlyTurnsTheTiesGiven()
+    {
+        var (p, holes, ip) = Row(4);
+        var c17 = p.Products.First(x => x.DelayMs == 17 && x.Kind == ProductKind.SurfaceConnector);
+        ip.Position = holes[0].Collar;
+        ip.HoleId = holes[0].Id;
+        // both drawn against the signal, but only the new one is to be turned
+        var old = Timing.Connect(p, holes[1].Id, holes[0].Id, c17);
+        var added = Timing.Connect(p, holes[2].Id, holes[1].Id, c17);
+        Assert.Equal(1, Timing.OrientTiesFromInitiation(p, new HashSet<Guid> { added.Id }));
+        Assert.Contains(p.Ties, t => t.FromId == holes[1].Id && t.ToId == holes[2].Id);
+        Assert.Contains(p.Ties, t => t.Id == old.Id && t.FromId == holes[1].Id && t.ToId == holes[0].Id);
+    }
+
+    [Fact]
+    public void PlaybackRate_ShowsTheBlastInTheSecondsChosen()
+    {
+        Assert.Equal(1, Timing.PlaybackRate(972, 0));
+        Assert.Equal(0.1, Timing.PlaybackRate(1000, 10), 9);
+        // a longer blast runs faster and takes the same time
+        Assert.Equal(0.5, Timing.PlaybackRate(5000, 10), 9);
+    }
+
+    /// <summary>0 ms ties reach both their ends at the same time: they point away from the end fewer ties from the point.</summary>
+    [Fact]
+    public void OrientTiesFromInitiation_TurnsZeroDelayTies()
+    {
+        var (p, holes, ip) = Row(4);
+        ip.Position = holes[0].Collar;
+        ip.HoleId = holes[0].Id;
+        Timing.Connect(p, holes[0].Id, holes[1].Id, null);
+        Timing.Connect(p, holes[3].Id, holes[2].Id, null);
+        Timing.Connect(p, holes[2].Id, holes[1].Id, null);
+        Assert.Equal(2, Timing.OrientTiesFromInitiation(p));
+        Assert.Contains(p.Ties, t => t.FromId == holes[1].Id && t.ToId == holes[2].Id);
+        Assert.Contains(p.Ties, t => t.FromId == holes[2].Id && t.ToId == holes[3].Id);
+    }
+
+    [Fact]
+    public void ReachedTies_AreThoseJoinedToAnInitiationPoint()
+    {
+        var (p, holes, ip) = Row(4);
+        ip.Position = holes[0].Collar;
+        ip.HoleId = holes[0].Id;
+        var joined = Timing.Connect(p, holes[1].Id, holes[0].Id, null);
+        var apart = Timing.Connect(p, holes[3].Id, holes[2].Id, null);
+        Assert.Equal(new[] { joined.Id }, Timing.ReachedTies(p));
+        Timing.Connect(p, holes[2].Id, holes[1].Id, null);
+        Assert.Contains(apart.Id, Timing.ReachedTies(p));
+    }
+
     /// <summary>A bound point and its hole move together either way; a deleted hole takes the point, a deleted point leaves the hole.</summary>
     [Fact]
     public void InitiationLinks_PointAndHoleStayTogether()
@@ -622,13 +675,30 @@ public class FileFormatTests
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + FragmentationPreset.Extension);
         try
         {
-            FragmentationPreset.Save(path, new FragmentationModel { RockFactor = 0, Ucs = 140, JointFactor = 35, RockMassDescription = 0, OversizeCm = 90 });
+            FragmentationPreset.Save(path, new FragmentationModel { RockFactor = 0, Ucs = 140, JointFactor = 35, RockMassDescription = 0, OversizeCm = 90, SizeUnit = SizeUnit.Cm });
             var m = FragmentationPreset.Load(path);
             Assert.Equal((0.0, 140.0, 35.0, 0.0, 90.0), (m.RockFactor, m.Ucs, m.JointFactor, m.RockMassDescription, m.OversizeCm));
+            Assert.Equal(SizeUnit.Cm, m.SizeUnit);
             File.WriteAllText(path, "{\"rockFactor\": 3}");
             Assert.Throws<InvalidDataException>(() => FragmentationPreset.Load(path));
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void FragmentSizeUnit_IsSavedWithTheProjectAndConvertsTheSizes()
+    {
+        var p = new BlastProject();
+        p.Fragmentation.SizeUnit = SizeUnit.Cm;
+        Assert.Equal(SizeUnit.Cm, ProjectJson.Deserialize(ProjectJson.Serialize(p)).Fragmentation.SizeUnit);
+        // a file from before it has none: the program settings give it
+        var old = ProjectJson.Deserialize(ProjectJson.Serialize(new BlastProject())).Fragmentation;
+        Assert.Null(old.SizeUnit);
+        Assert.Equal(SizeUnits.Default, SizeUnits.Of(old));
+        // the sizes stay in cm, only what is shown is converted
+        Assert.Equal(2000, SizeUnits.FromCm(200, SizeUnit.Mm));
+        Assert.Equal(200, SizeUnits.FromCm(200, SizeUnit.Cm));
+        Assert.Equal(150, SizeUnits.ToCm(1500, SizeUnit.Mm));
     }
 
     [Fact]

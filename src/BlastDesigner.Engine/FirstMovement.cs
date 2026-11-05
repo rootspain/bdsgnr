@@ -240,7 +240,7 @@ public static class FirstMovement
     public sealed record Arrow(Vec3 Position, double DirX, double DirY);
 
     /// <summary>Default arrow size, m ("TimingCalculation/ArrowSize").</summary>
-    public const double DefaultArrowSize = 2.0;
+    public const double DefaultArrowSize = 1.2;
 
     /// <summary>
     /// Point and time of every hole as the triangulation is fed: the middle of the first
@@ -263,6 +263,13 @@ public static class FirstMovement
 
     public static TimingDelaunay Triangulate(BlastProject project) => TimingDelaunay.Build(Inputs(project));
 
+    /// <summary>Whether several holes have a firing time and it is the same for all: the times then give no direction.</summary>
+    public static bool AllAtOnce(BlastProject project)
+    {
+        var times = project.Holes.Where(h => h.FiringTimeMs.HasValue).Select(h => h.FiringTimeMs!.Value).ToList();
+        return times.Count > 1 && times.Distinct().Count() == 1;
+    }
+
     /// <summary>
     /// Arrows at the centroids of internal valid triangles, pointing along the horizontal part of the plane normal,
     /// i.e. down the time gradient (towards earlier holes). Nearly flat planes (|(a, b)| &lt; 0.01) get no arrow.
@@ -278,18 +285,6 @@ public static class FirstMovement
             list.Add(new Arrow(d.MidPoint(t), t.A / l, t.B / l));
         }
         return list;
-    }
-
-    /// <summary>Area of the 7-point arrow of a given size (unit direction).</summary>
-    public static double LargeArrowArea(double size) => Math.Abs(GeoMath.Area(LargeArrow(0, 0, size, 0).Select(p => new Vec3(p.X, p.Y, 0)).ToList()));
-
-    /// <summary>The big arrow is drawn when the arrows cover less than 30 % of the triangulated area.</summary>
-    public static bool UseLargeArrows(TimingDelaunay d, double arrowSize)
-    {
-        double area = 0, n = 0;
-        foreach (var t in d.Triangles)
-            if (t.Internal && t.Valid) { area += d.Area(t); n++; }
-        return n * LargeArrowArea(arrowSize) / area < 0.3;
     }
 
     /// <summary>Small arrow: triangle with its tip at +d, base at −d, half-width 0.7·|d| (any y-up or y-down frame).</summary>

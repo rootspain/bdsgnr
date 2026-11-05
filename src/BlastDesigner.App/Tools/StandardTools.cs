@@ -283,12 +283,28 @@ public sealed class RotateTool : Tool
 /// <summary>Connects holes with surface delays: click the "from" hole (or initiation point) and then the "to" hole; dragging also works.</summary>
 public sealed class TieTool : Tool
 {
+    private static readonly SKColor CaptureColour = new(0x809AA3AD);
+
     private Entity? _from;
+    /// <summary>Where the line being drawn ends: the hole under the cursor, or the cursor.</summary>
+    private Vec3? _end;
 
     public TieTool(MainViewModel vm, Entity? start = null) : base(vm) { _from = start; }
 
+    public override void Activate()
+    {
+        base.Activate();
+        View.Rendering += UpdateCapture;
+    }
+
+    public override void Deactivate()
+    {
+        View.Rendering -= UpdateCapture;
+        base.Deactivate();
+    }
+
     public override string Name => "Tie";
-    public override string Hint => "Click the hole the signal comes from, then the holes it goes to; holes on the way get a tie each. Click the last hole again to finish. Holes the signal already reaches (a tie comes in or an initiation point stands on them) are skipped. The connector is chosen in the tie palette.";
+    public override string Hint => "Click a hole, then the hole to tie it to (or drag from one to the other); holes on the way get a tie each. The tie finishes the entry; with Shift held the entry goes on from that hole. Tied holes take more ties; each tie points away from the initiation point, whichever way it was drawn. The connector is chosen in the tie palette.";
 
     /// <summary>
     /// Hole or initiation point under the cursor. Other objects are skipped: an initiation point is often placed on a
@@ -312,22 +328,31 @@ public sealed class TieTool : Tool
         if (_from == null) { _from = Start(p); return; }
         if (Target(p) is not { } hit) return;
         // the last hole again finishes the entry; the next click starts a new chain
-        if (hit.Id == _from.Id) { _from = null; Preview.Clear(); Vm.SetStatus(Loc.T("Tie entry finished")); return; }
-        // a hole the signal already reaches through a tie gets no second one
-        if (Tied(hit)) { Vm.SetStatus(Loc.F("Hole {0} is already tied", (hit as Hole)?.Label ?? "")); return; }
+        if (hit.Id == _from.Id) { Finish(); return; }
         Connect(_from, hit);
-        _from = hit;
+        GoOnOrFinish(hit, p);
+    }
+
+    /// <summary>After a tie: with Shift held the entry goes on from its hole, otherwise it is finished.</summary>
+    private void GoOnOrFinish(Entity hit, ToolPointer p)
+    {
+        if (p.Modifiers.HasFlag(KeyModifiers.Shift)) _from = hit;
+        else Finish();
+    }
+
+    private void Finish()
+    {
+        _from = null;
+        _end = null;
+        Preview.Clear();
+        Vm.SetStatus(Loc.T("Tie entry finished"));
     }
 
     /// <summary>
-    /// Whether the signal already reaches the hole: a tie ends at it or an initiation point stands on it. A chain may
-    /// start there, but no tie may go to it. Ties that only leave the hole do not count.
-    /// </summary>
-    private bool Tied(Entity e) => e is Hole && (Vm.Project!.Ties.Any(t => t.ToId == e.Id) || InitiationLinks.PointOn(Vm.Project, e.Id) != null);
-
-    /// <summary>
     /// Ties from <paramref name="from"/> to <paramref name="to"/> through every hole on the way: within the pick radius
-    /// (pixels, status bar) of the line on the screen, in their order along it; one tie each, one undo step.
+    /// (pixels, status bar) of the line on the screen, in their order along it; one tie each, one undo step. The new ties
+    /// are then pointed away from the initiation point, whichever way the line was drawn (<see cref="Timing.OrientTiesFromInitiation"/>),
+    /// and so are the ties they join to it: those of an entry so far and others no point reached before.
     /// </summary>
     private void Connect(Entity from, Entity to)
     {
@@ -339,7 +364,9 @@ public sealed class TieTool : Tool
         var connector = delay == null ? Vm.ActiveConnector : null;
         Vm.Change(chain.Count > 2 ? "Add ties" : "Add tie", pr =>
         {
+            var reached = Timing.ReachedTies(pr);
             for (int i = 1; i < chain.Count; i++) Timing.Connect(pr, chain[i - 1], chain[i], connector, delay);
+            Timing.OrientTiesFromInitiation(pr, pr.Ties.Select(t => t.Id).Where(id => !reached.Contains(id)).ToHashSet());
         });
         if (chain.Count > 2) Vm.SetStatus(Loc.F("{0} ties added through the holes on the line", chain.Count - 1));
     }
@@ -355,14 +382,10 @@ public sealed class TieTool : Tool
         double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
         if (len2 < 1) return new();
         var visible = p.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
-        // holes already tied are passed over, as a click on them does nothing
-        var tied = p.Ties.Select(t => t.ToId).ToHashSet();
-        foreach (var ip in p.Entities.OfType<InitiationPoint>()) if (ip.HoleId is Guid hid) tied.Add(hid);
         var found = new List<(double T, Hole H)>();
         foreach (var h in p.Holes)
         {
             if (h.Id == from.Id || h.Id == to.Id || !visible.Contains(h.LayerId) || Vm.HiddenEntities.Contains(h.Id) || !BlastDesigner.Rendering.PlanRenderer.HoleVisible(p.View, h)) continue;
-            if (tied.Contains(h.Id)) continue;
             var (x, y) = cam.ToScreen(h.Collar);
             var t = ((x - ax) * dx + (y - ay) * dy) / len2;
             if (t <= 0 || t >= 1) continue;
@@ -371,13 +394,31 @@ public sealed class TieTool : Tool
         return found.OrderBy(f => f.T).Select(f => f.H).ToList();
     }
 
+    /// <summary>
+    /// Grey lines on both sides of the line being drawn, the pick radius away from it on the screen: the holes between
+    /// them get a tie (<see cref="HolesOnTheWay"/>). The radius is in pixels, so they follow the zoom at each frame.
+    /// </summary>
+    private void UpdateCapture()
+    {
+        Preview.Guides.Clear();
+        if (!Vm.TieChain || !Vm.TieCaptureShown || _from == null || _end is not Vec3 b || Timing.PositionOf(Vm.Project!, _from.Id) is not Vec3 a) return;
+        var cam = View.Camera;
+        var (ax, ay) = cam.ToScreen(a);
+        var (bx, by) = cam.ToScreen(b);
+        double dx = bx - ax, dy = by - ay, len = Math.Sqrt(dx * dx + dy * dy);
+        if (len < 1) return;
+        double nx = -dy / len * View.TargetRadius, ny = dx / len * View.TargetRadius;
+        foreach (var side in new[] { 1, -1 })
+            Preview.Guides.Add((new[] { cam.ToWorld(ax + side * nx, ay + side * ny, a.Z), cam.ToWorld(bx + side * nx, by + side * ny, b.Z) }, CaptureColour));
+    }
+
     public override void PointerReleased(ToolPointer p)
     {
-        // Drag release on another hole creates the tie too.
-        if (_from != null && Target(p) is Hole h && h.Id != _from.Id && !Tied(h) && !p.Modifiers.HasFlag(KeyModifiers.Shift) && Preview.Lines.Count > 0)
+        // Drag release on another hole creates the tie too, and finishes or goes on like a click.
+        if (_from != null && Target(p) is Hole h && h.Id != _from.Id && Preview.Lines.Count > 0)
         {
             Connect(_from, h);
-            _from = h;
+            GoOnOrFinish(h, p);
         }
     }
 
@@ -388,14 +429,20 @@ public sealed class TieTool : Tool
         var a = Timing.PositionOf(Vm.Project!, _from.Id) ?? p.World;
         var colour = new SKColor(Vm.ActiveConnector?.Color ?? 0xFFDC2626);
         Preview.Markers.Clear();
-        if (Target(p) is Hole h && h.Id != _from.Id && !Tied(h))
+        if (Target(p) is Hole h && h.Id != _from.Id)
         {
             // through the holes on the way, which get a tie each
             var way = Vm.TieChain ? HolesOnTheWay(_from, h) : new List<Hole>();
             Preview.Lines.Add((new[] { a }.Concat(way.Select(x => x.Collar)).Append(h.Collar).ToList(), false, colour));
             foreach (var x in way) Preview.Markers.Add((x.Collar, colour));
+            _end = h.Collar;
         }
-        else Preview.Lines.Add((new[] { a, p.World }, false, colour));
+        else
+        {
+            Preview.Lines.Add((new[] { a, p.World }, false, colour));
+            _end = p.World;
+        }
+        UpdateCapture();
         Preview.Labels.Clear();
         Preview.Labels.Add((p.World, Vm.ActiveTieDelayMs is double ms ? Loc.F("{0} ms", ms.ToString("0.#")) : Vm.ActiveConnector?.Name ?? "0 ms"));
     }
@@ -405,6 +452,7 @@ public sealed class TieTool : Tool
     public override void Cancel()
     {
         _from = null;
+        _end = null;
         base.Cancel();
     }
 

@@ -506,6 +506,11 @@ Invert selection	Инвертировать выделение
 Is dummy	Фиктивная
 Is electronic	Электронная
 Isochrone interval (ms)	Шаг изолиний (мс)
+Show the blast in	Показать взрыв за
+Natural	Естественное
+{0} s	{0} с
+s	с
+The blast's own time: {0:0} ms	Время самого взрыва: {0:0} мс
 Isochrones	Изолинии
 Isolate	Только этот слой
 Join like decks	Объединить одинаковые колонки
@@ -639,6 +644,7 @@ Next number	Следующий номер
 Next time: {0} ms	Следующее время: {0} мс
 No	Нет
 No duplicate holes found.	Дубликаты скважин не найдены.
+All holes fire at the same time, the direction cannot be determined.	Все скважины взрываются одновременно, направление не определить
 No hole is initiated. Add an initiation point and ties, or electronic times.	Ни одна скважина не инициирована. Добавьте точку инициирования и связи или электронные времена.
 No log	Нет регистрации
 No missing objects found.	Потерянных объектов не найдено.
@@ -1446,7 +1452,7 @@ Face between crest "{0}" and toe "{1}".	Откос между бровкой «{
 Face burst m	Выброс с откоса, м
 Find maximum surface	Найти максимальную поверхность
 Find minimum surface	Найти минимальную поверхность
-Fines < {0} cm: {1:0.0} %	Мелочь < {0} см: {1:0.0} %
+Fines < {0}: {1:0.0} %	Мелочь < {0}: {1:0.0} %
 Fines cm	Мелочь, см
 Firing span	Время взрывания
 Flyrock clearance zone	Зона разлёта
@@ -1522,7 +1528,7 @@ Offset elevation	Смещение по высоте
 Offset northing	Смещение по северу
 Over-drilled	Перебур
 Oversize	Негабарит
-Oversize > {0} cm: {1:0.0} %	Негабарит > {0} см: {1:0.0} %
+Oversize > {0}: {1:0.0} %	Негабарит > {0}: {1:0.0} %
 Oversize cm	Негабарит, см
 PPV (mm/s)	PPV (мм/с)
 PPV = K · (D/√Q)^-B.  Events: {0}.  K(50 %) = {1:0}, B = {2:0.000}, R² = {3:0.000}, standard error {4:0.000} (log10).  K at {5:0.#} % = {6:0}.	PPV = K · (D/√Q)^-B.  Событий: {0}.  K(50 %) = {1:0}, B = {2:0.000}, R² = {3:0.000}, стандартная ошибка {4:0.000} (log10).  K при {5:0.#} % = {6:0}.
@@ -1566,7 +1572,7 @@ Set the kind of the strata surfaces to Strata first.	Сначала задайт
 Short	Недобур
 Site coordinate system	Система координат участка
 Site coordinate system…	Система координат участка…
-Size (cm)	Размер (см)
+Size ({0})	Размер ({0})
 Soft alternate product id	Альтернатива для слабых интервалов
 Soft collar extra stemming	Доп. забойка при слабом устье
 Softness threshold	Порог слабости
@@ -1594,9 +1600,6 @@ Vibration ({0} mm/s, K = {1:0}, B = {2:0.00}): {3:0} m	Сейсмика ({0} м�
 Vibration records	Сейсмические события
 Volume overview	Обзор объёмов
 Wet alternate product id	Альтернатива для обводнённой части
-X20 {0:0.0} cm	X20 {0:0.0} см
-X50 {0:0.0} cm	X50 {0:0.0} см
-X80 {0:0.0} cm	X80 {0:0.0} см
 Youngs modulus	Модуль Юнга
 front row	первый ряд
 kg per interval	кг за интервал
@@ -1621,6 +1624,7 @@ MJ/t	МДж/т
  ms	 мс
  kg	 кг
  cm	 см
+ mm	 мм
  dB	 дБ
  m³	 м³
  m	 м
@@ -2055,6 +2059,12 @@ ui:mixed	разные
 ui:Collar	Устье
 ui:Geometry	Геометрия
 ui:Classification	Классификация
+ui:Measurements	Замеры
+ui:No. {0}	№ {0}
+ui:Explosive total	ВВ всего
+ui:Explosive per hole	На скважину
+ui:Explosive in the hole	ВВ в скважине
+ui:Classification	Классификация
 ui:State	Состояние
 ui:Hole exceptions	Исключения
 ui:Initiation and loading	Инициирование и заряжание
@@ -2172,7 +2182,7 @@ ui:Cursor coordinates in the status bar	Координаты курсора в �
 ui:Key S in the viewport	Клавиша S во вьюпорте
 ui:Pick radius	Радиус захвата
 ui:Snapping reaches 1.5 times as far	Привязка срабатывает в 1,5 раза дальше
-ui:Minimum top stemming in hole diameters; kept in the program settings	Минимальная верхняя забойка в диаметрах скважины; сохраняется в настройках программы
+ui:Minimum top stemming in hole diameters; kept in the project and saved with a loading rule	Минимальная верхняя забойка в диаметрах скважины; хранится в проекте и сохраняется в правиле заряжания
 ui:Autosave	Автосохранение
 ui:min	мин
 ui:0 — off	0 — выключено
@@ -2302,7 +2312,9 @@ ui:Hole depth lines from collar to toe; off shows collars only	Линии скв
 ui:Charge columns along the holes, also without depth lines (Ctrl+Shift+L)	Колонки зарядов по скважинам, в том числе без линий глубин (Ctrl+Shift+L)
 Arrows	Стрелки
 Triangles	Треугольники
-Auto	Авто
+One colour	Один цвет
+Gradient	Градиент
+Colour by direction	Цвет по направлению
 {0:0.0} m	{0:0.0} м
 Shape	Форма
 Arrow size	Размер стрелки
@@ -2452,10 +2464,13 @@ Click the hole the signal comes from, then the hole it goes to; holes on the way
 Add ties	Добавить связи
 {0} ties added through the holes on the line	Добавлено связей: {0}, через скважины на линии
 ui:Tie chain	Цепочка связей
+ui:Capture width	Ширина захвата
+ui:Grey lines beside the tie show what it captures. The + and − keys change the pick radius	Серые линии по бокам связи показывают область захвата. Клавиши + и − меняют радиус захвата
+ui:Pick radius: {0:0} px	Радиус захвата: {0:0} пкс
 ui:On: ties go in turn through the holes on the line. Off: one tie from the first hole to the last	Включено: связи идут по очереди через скважины на линии. Выключено: одна связь от начальной скважины до конечной
 Connections	Соединения
 Initiation system	Система инициации
-Shock tube	УВТ
+Shock tube	НСИ
 Cord delay	Замедление шнура
 Electric	Электрич.
 Harness wire	Harness wire
@@ -2464,19 +2479,18 @@ User defined	Определённое пользователем
 Time, ms	Время, мс
 Product family	Семейство продуктов
 Product choice	Выбор продукта
-No products of this family in Available resources	В «Доступных ресурсах» нет продуктов этого семейства
+No products of this type in Available resources	В «Доступных ресурсах» нет продуктов этого типа
 {0} ms	{0} мс
 m/s	м/с
 Cord relay	Реле ДШ
 Electric detonator	Электродетонатор
 ui:Harness wire	Harness wire
 Detonating cord system	Детонирующий шнур
-Click the hole the signal comes from, then the holes it goes to; holes on the way get a tie each. Click the last hole again to finish. Holes the signal already reaches (a tie comes in or an initiation point stands on them) are skipped. The connector is chosen in the tie palette.	Щёлкните скважину, откуда идёт сигнал, затем скважины, куда он идёт; скважины на пути линии связываются по очереди. Повторный щелчок по последней скважине завершает ввод. Скважины, куда сигнал уже приходит (входит связь или стоит точка инициирования), пропускаются. Замедлитель выбирается в палитре СИ.
+Click a hole, then the hole to tie it to (or drag from one to the other); holes on the way get a tie each. The tie finishes the entry; with Shift held the entry goes on from that hole. Tied holes take more ties; each tie points away from the initiation point, whichever way it was drawn. The connector is chosen in the tie palette.	Щёлкните скважину, затем скважину, с которой её связать (или протяните линию от одной к другой); скважины на пути линии связываются по очереди. Связь завершает ввод; с зажатым Shift ввод продолжается от этой скважины. К уже связанным скважинам можно добавлять связи; каждая связь направляется от точки инициирования, в какую бы сторону её ни провели. Замедлитель выбирается в палитре СИ.
 Tie entry finished	Ввод связей завершён
 Hole {0} is already tied	Скважина {0} уже связана
 Initiation catalogue	Каталог СИ
 ui:Initiation catalogue	Каталог СИ
-Subtype	Подтип
 Family	Семейство
 Variant	Вариант
 Delay	Замедление
@@ -2494,6 +2508,8 @@ Ties turned to run from the initiation point: {0}	Связи развёрнут�
 ui:cm	см
 ui:GPa	ГПа
 ui:{0} cm	{0} см
+ui:{0} mm	{0} мм
+ui:Units of measurement	Единицы измерения
 ui:Oversize	Негабарит
 ui:Fines	Мелочь
 ui:Calculate from f	Рассчитать по f
@@ -2611,3 +2627,5 @@ ui:Right	Справа
 ui:Drag a label here	Перетащите подпись сюда
 ui:Move to the left side	Перенести влево
 ui:Move to the right side	Перенести вправо
+Min stemming diameters	Мин. забойка, диаметров
+Minimum stemming	Минимальная забойка

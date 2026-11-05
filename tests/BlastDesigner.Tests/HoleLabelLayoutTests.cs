@@ -55,3 +55,34 @@ public class HoleLabelLayoutTests
         Assert.False(HoleLabelLayout.IsShown(v, HoleLabel.HoleOrder));
     }
 }
+
+public class NaturalOrderTests
+{
+    [Fact]
+    public void Numbers_GoByValue_AlsoInsideText()
+    {
+        Assert.Equal(new[] { "1", "2", "10", "11", "20" }, new[] { "1", "10", "11", "2", "20" }.OrderBy(s => s, NaturalOrder.Instance));
+        Assert.Equal(new[] { "A2", "A10", "B1" }, new[] { "A10", "B1", "A2" }.OrderBy(s => s, NaturalOrder.Instance));
+        // a number with letters among plain numbers: after them, its own number counts among its likes
+        Assert.Equal(new[] { "1", "3", "10", "A-2", "A-10" }, new[] { "A-10", "10", "A-2", "3", "1" }.OrderBy(s => s, NaturalOrder.Instance));
+        Assert.True(NaturalOrder.Instance.Compare("1E2", "3") < 0);
+        Assert.True(NaturalOrder.Instance.Compare("12.10", "12.5") < 0);
+        Assert.Equal(0, NaturalOrder.Instance.Compare("a7", "A07"));
+        Assert.True(NaturalOrder.Instance.Compare("", "1") < 0);
+    }
+}
+
+public class MinStemmingTests
+{
+    [Fact]
+    public void MinStemming_IsSavedWithTheProjectAndTheRule()
+    {
+        var p = new BlastProject { MinStemmingDiameters = 18 };
+        p.LoadingRules.Add(new LoadingRule { Name = "r", MinStemmingDiameters = 22 });
+        var back = ProjectJson.Deserialize(ProjectJson.Serialize(p));
+        Assert.Equal(18, back.MinStemmingDiameters);
+        Assert.Equal(22, back.LoadingRules[0].MinStemmingDiameters);
+        // a file from before it has none: the program settings give it
+        Assert.Null(ProjectJson.Deserialize(ProjectJson.Serialize(new BlastProject())).MinStemmingDiameters);
+    }
+}

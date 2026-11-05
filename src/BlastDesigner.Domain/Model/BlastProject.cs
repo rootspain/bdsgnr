@@ -28,6 +28,11 @@ public sealed class BlastProject
     public DesignTolerances Tolerances { get; set; } = new();
     public FlyrockModel Flyrock { get; set; } = new();
     public FragmentationModel Fragmentation { get; set; } = new();
+    /// <summary>
+    /// Shortest top stemming accepted by the loading check, in hole diameters; it goes with the project. Null in files
+    /// from before it: the program settings give it then.
+    /// </summary>
+    public double? MinStemmingDiameters { get; set; }
     public List<VibrationRecord> VibrationRecords { get; set; } = new();
     public SiteCoordinateSystem Coordinates { get; set; } = new();
 

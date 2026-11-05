@@ -201,6 +201,80 @@ Step("layer list on the properties tab", () =>
     vm.Undo(); Pump();
     if (vm.Project!.Entities.Where(e => ids.Contains(e.Id)).Any(e => e.LayerId != from)) throw new Exception("undo should bring the selection back to its layer");
 });
+Step("properties of holes: loading on top, fields in folding groups inside the panel", () =>
+{
+    var selected = vm.Doc!.Selection.ToList();
+    var holes = vm.Project!.Holes.Take(3).Select(h => h.Id).ToList();
+    vm.Doc.Select(holes.Take(1)); Pump();
+    Control Named(string name) => window.GetLogicalDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name && c.IsEffectivelyVisible) ?? throw new Exception("no " + name + " on the properties tab");
+    bool Shows(string name) => window.GetLogicalDescendants().OfType<Control>().Any(c => c.Name == name && c.IsEffectivelyVisible);
+    void Press(string name) { Named(name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    if (Named("editLoading").TranslatePoint(new Point(), window)!.Value.Y >= Named("selectionLayer").TranslatePoint(new Point(), window)!.Value.Y) throw new Exception("the loading button should be above the layer list");
+    Named("holeCharge");
+    // every field fits the width of the panel
+    var grid = window.GetLogicalDescendants().OfType<PropertyGrid>().First(g => g.IsEffectivelyVisible);
+    foreach (var box in grid.GetLogicalDescendants().OfType<TextBox>().Where(b => b.IsEffectivelyVisible))
+        if (box.TranslatePoint(new Point(box.Bounds.Width, 0), grid)!.Value.X > grid.Bounds.Width + 0.5) throw new Exception($"{box.Name} runs out of the panel");
+    // a group folds and stays folded for the next selection
+    if (Shows("propWaterDepth") || !Shows("propLength")) throw new Exception("Measurements should start folded, Geometry open");
+    Press("sectionMeasurements");
+    if (!Shows("propWaterDepth")) throw new Exception("the group did not open");
+    vm.Doc.Select(holes); Pump();
+    if (!Shows("propWaterDepth")) throw new Exception("the open group closed with the selection");
+    Press("sectionMeasurements");
+    if (Shows("propWaterDepth")) throw new Exception("the group did not fold");
+    Named("chargeTotal"); Named("chargePerHole");
+    // a field in a group edits all the holes, in one undo step
+    var length = (TextBox)Named("propLength");
+    var was = vm.Project.Holes.First(h => h.Id == holes[0]).Length;
+    length.Text = "12.5"; length.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    if (vm.Project.Holes.Where(h => holes.Contains(h.Id)).Any(h => h.Length != 12.5)) throw new Exception("the length was not set on the holes");
+    Shot("02d_properties_holes");
+    vm.Undo(); Pump();
+    if (vm.Project!.Holes.First(h => h.Id == holes[0]).Length != was) throw new Exception("undo should bring the length back");
+    vm.Doc!.Select(selected); Pump();
+});
+Step("properties of ties: the delay is taken by Enter and when the focus leaves, and the times follow", () =>
+{
+    var selected = vm.Doc!.Selection.ToList();
+    var p = vm.Project!;
+    var ties = p.Ties.Where(t => p.FindEntity(t.ToId) is Hole { FiringTimeMs: not null }).Take(2).ToList();
+    var ids = ties.Select(t => t.Id).ToList();
+    var hole = ties[0].ToId;
+    double? Time() => ((Hole)vm.Project!.FindEntity(hole)!).FiringTimeMs;
+    TextBox Delay() => window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propDelayMs" && b.IsEffectivelyVisible);
+    void Enter(TextBox box) => box.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter });
+    void Leave(TextBox box) => box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent));
+    vm.Doc.Select(ids.Take(1)); Pump();
+    var was = Time();
+    var steps = vm.Doc.UndoNames.Count;
+    var box = Delay();
+    box.Text = "321"; Enter(box); Pump();
+    if (Time() == was) throw new Exception("Enter did not recalculate the times");
+    var byEnter = Time();
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("the delay by Enter should be one undo step");
+    // the panel was built anew; the box taken away must not make a second step, also with its focus lost
+    Leave(box); Pump();
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("the focus lost after Enter made a second undo step");
+    box = Delay();
+    box.Text = "654"; Leave(box); Pump();
+    if (Time() == byEnter) throw new Exception("leaving the field did not recalculate the times");
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    Pump();
+    // ties with different delays show as mixed: Enter sets them all in one step
+    vm.Change("Smoke tie delay", pr => ((TieEntity)pr.FindEntity(ids[0])!).DelayMs = 5);
+    vm.Doc.Select(ids); Pump();
+    var mixedSteps = vm.Doc.UndoNames.Count;
+    box = Delay();
+    box.Text = "77"; Enter(box); Pump();
+    Leave(box); Pump();
+    if (vm.Doc.UndoNames.Count != mixedSteps + 1) throw new Exception("mixed delays by Enter should be one undo step");
+    if (ids.Any(id => ((TieEntity)vm.Project!.FindEntity(id)!).DelayMs != 77)) throw new Exception("the delay was not set on all the ties");
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    Pump();
+    if (Time() != was) throw new Exception("undo should bring the time back");
+    vm.Doc.Select(selected); Pump();
+});
 Step("mixed values and flag merge", () =>
 {
     var a = new Hole { Length = 10, Diameter = 102, Exceptions = HoleException.Wet };
@@ -245,6 +319,18 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
     }
     // the plan keeps its own arrow style; the window's settings show on its chips and size field
     var buttons = w.GetLogicalDescendants().OfType<Button>().ToList();
+    if (buttons.Any(b => (b.Tag as string) == "shape:2")) throw new Exception("the Auto shape is still offered");
+    if (w.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "arrowSize").Text != BlastDesigner.App.Services.Loc.F("{0:0.0} m", 1.2)) throw new Exception("the arrows should start at 1.2 m");
+    // one colour first; the gradient colours the arrows by direction and shows its legend
+    var arrows = view.OptionsSource!().Overlays.OfType<BlastDesigner.Rendering.FirstMovementOverlay>().First();
+    if (arrows.Gradient || buttons.First(b => (b.Tag as string) == "colour:0").Foreground != BlastDesigner.App.Services.Look.Accent) throw new Exception("the arrows should start in one colour");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06c_first_movement_one_colour.png"));
+    buttons.First(b => (b.Tag as string) == "colour:1").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!arrows.Gradient) throw new Exception("the gradient chip did not switch");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06d_first_movement_gradient.png"));
+    buttons.First(b => (b.Tag as string) == "colour:0").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     var triangles = buttons.First(b => (b.Tag as string) == "shape:1");
     triangles.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     if (triangles.Foreground != BlastDesigner.App.Services.Look.Accent || buttons.First(b => (b.Tag as string) == "shape:0").Foreground == BlastDesigner.App.Services.Look.Accent) throw new Exception("shape chip did not switch to triangles");
@@ -726,7 +812,9 @@ Step("fragmentation inputs: rock factor A and Protodyakonov f, matched by the bl
     jointed.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     if (!Box("jointFactor").IsEffectivelyVisible || form.Draft.RockMassDescription != 0) throw new Exception("jointed mass: the joint factor field should show, RMD 0");
     // a preset keeps the inputs and brings them back into another window
-    Type("protodyakonovF", "7"); Type("oversize", "80");
+    // the sizes are typed in mm here: 800 mm is 80 cm
+    form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "sizeUnitMm").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    Type("protodyakonovF", "7"); Type("oversize", "800");
     var preset = Path.Combine(outDir, "smoke" + BlastDesigner.IO.FragmentationPreset.Extension);
     if (form.GetLogicalDescendants().OfType<Button>().Count(b => b.Name is "savePreset" or "loadPreset") != 2) throw new Exception("no preset buttons in the window");
     form.SavePreset(preset);
@@ -739,6 +827,89 @@ Step("fragmentation inputs: rock factor A and Protodyakonov f, matched by the bl
         throw new Exception($"preset not loaded: σc {again.Draft.Ucs}, oversize {again.Draft.OversizeCm}, RMD {again.Draft.RockMassDescription}, A {again.Draft.RockFactor}");
     if (again.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "protodyakonovF").Text != "7") throw new Exception("the loaded preset is not shown");
     w2.Close(); Pump();
+});
+Step("fragmentation inputs: block sizes in mm or cm, the switch kept in the preset", () =>
+{
+    var form = new FragmentationForm(vm.Project!);
+    var w = new Window { Width = 640, Height = 820, Content = form, Background = BlastDesigner.App.Services.Look.Ground };
+    w.Show(); Pump();
+    TextBox Box(string name) => form.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == name);
+    void Type(string name, string text) { var b = Box(name); b.Text = text; b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
+    void Unit(string unit) { form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "sizeUnit" + unit).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    string UnitText(string name) => (Box(name).InnerRightContent as TextBlock)?.Text ?? "";
+    var mm = BlastDesigner.App.Services.Loc.Ui("mm");
+    var cm = BlastDesigner.App.Services.Loc.Ui("cm");
+    // the group titles are blue
+    var title = form.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Size distribution").ToUpper(System.Globalization.CultureInfo.CurrentCulture));
+    if (title.Foreground != BlastDesigner.App.Services.Look.Blue) throw new Exception("the group title is not blue");
+    Unit("Mm");
+    Type("maxBlock", "1500");
+    if (Math.Abs(form.Draft.MaxBlockCm - 150) > 1e-9 || UnitText("maxBlock") != mm || UnitText("fines") != mm) throw new Exception($"1500 mm should be 150 cm: {form.Draft.MaxBlockCm}, unit {UnitText("maxBlock")}");
+    // switching the unit converts what is shown, the sizes stay the same
+    Unit("Cm");
+    if (Box("maxBlock").Text != "150" || form.Draft.MaxBlockCm != 150 || form.Draft.SizeUnit != SizeUnit.Cm || UnitText("oversize") != cm)
+        throw new Exception($"in cm the largest block should show 150: {Box("maxBlock").Text}, {form.Draft.MaxBlockCm} cm, unit {form.Draft.SizeUnit}");
+    var x50 = form.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Name == "preview0");
+    if (x50 != null && !x50.Text!.EndsWith(cm)) throw new Exception("X50 not in cm: " + x50.Text);
+    Unit("Mm");
+    if (Box("maxBlock").Text != "1500") throw new Exception("back in mm the largest block should show 1500: " + Box("maxBlock").Text);
+    if (x50 != null && !form.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "preview0").Text!.EndsWith(mm)) throw new Exception("X50 not in mm");
+    form.GetLogicalDescendants().OfType<ScrollViewer>().First().Offset = new Vector(0, 10000);
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "17b_fragmentation_size_units.png"));
+    // the preset keeps the unit and puts it back over the one of the window
+    Unit("Cm");
+    var preset = Path.Combine(outDir, "smoke-cm" + BlastDesigner.IO.FragmentationPreset.Extension);
+    form.SavePreset(preset);
+    Unit("Mm");
+    form.LoadPreset(preset); Pump();
+    if (form.Draft.SizeUnit != SizeUnit.Cm || Box("maxBlock").Text != "150") throw new Exception($"the preset unit not applied: {form.Draft.SizeUnit}, {Box("maxBlock").Text}");
+    w.Close(); Pump();
+});
+Step("exceptions window: the buttons take the rows chosen in the table, with none chosen the whole list", () =>
+{
+    var steps = vm.Doc!.UndoNames.Count;
+    var selected = vm.Doc.Selection.ToList();
+    var marked = vm.Project!.Holes.Where(h => !h.IsDummy).Take(3).Select(h => h.Id).ToList();
+    vm.Change("Smoke exceptions", p => { foreach (var id in marked) ((Hole)p.FindEntity(id)!).Exceptions = HoleException.Wet; });
+    BlastDesigner.App.Views.AnalysisWindows.Exceptions(vm); Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var table = w.GetLogicalDescendants().OfType<DataGrid>().First();
+    var items = table.ItemsSource!.Cast<string[]>().ToList();
+    void Press(string text) { w.GetLogicalDescendants().OfType<Button>().First(b => b.Content as string == BlastDesigner.App.Services.Loc.T(text)).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    if (items.Count < 3) throw new Exception($"{items.Count} rows in the exceptions table");
+    // the hole numbers are text in the table but sort by value, on opening and by the column
+    var natural = items.Select(i => i[0]).OrderBy(l => l, BlastDesigner.Domain.NaturalOrder.Instance).ToList();
+    if (!items.Select(i => i[0]).SequenceEqual(natural)) throw new Exception("the table does not open in the order of the numbers");
+    table.Columns[0].Sort(System.ComponentModel.ListSortDirection.Descending); Pump();
+    var sorted = table.CollectionView!.Cast<string[]>().Select(i => i[0]).ToList();
+    if (!sorted.SequenceEqual(Enumerable.Reverse(natural))) throw new Exception("the column does not sort by number: " + string.Join(" ", sorted.Take(12)));
+    table.Columns[0].Sort(System.ComponentModel.ListSortDirection.Ascending); Pump();
+    // sorting leaves the first row chosen, in sight in the table
+    table.SelectedItems.Clear(); Pump();
+    Press("Highlight");
+    if (vm.Highlight.Ids.Count != items.Count) throw new Exception($"with no row chosen the whole list should be highlighted: {vm.Highlight.Ids.Count} of {items.Count}");
+    // the search keeps the rows whose hole has the text, whatever its case; the buttons then take those shown
+    var search = w.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "exceptionsSearch");
+    var label = items[1][0];
+    search.Text = label.ToLowerInvariant(); Pump();
+    var found = table.CollectionView!.Cast<string[]>().ToList();
+    if (found.Count == 0 || found.Count >= items.Count || found.Any(r => !r[0].Contains(label, StringComparison.OrdinalIgnoreCase))) throw new Exception($"searching {label}: {found.Count} rows of {items.Count}");
+    Press("Highlight");
+    if (vm.Highlight.Ids.Count != found.Count) throw new Exception($"with a search the rows shown should be highlighted: {vm.Highlight.Ids.Count} of {found.Count}");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "40_exceptions_search.png"));
+    search.Text = ""; Pump();
+    if (table.CollectionView!.Cast<string[]>().Count() != items.Count) throw new Exception("clearing the search should bring all the rows back");
+    table.SelectedItems.Add(items[0]); table.SelectedItems.Add(items[2]); Pump();
+    Press("Highlight");
+    if (vm.Highlight.Ids.Count != 2) throw new Exception($"{vm.Highlight.Ids.Count} holes highlighted instead of the 2 rows chosen");
+    Press("Select these holes");
+    var wanted = new[] { items[0][0], items[2][0] };
+    if (vm.Doc!.SelectedHoles.Count() != 2 || vm.Doc.SelectedHoles.Any(h => !wanted.Contains(h.Label))) throw new Exception($"{vm.Doc.SelectedHoles.Count()} holes selected instead of the 2 rows chosen");
+    w.Close(); vm.ClearOverlays(); Pump();
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    vm.Doc!.Select(selected); Pump();
 });
 Step("exceptions window: Highlight rings the holes, Clear analysis on the plan removes them", () =>
 {
@@ -761,22 +932,45 @@ Step("visualization window: the chosen speed, interval and switches come back ne
 {
     vm.VisualizeTiming(); Pump();
     var w = BlastDesigner.App.Services.Dialogs.LastShown!;
-    w.GetLogicalDescendants().OfType<RadioButton>().First(r => (r.Content as string) == "0.5x").IsChecked = true;
+    void Chip(string tag) => w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == tag).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    TextBox Seconds() => w.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "playbackSeconds");
+    foreach (var tag in new[] { "playback:0", "playback:2", "playback:5", "playback:10", "playback:15" }) w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == tag);
+    // round buttons: Play turns into Pause while the blast runs, Stop ends it
+    Button Named(string name) => w.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name);
+    if (Named("play").Bounds.Width != Named("play").Bounds.Height || Named("play").CornerRadius.TopLeft * 2 != Named("play").Bounds.Width) throw new Exception("the Play button is not round");
+    void Tap(string name) { Named(name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    string? Tip() => ToolTip.GetTip(Named("play")) as string;
+    Tap("play");
+    if (Tip() != BlastDesigner.App.Services.Loc.T("Pause")) throw new Exception("Play should turn into Pause: " + Tip());
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "30d_visualization_playing.png"));
+    Tap("stop");
+    if (Tip() != BlastDesigner.App.Services.Loc.T("Play")) throw new Exception("Stop should bring Play back: " + Tip());
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "30c_visualization_speed.png"));
+    // a number of its own is taken by Enter and by leaving the field; a chip puts its number in the field
+    Seconds().Text = "7";
+    Seconds().RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter });
+    if (vm.Settings.PlaybackSeconds != 7) throw new Exception("the seconds typed in were not taken: " + vm.Settings.PlaybackSeconds);
+    Chip("playback:5");
+    if (Seconds().Text != "5") throw new Exception("the chip did not put its seconds in the field: " + Seconds().Text);
     w.GetLogicalDescendants().OfType<NumericUpDown>().First().Value = 40;
     foreach (var c in w.GetLogicalDescendants().OfType<CheckBox>()) c.IsChecked = false;
     Pump();
-    BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
+    // in the settings file at once, with the window still open
     var saved = BlastDesigner.IO.ProgramSettings.Load();
-    if (saved.PlaybackSpeed != 0.5 || saved.IsochroneIntervalMs != 40 || saved.ShowIsochrones || saved.ColourHolesByTime)
-        throw new Exception($"not saved: speed {saved.PlaybackSpeed}, interval {saved.IsochroneIntervalMs}, isochrones {saved.ShowIsochrones}, colour {saved.ColourHolesByTime}");
+    BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
+    if (saved.PlaybackSeconds != 5 || saved.IsochroneIntervalMs != 40 || saved.ShowIsochrones || saved.ColourHolesByTime)
+        throw new Exception($"not saved: seconds {saved.PlaybackSeconds}, interval {saved.IsochroneIntervalMs}, isochrones {saved.ShowIsochrones}, colour {saved.ColourHolesByTime}");
     vm.VisualizeTiming(); Pump();
     w = BlastDesigner.App.Services.Dialogs.LastShown!;
-    if (w.GetLogicalDescendants().OfType<RadioButton>().First(r => r.IsChecked == true).Content as string != "0.5x"
+    if (Seconds().Text != "5"
         || w.GetLogicalDescendants().OfType<NumericUpDown>().First().Value != 40
         || w.GetLogicalDescendants().OfType<CheckBox>().Any(c => c.IsChecked == true))
         throw new Exception("the window did not open with the values chosen last time");
     // back to the defaults for the other steps
-    w.GetLogicalDescendants().OfType<RadioButton>().First(r => (r.Content as string) == "1x").IsChecked = true;
+    Chip("playback:0");
+    if (Seconds().Text != "" || vm.Settings.PlaybackSeconds != 0) throw new Exception("Natural should clear the seconds");
     w.GetLogicalDescendants().OfType<NumericUpDown>().First().Value = 25;
     foreach (var c in w.GetLogicalDescendants().OfType<CheckBox>()) c.IsChecked = true;
     Pump();
@@ -851,6 +1045,17 @@ Step("loading dialog: save as rule", () =>
     void Capture(Avalonia.Controls.Window w, string name) { Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); var path = Path.Combine(outDir, name + ".png"); w.CaptureRenderedFrame()?.Save(path); Console.WriteLine($"     screenshot {path}"); }
     if (!save.IsEnabled) throw new Exception("Save as rule disabled on a loaded hole");
     var before = vm.Project.LoadingRules.Count;
+    // the minimum stemming typed in its check goes to the project (and to settings.json, kept intact here)
+    var savedSettings = File.Exists(ProgramSettings.SettingsPath) ? File.ReadAllBytes(ProgramSettings.SettingsPath) : null;
+    var stemBefore = vm.Project.MinStemmingDiameters;
+    void Stemming(string text)
+    {
+        var box = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "minStemming");
+        box.Text = text;
+        box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    }
+    Stemming("30");
+    if (vm.Project.MinStemmingDiameters != 30 || Charging.MinStemmingDiameters != 30) throw new Exception($"the minimum stemming should go to the project: {vm.Project.MinStemmingDiameters}");
 
     Click(save);
     var form = SaveRuleWindow.Last!;
@@ -862,6 +1067,13 @@ Step("loading dialog: save as rule", () =>
     var rule = vm.Project.LoadingRules.FirstOrDefault(r => r.Name == "Smoke rule") ?? throw new Exception("rule not stored in the loading rules");
     if (vm.Project.LoadingRules.Count != before + 1) throw new Exception("expected one new rule");
     if (editor.SelectedRule != rule) throw new Exception("saved rule is not selected in the Rule list");
+    if (rule.MinStemmingDiameters != 30) throw new Exception($"the rule should keep the minimum stemming: {rule.MinStemmingDiameters}");
+    // loading by the rule puts its minimum stemming back over the current one
+    Stemming("20");
+    var byRule = dlg.GetLogicalDescendants().OfType<Avalonia.Controls.Button>()
+        .First(b => b.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Any(t => t.Text == BlastDesigner.App.Services.Loc.T("Load by rule")));
+    Click(byRule);
+    if (vm.Project.MinStemmingDiameters != 30 || Charging.MinStemmingDiameters != 30) throw new Exception($"loading by the rule should set its minimum stemming: {vm.Project.MinStemmingDiameters}");
     var longer = new Hole { Length = hole.Length + 2, Diameter = hole.Diameter };
     Charging.ApplyRule(vm.Project, longer, rule);
     if (Math.Abs(Charging.TopStemming(vm.Project, longer) - 4) > 1e-6) throw new Exception("saved rule lost the 4 m stemming");
@@ -884,6 +1096,9 @@ Step("loading dialog: save as rule", () =>
     Click(empty);
     if (save.IsEnabled) throw new Exception("Save as rule must be disabled without explosive");
     dlg.Close();
+    vm.Change("Smoke stemming back", p => p.MinStemmingDiameters = stemBefore);
+    if (savedSettings != null) File.WriteAllBytes(ProgramSettings.SettingsPath, savedSettings); else File.Delete(ProgramSettings.SettingsPath);
+    vm.Settings.MinStemmingDiameters = 25;
 });
 Step("loading dialog: Enter commits a field and keeps the window", () =>
 {
@@ -983,6 +1198,17 @@ Step("hole form for several holes", () => { _ = HoleEditWindow.Show(vm, vm.Proje
 WindowShot("38b_hole_form_several");
 Step("resources window", () => { _ = ProductsWindow.Show(vm.Project!); });
 WindowShot("39_resources");
+Step("resources: the last row scrolls clear of the buttons under the list", () =>
+{
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Pump();
+    var sv = dlg.GetLogicalDescendants().OfType<ScrollViewer>().First(s => s.GetLogicalDescendants().OfType<Button>().Any(b => b.Tag is Product));
+    // what the list scrolls over is all of it: the bottom of the last row lies within the height it scrolls
+    var content = (Control)sv.Content!;
+    var last = sv.GetLogicalDescendants().OfType<Button>().Last(b => b.Tag is Product);
+    var bottom = last.TranslatePoint(new Point(0, last.Bounds.Height), content)!.Value.Y;
+    if (bottom > sv.Extent.Height + 0.5) throw new Exception($"the last row ends {bottom - sv.Extent.Height:0} px past the end of the scrolled list (extent {sv.Extent.Height:0})");
+});
 Step("resources: filter by kind, search, kind fields, delete asks when used", () =>
 {
     _ = ProductsWindow.Show(vm.Project!); Pump();
@@ -1564,6 +1790,38 @@ Step("tool windows open once", () =>
     if (BlastDesigner.App.Services.Dialogs.LastShown == first) throw new Exception("closed window was reused");
     BlastDesigner.App.Services.Dialogs.LastShown?.Close(); vm.ClearOverlays();
 });
+Step("tie tool: ties joined to the initiation point run away from it, at 0 ms too, the whole of a Shift entry", () =>
+{
+    var x0 = vm.Project!.Holes.Max(h => h.Collar.X) + 100;
+    var y0 = vm.Project.Holes.Min(h => h.Collar.Y) - 50;
+    var tiesBefore = vm.Project.Ties.Count();
+    var (connector, delay) = (vm.ActiveConnector, vm.ActiveTieDelayMs);
+    vm.ActiveConnector = null; vm.ActiveTieDelayMs = null;
+    var steps = vm.Doc!.UndoNames.Count;
+    var ids = new List<Guid>();
+    vm.Change("Smoke tied holes", p =>
+    {
+        for (int i = 0; i < 4; i++) { var h = new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + i * 5, y0, 100), Label = "T" + (i + 1) }; p.Add(h); ids.Add(h.Id); }
+        p.Add(new InitiationPoint { Position = ((Hole)p.FindEntity(ids[0])!).Collar, HoleId = ids[0], Label = "IPT" });
+        BlastDesigner.Engine.Timing.Connect(p, ids[0], ids[1], null);
+    });
+    vm.Doc!.Select(ids); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
+    vm.SetTool(new TieTool(vm)); Pump();
+    void Click(Guid id, bool shift = false)
+    {
+        var h = (Hole)vm.Project!.FindEntity(id)!;
+        var (x, y) = vm.View.Camera.ToScreen(h.Collar);
+        vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar, Left = true, ClickCount = 1, Modifiers = shift ? Avalonia.Input.KeyModifiers.Shift : Avalonia.Input.KeyModifiers.None });
+    }
+    // drawn from the far end: the first tie reaches no point yet, the second joins both to the tied hole
+    Click(ids[3]); Click(ids[2], shift: true); Click(ids[1]); Pump();
+    if (!vm.Project!.Ties.Any(t => t.FromId == ids[1] && t.ToId == ids[2]) || !vm.Project.Ties.Any(t => t.FromId == ids[2] && t.ToId == ids[3]))
+        throw new Exception("the ties of the entry should run away from the hole joined to the initiation point");
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    if (vm.Project.Ties.Count() != tiesBefore) throw new Exception("the ties were not undone");
+    vm.ActiveConnector = connector; vm.ActiveTieDelayMs = delay;
+    vm.SelectTool();
+});
 Step("tie tool: a line from one hole to another ties every hole on the way, in order, in one undo step", () =>
 {
     // beside the blast, a little off the straight line (within the pick radius), and one hole well off it
@@ -1571,33 +1829,102 @@ Step("tie tool: a line from one hole to another ties every hole on the way, in o
     var y0 = vm.Project.Holes.Min(h => h.Collar.Y);
     var tiesBefore = vm.Project.Ties.Count();
     var ids = new List<Guid>();
+    var off = Guid.Empty;
     vm.Change("Smoke holes in a line", p =>
     {
         for (int i = 0; i < 5; i++) { var h = new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + i * 5, y0 + 0.03 * (i % 2), 100), Label = "L" + (i + 1) }; p.Add(h); ids.Add(h.Id); }
-        p.Add(new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + 10, y0 + 6, 100), Label = "off" });
+        var o = new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + 10, y0 + 6, 100), Label = "off" };
+        p.Add(o);
+        off = o.Id;
     });
     vm.Doc!.Select(ids); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
     vm.SetTool(new TieTool(vm)); Pump();
-    void Click(Guid id)
+    void Click(Guid id, bool shift = false)
     {
         var h = (Hole)vm.Project!.FindEntity(id)!;
         var (x, y) = vm.View.Camera.ToScreen(h.Collar);
-        vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar, Left = true, ClickCount = 1 });
+        vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar, Left = true, ClickCount = 1, Modifiers = shift ? Avalonia.Input.KeyModifiers.Shift : Avalonia.Input.KeyModifiers.None });
     }
-    Click(ids[0]); Click(ids[4]); Pump();
+    void Move(Guid id)
+    {
+        var h = (Hole)vm.Project!.FindEntity(id)!;
+        var (x, y) = vm.View.Camera.ToScreen(h.Collar);
+        vm.ActiveTool!.PointerMoved(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar });
+    }
+    // the pick radius from the line on the screen, on both sides, at any zoom: grey lines show the capture area
+    void CheckCapture()
+    {
+        var lines = vm.View.Preview.Guides;
+        if (vm.View.Preview.Lines.Count != 1 || lines.Count != 2) throw new Exception($"{vm.View.Preview.Lines.Count} preview lines and {lines.Count} grey ones instead of the tie and two");
+        var cam = vm.View.Camera;
+        var (ax, ay) = cam.ToScreen(((Hole)vm.Project!.FindEntity(ids[0])!).Collar);
+        var (bx, by) = cam.ToScreen(((Hole)vm.Project.FindEntity(ids[4])!).Collar);
+        double dx = bx - ax, dy = by - ay, len = Math.Sqrt(dx * dx + dy * dy);
+        var sides = new List<double>();
+        foreach (var l in lines)
+            foreach (var pt in l.Points)
+            {
+                var (x, y) = cam.ToScreen(pt);
+                sides.Add(((x - ax) * dy - (y - ay) * dx) / len);
+            }
+        if (sides.Any(s => Math.Abs(Math.Abs(s) - vm.View.TargetRadius) > 0.1) || sides[0] * sides[2] >= 0)
+            throw new Exception("the grey lines should be the pick radius away on both sides: " + string.Join(" ", sides.Select(s => s.ToString("0.00"))));
+    }
+    Click(ids[0]); Move(ids[4]); CheckCapture();
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    Shot("31_tie_capture");
+    vm.View.Camera.Scale *= 2; vm.View.Redraw();
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    CheckCapture();
+    vm.View.Camera.Scale /= 2; vm.View.Redraw();
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    // F shows and hides them, its box follows; + and − change the pick radius, also the plus of the main keys with Shift
+    void Press(Avalonia.Input.Key key, Avalonia.Input.KeyModifiers mods = Avalonia.Input.KeyModifiers.None)
+    {
+        window.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = key, KeyModifiers = mods });
+        Pump();
+    }
+    CheckBox CaptureBox() => window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "tieCapture");
+    if (CaptureBox().IsChecked != true) throw new Exception("Capture width should be on by default");
+    Press(Avalonia.Input.Key.F); Move(ids[4]);
+    if (vm.View.Preview.Guides.Count != 0 || CaptureBox().IsChecked != false) throw new Exception("F should hide the grey lines and clear the box");
+    if (BlastDesigner.IO.ProgramSettings.Load().TieCaptureShown) throw new Exception("Capture width should be kept in the settings");
+    Press(Avalonia.Input.Key.F); Move(ids[4]);
+    if (vm.View.Preview.Guides.Count != 2 || CaptureBox().IsChecked != true) throw new Exception("F should bring the grey lines back");
+    if (!BlastDesigner.IO.ProgramSettings.Load().TieCaptureShown) throw new Exception("Capture width back on should be kept in the settings");
+    var radius = vm.View.TargetRadius;
+    Press(Avalonia.Input.Key.Add);
+    if (vm.View.TargetRadius != radius + 1) throw new Exception($"+ should widen the radius by 1: {vm.View.TargetRadius} from {radius}");
+    Move(ids[4]); CheckCapture();
+    Press(Avalonia.Input.Key.OemPlus, Avalonia.Input.KeyModifiers.Shift);
+    if (vm.View.TargetRadius != radius + 2) throw new Exception("Shift and the plus of the main keys should widen the radius");
+    Press(Avalonia.Input.Key.Subtract); Press(Avalonia.Input.Key.OemMinus);
+    if (vm.View.TargetRadius != radius) throw new Exception("− should narrow the radius by 1: " + vm.View.TargetRadius);
+    Click(ids[4]); Pump();
+    if (vm.View.Preview.Guides.Count != 0) throw new Exception("the grey lines stayed after the tie");
     var ties = vm.Project!.Ties.Where(t => ids.Contains(t.FromId) || ids.Contains(t.ToId)).ToList();
     if (ties.Count != 4) throw new Exception($"{ties.Count} ties instead of 4 through the holes on the line");
     for (int i = 1; i < 5; i++)
         if (!ties.Any(t => t.FromId == ids[i - 1] && t.ToId == ids[i])) throw new Exception($"no tie from hole {i} to {i + 1}");
-    // the last hole again finishes the entry; a new chain may start at a tied hole but tie no hole already tied
-    Click(ids[4]);
-    Click(ids[0]); Click(ids[2]); Pump();
-    if (vm.Project.Ties.Count(t => ids.Contains(t.FromId) || ids.Contains(t.ToId)) != 4) throw new Exception("a tie went to a hole already tied");
-    // a hole whose ties only leave it takes a tie in
-    Click(ids[0]);
-    Click(ids[4]); Click(ids[0]); Pump();
-    if (!vm.Project.Ties.Any(t => t.FromId == ids[4] && t.ToId == ids[0])) throw new Exception("no tie to a hole whose ties only leave it");
+    // the tie finished the entry: the next click only starts a new one; a hole already tied takes another tie, and
+    // with Shift the entry goes on from it, so the next click ties again
+    var steps = vm.Doc!.UndoNames.Count;
+    Click(off); Pump();
+    if (vm.Doc.UndoNames.Count != steps) throw new Exception("after a tie without Shift the next click should start a new entry, not tie");
+    Click(ids[2], shift: true); Pump();
+    if (!vm.Project.Ties.Any(t => (t.FromId == off && t.ToId == ids[2]) || (t.FromId == ids[2] && t.ToId == off))) throw new Exception("no tie to a hole already tied");
+    steps = vm.Doc.UndoNames.Count;
+    Click(ids[3]); Pump();
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("with Shift the entry should go on from the hole tied to");
+    vm.Undo();
+    // with an initiation point on the first hole, a line drawn back towards it is turned to run away from the point
+    vm.Change("Smoke initiation point", p => p.Add(new InitiationPoint { Position = ((Hole)p.FindEntity(ids[0])!).Collar, HoleId = ids[0], Label = "IPT" }));
+    Click(ids[3]); Click(ids[1]); Pump();
+    if (!vm.Project.Ties.Any(t => t.FromId == ids[1] && t.ToId == ids[2]) || !vm.Project.Ties.Any(t => t.FromId == ids[2] && t.ToId == ids[3]))
+        throw new Exception("ties drawn towards the initiation point should be turned to run away from it");
     vm.ActiveTool!.Cancel();
+    vm.Undo();
+    vm.Undo();
     vm.Undo();
     vm.Undo();
     if (vm.Project.Ties.Count() != tiesBefore) throw new Exception("one undo should remove all the ties of the line");
@@ -1607,7 +1934,9 @@ Step("tie tool: a line from one hole to another ties every hole on the way, in o
     chainBox.IsChecked = false; Pump();
     vm.ActiveTool!.Cancel();
     var stepsBefore = vm.Doc!.UndoNames.Count;
-    Click(ids[0]); Click(ids[4]); Pump();
+    Click(ids[0]); Move(ids[4]);
+    if (vm.View.Preview.Guides.Count != 0) throw new Exception("with the chain off nothing is captured: no grey lines");
+    Click(ids[4]); Pump();
     if (vm.Doc.UndoNames.Count != stepsBefore + 1) throw new Exception("one tie should be one undo step");
     var single = vm.Project.Ties.Where(t => ids.Contains(t.FromId) || ids.Contains(t.ToId)).ToList();
     if (single.Count != 1 || single[0].FromId != ids[0] || single[0].ToId != ids[4]) throw new Exception($"with the chain off: {single.Count} ties, expected one from the first hole to the last");
@@ -1740,7 +2069,7 @@ Step("the Ties button opens the initiation catalogue, whose position goes to the
     if (settings.Window[TiePaletteWindow.PositionKey] != $"{left.X},{left.Y}") throw new Exception("opening the catalogue changed its saved place: " + settings.Window[TiePaletteWindow.PositionKey]);
     win.Close(); vm.SelectTool();
 });
-Step("initiation catalogue: Type → Subtype → Family → Variant, user-defined delay, the window stays put", () =>
+Step("initiation catalogue: Type → Family → Variant, user-defined delay, the window stays put", () =>
 {
     vm.ShowTiePalette(); Pump();
     var win = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("initiation catalogue did not open");
@@ -1748,11 +2077,12 @@ Step("initiation catalogue: Type → Subtype → Family → Variant, user-define
     void Press(string tag) { Chip(tag).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
     var types = win.GetLogicalDescendants().OfType<Button>().Count(b => (b.Tag as string)?.StartsWith("type:") == true);
     if (types != 7) throw new Exception($"{types} types instead of 7");
-    // Electric: subtype electric detonators, their family, and its variants by delay
+    // Electric: the family of the electric detonators and its variants by delay
     Press("type:Electric");
     if (BlastDesigner.App.Services.Dialogs.LastShown != win || !win.IsVisible) throw new Exception("choosing a type recreated or closed the catalogue");
     if (vm.ActiveConnector?.Kind != ProductKind.ElectricDetonator) throw new Exception("Electric did not pick an electric detonator");
-    Chip("subtype:" + ProductKind.ElectricDetonator); Chip("family:Electric detonator");
+    Chip("family:Electric detonator");
+    if (win.GetLogicalDescendants().OfType<Button>().Any(b => (b.Tag as string)?.StartsWith("subtype:") == true)) throw new Exception("the Subtype group is still there");
     var variants = win.GetLogicalDescendants().OfType<Button>().Where(b => (b.Tag as string)?.StartsWith("variant:") == true).ToList();
     if (variants.Count != vm.Project!.Products.Count(p => p.Kind == ProductKind.ElectricDetonator && p.FamilyName == "Electric detonator")) throw new Exception($"{variants.Count} variants of the electric detonator family");
     var last = vm.Project.Products.Where(p => p.Kind == ProductKind.ElectricDetonator).OrderBy(p => p.DelayMs).Last();
@@ -1768,6 +2098,15 @@ Step("initiation catalogue: Type → Subtype → Family → Variant, user-define
     // back to the shock tube connectors for the steps after
     Press("type:ShockTube");
     if (vm.ActiveTieDelayMs != null || vm.ActiveConnector?.Kind != ProductKind.SurfaceConnector) throw new Exception("shock tube did not go back to a connector");
+    // a type lists the products of all its kinds: the shock tube connectors and the downhole detonators
+    foreach (var f in vm.Project.Products.Where(p => p.Kind is ProductKind.SurfaceConnector or ProductKind.DownholeDetonator).Select(p => p.FamilyName).Distinct()) Chip("family:" + f);
+    var downhole = vm.Project.Products.First(p => p.Kind == ProductKind.DownholeDetonator);
+    Press("family:" + downhole.FamilyName);
+    if (vm.ActiveConnector?.Kind != ProductKind.DownholeDetonator) throw new Exception("the downhole detonator family was not taken");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39e_initiation_catalogue_shock_tube.png"));
+    Press("family:" + vm.Project.Products.First(p => p.Kind == ProductKind.SurfaceConnector).FamilyName);
+    if (vm.ActiveConnector?.Kind != ProductKind.SurfaceConnector) throw new Exception("shock tube did not go back to a connector");
     if (!win.IsVisible) throw new Exception("the catalogue closed");
     win.Close(); vm.SelectTool();
 });

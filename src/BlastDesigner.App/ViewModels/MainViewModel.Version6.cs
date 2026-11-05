@@ -122,7 +122,14 @@ public sealed partial class MainViewModel
     public async Task EditFragmentationModel()
     {
         if (Doc == null) return;
-        if (await FragmentationWindow.Show(this) is { } edited) Change("Fragmentation inputs", p => p.Fragmentation = edited);
+        if (await FragmentationWindow.Show(this) is not { } edited) return;
+        Change("Fragmentation inputs", p => p.Fragmentation = edited);
+        // the unit last chosen is the one of the projects and presets that have none
+        if (edited.SizeUnit is { } unit && unit != Settings.FragmentSizeUnit)
+        {
+            Settings.FragmentSizeUnit = SizeUnits.Default = unit;
+            Settings.Save();
+        }
     }
     public Task EditCoordinates() => EditPart("Site coordinate system", p => p.Coordinates, (p, v) => p.Coordinates = v);
 

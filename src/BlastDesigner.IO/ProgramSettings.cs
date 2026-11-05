@@ -1,5 +1,6 @@
 using System.Text.Json;
 using BlastDesigner.Domain;
+using BlastDesigner.Domain.Model;
 
 namespace BlastDesigner.IO;
 
@@ -61,6 +62,8 @@ public sealed class ProgramSettings
         SurfaceColors.TryGetValue(kind, out var c) ? c : DefaultSurfaceColors.TryGetValue(kind, out var d) ? d : 0xFF8A9BB0;
     /// <summary>Shortest top stemming accepted by the loading check, in hole diameters.</summary>
     public double MinStemmingDiameters { get; set; } = 25;
+    /// <summary>Unit of the block sizes of fragmentation for projects and presets that have none of their own.</summary>
+    public SizeUnit FragmentSizeUnit { get; set; } = SizeUnit.Mm;
     public bool SnapToObjects { get; set; } = true;
     public double TargetRadiusPixels { get; set; } = 8;
     public bool ShowStartupAssistant { get; set; } = true;
@@ -72,8 +75,10 @@ public sealed class ProgramSettings
     public bool UseSurveyModel { get; set; } = true;
     /// <summary>Frames per second in the corner of the plan (Program settings ▸ Display).</summary>
     public bool ShowFps { get; set; }
-    /// <summary>Visualization window: playback speed (0.1, 0.5 or 1 — times the blast's own clock).</summary>
-    public double PlaybackSpeed { get; set; } = 1;
+    /// <summary>Tie tool panel ▸ Capture width: grey lines beside the tie being drawn show what it captures.</summary>
+    public bool TieCaptureShown { get; set; } = true;
+    /// <summary>Visualization window: seconds the whole blast is shown in; 0 runs on the blast's own clock.</summary>
+    public double PlaybackSeconds { get; set; }
     /// <summary>Visualization window: isochrone interval, ms.</summary>
     public double IsochroneIntervalMs { get; set; } = 25;
     /// <summary>Visualization window: draw the isochrones.</summary>

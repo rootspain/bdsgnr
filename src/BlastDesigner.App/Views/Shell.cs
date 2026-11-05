@@ -538,6 +538,16 @@ public sealed class ToolPanel : Border
             ToolTip.SetTip(chain, Loc.Ui("On: ties go in turn through the holes on the line. Off: one tie from the first hole to the last"));
             chain.IsCheckedChanged += (_, _) => _vm.TieChain = chain.IsChecked == true;
             _fields.Children.Add(chain);
+            var capture = new CheckBox
+            {
+                Content = Ui.Row(6, new TextBlock { Text = Loc.Ui("Capture width"), VerticalAlignment = VerticalAlignment.Center }, Look.Kbd("F")),
+                IsChecked = _vm.TieCaptureShown,
+                Name = "tieCapture",
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            ToolTip.SetTip(capture, Loc.Ui("Grey lines beside the tie show what it captures. The + and − keys change the pick radius"));
+            capture.IsCheckedChanged += (_, _) => { _vm.TieCaptureShown = capture.IsChecked == true; _vm.View.Redraw(); };
+            _fields.Children.Add(capture);
         }
         if (tool.Name is "Set" or "Row set")
             _fields.Children.Add(Field("Step, ms", _vm.Project.Electronic.HoleIntervalMs, v => _vm.Change("Electronic settings", p => p.Electronic.HoleIntervalMs = v)));

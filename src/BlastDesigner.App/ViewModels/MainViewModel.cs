@@ -59,14 +59,23 @@ public sealed partial class MainViewModel : ObservableObject
     public HashSet<Guid> HiddenEntities { get; } = new();
     /// <summary>Tie tool panel ▸ Tie chain: a line ties the holes on its way in turn; off, one tie from start to end.</summary>
     public bool TieChain { get; set; } = true;
+    /// <summary>Tie tool panel ▸ Capture width: grey lines beside the tie being drawn show what it captures; kept in the settings.</summary>
+    public bool TieCaptureShown
+    {
+        get => Settings.TieCaptureShown;
+        set
+        {
+            if (Settings.TieCaptureShown == value) return;
+            Settings.TieCaptureShown = value;
+            Settings.Save();
+        }
+    }
     /// <summary>Tie palette ▸ User defined: the delay new ties get instead of a product's; null uses the connector.</summary>
     public double? ActiveTieDelayMs { get; set; }
     /// <summary>Tie palette ▸ Initiation system chosen (a <see cref="Views.TiePaletteWindow"/> system key).</summary>
     public string? TieSystem { get; set; }
-    /// <summary>Initiation catalogue: subtype (product kind) chosen for each type (initiation system).</summary>
-    public Dictionary<string, ProductKind> TieSubtypes { get; } = new();
-    /// <summary>Initiation catalogue: family chosen for each subtype.</summary>
-    public Dictionary<ProductKind, string> TieFamilyChoice { get; } = new();
+    /// <summary>Initiation catalogue: family chosen for each type (initiation system).</summary>
+    public Dictionary<string, (ProductKind Kind, string Name)> TieFamilyChoice { get; } = new();
     public HighlightOverlay Highlight { get; } = new();
     public List<IOverlay> AnalysisOverlays { get; } = new();
     public double? AnimationTime { get; set; }
@@ -105,6 +114,7 @@ public sealed partial class MainViewModel : ObservableObject
         doc.Changed += OnDocChanged;
         doc.SelectionChanged += OnSelectionChanged;
         ActiveConnector = doc.Project.Products.FirstOrDefault(p => p.Kind == ProductKind.SurfaceConnector);
+        UseMinStemming();
         Timing.Solve(doc.Project);
         if (doc.Project.View.Scale > 0 && doc.FilePath != null) View.Camera.LoadFrom(doc.Project.View);
         else View.ZoomAll();
@@ -127,8 +137,26 @@ public sealed partial class MainViewModel : ObservableObject
     private void OnDocChanged(object? sender, EventArgs e)
     {
         if (Doc == null) return;
+        // an undo can bring back another minimum stemming
+        UseMinStemming();
         Timing.Solve(Doc.Project);
         RefreshAll();
+    }
+
+    /// <summary>The loading checks take the minimum stemming of the open project, or the program settings' when it has none.</summary>
+    private void UseMinStemming() => Charging.MinStemmingDiameters = Doc?.Project.MinStemmingDiameters ?? Settings.MinStemmingDiameters;
+
+    /// <summary>
+    /// A new minimum stemming: the project keeps it (one undo step), and the program settings keep it for projects
+    /// that have none.
+    /// </summary>
+    public void SetMinStemming(double diameters)
+    {
+        Settings.MinStemmingDiameters = diameters;
+        Settings.Save();
+        if (Doc == null) { Charging.MinStemmingDiameters = diameters; return; }
+        if (Project!.MinStemmingDiameters == diameters) { UseMinStemming(); return; }
+        Change("Minimum stemming", p => p.MinStemmingDiameters = diameters);
     }
 
     private void OnSelectionChanged(object? sender, EventArgs e)

@@ -529,6 +529,9 @@ public sealed class MainWindow : Window
             _ => null
         };
         else if (m == KeyModifiers.Shift && e.Key == Key.Z && !typing) a = _vm.UndoZoom;
+        // the plus of the main keys comes with Shift
+        else if (m is KeyModifiers.None or KeyModifiers.Shift && !typing && _vm.ActiveTool is TieTool && e.Key is Key.Add or Key.OemPlus or Key.Subtract or Key.OemMinus)
+            a = () => StepTargetRadius(e.Key is Key.Add or Key.OemPlus ? 1 : -1);
         else if (m == KeyModifiers.None && !typing) a = e.Key switch
         {
             Key.V => _vm.SelectTool,
@@ -551,6 +554,7 @@ public sealed class MainWindow : Window
             Key.X => () => AnalysisWindows.SectionTool(_vm),
             Key.F7 => () => ShowInspectorTab(1),
             Key.F3 => () => _ = _vm.FindHole("label"),
+            Key.F when _vm.ActiveTool is TieTool => () => { _vm.TieCaptureShown = !_vm.TieCaptureShown; _vm.View.Redraw(); },
             Key.Tab when _vm.ActiveTool is not null and not SelectTool => () => _ = _vm.EnterCoordinates(),
             Key.Enter when _vm.ActiveTool is SelectTool && _vm.HasSelection => () => ShowInspectorTab(0),
             Key.Enter when _vm.ActiveTool is not null and not SelectTool => _vm.CompleteTool,
@@ -575,6 +579,14 @@ public sealed class MainWindow : Window
         Ui.Safe(a);
         OnToolChanged();
         e.Handled = true;
+    }
+
+    /// <summary>The pick radius a step up or down, within the limits of its field in the status bar.</summary>
+    private void StepTargetRadius(int step)
+    {
+        _targetRadius.Value = Math.Clamp((_targetRadius.Value ?? 8) + step, _targetRadius.Minimum, _targetRadius.Maximum);
+        _vm.SetStatus(Loc.F(Loc.Ui("Pick radius: {0:0} px"), _targetRadius.Value));
+        _vm.View.Redraw();
     }
 
     private async Task OnOpened()

@@ -420,12 +420,7 @@ public static class HoleLoadingWindow
             Content = editor
         };
         editor.Closing = ok => { editor.Applied = ok; w.Close(); };
-        editor.StoreMinStemming = diameters =>
-        {
-            vm.Settings.MinStemmingDiameters = Charging.MinStemmingDiameters = diameters;
-            vm.Settings.Save();
-            vm.View.Redraw();
-        };
+        editor.StoreMinStemming = vm.SetMinStemming;
         editor.StoreRule = rule => vm.Change("Save loading rule", p =>
         {
             var i = p.LoadingRules.FindIndex(r => r.Id == rule.Id);
@@ -518,7 +513,7 @@ public sealed class HoleLoadingEditor : DockPanel
     public List<(bool Ok, string Text)> Checks { get; } = new();
 
     public Action<bool>? Closing { get; set; }
-    /// <summary>Takes the minimum stemming in diameters edited in its check and keeps it in the program settings.</summary>
+    /// <summary>Takes the minimum stemming in diameters edited in its check or loaded with a rule (project and program settings).</summary>
     public Action<double>? StoreMinStemming { get; set; }
 
     private Deck? Sel => Selected >= 0 && Selected < Decks.Count ? Decks[Selected] : null;
@@ -627,6 +622,8 @@ public sealed class HoleLoadingEditor : DockPanel
         if (!Decks.Any(d => _p.FindProduct(d.ProductId)?.IsExplosive == true)) return;
         var rule = await SaveRuleWindow.Show(TopLevel.GetTopLevel(this) as Window, _p, _hole, Decks);
         if (rule == null) return;
+        // the rule keeps the minimum stemming the column was checked against
+        rule.MinStemmingDiameters = Charging.MinStemmingDiameters;
         StoreRule?.Invoke(rule);
         FillRules(_p.LoadingRules.FirstOrDefault(r => r.Id == rule.Id));
     }
@@ -637,6 +634,8 @@ public sealed class HoleLoadingEditor : DockPanel
         _applyRule = Btn(Loc.T("Load by rule"), "wand", () =>
         {
             if (SelectedRule is not { } rule) return;
+            // the rule's minimum stemming replaces the current one
+            if (rule.MinStemmingDiameters is double stem) StoreMinStemming?.Invoke(stem);
             var tmp = ProjectJson.DeepClone(_hole);
             Charging.ApplyRule(_p, tmp, rule);
             Decks.Clear();
@@ -1312,7 +1311,7 @@ public sealed class HoleLoadingEditor : DockPanel
             Background = Look.Field,
             BorderBrush = Look.LineStrong
         };
-        ToolTip.SetTip(box, L("Minimum top stemming in hole diameters; kept in the program settings"));
+        ToolTip.SetTip(box, L("Minimum top stemming in hole diameters; kept in the project and saved with a loading rule"));
         var text = box.Text;
         void Commit(bool keepFocus)
         {

@@ -12,6 +12,7 @@ using BlastDesigner.App.Controls;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.Tools;
 using BlastDesigner.App.ViewModels;
+using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
@@ -72,13 +73,22 @@ public static class AnalysisWindows
         for (int i = 0; i < headers.Length; i++)
         {
             var idx = i;
-            grid.Columns.Add(new DataGridTextColumn { Header = Loc.T(headers[i]), Binding = new Avalonia.Data.Binding($"[{idx}]") });
+            grid.Columns.Add(new DataGridTextColumn { Header = Loc.T(headers[i]), Binding = new Avalonia.Data.Binding($"[{idx}]"), CustomSortComparer = new RowOrder(idx) });
         }
         grid.ItemsSource = rows.ToList();
         return grid;
     }
 
-    internal static Control WithButtons(Control content, params (string Text, Action Action)[] buttons)
+    /// <summary>Rows of a <see cref="Table"/> by one column: the cells are text, the numbers among them sort by value.</summary>
+    private sealed class RowOrder(int column) : System.Collections.IComparer
+    {
+        public int Compare(object? a, object? b) => NaturalOrder.Instance.Compare((a as string[])?[column], (b as string[])?[column]);
+    }
+
+    internal static Control WithButtons(Control content, params (string Text, Action Action)[] buttons) => WithButtons(content, null, buttons);
+
+    /// <summary>The buttons over the content, <paramref name="aside"/> at the right end of their row.</summary>
+    internal static Control WithButtons(Control content, Control? aside, params (string Text, Action Action)[] buttons)
     {
         var dock = new DockPanel { Margin = new Thickness(8) };
         var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(0, 0, 0, 6) };
@@ -88,8 +98,15 @@ public static class AnalysisWindows
             b.Click += (_, _) => { try { a(); } catch (Exception ex) { Dialogs.ShowError(ex); } };
             bar.Children.Add(b);
         }
-        DockPanel.SetDock(bar, Dock.Top);
-        dock.Children.Add(bar);
+        Control top = bar;
+        if (aside != null)
+        {
+            DockPanel.SetDock(aside, Dock.Right);
+            top = new DockPanel { Margin = bar.Margin, Children = { aside, bar } };
+            bar.Margin = default;
+        }
+        DockPanel.SetDock(top, Dock.Top);
+        dock.Children.Add(top);
         dock.Children.Add(content);
         return dock;
     }
@@ -120,16 +137,36 @@ public static class AnalysisWindows
         var min = timed.Min(h => h.FiringTimeMs!.Value);
         var playbackEnd = max > min ? max : max + 1;
         var slider = new Slider { Minimum = min, Maximum = playbackEnd, Value = playbackEnd, MinWidth = 60, VerticalAlignment = VerticalAlignment.Center };
-        var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 140 };
-        var interval = new NumericUpDown { Value = (decimal)Math.Clamp(s.IsochroneIntervalMs, 1, 1000), Minimum = 1, Maximum = 1000, Width = 120, FormatString = "0" };
-        var contours = new CheckBox { Content = Loc.T("Isochrones"), IsChecked = s.ShowIsochrones };
-        var colour = new CheckBox { Content = Loc.T("Colour by time"), IsChecked = s.ColourHolesByTime };
+        // the text of the window is the size of its chips, to keep it small on the plan
+        const double textSize = 12;
+        var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 130, FontSize = textSize };
+        var interval = new NumericUpDown { Value = (decimal)Math.Clamp(s.IsochroneIntervalMs, 1, 1000), Minimum = 1, Maximum = 1000, Width = 96, Height = 28, MinHeight = 28, FontSize = textSize, VerticalContentAlignment = VerticalAlignment.Center, FormatString = "0" };
+        var contours = new CheckBox { Content = Loc.T("Isochrones"), IsChecked = s.ShowIsochrones, FontSize = textSize, MinHeight = 24 };
+        var colour = new CheckBox { Content = Loc.T("Colour by time"), IsChecked = s.ColourHolesByTime, FontSize = textSize, MinHeight = 24 };
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-        // playback runs on the blast's own clock: 1x shows 1 ms of firing per 1 ms, 0.1x ten times slower
-        var playbackSpeed = s.PlaybackSpeed is 0.1 or 0.5 ? s.PlaybackSpeed : 1.0;
+        // the whole blast takes the seconds chosen, however long it is; 0 is its own clock, 1 ms of firing per 1 ms
+        var playbackSeconds = Math.Clamp(s.PlaybackSeconds, 0, 600);
         var clock = new System.Diagnostics.Stopwatch();
-        var play = new Button { Content = "▶ " + Loc.T("Play") };
-        void SetPlaying(bool isPlaying) => play.Content = (isPlaying ? "Ⅱ " + Loc.T("Pause") : "▶ " + Loc.T("Play"));
+        // round buttons with a filled sign, the tip says what they do
+        static Control Sign(string data, double size, IBrush fill) => new Avalonia.Controls.Shapes.Path { Data = Geometry.Parse(data), Fill = fill, Width = size, Height = size, Stretch = Stretch.Uniform };
+        static Button Round(string name) => new()
+        {
+            Name = name,
+            Width = 36,
+            Height = 36,
+            Padding = new Thickness(0),
+            CornerRadius = new CornerRadius(18),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        var play = Round("play");
+        play.Classes.Add("primary");
+        void SetPlaying(bool isPlaying)
+        {
+            play.Content = Sign(isPlaying ? "M6 4h4v16H6z M14 4h4v16h-4z" : "M6 4l15 8-15 8z", 14, Look.OnAccent);
+            ToolTip.SetTip(play, Loc.T(isPlaying ? "Pause" : "Play"));
+        }
+        SetPlaying(false);
         void Update()
         {
             vm.AnimationTime = Math.Min(slider.Value, max);
@@ -145,15 +182,17 @@ public static class AnalysisWindows
             vm.View.Redraw();
         }
         slider.PropertyChanged += (_, e) => { if (e.Property == RangeBase.ValueProperty) Update(); };
-        interval.ValueChanged += (_, _) => Update();
-        contours.IsCheckedChanged += (_, _) => Update();
-        colour.IsCheckedChanged += (_, _) => Update();
+        // the choices reach the settings file at once, not only when the window closes
+        void UpdateAndSave() { Update(); s.Save(); }
+        interval.ValueChanged += (_, _) => UpdateAndSave();
+        contours.IsCheckedChanged += (_, _) => UpdateAndSave();
+        colour.IsCheckedChanged += (_, _) => UpdateAndSave();
         timer.Tick += (_, _) =>
         {
             // real elapsed time, so a late tick does not slow the blast down
             var elapsed = clock.Elapsed.TotalMilliseconds;
             clock.Restart();
-            slider.Value = Math.Min(playbackEnd, slider.Value + elapsed * playbackSpeed);
+            slider.Value = Math.Min(playbackEnd, slider.Value + elapsed * Timing.PlaybackRate(playbackEnd - min, playbackSeconds));
             if (slider.Value >= playbackEnd)
             {
                 timer.Stop();
@@ -173,24 +212,62 @@ public static class AnalysisWindows
             timer.Start();
             SetPlaying(true);
         };
-        var stop = new Button { Content = "■ " + Loc.T("Stop") };
+        var stop = Round("stop");
+        stop.Content = Sign("M5 5h14v14H5z", 12, Look.TextSoft);
+        stop.Background = Brushes.Transparent;
+        stop.BorderBrush = Look.LineStrong;
+        stop.BorderThickness = new Thickness(1);
+        ToolTip.SetTip(stop, Loc.T("Stop"));
         stop.Click += (_, _) =>
         {
             timer.Stop();
             slider.Value = min;
             SetPlaying(false);
         };
-        var speed1 = new RadioButton { Content = "0.1x", GroupName = "TimingPlaybackSpeed", IsChecked = playbackSpeed == 0.1 };
-        var speed2 = new RadioButton { Content = "0.5x", GroupName = "TimingPlaybackSpeed", IsChecked = playbackSpeed == 0.5 };
-        var speed4 = new RadioButton { Content = "1x", GroupName = "TimingPlaybackSpeed", IsChecked = playbackSpeed == 1 };
-        speed1.IsCheckedChanged += (_, _) => { if (speed1.IsChecked == true) s.PlaybackSpeed = playbackSpeed = 0.1; };
-        speed2.IsCheckedChanged += (_, _) => { if (speed2.IsChecked == true) s.PlaybackSpeed = playbackSpeed = 0.5; };
-        speed4.IsCheckedChanged += (_, _) => { if (speed4.IsChecked == true) s.PlaybackSpeed = playbackSpeed = 1; };
+        static string Seconds(double v) => v > 0 ? v.ToString("0.#", CultureInfo.CurrentCulture) : "";
+        var seconds = new TextBox
+        {
+            Name = "playbackSeconds",
+            Text = Seconds(playbackSeconds),
+            Watermark = "—",
+            Width = 70,
+            Height = 28,
+            MinHeight = 28,
+            FontSize = textSize,
+            Padding = new Thickness(8, 3),
+            VerticalAlignment = VerticalAlignment.Center,
+            InnerRightContent = new TextBlock { Text = Loc.T("s"), FontSize = 11, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }
+        };
+        var secondsChips = new List<(Button Chip, double Value)>();
+        void SetSeconds(double value)
+        {
+            s.PlaybackSeconds = playbackSeconds = value;
+            s.Save();
+            seconds.Text = Seconds(value);
+            foreach (var (chip, v) in secondsChips) Ui.SetChip(chip, v == value);
+        }
+        void TakeSeconds()
+        {
+            var text = (seconds.Text ?? "").Trim().Replace(',', '.');
+            if (text.Length == 0) SetSeconds(0);
+            else if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) SetSeconds(Math.Clamp(v, 0, 600));
+            else seconds.Text = Seconds(playbackSeconds);
+        }
+        seconds.LostFocus += (_, _) => TakeSeconds();
+        seconds.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { TakeSeconds(); e.Handled = true; } };
+        var speedRow = Ui.Row(6, new TextBlock { Text = Loc.T("Show the blast in"), FontSize = textSize, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 2, 0) }, seconds);
+        foreach (var value in new double[] { 0, 2, 5, 10, 15 })
+        {
+            var chip = Ui.Chip(value == 0 ? Loc.T("Natural") : Loc.F("{0} s", value), () => SetSeconds(value), value == playbackSeconds, value == 0 ? Loc.F("The blast's own time: {0:0} ms", playbackEnd - min) : null);
+            chip.Tag = "playback:" + value;
+            secondsChips.Add((chip, value));
+            speedRow.Children.Add(chip);
+        }
         Grid.SetColumn(slider, 1);
         var panel = new StackPanel
         {
-            Margin = new Thickness(10),
-            Spacing = 8,
+            Margin = new Thickness(8),
+            Spacing = 6,
             Children =
             {
                 // the scrub bar takes what the buttons leave, so it shrinks with the window
@@ -200,16 +277,17 @@ public static class AnalysisWindows
                     ColumnSpacing = 8,
                     Children =
                     {
-                        new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { play, stop, speed1, speed2, speed4 } },
+                        new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { play, stop } },
                         slider
                     }
                 },
+                speedRow,
                 // in a narrow window the time and the last options wrap to a second line
                 new WrapPanel
                 {
                     Children =
                     {
-                        Spaced(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = Loc.T("Isochrone interval (ms)"), VerticalAlignment = VerticalAlignment.Center }, interval } }),
+                        Spaced(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new TextBlock { Text = Loc.T("Isochrone interval (ms)"), FontSize = textSize, VerticalAlignment = VerticalAlignment.Center }, interval } }),
                         Spaced(contours),
                         Spaced(colour),
                         Spaced(label)
@@ -217,9 +295,9 @@ public static class AnalysisWindows
                 }
             }
         };
-        static Control Spaced(Control c) { c.Margin = new Thickness(0, 0, 12, 4); return c; }
+        static Control Spaced(Control c) { c.Margin = new Thickness(0, 0, 12, 0); c.VerticalAlignment = VerticalAlignment.Center; return c; }
         Update();
-        const double width = 920, height = 130;
+        const double width = 720, height = 134;
         var w = Dialogs.ShowWindow("Visualization", panel, width, height, alignBottomToOwner: true);
         w.MinWidth = width / 2;
         w.MinHeight = height / 2;
@@ -434,7 +512,8 @@ public static class AnalysisWindows
         var p = vm.Project!;
         Timing.Solve(p);
         var rows = new List<string[]>();
-        foreach (var h in p.Holes.Where(h => !h.IsDummy).OrderBy(h => h.Label))
+        var holeOf = new Dictionary<string[], Guid>();
+        foreach (var h in p.Holes.Where(h => !h.IsDummy).OrderBy(h => h.Label, NaturalOrder.Instance))
         {
             var issues = new List<string>();
             if (h.Exceptions != HoleException.None) issues.Add(Loc.Enum(h.Exceptions));
@@ -442,11 +521,29 @@ public static class AnalysisWindows
             issues.AddRange(Charging.Validate(p, h).Select(Loc.T));
             if (!h.FiringTimeMs.HasValue) issues.Add(Loc.T("Not initiated"));
             if (h.ActualLength is double a && Math.Abs(a - h.Length) > 0.5) issues.Add(Loc.F("Dipped {0:0.0} vs design {1:0.0}", a, h.Length));
-            if (issues.Count > 0) rows.Add(new[] { h.Label, string.Join("; ", issues) });
+            if (issues.Count == 0) continue;
+            var row = new[] { h.Label, string.Join("; ", issues) };
+            rows.Add(row);
+            holeOf[row] = h.Id;
         }
-        var ids = rows.Select(r => p.Holes.First(h => h.Label == r[0]).Id).ToList();
-        var content = Table(new[] { "Hole", "Problem" }, rows);
-        Dialogs.ShowWindow("Exceptions view", WithButtons(content, ("Select these holes", () => vm.Doc!.Select(ids)), ("Highlight", () => vm.SetHighlight(ids))), 640, 480);
+        var content = (DataGrid)Table(new[] { "Hole", "Problem" }, rows);
+        // a view of the rows: the search filters them and the order chosen by a column stays
+        var shown = new Avalonia.Collections.DataGridCollectionView(rows);
+        content.ItemsSource = shown;
+        var search = new TextBox { Watermark = Loc.T("Filter by label…"), Width = 200, Name = "exceptionsSearch" };
+        search.TextChanged += (_, _) =>
+        {
+            var text = (search.Text ?? "").Trim();
+            shown.Filter = text.Length == 0 ? null : r => ((string[])r)[0].Contains(text, StringComparison.OrdinalIgnoreCase);
+            content.SelectedItems.Clear();
+        };
+        // the rows chosen in the table; with none chosen all those shown
+        List<Guid> Chosen()
+        {
+            var chosen = content.SelectedItems.OfType<string[]>().ToList();
+            return (chosen.Count > 0 ? chosen : shown.Cast<string[]>()).Select(r => holeOf[r]).ToList();
+        }
+        Dialogs.ShowWindow("Exceptions view", WithButtons(content, search, ("Select these holes", () => vm.Doc!.Select(Chosen())), ("Highlight", () => vm.SetHighlight(Chosen()))), 640, 480);
     }
 
     /// <summary>Front row: true burden of each front-row hole to the crest line.</summary>
@@ -523,6 +620,7 @@ public static class AnalysisWindows
     // ---- first movement ---------------------------------------------------------------
 
     static double _firstMovementArrowSize = BlastDesigner.Engine.FirstMovement.DefaultArrowSize;
+    static bool _firstMovementGradient;
     static FirstMovementOverlay? _firstMovementOpen;
     static bool _firstMovementOnPlan;
 
@@ -541,8 +639,12 @@ public static class AnalysisWindows
         }
         var p = vm.Project!;
         Timing.Solve(p);
-        var overlay = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize };
-        if (overlay.Arrows(p).Count == 0) { _ = Dialogs.Info(Loc.T("No hole is initiated. Add an initiation point and ties, or electronic times.")); return; }
+        var overlay = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize, Gradient = _firstMovementGradient, LegendTitle = Loc.T("Colour by direction") };
+        if (overlay.Arrows(p).Count == 0)
+        {
+            _ = Dialogs.Info(Loc.T(BlastDesigner.Engine.FirstMovement.AllAtOnce(p) ? "All holes fire at the same time, the direction cannot be determined." : "No hole is initiated. Add an initiation point and ties, or electronic times."));
+            return;
+        }
         var view = SecondaryViewport(vm, () =>
         {
             var o = vm.BuildSceneOptions();
@@ -558,9 +660,12 @@ public static class AnalysisWindows
         var arrowCount = overlay.Arrows(p).Count;
         var size = new TextBlock { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, MinWidth = 54, TextAlignment = TextAlignment.Center, FontFamily = Look.Mono, Foreground = Look.Text, Name = "arrowSize" };
         var shapeChips = new List<Button>();
+        var colourChips = new List<Button>();
         void Refresh()
         {
             _firstMovementArrowSize = overlay.ArrowSize;
+            _firstMovementGradient = overlay.Gradient;
+            for (var i = 0; i < colourChips.Count; i++) Ui.SetChip(colourChips[i], overlay.Gradient == (i == 1));
             size.Text = Loc.F("{0:0.0} m", overlay.ArrowSize);
             for (var i = 0; i < shapeChips.Count; i++) Ui.SetChip(shapeChips[i], (int)overlay.Shape == i);
             view.Redraw();
@@ -584,13 +689,24 @@ public static class AnalysisWindows
 
         // shape: one segmented row of chips
         var shapes = Ui.Row(6);
-        foreach (var (shapeName, i) in new[] { "Arrows", "Triangles", "Auto" }.Select((n, i) => (n, i)))
+        foreach (var (shapeName, i) in new[] { "Arrows", "Triangles" }.Select((n, i) => (n, i)))
         {
             var chip = Ui.Chip(Loc.T(shapeName), () => { overlay.Shape = (FirstMovementOverlay.ArrowShape)i; Refresh(); }, (int)overlay.Shape == i);
             chip.Height = 32;
             chip.Tag = "shape:" + i;
             shapeChips.Add(chip);
             shapes.Children.Add(chip);
+        }
+
+        // colour: one for all the arrows, or the colour of each direction with its legend on the plan
+        var colours = Ui.Row(6);
+        foreach (var (colourName, gradient) in new[] { ("One colour", false), ("Gradient", true) })
+        {
+            var chip = Ui.Chip(Loc.T(colourName), () => { overlay.Gradient = gradient; Refresh(); }, overlay.Gradient == gradient);
+            chip.Height = 32;
+            chip.Tag = "colour:" + (gradient ? 1 : 0);
+            colourChips.Add(chip);
+            colours.Children.Add(chip);
         }
 
         // arrow size: − value + in one field-like pill
@@ -643,7 +759,7 @@ public static class AnalysisWindows
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(14, 10, 14, 4),
-            Child = new WrapPanel { Children = { Group("Shape", shapes), Group("Arrow size", stepper), Group("View", viewGroup) } }
+            Child = new WrapPanel { Children = { Group("Shape", shapes), Group("Color", colours), Group("Arrow size", stepper), Group("View", viewGroup) } }
         };
 
         // action bar: what the arrows are, and what to do with them

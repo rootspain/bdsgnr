@@ -189,8 +189,10 @@ public static class Analysis
         var frag = Fragmentation.Compute(project);
         if (frag.X50Cm > 0)
         {
-            list.Add(new("Fragmentation", "X50", $"{frag.X50Cm:0.0} cm"));
-            list.Add(new("Fragmentation", "X80", $"{frag.X80Cm:0.0} cm"));
+            var unit = SizeUnits.Of(project.Fragmentation);
+            string Size(double cm) => SizeUnits.FromCm(cm, unit).ToString(SizeUnits.Format(unit)) + " " + SizeUnits.Symbol(unit);
+            list.Add(new("Fragmentation", "X50", Size(frag.X50Cm)));
+            list.Add(new("Fragmentation", "X80", Size(frag.X80Cm)));
             list.Add(new("Fragmentation", "Oversize", $"{frag.OversizePct:0.0} %", frag.OversizePct > 10));
         }
         var tol = Tolerance.Check(project);

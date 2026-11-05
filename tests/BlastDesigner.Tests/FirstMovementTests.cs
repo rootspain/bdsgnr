@@ -63,6 +63,22 @@ public class FirstMovementTests
     }
 
     [Fact]
+    public void AllAtOnce_IsSeveralHolesWithOneTime()
+    {
+        var p = new BlastProject();
+        var a = p.Add(new Hole { Label = "1" });
+        var b = p.Add(new Hole { Label = "2" });
+        var c = p.Add(new Hole { Label = "3" });
+        Assert.False(FirstMovement.AllAtOnce(p));
+        a.FiringTimeMs = 500;
+        Assert.False(FirstMovement.AllAtOnce(p));
+        b.FiringTimeMs = 500;
+        Assert.True(FirstMovement.AllAtOnce(p));
+        c.FiringTimeMs = 517;
+        Assert.False(FirstMovement.AllAtOnce(p));
+    }
+
+    [Fact]
     public void FlatTimeGivesNoArrowsAndSlopeRangeIsWidened()
     {
         var d = TimingDelaunay.Build(Grid((x, y) => 100));

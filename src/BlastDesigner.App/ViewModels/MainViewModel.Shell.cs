@@ -157,16 +157,16 @@ public sealed partial class MainViewModel
             G("Blast dynamics", M("Visualization", "play", "Calculations/Visualize timing", "Ctrl⇧V", true), M("Angle of initiation", "arrow", "Calculations/Angle of initiation"),
                 M("First movement", "arrow", "Calculations/First movement"), M("Burden relief", "chart", "Calculations/Burden relief"), M("Time envelope", "chart", "Calculations/Time envelope"),
                 M("Charge vs time", "chart", "Calculations/Time envelope overview"), M("Clear analysis", "close", "View/Clear analysis display", "Esc")),
+            G("Quality control", M("Bullseye", "exclusion", "View/Single hole view (bullseye)"), M("Exceptions", "eye", "View/Exceptions view"), M("Front row", "row", "View/Front row view"),
+                M("Row check", "row", "View/Row check view"), M("Burden check", "measure", "View/Burden check view"), M("Horizontal slice", "slice", "View/Horizontal slice"),
+                M("Charge in 3D", "charge", "View/Loading"), M("Tolerances", "check", "Calculations/Design tolerance check"), M("Fly through", "send", "View/Fly through")),
             G("Volumes", M("Quantities", "chart", "Calculations/Quantities", "Ctrl⇧Q", true), M("Dashboard", "dash", "View/Dashboard", big: true),
                 M("Volume between surfaces", "cube", "Tools/Surfaces/Volume…"), M("Volume overview", "polygon", "Calculations/Volume overview"), M("Costs", "money", "Calculations/Project costs")),
             G("Environment", M("Exclusion zone", "exclusion", "Calculations/Environmental prediction/Exclusion zone calculator", big: true),
                 M("Vibration", "wave", "Calculations/Vibration/Vibration"), M("Vibration map", "wave", "Calculations/Vibration/Vibration map"), M("Airblast map", "air", "Calculations/Vibration/Airblast map"),
                 M("Flyrock", "frag", "Calculations/Environmental prediction/Flyrock prediction"), M("Scale law", "wave", "Calculations/Environmental prediction/Scale law calculator"),
                 M("Vibration records", "wave", "Tools/Vibration analysis…")),
-            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…")),
-            G("Quality control", M("Bullseye", "exclusion", "View/Single hole view (bullseye)"), M("Exceptions", "eye", "View/Exceptions view"), M("Front row", "row", "View/Front row view"),
-                M("Row check", "row", "View/Row check view"), M("Burden check", "measure", "View/Burden check view"), M("Horizontal slice", "slice", "View/Horizontal slice"),
-                M("Charge in 3D", "charge", "View/Loading"), M("Tolerances", "check", "Calculations/Design tolerance check"), M("Fly through", "send", "View/Fly through"))
+            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…"))
         }),
         new Stage("Output", new()
         {

@@ -215,8 +215,8 @@ public static class ReportDesignerWindow
 /// <summary>Tie palette: picks the surface connector used by the Tie tool.</summary>
 /// <summary>
 /// Initiation catalogue (was the tie palette): what new ties are made with, chosen down the hierarchy
-/// Type (initiation system) → Subtype (product kind) → Family → Variant (a product of the family, by its delay); a
-/// user-defined type takes a delay instead. The products come from Available resources, their family from the
+/// Type (initiation system, all the products of its kinds) → Family → Variant (a product of the family, by its delay);
+/// a user-defined type takes a delay instead. The products come from Available resources, their family from the
 /// product's Family field (or the name without its delay). The current choice is shown on top.
 /// </summary>
 public static class TiePaletteWindow
@@ -229,23 +229,16 @@ public static class TiePaletteWindow
     public const string PositionKey = "TiePalette";
     public const string Title = "Initiation catalogue";
 
-    /// <summary>Types (initiation systems): key, label and the subtype they start with (none for user defined).</summary>
-    public static readonly (string Key, string Label, ProductKind? Kind)[] Systems =
+    /// <summary>Types (initiation systems): key, label and the product kinds they list, the one they start with first (none for user defined).</summary>
+    public static readonly (string Key, string Label, ProductKind[] Kinds)[] Systems =
     {
-        ("ShockTube", "Shock tube", ProductKind.SurfaceConnector),
-        ("CordRelay", "Cord delay", ProductKind.CordRelay),
-        ("Cord", "Detonating cord system", ProductKind.DetonatingCord),
-        ("Electric", "Electric", ProductKind.ElectricDetonator),
-        ("Harness", "Harness wire", ProductKind.HarnessWire),
-        ("Ebs", "EBS detonators", ProductKind.ElectronicDetonator),
-        ("User", "User defined", null)
-    };
-
-    /// <summary>Subtypes offered: the product kinds that make or carry a tie.</summary>
-    public static readonly ProductKind[] Subtypes =
-    {
-        ProductKind.SurfaceConnector, ProductKind.CordRelay, ProductKind.DetonatingCord, ProductKind.ElectricDetonator,
-        ProductKind.HarnessWire, ProductKind.ElectronicDetonator, ProductKind.DownholeDetonator, ProductKind.Other
+        ("ShockTube", "Shock tube", new[] { ProductKind.SurfaceConnector, ProductKind.DownholeDetonator, ProductKind.Other }),
+        ("CordRelay", "Cord delay", new[] { ProductKind.CordRelay }),
+        ("Cord", "Detonating cord system", new[] { ProductKind.DetonatingCord }),
+        ("Electric", "Electric", new[] { ProductKind.ElectricDetonator }),
+        ("Harness", "Harness wire", new[] { ProductKind.HarnessWire }),
+        ("Ebs", "EBS detonators", new[] { ProductKind.ElectronicDetonator }),
+        ("User", "User defined", Array.Empty<ProductKind>())
     };
 
     public static void Show(MainViewModel vm)
@@ -274,19 +267,20 @@ public static class TiePaletteWindow
         Dialogs.Owner?.Screens is not { } screens || screens.All.Count == 0 || screens.ScreenFromPoint(p) != null;
 
     private static string TypeOf(MainViewModel vm) =>
-        vm.TieSystem ?? (vm.ActiveTieDelayMs != null ? "User" : Systems.FirstOrDefault(s => s.Kind == vm.ActiveConnector?.Kind).Key ?? "ShockTube");
+        vm.TieSystem ?? (vm.ActiveTieDelayMs != null ? "User" : Systems.FirstOrDefault(s => vm.ActiveConnector is { } a ? s.Kinds.Contains(a.Kind) : s.Kinds.Length == 0).Key ?? "ShockTube");
 
-    private static ProductKind SubtypeOf(MainViewModel vm, string type) =>
-        vm.ActiveTieDelayMs == null && vm.ActiveConnector?.Kind is ProductKind k && vm.TieSystem == type ? k
-        : vm.TieSubtypes.TryGetValue(type, out var s) ? s : Systems.First(x => x.Key == type).Kind ?? ProductKind.SurfaceConnector;
+    /// <summary>The families of all the products of a type, those of its first kind first.</summary>
+    private static List<IGrouping<(ProductKind Kind, string Name), Product>> Families(MainViewModel vm, string type)
+    {
+        var kinds = Systems.First(s => s.Key == type).Kinds;
+        return vm.Project!.Products.Where(p => kinds.Contains(p.Kind)).GroupBy(p => (p.Kind, Name: p.FamilyName))
+            .OrderBy(g => Array.IndexOf(kinds, g.Key.Kind)).ThenBy(g => g.Key.Name).ToList();
+    }
 
-    private static List<IGrouping<string, Product>> Families(MainViewModel vm, ProductKind kind) =>
-        vm.Project!.Products.Where(p => p.Kind == kind).GroupBy(p => p.FamilyName).OrderBy(g => g.Key).ToList();
-
-    private static string FamilyOf(MainViewModel vm, ProductKind kind, List<IGrouping<string, Product>> families) =>
-        vm.ActiveConnector is { } a && a.Kind == kind && vm.ActiveTieDelayMs == null ? a.FamilyName
-        : vm.TieFamilyChoice.TryGetValue(kind, out var f) && families.Any(g => g.Key == f) ? f
-        : families.FirstOrDefault()?.Key ?? "";
+    private static (ProductKind Kind, string Name) FamilyOf(MainViewModel vm, string type, List<IGrouping<(ProductKind Kind, string Name), Product>> families) =>
+        vm.ActiveConnector is { } a && vm.ActiveTieDelayMs == null && families.Any(g => g.Key == (a.Kind, a.FamilyName)) ? (a.Kind, a.FamilyName)
+        : vm.TieFamilyChoice.TryGetValue(type, out var f) && families.Any(g => g.Key == f) ? f
+        : families.FirstOrDefault()?.Key ?? default;
 
     /// <summary>Makes new ties with the product (or the user's delay) and switches to the tie tool.</summary>
     private static void Use(MainViewModel vm, Product? p, double? delay, string type)
@@ -294,7 +288,7 @@ public static class TiePaletteWindow
         vm.ActiveConnector = p;
         vm.ActiveTieDelayMs = delay;
         vm.TieSystem = type;
-        if (p != null) { vm.TieSubtypes[type] = p.Kind; vm.TieFamilyChoice[p.Kind] = p.FamilyName; }
+        if (p != null) vm.TieFamilyChoice[type] = (p.Kind, p.FamilyName);
         vm.SetStatus(Loc.F("Tie connector: {0}", delay is double ms ? Loc.F("{0} ms", ms.ToString("0.#")) : p?.Name ?? Loc.T("0 ms connection")));
         if (vm.ActiveTool is not Tools.TieTool) vm.SetTool(new Tools.TieTool(vm));
         Fill(vm);
@@ -368,25 +362,24 @@ public static class TiePaletteWindow
         // ---- 1 Type
         var types = Wrap();
         types.Name = "tieTypes";
-        foreach (var (key, label, kind) in Systems)
+        foreach (var (key, label, kinds) in Systems)
         {
             var k = key;
             var chip = Ui.Chip(Loc.T(label), () =>
             {
                 if (TypeOf(vm) == k) return;
-                if (kind == null) { Use(vm, null, vm.ActiveTieDelayMs ?? 0, k); return; }
-                // the type starts with its subtype and the first variant of the chosen family
-                var sub = vm.TieSubtypes.TryGetValue(k, out var s) ? s : kind.Value;
-                var fams = Families(vm, sub);
-                var fam = vm.TieFamilyChoice.TryGetValue(sub, out var f) ? fams.FirstOrDefault(g => g.Key == f) ?? fams.FirstOrDefault() : fams.FirstOrDefault();
-                Use(vm, fam?.OrderBy(p => p.DelayMs).First(), null, k);
+                if (kinds.Length == 0) { Use(vm, null, vm.ActiveTieDelayMs ?? 0, k); return; }
+                // the type starts with the first variant of the chosen family
+                var fams = Families(vm, k);
+                var chosen = FamilyOf(vm, k, fams);
+                Use(vm, fams.FirstOrDefault(g => g.Key == chosen)?.OrderBy(p => p.DelayMs).First(), null, k);
             }, key == type);
             chip.Tag = "type:" + key;
             types.Children.Add(chip);
         }
         _panel.Children.Add(Step("1", "Type", types));
 
-        if (typeInfo.Kind == null)
+        if (typeInfo.Kinds.Length == 0)
         {
             // user defined: a delay of its own on every new tie
             var box = new TextBox { Text = (vm.ActiveTieDelayMs ?? 0).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture), Width = 120, Height = 32, FontFamily = Look.Mono, Name = "tieUserDelay" };
@@ -400,42 +393,22 @@ public static class TiePaletteWindow
             return;
         }
 
-        // ---- 2 Subtype
-        var subtype = SubtypeOf(vm, type);
-        var subtypes = Wrap();
-        subtypes.Name = "tieSubtypes";
-        foreach (var kind in Subtypes)
-        {
-            var kk = kind;
-            var count = vm.Project.Products.Count(p => p.Kind == kind);
-            var chip = Ui.Chip(count > 0 ? $"{Loc.Enum(kind)}  {count}" : Loc.Enum(kind), () =>
-            {
-                if (SubtypeOf(vm, type) == kk) return;
-                vm.TieSubtypes[type] = kk;
-                var fams = Families(vm, kk);
-                var fam = vm.TieFamilyChoice.TryGetValue(kk, out var f) ? fams.FirstOrDefault(g => g.Key == f) ?? fams.FirstOrDefault() : fams.FirstOrDefault();
-                if (fam != null) Use(vm, fam.OrderBy(p => p.DelayMs).First(), null, type);
-                else { vm.TieSystem = type; Fill(vm); }
-            }, kind == subtype);
-            chip.Tag = "subtype:" + kind;
-            if (count == 0) chip.Opacity = 0.55;
-            subtypes.Children.Add(chip);
-        }
-        _panel.Children.Add(Step("2", "Subtype", subtypes));
-
-        // ---- 3 Family
-        var families = Families(vm, subtype);
+        // ---- 2 Family
+        var families = Families(vm, type);
         if (families.Count == 0)
         {
-            _panel.Children.Add(Step("3", "Family", Card(new TextBlock { Text = Loc.T("No products of this family in Available resources"), Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap })));
+            _panel.Children.Add(Step("2", "Family", Card(new TextBlock { Text = Loc.T("No products of this type in Available resources"), Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap })));
             return;
         }
-        var family = FamilyOf(vm, subtype, families);
+        var family = FamilyOf(vm, type, families);
+        // a type of several kinds says the kind of each family
+        var mixed = families.Select(g => g.Key.Kind).Distinct().Count() > 1;
         var famList = new StackPanel { Spacing = 4, Name = "tieFamilies" };
         foreach (var g in families)
         {
             var key = g.Key;
             var on = key == family;
+            var note = string.Join(" · ", (mixed ? new[] { Loc.Enum(key.Kind) } : Array.Empty<string>()).Concat(g.Select(p => p.Manufacturer).Where(m => m.Length > 0).Distinct()));
             var row = new Button
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -445,7 +418,7 @@ public static class TiePaletteWindow
                 BorderThickness = new Thickness(1),
                 Background = on ? Look.AccentSoft : Look.Panel,
                 BorderBrush = on ? Look.Accent : Look.Line,
-                Tag = "family:" + key,
+                Tag = "family:" + key.Name,
                 Content = new DockPanel
                 {
                     Children =
@@ -453,19 +426,19 @@ public static class TiePaletteWindow
                         new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = Loc.F("{0} var.", g.Count()), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
                         new StackPanel { Children =
                         {
-                            new TextBlock { Text = key, FontWeight = FontWeight.SemiBold, Foreground = on ? Look.Accent : Look.Text },
-                            new TextBlock { Text = string.Join(", ", g.Select(p => p.Manufacturer).Where(m => m.Length > 0).Distinct()), FontSize = 11, Foreground = Look.Faint, IsVisible = g.Any(p => p.Manufacturer.Length > 0) }
+                            new TextBlock { Text = key.Name, FontWeight = FontWeight.SemiBold, Foreground = on ? Look.Accent : Look.Text },
+                            new TextBlock { Text = note, FontSize = 11, Foreground = Look.Faint, IsVisible = note.Length > 0 }
                         } }
                     }
                 }
             };
             row.Classes.Add("flat");
-            row.Click += (_, _) => { if (key != FamilyOf(vm, subtype, families)) Use(vm, g.OrderBy(p => p.DelayMs).First(), null, type); };
+            row.Click += (_, _) => { if (key != FamilyOf(vm, type, families)) Use(vm, g.OrderBy(p => p.DelayMs).First(), null, type); };
             famList.Children.Add(row);
         }
-        _panel.Children.Add(Step("3", "Family", famList));
+        _panel.Children.Add(Step("2", "Family", famList));
 
-        // ---- 4 Variant
+        // ---- 3 Variant
         var variants = Wrap();
         variants.Name = "tieVariants";
         foreach (var p in families.First(g => g.Key == family).OrderBy(p => p.DelayMs))
@@ -478,6 +451,6 @@ public static class TiePaletteWindow
             chip.Tag = "variant:" + p.Id;
             variants.Children.Add(chip);
         }
-        _panel.Children.Add(Step("4", "Variant", variants));
+        _panel.Children.Add(Step("3", "Variant", variants));
     }
 }

@@ -195,7 +195,9 @@ public sealed class ProductsEditor : DockPanel
         {
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(0, 1),
-            Child = new ScrollViewer { Content = _list, Padding = new Thickness(8, 6) }
+            // the space round the list is the list's margin: a padding of the scroll viewer is left out of the height it
+            // scrolls, and the last row would stay under the buttons
+            Child = new ScrollViewer { Content = new Border { Padding = new Thickness(8, 6), Child = _list } }
         });
         return dock;
     }

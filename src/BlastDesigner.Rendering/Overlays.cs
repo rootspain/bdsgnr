@@ -9,6 +9,8 @@ namespace BlastDesigner.Rendering;
 public sealed class PreviewOverlay : IOverlay
 {
     public List<(IReadOnlyList<Vec3> Points, bool Closed, SKColor Color)> Lines { get; } = new();
+    /// <summary>Helper lines beside what is being drawn, thinner than <see cref="Lines"/>.</summary>
+    public List<(IReadOnlyList<Vec3> Points, SKColor Color)> Guides { get; } = new();
     public List<(Vec3 Point, SKColor Color)> Points { get; } = new();
     public List<(Vec3 Point, string Text)> Labels { get; } = new();
     /// <summary>Square markers for holes that a tool is about to create.</summary>
@@ -24,6 +26,7 @@ public sealed class PreviewOverlay : IOverlay
         Moving = null;
         MoveOffset = Vec3.Zero;
         Lines.Clear();
+        Guides.Clear();
         Points.Clear();
         Labels.Clear();
         Markers.Clear();
@@ -39,6 +42,7 @@ public sealed class PreviewOverlay : IOverlay
     {
         var copy = new PreviewOverlay { ScreenRect = ScreenRect, Snap = Snap, Moving = Moving, MoveOffset = MoveOffset };
         foreach (var (pts, closed, col) in Lines) copy.Lines.Add((pts.ToArray(), closed, col));
+        foreach (var (pts, col) in Guides) copy.Guides.Add((pts.ToArray(), col));
         copy.Points.AddRange(Points);
         copy.Labels.AddRange(Labels);
         copy.Markers.AddRange(Markers);
@@ -54,6 +58,12 @@ public sealed class PreviewOverlay : IOverlay
         {
             stroke.Color = PlanRenderer.Adapt(col);
             PlanRenderer.DrawPolyline(c, cam, pts, closed, stroke);
+        }
+        stroke.StrokeWidth = 0.75f;
+        foreach (var (pts, col) in Guides)
+        {
+            stroke.Color = PlanRenderer.Adapt(col);
+            PlanRenderer.DrawPolyline(c, cam, pts, false, stroke);
         }
         foreach (var (p, col) in Points)
         {
@@ -207,16 +217,22 @@ public sealed class TimingContourOverlay : IOverlay
 
 /// <summary>
 /// First movement: one arrow per valid triangle of the timing triangulation, at its centroid, pointing down
-/// the time gradient; fill colour = hue of the screen direction, black outline; size in metres; big 7-point arrows when
-/// they cover less than 30 % of the triangulated area. Clipped to closed blast boundaries.
+/// the time gradient; fill yellow, or with <see cref="Gradient"/> the hue of the screen direction and a legend of it;
+/// black outline; size in metres. Clipped to closed blast boundaries.
 /// </summary>
 public sealed class FirstMovementOverlay : IMovePreviewOverlay
 {
-    public enum ArrowShape { Arrow, Triangle, Auto }
+    public enum ArrowShape { Arrow, Triangle }
+
+    private static readonly SKColor SingleColour = new(0xFFFACC15);
 
     public double ArrowSize { get; set; } = FirstMovement.DefaultArrowSize;
-    /// <summary>Arrow: always the 7-point arrow; Triangle: always the small triangle; Auto: arrow below 30 % coverage).</summary>
+    /// <summary>Arrow: the 7-point arrow; Triangle: the small triangle.</summary>
     public ArrowShape Shape { get; set; } = ArrowShape.Arrow;
+    /// <summary>Each arrow in the colour of its direction, with the legend of the colours; otherwise all yellow.</summary>
+    public bool Gradient { get; set; }
+    /// <summary>Caption of the legend of the colours.</summary>
+    public string LegendTitle { get; set; } = "";
     /// <summary>Draw in the main plan's style (line arrows) instead of the filled arrows.</summary>
     public bool PlanStyle { get; set; }
 
@@ -246,9 +262,9 @@ public sealed class FirstMovementOverlay : IMovePreviewOverlay
 
     public void Draw(SKCanvas c, Camera cam, BlastProject project, ISet<Guid>? moved, Vec3 offset)
     {
-        var d = Delaunay(project, moved, offset);
+        Delaunay(project, moved, offset);
         if (_arrows.Count == 0) return;
-        var large = Shape == ArrowShape.Arrow || (Shape == ArrowShape.Auto && FirstMovement.UseLargeArrows(d, ArrowSize));
+        var large = Shape == ArrowShape.Arrow;
         var bounds = project.Entities.OfType<PolylineEntity>().Where(p => p.Closed && p.Kind == LineKind.Boundary && p.Points.Count > 2).ToList();
         var saved = c.Save();
         if (bounds.Count > 0)
@@ -285,9 +301,7 @@ public sealed class FirstMovementOverlay : IMovePreviewOverlay
             dx /= len; dy /= len;
             var size = ArrowSize * cam.Scale;
             var pts = large ? FirstMovement.LargeArrow(sx, sy, dx * size, dy * size) : FirstMovement.SmallArrow(sx, sy, dx * size, dy * size);
-            // The hue comes from the screen direction with y up.
-            var (r, g, bl) = FirstMovement.ColorFromHsv(Math.Atan2(-dy, dx) * 180 / Math.PI, 1, 1);
-            fill.Color = new SKColor(r, g, bl);
+            fill.Color = Gradient ? DirectionColour(dx, dy) : SingleColour;
             using var path = new SKPath();
             path.MoveTo((float)pts[0].X, (float)pts[0].Y);
             for (int i = 1; i < pts.Length; i++) path.LineTo((float)pts[i].X, (float)pts[i].Y);
@@ -296,6 +310,34 @@ public sealed class FirstMovementOverlay : IMovePreviewOverlay
             c.DrawPath(path, outline);
         }
         c.RestoreToCount(saved);
+        if (Gradient) DrawLegend(c);
+    }
+
+    /// <summary>The colour of a direction on the screen; the hue comes from it with y up.</summary>
+    private static SKColor DirectionColour(double dx, double dy)
+    {
+        var (r, g, b) = FirstMovement.ColorFromHsv(Math.Atan2(-dy, dx) * 180 / Math.PI, 1, 1);
+        return new SKColor(r, g, b);
+    }
+
+    /// <summary>Top left of the view: a ring of the colours, each where an arrow of that colour points on the screen.</summary>
+    private void DrawLegend(SKCanvas c)
+    {
+        const float left = 12, top = 12, radius = 30;
+        using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = SKColors.White, TextAlign = SKTextAlign.Center };
+        var width = Math.Max(96, text.MeasureText(LegendTitle) + 20);
+        using var back = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = new SKColor(0xB8101215) };
+        c.DrawRoundRect(new SKRect(left, top, left + width, top + 104), 8, 8, back);
+        float x = left + width / 2, y = top + 44;
+        using var ring = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 11 };
+        var oval = new SKRect(x - radius, y - radius, x + radius, y + radius);
+        for (int a = -180; a < 180; a += 2)
+        {
+            var angle = a * Math.PI / 180;
+            ring.Color = DirectionColour(Math.Cos(angle), -Math.Sin(angle));
+            c.DrawArc(oval, -a - 1.5f, 3, false, ring);
+        }
+        c.DrawText(LegendTitle, x, top + 94, text);
     }
 }
 

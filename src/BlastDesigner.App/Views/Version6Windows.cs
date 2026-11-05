@@ -154,7 +154,7 @@ public static class Version6Windows
     private static string Units(string value)
     {
         if (Loc.Language == "en") return value;
-        foreach (var (en, tr) in new[] { (" dummy", " dummy"), (" mm/s at ", " mm/s at "), ("MJ/t", "MJ/t"), ("kg/m³", "kg/m³"), (" ms", " ms"), (" kg", " kg"), (" cm", " cm"), (" dB", " dB"), (" m³", " m³"), (" m", " m"), (" t", " t") })
+        foreach (var (en, tr) in new[] { (" dummy", " dummy"), (" mm/s at ", " mm/s at "), ("MJ/t", "MJ/t"), ("kg/m³", "kg/m³"), (" ms", " ms"), (" kg", " kg"), (" cm", " cm"), (" mm", " mm"), (" dB", " dB"), (" m³", " m³"), (" m", " m"), (" t", " t") })
             value = value.Replace(en, Loc.T(tr));
         return value;
     }
@@ -349,20 +349,25 @@ public static class Version6Windows
         var chart = new SkiaView();
         var info = new SelectableTextBlock { Margin = new Thickness(0, 6), TextWrapping = TextWrapping.Wrap };
         Engine.Fragmentation.Result r = Engine.Fragmentation.Compute(p);
+        // the sizes in the unit of the fragmentation inputs
+        var unit = SizeUnits.Of(p.Fragmentation);
+        string Size(double cm) => SizeUnits.FromCm(cm, unit).ToString(SizeUnits.Format(unit), CultureInfo.CurrentCulture) + " " + Loc.Ui(SizeUnits.Symbol(unit));
+        List<(double, double)> InUnit(List<(double SizeCm, double PassingPct)> curve) => curve.Select(c => (SizeUnits.FromCm(c.SizeCm, unit), c.PassingPct)).ToList();
         void Update()
         {
             var sel = vm.Doc!.SelectedHoles.ToList();
             r = Engine.Fragmentation.Compute(p, sel.Count > 0 ? sel : null);
+            unit = SizeUnits.Of(p.Fragmentation);
             chart.Paint = (c, w, h) => Chart.Draw(c, w, h, new[]
             {
-                new Chart.Series("Kuz-Ram (Rosin-Rammler)", r.Curve, new SKColor(0xFF2563EB)),
-                new Chart.Series("Swebrec", r.Swebrec, new SKColor(0xFFDC2626))
-            }, "Size (cm)", "Passing (%)", logX: true);
+                new Chart.Series("Kuz-Ram (Rosin-Rammler)", InUnit(r.Curve), new SKColor(0xFF2563EB)),
+                new Chart.Series("Swebrec", InUnit(r.Swebrec), new SKColor(0xFFDC2626))
+            }, Loc.F("Size ({0})", Loc.Ui(SizeUnits.Symbol(unit))), "Passing (%)", logX: true);
             info.Text = r.X50Cm <= 0 ? Loc.T("Load the holes first: fragmentation needs the powder factor and charge per hole.") : string.Join("   ", new[]
             {
                 Loc.F("Rock factor A = {0:0.0}", r.RockFactor), Loc.F("Powder factor {0:0.000} kg/m³", r.PowderFactor), Loc.F("Charge per hole {0:0} kg", r.ChargePerHole), Loc.F("RWS {0:0}", r.Rws),
-                Loc.F("n = {0:0.00}", r.Uniformity), Loc.F("X20 {0:0.0} cm", r.X20Cm), Loc.F("X50 {0:0.0} cm", r.X50Cm), Loc.F("X80 {0:0.0} cm", r.X80Cm),
-                Loc.F("Oversize > {0} cm: {1:0.0} %", p.Fragmentation.OversizeCm, r.OversizePct), Loc.F("Fines < {0} cm: {1:0.0} %", p.Fragmentation.FinesCm, r.FinesPct),
+                Loc.F("n = {0:0.00}", r.Uniformity), "X20 " + Size(r.X20Cm), "X50 " + Size(r.X50Cm), "X80 " + Size(r.X80Cm),
+                Loc.F("Oversize > {0}: {1:0.0} %", Size(p.Fragmentation.OversizeCm), r.OversizePct), Loc.F("Fines < {0}: {1:0.0} %", Size(p.Fragmentation.FinesCm), r.FinesPct),
                 sel.Count > 0 ? Loc.F("({0} selected holes)", sel.Count) : Loc.T("(all holes)")
             });
             chart.InvalidateVisual();
@@ -372,7 +377,7 @@ public static class Version6Windows
         var w = Dialogs.ShowWindow("Fragmentation prediction", WithButtons(Stack(new Panel(), chart, info),
             ("Inputs…", () => _ = vm.EditFragmentationModel()),
             ("Recalculate", Update),
-            ("Export CSV…", () => _ = vm.SaveCsv("Export fragmentation", "_fragmentation", Interchange.ExportFragmentation(r)))), 900, 600);
+            ("Export CSV…", () => _ = vm.SaveCsv("Export fragmentation", "_fragmentation", Interchange.ExportFragmentation(r, unit)))), 900, 600);
         w.Closed += (_, _) => vm.ModelRefreshed -= Update;
     }
 

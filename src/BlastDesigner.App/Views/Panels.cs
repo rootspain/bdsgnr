@@ -134,6 +134,16 @@ public sealed class PropertiesPanel : DockPanel
     private readonly MainViewModel _vm;
     private readonly ContentControl _content = new();
     private readonly TextBlock _header = new() { Classes = { "caption" } };
+    /// <summary>The groups of the fields of a hole; the last one takes all the others.</summary>
+    private static readonly PropertySection[] HoleSections =
+    {
+        new("Geometry", nameof(Hole.Label), nameof(Hole.Collar), nameof(Hole.Angle), nameof(Hole.Bearing), nameof(Hole.Length), nameof(Hole.Diameter), nameof(Hole.Subdrill)),
+        new("Classification", nameof(Hole.HoleType), nameof(Hole.MaterialType), nameof(Hole.State), nameof(Hole.IsDummy)),
+        new("Measurements", nameof(Hole.ActualLength), nameof(Hole.WaterDepth), nameof(Hole.Temperature), nameof(Hole.Exceptions)),
+        new("Other")
+    };
+    /// <summary>The groups folded, kept from one selection to the next.</summary>
+    private readonly HashSet<string> _collapsed = new() { "Measurements", "Other" };
 
     public PropertiesPanel(MainViewModel vm)
     {
@@ -147,6 +157,7 @@ public sealed class PropertiesPanel : DockPanel
     public void Refresh()
     {
         if (!IsVisible) return;
+        _header.IsVisible = true;
         var doc = _vm.Doc;
         var sel = doc?.SelectedEntities.ToList() ?? new();
         if (doc == null)
@@ -173,6 +184,14 @@ public sealed class PropertiesPanel : DockPanel
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
         var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid);
+        if (first is Hole)
+        {
+            grid.Sections = HoleSections;
+            grid.Collapsed = _collapsed;
+            string m = Loc.Ui("m"), degrees = "°";
+            foreach (var (name, unit) in new[] { (nameof(Hole.Collar), m), (nameof(Hole.Angle), degrees), (nameof(Hole.Bearing), degrees), (nameof(Hole.Length), m), (nameof(Hole.Diameter), Loc.Ui("mm")), (nameof(Hole.Subdrill), m), (nameof(Hole.ActualLength), m), (nameof(Hole.WaterDepth), m), (nameof(Hole.Temperature), "°C") })
+                grid.Units[name] = unit;
+        }
         grid.SetTargets(template, sel);
         var ids = sel.Select(e => e.Id).ToHashSet();
         grid.PropertyEdited += name =>
@@ -188,18 +207,31 @@ public sealed class PropertiesPanel : DockPanel
                 }
             });
         };
-        var panel = new StackPanel { Children = { LayerRow(doc, sel) } };
         if (first is Hole hole)
         {
-            panel.Children.Add(new TextBlock { Text = Loc.T("Charge"), Classes = { "caption" } });
-            var text = sel.Count == 1
-                ? ChargeText(doc.Project, hole)
-                : Loc.F("Explosive {0:0.0} kg", sel.OfType<Hole>().Sum(h => Charging.ExplosiveMass(doc.Project, h)));
-            panel.Children.Add(new TextBlock { Text = text, Margin = new Thickness(6, 0), TextWrapping = TextWrapping.Wrap });
-            var edit = new Button { Content = sel.Count == 1 ? Loc.T("Edit loading…") : Loc.F("Edit loading ({0} holes)…", sel.Count), Margin = new Thickness(6), IsEnabled = !doc.IsReadOnly };
+            _header.IsVisible = false;
+            var edit = new Button
+            {
+                Content = sel.Count == 1 ? Loc.T("Edit loading…") : Loc.F("Edit loading ({0} holes)…", sel.Count),
+                Height = 34,
+                CornerRadius = new CornerRadius(7),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Classes = { "primary" },
+                IsEnabled = !doc.IsReadOnly,
+                Name = "editLoading"
+            };
             edit.Click += async (_, _) => await _vm.EditHoleLoading(hole);
-            panel.Children.Add(edit);
+            _content.Content = new StackPanel
+            {
+                Spacing = 12,
+                Margin = new Thickness(14, 12, 14, 14),
+                Children = { HoleHead(hole, sel.Count), edit, sel.Count == 1 ? HoleCharge(doc.Project, hole) : HolesCharge(doc.Project, sel.OfType<Hole>().ToList()), LayerRow(doc, sel, stacked: true), grid }
+            };
+            return;
         }
+        var panel = new StackPanel { Children = { LayerRow(doc, sel) } };
         if (first is TimingLineEntity line && sel.Count == 1)
         {
             // the line programs the holes it remembers; this adds the electronic holes no line programs yet
@@ -217,10 +249,10 @@ public sealed class PropertiesPanel : DockPanel
     }
 
     /// <summary>
-    /// The layer of the selection, laid out like a row of the property grid: picking another one moves the selection
-    /// there; several layers show as mixed.
+    /// The layer of the selection, laid out like a row of the property grid, or <paramref name="stacked"/> like a field of
+    /// its groups: picking another one moves the selection there; several layers show as mixed.
     /// </summary>
-    private Control LayerRow(Document doc, List<Entity> sel)
+    private Control LayerRow(Document doc, List<Entity> sel, bool stacked = false)
     {
         var layers = doc.Project.Layers;
         var mixed = sel.Any(e => e.LayerId != sel[0].LayerId);
@@ -235,11 +267,11 @@ public sealed class PropertiesPanel : DockPanel
                 new TextBlock { Text = Loc.Name(l.Name), VerticalAlignment = VerticalAlignment.Center })),
             SelectedIndex = mixed ? -1 : layers.FindIndex(l => l.Id == sel[0].LayerId),
             PlaceholderText = Loc.T("(mixed)"),
-            MinWidth = 160,
+            MinWidth = stacked ? 0 : 160,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             IsEnabled = !doc.IsReadOnly,
-            Margin = new Thickness(0, 2)
+            Margin = stacked ? default : new Thickness(0, 2)
         };
         combo.SelectionChanged += (_, _) =>
         {
@@ -247,17 +279,122 @@ public sealed class PropertiesPanel : DockPanel
             var layer = layers[combo.SelectedIndex];
             if (sel.Any(e => e.LayerId != layer.Id)) _vm.MoveSelectionToLayer(layer);
         };
+        if (stacked) return new StackPanel { Spacing = 4, Children = { new TextBlock { Text = Loc.T("Layer"), FontSize = 12, Foreground = Look.Muted }, combo } };
         var label = new TextBlock { Text = Loc.T("Layer"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 8, 2) };
         Grid.SetColumn(combo, 1);
         // the columns and margin of the property grid under it, so the row lines up with its fields
         return new Grid { ColumnDefinitions = new ColumnDefinitions("2*,3*"), Margin = new Thickness(4, 4, 4, 0), Children = { label, combo } };
     }
 
-    private static string ChargeText(BlastProject p, Hole h)
+    /// <summary>What is selected: the kind on the left, the number of the hole or how many on the right.</summary>
+    private static Control HoleHead(Hole hole, int count)
     {
-        if (h.Decks.Count == 0) return Loc.T("Not loaded");
-        var lines = h.Decks.OrderBy(d => d.Top).Select(d => $"{d.Top:0.0}–{d.Bottom:0.0} m  {p.FindProduct(d.ProductId)?.Name}  {Charging.DeckMass(p, h, d):0.0} kg" + (d.Primers.Count > 0 ? $"  ({d.Primers.Count} pr.)" : ""));
-        return string.Join("\n", lines) + "\n" + Loc.F("Explosive {0:0.0} kg", Charging.ExplosiveMass(p, h));
+        var mark = count > 1 ? $"× {count}" : hole.Label.Length > 0 ? Loc.F(Loc.Ui("No. {0}"), hole.Label) : "";
+        var head = new DockPanel();
+        if (mark.Length > 0)
+            head.Children.Add(new Border
+            {
+                [DockPanel.DockProperty] = Dock.Right,
+                Background = Look.AccentSoft,
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(8, 2),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock { Text = mark, FontFamily = Look.Mono, FontSize = 12, Foreground = Look.Accent, Name = "holeMark" }
+            });
+        head.Children.Add(new TextBlock { Text = count > 1 ? Loc.Ui("Holes") : Loc.T(hole.KindName), FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center });
+        return head;
+    }
+
+    private static Border Tile(Control child, string? name = null) => new()
+    {
+        Name = name,
+        Background = Look.Panel,
+        BorderBrush = Look.Line,
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(8),
+        Padding = new Thickness(10, 8),
+        Child = child
+    };
+
+    private static TextBlock TileLabel(string text) => new() { Text = text, FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+
+    private static Control Kilograms(double kg) => new StackPanel
+    {
+        Orientation = Orientation.Horizontal,
+        Spacing = 4,
+        Children =
+        {
+            new TextBlock { Text = kg.ToString("0.0", CultureInfo.CurrentCulture), FontFamily = Look.Mono, FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Look.Text },
+            new TextBlock { Text = Loc.Ui("kg"), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 2) }
+        }
+    };
+
+    /// <summary>The explosive of several holes: in all and the mean of a hole.</summary>
+    private static Control HolesCharge(BlastProject p, List<Hole> holes)
+    {
+        var total = holes.Sum(h => Charging.ExplosiveMass(p, h));
+        var mean = Tile(new StackPanel { Children = { TileLabel(Loc.Ui("Explosive per hole")), Kilograms(total / holes.Count) } }, "chargePerHole");
+        Grid.SetColumn(mean, 2);
+        return new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,8,*"),
+            Children = { Tile(new StackPanel { Children = { TileLabel(Loc.Ui("Explosive total")), Kilograms(total) } }, "chargeTotal"), mean }
+        };
+    }
+
+    /// <summary>The charge of a hole: its explosive, the decks to scale down the hole and each of them.</summary>
+    private static Control HoleCharge(BlastProject p, Hole h)
+    {
+        if (h.Decks.Count == 0) return Tile(TileLabel(Loc.T("Not loaded")), "holeCharge");
+        var decks = h.Decks.OrderBy(d => d.Top).ToList();
+        var head = new DockPanel();
+        var mass = Kilograms(Charging.ExplosiveMass(p, h));
+        mass[DockPanel.DockProperty] = Dock.Right;
+        head.Children.Add(mass);
+        head.Children.Add(TileLabel(Loc.Ui("Explosive in the hole")));
+        var scale = new Grid();
+        var rows = new StackPanel { Spacing = 2 };
+        var depth = 0.0;
+        void Part(double length, IBrush? colour)
+        {
+            if (length <= 0) return;
+            scale.ColumnDefinitions.Add(new ColumnDefinition(length, GridUnitType.Star));
+            if (colour == null) return;
+            var part = new Border { Background = colour };
+            Grid.SetColumn(part, scale.ColumnDefinitions.Count - 1);
+            scale.Children.Add(part);
+        }
+        foreach (var d in decks)
+        {
+            var product = p.FindProduct(d.ProductId);
+            IBrush colour = product == null ? Look.Faint : new SolidColorBrush(Color.FromUInt32(product.Color));
+            Part(d.Top - depth, null);
+            Part(d.Bottom - d.Top, colour);
+            depth = Math.Max(depth, d.Bottom);
+            var text = $"{d.Top:0.0}–{d.Bottom:0.0} {Loc.Ui("m")}  {product?.Name}" + (d.Primers.Count > 0 ? $"  ({d.Primers.Count} pr.)" : "");
+            var kg = new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = $"{Charging.DeckMass(p, h, d):0.0} {Loc.Ui("kg")}", FontFamily = Look.Mono, FontSize = 11, Foreground = Look.Muted, Margin = new Thickness(8, 0, 0, 0) };
+            var name = new TextBlock { Text = text, FontSize = 11, Foreground = Look.Muted, TextTrimming = TextTrimming.CharacterEllipsis };
+            ToolTip.SetTip(name, text);
+            rows.Children.Add(new DockPanel
+            {
+                Children =
+                {
+                    new Border { [DockPanel.DockProperty] = Dock.Left, Width = 8, Height = 8, CornerRadius = new CornerRadius(2), Background = colour, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center },
+                    kg, name
+                }
+            });
+        }
+        Part(h.EffectiveLength - depth, null);
+        return Tile(new StackPanel
+        {
+            Spacing = 6,
+            Children =
+            {
+                head,
+                new Border { Height = 8, CornerRadius = new CornerRadius(4), ClipToBounds = true, Background = Look.Line, Child = scale },
+                rows
+            }
+        }, "holeCharge");
     }
 
     private static Control Summary(BlastProject p)

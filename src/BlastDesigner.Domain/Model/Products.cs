@@ -140,6 +140,11 @@ public sealed class LoadingRule
     public double SoftnessThreshold { get; set; } = 0.3;
     /// <summary>Stemming is lengthened by this much when the MWD log shows soft rock at the collar, m.</summary>
     public double SoftCollarExtraStemming { get; set; }
+    /// <summary>
+    /// Minimum top stemming in hole diameters the rule was saved with; loading a hole by the rule makes it the project's.
+    /// Null for rules saved before it, which leave the project's as it is.
+    /// </summary>
+    public double? MinStemmingDiameters { get; set; }
 
     public bool Matches(Hole h)
     {

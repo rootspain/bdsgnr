@@ -6,6 +6,7 @@ using Avalonia.VisualTree;
 using Avalonia.Markup.Xaml;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.Views;
+using BlastDesigner.Domain.Model;
 using BlastDesigner.IO;
 
 namespace BlastDesigner.App;
@@ -39,6 +40,7 @@ public partial class App : Application
             w.Focus();
         });
         Engine.Charging.MinStemmingDiameters = settings.MinStemmingDiameters;
+        SizeUnits.Default = settings.FragmentSizeUnit;
         Log.Info("Application started");
         if (settings.UsageLogging) UsageLog.Start(Changelog.Current.ToString());
         // what is still in memory reaches the file also when the program fails

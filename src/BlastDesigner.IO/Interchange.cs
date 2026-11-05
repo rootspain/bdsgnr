@@ -324,9 +324,10 @@ public static class Interchange
         Csv(new[] { "Hole", "kg/m", "Burden m", "Stemming m", "Face burst m", "Cratering m", "Rifling m", "Max m" },
             r.Holes.Select(h => new[] { h.Hole.Label, F(h.ChargePerMetre, "0.0"), F(h.Burden, "0.00"), F(h.Stemming, "0.00"), F(h.FaceBurst, "0"), F(h.Cratering, "0"), F(h.Rifling, "0"), F(h.Max, "0") }));
 
-    public static string ExportFragmentation(Fragmentation.Result r) =>
-        Csv(new[] { "Size cm", "Kuz-Ram passing %", "Swebrec passing %" },
-            r.Curve.Zip(r.Swebrec, (a, b) => new[] { F(a.SizeCm, "0.###"), F(a.PassingPct, "0.00"), F(b.PassingPct, "0.00") }));
+    /// <summary>The size distribution curves, the sizes in <paramref name="unit"/>.</summary>
+    public static string ExportFragmentation(Fragmentation.Result r, SizeUnit unit = SizeUnit.Cm) =>
+        Csv(new[] { "Size " + SizeUnits.Symbol(unit), "Kuz-Ram passing %", "Swebrec passing %" },
+            r.Curve.Zip(r.Swebrec, (a, b) => new[] { F(SizeUnits.FromCm(a.SizeCm, unit), "0.###"), F(a.PassingPct, "0.00"), F(b.PassingPct, "0.00") }));
 
     /// <summary>Extended firing data: firing data plus row, horizon, detonator ID, explosive mass and collar/toe coordinates.</summary>
     public static string ExportExtendedFiringData(BlastProject project, IEnumerable<Hole> holes)

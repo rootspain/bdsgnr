@@ -99,6 +99,27 @@ public sealed class FragmentationModel
     public double OversizeCm { get; set; } = 100;
     /// <summary>Fines threshold for the report, cm.</summary>
     public double FinesCm { get; set; } = 2;
+    /// <summary>
+    /// The unit the block sizes are shown and entered in; the sizes themselves stay in cm. Null in files from before it:
+    /// the program settings give it then (<see cref="SizeUnits.Default"/>).
+    /// </summary>
+    public SizeUnit? SizeUnit { get; set; }
+}
+
+public enum SizeUnit { Mm, Cm }
+
+/// <summary>Block sizes (kept and calculated in cm) in the unit they are shown in.</summary>
+public static class SizeUnits
+{
+    /// <summary>The unit of the program settings, for inputs that have none of their own.</summary>
+    public static SizeUnit Default { get; set; } = SizeUnit.Mm;
+    public static SizeUnit Of(FragmentationModel m) => m.SizeUnit ?? Default;
+    public static double FromCm(double cm, SizeUnit unit) => unit == SizeUnit.Mm ? cm * 10 : cm;
+    public static double ToCm(double value, SizeUnit unit) => unit == SizeUnit.Mm ? value / 10 : value;
+    /// <summary>"mm" or "cm", to be translated.</summary>
+    public static string Symbol(SizeUnit unit) => unit == SizeUnit.Mm ? "mm" : "cm";
+    /// <summary>Number format of a size: a mm value has ten times as many units, so one decimal less.</summary>
+    public static string Format(SizeUnit unit) => unit == SizeUnit.Mm ? "0" : "0.0";
 }
 
 /// <summary>Measured vibration event used to fit the site law.</summary>

@@ -206,6 +206,10 @@ public sealed class FragmentationForm : DockPanel
     }
     private static readonly IBrush Warn = new SolidColorBrush(Color.FromUInt32(0xFFE5484D));
     private readonly List<Button> _massChips = new();
+    /// <summary>The mm and cm switch of the block sizes.</summary>
+    private readonly List<Button> _unitChips = new();
+    /// <summary>The unit the block sizes are shown and entered in; the draft keeps them in cm.</summary>
+    private SizeUnit Unit => SizeUnits.Of(Draft);
     private readonly StackPanel _jfRow = new() { Spacing = 4 };
     private readonly Grid _preview = new() { ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), ColumnSpacing = 10 };
     private Mass _mass;
@@ -214,6 +218,8 @@ public sealed class FragmentationForm : DockPanel
     {
         _p = project;
         Draft = ProjectJson.DeepClone(project.Fragmentation);
+        // a project from before the unit takes the one of the program settings
+        Draft.SizeUnit ??= SizeUnits.Default;
         ReadMass();
 
         // hard limits cut the entry to the allowed range; soft ones only flag it (Refresh)
@@ -225,9 +231,10 @@ public sealed class FragmentationForm : DockPanel
         _jf = Number("jointFactor", null, v => { Draft.JointFactor = Math.Max(0, v); Refresh(); });
         _e = Number("youngsModulus", "GPa", v => { Draft.YoungsModulus = Math.Max(0, v); Refresh(); });
         _drill = Number("drillDeviation", "m", v => { Draft.DrillDeviation = Math.Max(0, v); Refresh(); });
-        _max = Number("maxBlock", "cm", v => { Draft.MaxBlockCm = Math.Max(1, v); Refresh(); });
-        _over = Number("oversize", "cm", v => { Draft.OversizeCm = Math.Max(0.1, v); Refresh(); });
-        _fines = Number("fines", "cm", v => { Draft.FinesCm = Math.Max(0.01, v); Refresh(); });
+        // the sizes are entered in the unit chosen and kept in cm
+        _max = Number("maxBlock", "cm", v => { Draft.MaxBlockCm = Math.Max(1, SizeUnits.ToCm(v, Unit)); Refresh(); });
+        _over = Number("oversize", "cm", v => { Draft.OversizeCm = Math.Max(0.1, SizeUnits.ToCm(v, Unit)); Refresh(); });
+        _fines = Number("fines", "cm", v => { Draft.FinesCm = Math.Max(0.01, SizeUnits.ToCm(v, Unit)); Refresh(); });
 
         var header = Header();
         SetDock(header, Dock.Top);
@@ -240,7 +247,7 @@ public sealed class FragmentationForm : DockPanel
         body.Children.Add(RockFactorCard());
         body.Children.Add(Section("Rock mass", MassFields()));
         body.Children.Add(Section("Drilling", Fields(2, Labeled("Drilling accuracy (standard deviation)", _drill))));
-        body.Children.Add(Section("Size distribution", Fields(3, Labeled("Largest in-situ block", _max), Labeled("Oversize above", _over), Labeled("Fines below", _fines))));
+        body.Children.Add(Section("Size distribution", Fields(3, Labeled("Largest in-situ block", _max), Labeled("Oversize above", _over), Labeled("Fines below", _fines)), UnitSwitch()));
         body.Children.Add(Section("Prediction for the blast", new Border
         {
             Background = Look.Panel,
@@ -287,7 +294,10 @@ public sealed class FragmentationForm : DockPanel
     /// <summary>Puts the inputs of a preset file in the window (applied to the blast with Apply).</summary>
     public void LoadPreset(string path)
     {
+        var unit = Unit;
         Draft = FragmentationPreset.Load(path);
+        // the unit of the preset; one from before it keeps the unit of the window
+        Draft.SizeUnit ??= unit;
         ReadMass();
         Refresh();
     }
@@ -468,15 +478,34 @@ public sealed class FragmentationForm : DockPanel
         Refresh();
     }
 
-    private static Control Section(string title, Control content) => new StackPanel
+    /// <summary>A group of fields under its title; <paramref name="aside"/> goes on the right of the title.</summary>
+    private static Control Section(string title, Control content, Control? aside = null)
     {
-        Spacing = 8,
-        Children =
+        var head = new DockPanel();
+        if (aside != null)
         {
-            new TextBlock { Text = L(title).ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint },
-            content
+            SetDock(aside, Dock.Right);
+            head.Children.Add(aside);
         }
-    };
+        head.Children.Add(new TextBlock { Text = L(title).ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue, VerticalAlignment = VerticalAlignment.Center });
+        return new StackPanel { Spacing = 8, Children = { head, content } };
+    }
+
+    /// <summary>The mm | cm switch of the block sizes; the values shown are converted, the sizes stay the same.</summary>
+    private Control UnitSwitch()
+    {
+        var row = Ui.Row(4);
+        foreach (var unit in new[] { SizeUnit.Mm, SizeUnit.Cm })
+        {
+            var chip = Ui.Chip(L(SizeUnits.Symbol(unit)), () => { Commit(); Draft.SizeUnit = unit; Refresh(); }, Unit == unit, L("Units of measurement"));
+            chip.Height = 24;
+            chip.MinWidth = 36;
+            chip.Name = "sizeUnit" + unit;
+            _unitChips.Add(chip);
+            row.Children.Add(chip);
+        }
+        return row;
+    }
 
     private static TextBlock Label(string text) => new() { Text = L(text), FontSize = 12, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap };
 
@@ -564,9 +593,12 @@ public sealed class FragmentationForm : DockPanel
         Show(_jf, Draft.JointFactor, "0.#");
         Show(_e, Draft.YoungsModulus, "0.#");
         Show(_drill, Draft.DrillDeviation, "0.0#");
-        Show(_max, Draft.MaxBlockCm, "0.#");
-        Show(_over, Draft.OversizeCm, "0.#");
-        Show(_fines, Draft.FinesCm, "0.##");
+        Show(_max, SizeUnits.FromCm(Draft.MaxBlockCm, Unit), "0.#");
+        Show(_over, SizeUnits.FromCm(Draft.OversizeCm, Unit), "0.#");
+        Show(_fines, SizeUnits.FromCm(Draft.FinesCm, Unit), "0.##");
+        foreach (var box in new[] { _max, _over, _fines })
+            if (box.InnerRightContent is TextBlock unitText) unitText.Text = L(SizeUnits.Symbol(Unit));
+        for (int i = 0; i < _unitChips.Count; i++) Ui.SetChip(_unitChips[i], (int)Unit == i);
         // each slider at the step of its value
         _movingSliders = true;
         _aSlider.Value = StepOf(AStops, RockFactor);
@@ -596,6 +628,9 @@ public sealed class FragmentationForm : DockPanel
         warning.IsVisible = warning.Text.Length > 0;
     }
 
+    /// <summary>A size kept in cm, in the unit chosen.</summary>
+    private string Size(double cm) => Loc.F(L("{0} " + SizeUnits.Symbol(Unit)), N(SizeUnits.FromCm(cm, Unit), SizeUnits.Format(Unit)));
+
     /// <summary>X50, X80, oversize and fines of the blast with the inputs as edited.</summary>
     private void RefreshPreview()
     {
@@ -611,8 +646,8 @@ public sealed class FragmentationForm : DockPanel
         }
         var cells = new (string Label, string Value, bool Warn)[]
         {
-            ("X50", Loc.F(L("{0} cm"), N(r.X50Cm, "0.0")), false),
-            ("X80", Loc.F(L("{0} cm"), N(r.X80Cm, "0.0")), false),
+            ("X50", Size(r.X50Cm), false),
+            ("X80", Size(r.X80Cm), false),
             (L("Oversize"), N(r.OversizePct, "0.0") + " %", r.OversizePct > 10),
             (L("Fines"), N(r.FinesPct, "0.0") + " %", false)
         };
