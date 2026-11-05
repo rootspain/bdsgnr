@@ -144,7 +144,7 @@ public class ChargingTests
     public void RuleFromColumn_ReappliesAndAdaptsLikeAdaptColumn()
     {
         var p = BlastProject.CreateNew();
-        Guid Id(string name) => p.Products.First(x => x.Name == name).Id;
+        string Id(string name) => p.Products.First(x => x.Name == name).Id;
         Primer Pr(double depth) => new() { Depth = depth, BoosterId = p.Products.First(x => x.Kind == ProductKind.Booster).Id, DetonatorId = p.Products.First(x => x.IsDetonator).Id };
         var column = new List<Deck>
         {
@@ -177,7 +177,7 @@ public class ChargingTests
     [Fact]
     public void JoinLikeDecks_MergesAdjacentSameProduct()
     {
-        var id = Guid.NewGuid();
+        var id = Guid.NewGuid().ToString();
         var h = new Hole { Length = 10, Decks = { new Deck { Top = 3, Bottom = 6, ProductId = id }, new Deck { Top = 6, Bottom = 10, ProductId = id } } };
         Charging.JoinLikeDecks(new[] { h });
         Assert.Single(h.Decks);

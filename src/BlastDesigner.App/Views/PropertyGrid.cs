@@ -102,8 +102,8 @@ public sealed class PropertyGrid : Grid
         }
     }
     public bool ReadOnly { get; set; }
-    /// <summary>Named choices for Guid? properties (e.g. products), keyed by property name.</summary>
-    public Dictionary<string, IReadOnlyList<(Guid Id, string Name)>> Choices { get; } = new();
+    /// <summary>Named choices for id properties (e.g. products), keyed by property name.</summary>
+    public Dictionary<string, IReadOnlyList<(string Id, string Name)>> Choices { get; } = new();
     /// <summary>Colour swatch (ARGB) shown next to each value of an enum type in its list, e.g. the colour of each kind of surface.</summary>
     public Dictionary<Type, Func<object, uint>> EnumColors { get; } = new();
     public event Action<string>? PropertyEdited;
@@ -302,7 +302,7 @@ public sealed class PropertyGrid : Grid
         var value = p.GetValue(target);
         var mixed = Mixed.Contains(p.Name);
 
-        if (type == typeof(string))
+        if (type == typeof(string) && !Choices.ContainsKey(p.Name))
         {
             var tb = new TextBox { Text = mixed ? "" : (string?)value ?? "", Watermark = mixed ? MixedText : null, AcceptsReturn = p.Name is "Description" or "Comment" or "Comments" or "Notes", TextWrapping = TextWrapping.Wrap };
             tb.LostFocus += (_, _) =>
@@ -433,10 +433,10 @@ public sealed class PropertyGrid : Grid
             }
             return g;
         }
-        if ((under ?? type) == typeof(Guid) && Choices.TryGetValue(p.Name, out var choices))
+        if (type == typeof(string) && Choices.TryGetValue(p.Name, out var choices))
         {
-            var items = new List<(Guid? Id, string Name)> { (null, Loc.T("(none)")) };
-            items.AddRange(choices.Select(c => ((Guid?)c.Id, c.Name)));
+            var items = new List<(string? Id, string Name)> { (null, Loc.T("(none)")) };
+            items.AddRange(choices.Select(c => ((string?)c.Id, c.Name)));
             var combo = new ComboBox { ItemsSource = items.Select(i => i.Name).ToList(), SelectedIndex = mixed ? -1 : Math.Max(0, items.FindIndex(i => Equals(i.Id, value))), PlaceholderText = mixed ? MixedText : null, MinWidth = 200 };
             combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) Set(p, items[combo.SelectedIndex].Id); };
             return combo;

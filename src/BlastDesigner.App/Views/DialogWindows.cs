@@ -229,18 +229,6 @@ public static class TiePaletteWindow
     public const string PositionKey = "TiePalette";
     public const string Title = "Initiation catalogue";
 
-    /// <summary>Types (initiation systems): key, label and the product kinds they list, the one they start with first (none for user defined).</summary>
-    public static readonly (string Key, string Label, ProductKind[] Kinds)[] Systems =
-    {
-        ("ShockTube", "Shock tube", new[] { ProductKind.SurfaceConnector, ProductKind.DownholeDetonator, ProductKind.Other }),
-        ("CordRelay", "Cord delay", new[] { ProductKind.CordRelay }),
-        ("Cord", "Detonating cord system", new[] { ProductKind.DetonatingCord }),
-        ("Electric", "Electric", new[] { ProductKind.ElectricDetonator }),
-        ("Harness", "Harness wire", new[] { ProductKind.HarnessWire }),
-        ("Ebs", "EBS detonators", new[] { ProductKind.ElectronicDetonator }),
-        ("User", "User defined", Array.Empty<ProductKind>())
-    };
-
     public static void Show(MainViewModel vm)
     {
         if (vm.Project == null) return;
@@ -266,20 +254,36 @@ public static class TiePaletteWindow
     private static bool OnScreen(PixelPoint p) =>
         Dialogs.Owner?.Screens is not { } screens || screens.All.Count == 0 || screens.ScreenFromPoint(p) != null;
 
-    private static string TypeOf(MainViewModel vm) =>
-        vm.TieSystem ?? (vm.ActiveTieDelayMs != null ? "User" : Systems.FirstOrDefault(s => vm.ActiveConnector is { } a ? s.Kinds.Contains(a.Kind) : s.Kinds.Length == 0).Key ?? "ShockTube");
+    /// <summary>The types offered, from the table of the project.</summary>
+    private static List<CatalogueType> Types(MainViewModel vm) => vm.Project!.Catalogue.Types.Where(t => !t.Deleted).OrderBy(t => t.Order).ToList();
 
-    /// <summary>The families of all the products of a type, those of its first kind first.</summary>
-    private static List<IGrouping<(ProductKind Kind, string Name), Product>> Families(MainViewModel vm, string type)
+    /// <summary>The kinds a type lists, those deleted left out.</summary>
+    private static List<string> KindsOf(MainViewModel vm, CatalogueType type) =>
+        type.KindIds.Where(id => vm.Project!.Catalogue.Kinds.Any(k => k.Id == id && !k.Deleted)).ToList();
+
+    private static string KindName(MainViewModel vm, string id) =>
+        vm.Project!.Catalogue.Kinds.FirstOrDefault(k => k.Id == id) is { } k ? Loc.T(k.Name) : "";
+
+    private static CatalogueType? TypeOf(MainViewModel vm)
     {
-        var kinds = Systems.First(s => s.Key == type).Kinds;
-        return vm.Project!.Products.Where(p => kinds.Contains(p.Kind)).GroupBy(p => (p.Kind, Name: p.FamilyName))
-            .OrderBy(g => Array.IndexOf(kinds, g.Key.Kind)).ThenBy(g => g.Key.Name).ToList();
+        var types = Types(vm);
+        return types.FirstOrDefault(t => t.Id == vm.TieSystem)
+            ?? (vm.ActiveTieDelayMs != null ? types.FirstOrDefault(t => t.UserDelay) : null)
+            ?? types.FirstOrDefault(t => vm.ActiveConnector is { } a ? t.KindIds.Contains(a.KindId) : t.UserDelay)
+            ?? types.FirstOrDefault();
     }
 
-    private static (ProductKind Kind, string Name) FamilyOf(MainViewModel vm, string type, List<IGrouping<(ProductKind Kind, string Name), Product>> families) =>
-        vm.ActiveConnector is { } a && vm.ActiveTieDelayMs == null && families.Any(g => g.Key == (a.Kind, a.FamilyName)) ? (a.Kind, a.FamilyName)
-        : vm.TieFamilyChoice.TryGetValue(type, out var f) && families.Any(g => g.Key == f) ? f
+    /// <summary>The families of all the products of a type, those of its first kind first.</summary>
+    private static List<IGrouping<(string KindId, string Name), Product>> Families(MainViewModel vm, CatalogueType type)
+    {
+        var kinds = KindsOf(vm, type);
+        return vm.Project!.ActiveProducts.Where(p => kinds.Contains(p.KindId)).GroupBy(p => (p.KindId, Name: p.FamilyName))
+            .OrderBy(g => kinds.IndexOf(g.Key.KindId)).ThenBy(g => g.Key.Name).ToList();
+    }
+
+    private static (string KindId, string Name) FamilyOf(MainViewModel vm, CatalogueType type, List<IGrouping<(string KindId, string Name), Product>> families) =>
+        vm.ActiveConnector is { } a && vm.ActiveTieDelayMs == null && families.Any(g => g.Key == (a.KindId, a.FamilyName)) ? (a.KindId, a.FamilyName)
+        : vm.TieFamilyChoice.TryGetValue(type.Id, out var f) && families.Any(g => g.Key == f) ? f
         : families.FirstOrDefault()?.Key ?? default;
 
     /// <summary>Makes new ties with the product (or the user's delay) and switches to the tie tool.</summary>
@@ -288,7 +292,7 @@ public static class TiePaletteWindow
         vm.ActiveConnector = p;
         vm.ActiveTieDelayMs = delay;
         vm.TieSystem = type;
-        if (p != null) vm.TieFamilyChoice[type] = (p.Kind, p.FamilyName);
+        if (p != null) vm.TieFamilyChoice[type] = (p.KindId, p.FamilyName);
         vm.SetStatus(Loc.F("Tie connector: {0}", delay is double ms ? Loc.F("{0} ms", ms.ToString("0.#")) : p?.Name ?? Loc.T("0 ms connection")));
         if (vm.ActiveTool is not Tools.TieTool) vm.SetTool(new Tools.TieTool(vm));
         Fill(vm);
@@ -334,15 +338,20 @@ public static class TiePaletteWindow
         if (_panel == null || vm.Project == null) return;
         _build++;
         _panel.Children.Clear();
-        var type = TypeOf(vm);
-        var typeInfo = Systems.First(s => s.Key == type);
+        var types = Types(vm);
+        if (TypeOf(vm) is not { } typeInfo)
+        {
+            _panel.Children.Add(Card(new TextBlock { Text = Loc.T("No products of this type in Available resources"), Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap }));
+            return;
+        }
+        var type = typeInfo.Id;
 
         // ---- current choice
         var current = vm.ActiveTieDelayMs is double ud ? Loc.F("{0} ms", ud.ToString("0.#"))
             : vm.ActiveConnector is { } ac ? $"{ac.FamilyName} · {VariantText(ac)}" : Loc.T("0 ms connection");
-        var path = vm.ActiveTieDelayMs != null || vm.ActiveConnector == null ? Loc.T(typeInfo.Label)
-            : $"{Loc.T(typeInfo.Label)}  ›  {Loc.Enum(vm.ActiveConnector.Kind)}";
-        var none = Ui.Chip(Loc.T("0 ms connection"), () => Use(vm, null, null, "ShockTube"), vm.ActiveConnector == null && vm.ActiveTieDelayMs == null, Loc.T("A tie without a connector"));
+        var path = vm.ActiveTieDelayMs != null || vm.ActiveConnector == null ? Loc.T(typeInfo.Name)
+            : $"{Loc.T(typeInfo.Name)}  ›  {KindName(vm, vm.ActiveConnector.KindId)}";
+        var none = Ui.Chip(Loc.T("0 ms connection"), () => Use(vm, null, null, (types.FirstOrDefault(x => !x.UserDelay) ?? typeInfo).Id), vm.ActiveConnector == null && vm.ActiveTieDelayMs == null, Loc.T("A tie without a connector"));
         none.Tag = "none";
         _panel.Children.Add(Card(new DockPanel
         {
@@ -360,26 +369,25 @@ public static class TiePaletteWindow
         }, "tieCurrentCard"));
 
         // ---- 1 Type
-        var types = Wrap();
-        types.Name = "tieTypes";
-        foreach (var (key, label, kinds) in Systems)
+        var typeChips = Wrap();
+        typeChips.Name = "tieTypes";
+        foreach (var item in types)
         {
-            var k = key;
-            var chip = Ui.Chip(Loc.T(label), () =>
+            var chip = Ui.Chip(Loc.T(item.Name), () =>
             {
-                if (TypeOf(vm) == k) return;
-                if (kinds.Length == 0) { Use(vm, null, vm.ActiveTieDelayMs ?? 0, k); return; }
+                if (TypeOf(vm)?.Id == item.Id) return;
+                if (item.UserDelay) { Use(vm, null, vm.ActiveTieDelayMs ?? 0, item.Id); return; }
                 // the type starts with the first variant of the chosen family
-                var fams = Families(vm, k);
-                var chosen = FamilyOf(vm, k, fams);
-                Use(vm, fams.FirstOrDefault(g => g.Key == chosen)?.OrderBy(p => p.DelayMs).First(), null, k);
-            }, key == type);
-            chip.Tag = "type:" + key;
-            types.Children.Add(chip);
+                var fams = Families(vm, item);
+                var chosen = FamilyOf(vm, item, fams);
+                Use(vm, fams.FirstOrDefault(g => g.Key == chosen)?.OrderBy(p => p.DelayMs).First(), null, item.Id);
+            }, item.Id == type);
+            chip.Tag = "type:" + item.Id;
+            typeChips.Children.Add(chip);
         }
-        _panel.Children.Add(Step("1", "Type", types));
+        _panel.Children.Add(Step("1", "Type", typeChips));
 
-        if (typeInfo.Kinds.Length == 0)
+        if (typeInfo.UserDelay)
         {
             // user defined: a delay of its own on every new tie
             var box = new TextBox { Text = (vm.ActiveTieDelayMs ?? 0).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture), Width = 120, Height = 32, FontFamily = Look.Mono, Name = "tieUserDelay" };
@@ -394,21 +402,21 @@ public static class TiePaletteWindow
         }
 
         // ---- 2 Family
-        var families = Families(vm, type);
+        var families = Families(vm, typeInfo);
         if (families.Count == 0)
         {
             _panel.Children.Add(Step("2", "Family", Card(new TextBlock { Text = Loc.T("No products of this type in Available resources"), Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap })));
             return;
         }
-        var family = FamilyOf(vm, type, families);
+        var family = FamilyOf(vm, typeInfo, families);
         // a type of several kinds says the kind of each family
-        var mixed = families.Select(g => g.Key.Kind).Distinct().Count() > 1;
+        var mixed = families.Select(g => g.Key.KindId).Distinct().Count() > 1;
         var famList = new StackPanel { Spacing = 4, Name = "tieFamilies" };
         foreach (var g in families)
         {
             var key = g.Key;
             var on = key == family;
-            var note = string.Join(" · ", (mixed ? new[] { Loc.Enum(key.Kind) } : Array.Empty<string>()).Concat(g.Select(p => p.Manufacturer).Where(m => m.Length > 0).Distinct()));
+            var note = string.Join(" · ", (mixed ? new[] { KindName(vm, key.KindId) } : Array.Empty<string>()).Concat(g.Select(p => p.Manufacturer).Where(m => m.Length > 0).Distinct()));
             var row = new Button
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -433,7 +441,7 @@ public static class TiePaletteWindow
                 }
             };
             row.Classes.Add("flat");
-            row.Click += (_, _) => { if (key != FamilyOf(vm, type, families)) Use(vm, g.OrderBy(p => p.DelayMs).First(), null, type); };
+            row.Click += (_, _) => { if (key != FamilyOf(vm, typeInfo, families)) Use(vm, g.OrderBy(p => p.DelayMs).First(), null, type); };
             famList.Children.Add(row);
         }
         _panel.Children.Add(Step("2", "Family", famList));

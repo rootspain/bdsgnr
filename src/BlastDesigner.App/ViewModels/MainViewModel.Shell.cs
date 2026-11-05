@@ -162,11 +162,11 @@ public sealed partial class MainViewModel
                 M("Charge in 3D", "charge", "View/Loading"), M("Tolerances", "check", "Calculations/Design tolerance check"), M("Fly through", "send", "View/Fly through")),
             G("Volumes", M("Quantities", "chart", "Calculations/Quantities", "Ctrl⇧Q", true), M("Dashboard", "dash", "View/Dashboard", big: true),
                 M("Volume between surfaces", "cube", "Tools/Surfaces/Volume…"), M("Volume overview", "polygon", "Calculations/Volume overview"), M("Costs", "money", "Calculations/Project costs")),
+            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…")),
             G("Environment", M("Exclusion zone", "exclusion", "Calculations/Environmental prediction/Exclusion zone calculator", big: true),
                 M("Vibration", "wave", "Calculations/Vibration/Vibration"), M("Vibration map", "wave", "Calculations/Vibration/Vibration map"), M("Airblast map", "air", "Calculations/Vibration/Airblast map"),
                 M("Flyrock", "frag", "Calculations/Environmental prediction/Flyrock prediction"), M("Scale law", "wave", "Calculations/Environmental prediction/Scale law calculator"),
-                M("Vibration records", "wave", "Tools/Vibration analysis…")),
-            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…"))
+                M("Vibration records", "wave", "Tools/Vibration analysis…"))
         }),
         new Stage("Output", new()
         {

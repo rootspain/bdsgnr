@@ -64,8 +64,8 @@ public static class Quantities
                     energy += Charging.DeckMass(project, h, d) * p.Energy;
         }
 
-        var amounts = new Dictionary<Guid, double>();
-        void Add(Guid? id, double amount) { if (id is Guid g) amounts[g] = amounts.GetValueOrDefault(g) + amount; }
+        var amounts = new Dictionary<string, double>();
+        void Add(string? id, double amount) { if (id != null) amounts[id] = amounts.GetValueOrDefault(id) + amount; }
         foreach (var h in real)
             foreach (var d in h.Decks)
             {

@@ -269,7 +269,7 @@ public sealed class TieEntity : Entity
     public Guid FromId { get; set; }
     public Guid ToId { get; set; }
     /// <summary>Surface connector product; its delay is used unless <see cref="DelayMs"/> overrides it.</summary>
-    public Guid? ProductId { get; set; }
+    public string? ProductId { get; set; }
     public double DelayMs { get; set; }
 
     [JsonIgnore] public Vec3 FromPos { get; set; }

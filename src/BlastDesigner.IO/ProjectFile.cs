@@ -82,6 +82,8 @@ public static class ProjectFile
             if (l.Group == "Survey") l.Group = StandardLayers.TopographyGroup;
         // an initiation point standing on a hole is bound to it (before 0.2.3 it only shared the position)
         InitiationLinks.Normalize(p);
+        // schema 1: kinds and families lived on the products; the tables are made from them
+        ProductCatalogue.Attach(p, new ProductCatalogue(), Array.Empty<Product>());
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;
     }
 
@@ -124,14 +126,14 @@ public static class ProjectFile
             if (existing == null) { target.Layers.Add(l); existing = l; }
             layerMap[l.Id] = existing.Id;
         }
-        var productMap = new Dictionary<Guid, Guid>();
+        var productMap = new Dictionary<string, string>();
         foreach (var p in source.Products)
         {
             var existing = target.Products.FirstOrDefault(x => x.Id == p.Id) ?? target.Products.FirstOrDefault(x => x.Name == p.Name && x.Kind == p.Kind);
             if (existing == null) { target.Products.Add(p); existing = p; }
             productMap[p.Id] = existing.Id;
         }
-        Guid? MapP(Guid? id) => id is Guid g && productMap.TryGetValue(g, out var m) ? m : id;
+        string? MapP(string? id) => id != null && productMap.TryGetValue(id, out var m) ? m : id;
 
         var ids = target.Entities.Select(e => e.Id).ToHashSet();
         var idMap = new Dictionary<Guid, Guid>();
@@ -161,6 +163,9 @@ public static class ProjectFile
         }
         target.Entities.AddRange(source.Entities);
         foreach (var a in source.Attachments) target.Attachments.Add(a);
+        // the records of the other project come along; those of this project go first
+        target.Catalogue = ProductCatalogue.Layered(source.Catalogue, new ProductCatalogue(), target.Catalogue);
+        ProductCatalogue.Link(target);
         return source.Entities.Count;
     }
 }

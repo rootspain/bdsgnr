@@ -9,6 +9,11 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.2.4 — 2026-11-04
 
 ### New
+- **Tables in the Available resources window:** sections Products, Families, Kinds, Groups and Types, whose records
+  can be added, edited, deleted and restored. Deletion is logical: a record is no longer offered for anything new,
+  and what already uses it goes on showing it. Deleting a type, kind or family takes its children, with a warning.
+  Records are kept in the project and in catalog.json next to the settings; old projects are converted when opened
+  and get the standard products they lack. Older versions of the program cannot open the new files.
 - **Sliders under the A and f fields** of the Fragmentation inputs window. The A slider steps along the rock type
   table from 0 to 18 (the row bounds and the whole numbers inside the rows), the f slider along the Protodyakonov
   category bounds from 0 to 20. Under each field is the rock type or category the value falls in, with its range and
@@ -27,7 +32,35 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - The Properties tab has a Layer list: it shows the layer of the selection (or "(mixed)"), and picking another layer
   moves the selection there in one undo step.
 
+- **Size units of fragmentation:** a mm | cm switch on the Size distribution group of the Fragmentation inputs window,
+  mm by default. The unit is kept in the project, the preset and the settings and applies to the fields, X20/X50/X80,
+  the chart, the dashboard and the CSV export.
+- **Minimum stemming in the project and the loading rule:** the value is saved in both; opening a file takes its value,
+  Load by rule replaces the current one.
+- **Tie tool:** grey lines beside the tie show the capture area. The Capture width box (key F) shows and hides them and
+  is kept in the settings; the + and − keys change the pick radius by 1.
+- **Visualization window:** the speed is set as the time the blast is shown in: chips Natural, 2, 5, 10, 15 s or a value
+  of your own. The choice and the boxes reach the settings at once.
+- **First movement window:** a One colour (yellow) or Gradient switch, with a legend of the colours.
+- **Exceptions window:** search by hole number.
+
 ### Changed
+- Properties tab for holes: the Edit loading button on top, charge cards, fields in folding groups, two to a row; the
+  fields no longer run out of the panel.
+- Ties attach to holes already tied, and their direction comes from the initiation point whichever way they were drawn,
+  also at 0 ms and in a Shift entry. A click on a hole finishes the entry; with Shift it goes on.
+- Initiation catalogue: the Subtype group is gone, a type shows all its products; the type УВТ is now НСИ in Russian.
+- The Visualization window is more compact: round Play and Stop buttons, a thin title, a fixed height.
+- First movement window: arrows start at 1.2 m, the Auto chip is gone.
+- The group titles of the fragmentation window are blue.
+- Analysis ribbon: Quality control stands before Volumes, Fragmentation before Environment; the Recent button of the
+  File ribbon has a new Russian name.
+- Number fields of the Properties tab and of dialogs take their value on Enter, and the times follow at once.
+- Select these holes and Highlight in the Exceptions window work on the rows chosen in the table, or on all the rows
+  shown when none is chosen.
+- The tables of the analysis windows sort numbers by value: 1, 2, 10, not 1, 10, 2.
+- First movement says so when all holes fire at the same time, instead of saying that no hole is initiated.
+- The last row of the Available resources list no longer hides under the buttons.
 - **A and f are matched by tables, not by the Cunningham formula.** A by the rock type table: soft 0.6–2, medium
   strength 3–7, strong 8–12, extremely strong 13–18. f by the 15 Protodyakonov categories (X–I, f 0.3–20). A value typed
   in sets the other field by its share of its table's range, rounded to a whole number. When the value is at least the

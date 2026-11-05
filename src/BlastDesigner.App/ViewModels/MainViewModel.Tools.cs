@@ -579,7 +579,7 @@ public sealed partial class MainViewModel
 
     public async void InholeDelayTool()
     {
-        var dets = Project!.Products.Where(p => p.Kind == ProductKind.DownholeDetonator).ToList();
+        var dets = Project!.ActiveProducts.Where(p => p.Kind == ProductKind.DownholeDetonator).ToList();
         if (dets.Count == 0) { await Dialogs.Info(Loc.T("Add a downhole detonator to the available resources first.")); return; }
         var idx = await Dialogs.Choose("In-hole delay", Loc.T("Detonator to assign"), dets.Select(d => d.Name).ToList());
         if (idx is not int i) return;
@@ -621,7 +621,7 @@ public sealed partial class MainViewModel
         if (Doc == null) return;
         var ip = Project!.Entities.OfType<InitiationPoint>().FirstOrDefault();
         if (ip == null) { await Dialogs.Info(Loc.T("Place an initiation point (lead-in) first.")); return; }
-        var connectors = Project.Products.Where(p => p.Kind == ProductKind.SurfaceConnector).ToList();
+        var connectors = Project.ActiveProducts.Where(p => p.Kind == ProductKind.SurfaceConnector).ToList();
         if (connectors.Count == 0) { await Dialogs.Info(Loc.T("Add surface connectors to the available resources first.")); return; }
         var names = connectors.Select(c => c.Name).ToList();
         var hi = await Dialogs.Choose("Automatic tie-up", Loc.T("Connector between holes in a row"), names, 0);

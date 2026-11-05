@@ -53,15 +53,15 @@ public static class LoadingAlternates
     {
         var len = h.EffectiveLength;
         if (rule.WetAlternateProductId != null && h.WaterDepth > 0)
-            Replace(project, h, len - h.WaterDepth, len, rule.WetAlternateProductId.Value, p => !p.WaterResistant);
+            Replace(project, h, len - h.WaterDepth, len, rule.WetAlternateProductId!, p => !p.WaterResistant);
         if (h.Mwd is { Count: > 0 })
         {
             foreach (var (top, bottom, hardness) in Intervals(h.Mwd, len))
             {
                 if (rule.HardAlternateProductId != null && hardness >= rule.HardnessThreshold)
-                    Replace(project, h, top, bottom, rule.HardAlternateProductId.Value, _ => true);
+                    Replace(project, h, top, bottom, rule.HardAlternateProductId!, _ => true);
                 else if (rule.SoftAlternateProductId != null && hardness < rule.SoftnessThreshold)
-                    Replace(project, h, top, bottom, rule.SoftAlternateProductId.Value, _ => true);
+                    Replace(project, h, top, bottom, rule.SoftAlternateProductId!, _ => true);
             }
             if (rule.SoftCollarExtraStemming > 0 && h.Mwd.OrderBy(s => s.Depth).First().Hardness < rule.SoftnessThreshold)
                 ExtendStemming(project, h, rule.SoftCollarExtraStemming);
@@ -83,7 +83,7 @@ public static class LoadingAlternates
     }
 
     /// <summary>Replaces the product of explosive decks inside [top, bottom], splitting decks at the interval ends.</summary>
-    public static void Replace(BlastProject project, Hole h, double top, double bottom, Guid productId, Func<Product, bool> applies)
+    public static void Replace(BlastProject project, Hole h, double top, double bottom, string productId, Func<Product, bool> applies)
     {
         var result = new List<Deck>();
         foreach (var d in h.Decks.OrderBy(d => d.Top))

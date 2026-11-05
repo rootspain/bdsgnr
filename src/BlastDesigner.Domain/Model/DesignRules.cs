@@ -17,8 +17,8 @@ public sealed class InitiationRule
     public int Horizon { get; set; } = -1;
     public double MinLength { get; set; }
     public double MaxLength { get; set; } = 1000;
-    public Guid? DetonatorId { get; set; }
-    public Guid? BoosterId { get; set; }
+    public string? DetonatorId { get; set; }
+    public string? BoosterId { get; set; }
     /// <summary>Primers per explosive deck; 0 keeps the existing count.</summary>
     public int PrimersPerDeck { get; set; }
     /// <summary>Overrides the detonator delay, ms; null uses the product's nominal delay.</summary>

@@ -819,7 +819,7 @@ public static class PlanRenderer
         } : null;
         // All arrows go into one triangle mesh: drawn one by one, 750 ties were 750 antialiased lines and 750 small
         // filled paths, half of a blast frame; as paths, Skia stroked them on the CPU. Ties outside the view are skipped.
-        var products = new Dictionary<Guid, Product>();
+        var products = new Dictionary<string, Product>();
         foreach (var p in project.Products) products.TryAdd(p.Id, p);
         var arrows = new LineMesh();
         var labels = new TextBatch();
@@ -838,7 +838,7 @@ public static class PlanRenderer
                 var (x0, y0) = cam.ToScreen(a + dir * gap);
                 var (x1, y1) = cam.ToScreen(b - dir * gap);
                 if ((x0 < -20 && x1 < -20) || (x0 > w + 20 && x1 > w + 20) || (y0 < -20 && y1 < -20) || (y0 > h + 20 && y1 > h + 20)) continue;
-                var product = t.ProductId is Guid pid && products.TryGetValue(pid, out var found) ? found : null;
+                var product = t.ProductId is string pid && products.TryGetValue(pid, out var found) ? found : null;
                 var selected = opt.Selection.Contains(t.Id);
                 var col = selected ? opt.SelectionColor : product != null ? new SKColor(product.Color) : new SKColor(0xFF6B7280);
                 if (!_dark && col.Red > 230 && col.Green > 230 && col.Blue > 230) col = new SKColor(0xFF374151);

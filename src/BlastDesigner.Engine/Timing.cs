@@ -13,7 +13,7 @@ public static class Timing
     /// </summary>
     public static double TieDelay(BlastProject project, TieEntity tie, Vec3? from = null, Vec3? to = null)
     {
-        if (tie.DelayMs != 0 || tie.ProductId is not Guid pid || project.FindProduct(pid) is not { } p) return tie.DelayMs;
+        if (tie.DelayMs != 0 || tie.ProductId is not string pid || project.FindProduct(pid) is not { } p) return tie.DelayMs;
         switch (p.Kind)
         {
             case ProductKind.DetonatingCord:

@@ -204,7 +204,31 @@ public static class Dialogs
     /// Shows a tool window: centred on the main window, at its bottom edge (<paramref name="alignBottomToOwner"/>) or at
     /// <paramref name="at"/> (a remembered place, set before it is shown so nothing centres it afterwards).
     /// </summary>
-    public static Window ShowWindow(string title, Control content, double width, double height, bool alignBottomToOwner = false, PixelPoint? at = null)
+    /// <summary>
+    /// Keeps a window without the system title at one height, its width from <paramref name="minWidth"/> up. The size
+    /// limits of the window alone do not do: Windows adds the height of a title to them at the first move or resize, so
+    /// the limits go to Windows directly too.
+    /// </summary>
+    public static void FixHeight(Window w, double minWidth, double height)
+    {
+        w.MinWidth = minWidth;
+        w.MinHeight = w.MaxHeight = height;
+        if (w.TryGetPlatformHandle()?.HandleDescriptor != "HWND") return;
+        const uint getMinMaxInfo = 0x0024;
+        // MINMAXINFO: the smallest size at 24, the largest at 32, x then y
+        Win32Properties.AddWndProcHookCallback(w, (IntPtr _, uint message, IntPtr _, IntPtr info, ref bool handled) =>
+        {
+            if (message != getMinMaxInfo) return IntPtr.Zero;
+            var rows = (int)Math.Round(height * w.RenderScaling);
+            System.Runtime.InteropServices.Marshal.WriteInt32(info, 24, (int)Math.Round(minWidth * w.RenderScaling));
+            System.Runtime.InteropServices.Marshal.WriteInt32(info, 28, rows);
+            System.Runtime.InteropServices.Marshal.WriteInt32(info, 36, rows);
+            handled = true;
+            return IntPtr.Zero;
+        });
+    }
+
+    public static Window ShowWindow(string title, Control content, double width, double height, bool alignBottomToOwner = false, PixelPoint? at = null, Action<Window>? beforeShow = null)
     {
         if (!MultiInstance.Contains(title) && ActivateExisting(title)) return OpenWindows[title];
         UsageLog.Track(UsageLog.Dialog, title);
@@ -223,6 +247,7 @@ public static class Dialogs
             OpenWindows[title] = w;
             w.Closed += (_, _) => { if (OpenWindows.TryGetValue(title, out var open) && open == w) OpenWindows.Remove(title); };
         }
+        beforeShow?.Invoke(w);
         if (Owner != null) w.Show(Owner); else w.Show();
         if (at == null && alignBottomToOwner && Owner is { } owner)
         {

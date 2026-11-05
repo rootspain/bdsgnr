@@ -149,7 +149,7 @@ public sealed class Deck
 {
     public double Top { get; set; }
     public double Bottom { get; set; }
-    public Guid? ProductId { get; set; }
+    public string? ProductId { get; set; }
     public List<Primer> Primers { get; set; } = new();
 
     [JsonIgnore] public double Length => Math.Max(0, Bottom - Top);
@@ -167,8 +167,8 @@ public sealed class Deck
 public sealed class Primer
 {
     public double Depth { get; set; }
-    public Guid? BoosterId { get; set; }
-    public Guid? DetonatorId { get; set; }
+    public string? BoosterId { get; set; }
+    public string? DetonatorId { get; set; }
     /// <summary>Overrides the detonator's nominal delay when not null.</summary>
     public double? DelayMs { get; set; }
 

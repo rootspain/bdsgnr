@@ -1642,7 +1642,7 @@ ui:Document	Документ
 ui:New	Новый
 ui:Open	Открыть
 ui:Save	Сохранить
-ui:Recent	Последние
+ui:Recent	Недавние
 ui:Save as…	Сохранить как…
 ui:Close	Закрыть
 ui:Templates	Шаблоны
@@ -2151,7 +2151,6 @@ ui:Core load	Навеска
 ui:Unit mass	Масса единицы
 ui:Water resistant	Водоустойчивое
 ui:Colour	Цвет
-ui:They will be left without this product.	Они останутся без этого продукта.
 ui:order changed	порядок изменён
 ui:Appearance	Оформление
 ui:Viewport	Вьюпорт
@@ -2629,3 +2628,48 @@ ui:Move to the left side	Перенести влево
 ui:Move to the right side	Перенести вправо
 Min stemming diameters	Мин. забойка, диаметров
 Minimum stemming	Минимальная забойка
+ui:Families	Семейства
+ui:Kinds	Виды
+ui:Groups	Группы
+ui:Types	Типы
+ui:Show deleted	Показывать удалённые
+ui:<unassigned>	<не назначенные>
+ui:Kinds no group lists; a group takes them with its boxes	Виды вне групп. Чтобы добавить вид в группу, отметьте его в этой группе
+ui:Every kind is in a group	Все виды распределены по группам
+ui:Restore	Восстановить
+ui:deleted	удалено
+ui:New family	Новое семейство
+ui:New kind	Новый вид
+ui:New group	Новая группа
+ui:New type	Новый тип
+ui:How the program calculates it	Как считает программа
+ui:Charge of the hole: the mass comes from the density and the volume of the deck, with the loading factor. It counts in the explosive of the hole and the blast and in the predictions; a deck of it needs a primer and is checked against water.	Заряд скважины: масса считается по плотности и объёму интервала с коэффициентом заряжания. Входит в массу ВВ скважины и взрыва и в прогнозы; интервалу нужен боевик, он проверяется на обводнённость.
+ui:Charge of the hole: the mass comes from the cartridges that fit the deck, by their mass and length. It counts in the explosive of the hole and the blast and in the predictions; a deck of it needs a primer and is checked against water.	Заряд скважины: масса считается по патронам, которые помещаются в интервал, по их массе и длине. Входит в массу ВВ скважины и взрыва и в прогнозы; интервалу нужен боевик, он проверяется на обводнённость.
+ui:A deck of it counts as stemming: in the stemming length and the minimum stemming check. Its mass comes from the density and the volume and stays out of the explosive; quantities are in kilograms.	Интервал считается забойкой: входит в длину забойки и проверку минимальной забойки. Масса считается по плотности и объёму и в массу ВВ не входит; в объёмах учитывается в килограммах.
+ui:A deck of it takes up its place in the column and has no mass. Quantities count it in pieces.	Интервал занимает место в колонке, но массы не имеет. В объёмах учитывается штуками.
+ui:Offered as the booster of a primer. Quantities count it in pieces.	Предлагается как боевик в заряде. В объёмах учитывается штуками.
+ui:Offered as the detonator of a primer: its delay is added to the firing time of the hole. Quantities count it in pieces.	Предлагается как детонатор боевика: его задержка прибавляется ко времени взрывания скважины. В объёмах учитывается штуками.
+ui:Used for ties: the delay of the product is the delay of the tie, so it sets the times of the holes down the line.	Используется для связей: задержка продукта становится задержкой связи и определяет времена скважин дальше по цепи.
+ui:Offered as the detonator of a primer: a hole with it counts as electronic and its time is programmed. On a tie it adds no delay.	Предлагается как детонатор боевика: скважина с ним считается электронной, её время программируется. На связи задержки не добавляет.
+ui:Used for ties: the delay of the tie comes from its length and the velocity of detonation of the product.	Используется для связей: задержка считается по длине связи и скорости детонации продукта.
+ui:Used for ties: the delay of the product is the delay of the tie, as with a surface connector.	Используется для связей: задержка продукта становится задержкой связи, как у поверхностного замедлителя.
+ui:Offered as the detonator of a primer: its delay is added to the firing time of the hole. On a tie it adds no delay.	Предлагается как детонатор боевика: его задержка прибавляется ко времени взрывания скважины. На связи задержки не добавляет.
+ui:Used for ties that only carry the signal: a tie with it adds no delay.	Используется для связей, которые только передают сигнал: задержки не добавляет.
+ui:No calculation of its own: it is not explosive or stemming, quantities count it in pieces, and on a tie its delay is used.	Отдельного расчёта нет: не считается ни ВВ, ни забойкой, в объёмах идёт штуками, на связи используется его задержка.
+ui:Explosive: mass by volume	ВВ: масса по объёму
+ui:Explosive: mass by cartridges	ВВ: масса по патронам
+ui:Column filler: mass by volume, counts as stemming	Заполнитель колонки: масса по объёму, считается забойкой
+ui:In the column: no mass, counted in pieces	В колонке: без массы, считается штуками
+ui:Primer: counted in pieces	Инициатор заряда: считается штуками
+ui:In-hole delay	Задержка в скважине
+ui:Delay on the tie	Задержка на связи
+ui:Programmed delay, tie without a delay	Программируемая задержка, связь без задержки
+ui:Delay from length and velocity of detonation	Задержка по длине и скорости детонации
+ui:Delay on the tie, on cord	Задержка на связи, на шнуре
+ui:In-hole delay, tie without a delay	Задержка в скважине, связь без задержки
+ui:Tie without a delay	Связь без задержки
+ui:No rules of its own	Без особых правил
+ui:Own delay instead of a product	Своя задержка вместо продукта
+ui:Restore the parent record first	Сначала восстановите родительскую запись
+ui:Also deleted: kinds {0}, families {1}, products {2}	Будут удалены также: видов {0}, семейств {1}, продуктов {2}
+ui:They keep it, but it is not offered for new records.	Там запись останется, но для новых она больше не предлагается.

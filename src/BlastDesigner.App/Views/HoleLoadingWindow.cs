@@ -77,7 +77,7 @@ public static class ColumnEdit
     /// Split: primers stay in the half they are in. Duplicate: both halves get the original primer layout measured from their bottoms.
     /// Insert: the lower half takes <paramref name="product"/> and has no primers.
     /// </summary>
-    public static Deck? Split(List<Deck> decks, int i, SplitMode mode, Guid? product = null)
+    public static Deck? Split(List<Deck> decks, int i, SplitMode mode, string? product = null)
     {
         var d = decks[i];
         if (d.Length < 2 * MinLength - 1e-9) return null;
@@ -892,7 +892,7 @@ public sealed class HoleLoadingEditor : DockPanel
 
     // ---------- deck commands ----------
 
-    private Guid? FirstOf(Func<Product, bool> pick) => _p.Products.FirstOrDefault(pick)?.Id;
+    private string? FirstOf(Func<Product, bool> pick) => _p.ActiveProducts.FirstOrDefault(pick)?.Id;
 
     public void AddDeck()
     {
@@ -988,7 +988,7 @@ public sealed class HoleLoadingEditor : DockPanel
         _props.Children.Add(Ui.Row(8, Swatch(prod?.Color ?? 0xFFCCCCCC, 12),
             new TextBlock { Text = Loc.F("Deck {0} of {1}", Selected + 1, Decks.Count), FontSize = 14, FontWeight = FontWeight.SemiBold, Foreground = Look.Text }));
 
-        var choices = _p.Products.Where(x => x.IsColumnProduct || x.Id == d.ProductId).ToList();
+        var choices = _p.Products.Where(x => (x.IsColumnProduct && !x.Deleted) || x.Id == d.ProductId).ToList();
         var combo = new ComboBox { ItemsSource = choices.Select(x => x.Name).ToList(), SelectedIndex = choices.FindIndex(x => x.Id == d.ProductId), HorizontalAlignment = HorizontalAlignment.Stretch, Height = 32 };
         combo.SelectionChanged += (_, _) =>
         {
@@ -1175,14 +1175,16 @@ public sealed class HoleLoadingEditor : DockPanel
         var body = new StackPanel { Spacing = 8, Children = { top } };
         // Every primer card is always open: depth, delay, booster and detonator are edited in place.
         {
-            var boosters = _p.Products.Where(x => x.Kind == ProductKind.Booster).ToList();
-            var dets = _p.Products.Where(x => x.IsDetonator).ToList();
-            ComboBox Pick(List<Product> items, Guid? id, Action<Guid?> set)
+            var boosters = _p.ActiveProducts.Where(x => x.Kind == ProductKind.Booster).ToList();
+            var dets = _p.ActiveProducts.Where(x => x.IsDetonator).ToList();
+            ComboBox Pick(List<Product> items, string? id, Action<string?> set)
             {
+                // a deleted product goes on showing where it is used
+                if (_p.FindProduct(id) is { Deleted: true } gone) items = items.Append(gone).ToList();
                 var c = new ComboBox { ItemsSource = items.Select(x => x.Name).Prepend("—").ToList(), SelectedIndex = items.FindIndex(x => x.Id == id) + 1, HorizontalAlignment = HorizontalAlignment.Stretch, Height = 30 };
                 c.SelectionChanged += (_, _) =>
                 {
-                    var v = c.SelectedIndex > 0 ? items[c.SelectedIndex - 1].Id : (Guid?)null;
+                    var v = c.SelectedIndex > 0 ? items[c.SelectedIndex - 1].Id : null;
                     if (v == id) return;
                     set(v);
                     Refresh();

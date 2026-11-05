@@ -5,13 +5,17 @@ namespace BlastDesigner.Domain.Model;
 /// <summary>The whole blast design document.</summary>
 public sealed class BlastProject
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public Guid Id { get; set; } = Guid.NewGuid();
     public ProjectHeader Header { get; set; } = new();
     public DesignData Design { get; set; } = new();
     public List<Product> Products { get; set; } = new();
+    /// <summary>The tables above the products: types, kinds, groups and families.</summary>
+    public ProductCatalogue Catalogue { get; set; } = new();
+    /// <summary>The products offered for anything new; the deleted ones only go on showing where they are used.</summary>
+    public IEnumerable<Product> ActiveProducts => Products.Where(p => !p.Deleted);
     public List<Layer> Layers { get; set; } = new();
     public List<Entity> Entities { get; set; } = new();
     public List<HoleRow> Rows { get; set; } = new();
@@ -39,7 +43,7 @@ public sealed class BlastProject
     [JsonIgnore] public IEnumerable<Hole> Holes => Entities.OfType<Hole>();
     [JsonIgnore] public IEnumerable<TieEntity> Ties => Entities.OfType<TieEntity>();
 
-    public Product? FindProduct(Guid? id) => id is null ? null : Products.FirstOrDefault(p => p.Id == id);
+    public Product? FindProduct(string? id) => id is null ? null : Products.FirstOrDefault(p => p.Id == id);
     public Layer? FindLayer(Guid id) => Layers.FirstOrDefault(l => l.Id == id);
     public Entity? FindEntity(Guid id) => Entities.FirstOrDefault(e => e.Id == id);
 
@@ -78,6 +82,8 @@ public sealed class BlastProject
         p.GetOrCreateLayer(StandardLayers.Annotation, 0xFF0F172A, "Drawing");
         p.DefaultLayerId = def.Id;
         p.Products = Product.DefaultCatalogue();
+        p.Catalogue = ProductCatalogue.BuiltIn();
+        ProductCatalogue.Link(p);
         p.LoadingRules.Add(DefaultRule(p));
         return p;
     }

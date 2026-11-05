@@ -230,12 +230,15 @@ public sealed partial class MainViewModel
     public void AddProductChoices(PropertyGrid grid)
     {
         if (Project == null) return;
-        var all = Project.Products.Select(p => (p.Id, p.Name)).ToList();
-        grid.Choices["ProductId"] = all;
-        grid.Choices["StemmingProductId"] = Project.Products.Where(p => p.Kind == ProductKind.Stemming).Select(p => (p.Id, p.Name)).ToList();
-        grid.Choices["BoosterId"] = Project.Products.Where(p => p.Kind == ProductKind.Booster).Select(p => (p.Id, p.Name)).ToList();
-        grid.Choices["DetonatorId"] = Project.Products.Where(p => p.IsDetonator).Select(p => (p.Id, p.Name)).ToList();
-        var explosives = Project.Products.Where(p => p.IsExplosive).Select(p => (p.Id, p.Name)).ToList();
+        // a deleted product is offered no more, but what uses it goes on showing it
+        var used = Project.Products.Any(p => p.Deleted) ? ProductCatalogue.UsedProducts(Project) : new HashSet<string>();
+        List<(string, string)> Of(Func<Product, bool> pick) => Project.Products.Where(p => pick(p) && (!p.Deleted || used.Contains(p.Id)))
+            .Select(p => (p.Id, p.Deleted ? $"{p.Name} ({Loc.Ui("deleted")})" : p.Name)).ToList();
+        grid.Choices["ProductId"] = Of(_ => true);
+        grid.Choices["StemmingProductId"] = Of(p => p.Kind == ProductKind.Stemming);
+        grid.Choices["BoosterId"] = Of(p => p.Kind == ProductKind.Booster);
+        grid.Choices["DetonatorId"] = Of(p => p.IsDetonator);
+        var explosives = Of(p => p.IsExplosive);
         grid.Choices["WetAlternateProductId"] = explosives;
         grid.Choices["HardAlternateProductId"] = explosives;
         grid.Choices["SoftAlternateProductId"] = explosives;
@@ -270,8 +273,19 @@ public sealed partial class MainViewModel
     public async Task EditResources()
     {
         if (Doc == null) return;
-        var list = await ProductsWindow.Show(Project!);
-        if (list != null) Change("Available resources", p => p.Products = list);
+        if (await ProductsWindow.Show(Project!) is not var (products, tables)) return;
+        tables.Accept(products);
+        var (tablesBefore, productsBefore) = (Project!.Catalogue, Project.Products);
+        Change("Available resources", p =>
+        {
+            p.Products = products;
+            p.Catalogue = tables;
+            ProductCatalogue.Link(p);
+        });
+        // what was added, edited, deleted or restored goes to the user's records too, for the other projects
+        var mine = UserCatalogue.Load();
+        mine.Remember(tablesBefore, productsBefore, Project!.Catalogue, Project.Products);
+        mine.Save();
     }
 
     public async Task EditVisualStyle()

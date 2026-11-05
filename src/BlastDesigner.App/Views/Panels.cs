@@ -186,6 +186,8 @@ public sealed class PropertiesPanel : DockPanel
         _vm.AddProductChoices(grid);
         if (first is Hole)
         {
+            // the detonator id of a hole is its serial number, not a product
+            grid.Choices.Remove(nameof(Hole.DetonatorId));
             grid.Sections = HoleSections;
             grid.Collapsed = _collapsed;
             string m = Loc.Ui("m"), degrees = "°";

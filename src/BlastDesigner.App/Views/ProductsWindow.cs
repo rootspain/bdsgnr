@@ -15,7 +15,7 @@ namespace BlastDesigner.App.Views;
 /// <summary>Edit ▸ Available resources: the project's product catalogue, searchable and filtered by kind.</summary>
 public static class ProductsWindow
 {
-    public static async Task<List<Product>?> Show(BlastProject project)
+    public static async Task<(List<Product> Products, ProductCatalogue Tables)?> Show(BlastProject project)
     {
         var editor = new ProductsEditor(project);
         var w = new Window
@@ -32,39 +32,28 @@ public static class ProductsWindow
         editor.Closing = ok => { editor.Applied = ok; w.Close(); };
         w.Opened += (_, _) => editor.FocusSearch();
         await Dialogs.ShowModal(w);
-        return editor.Applied ? editor.Products : null;
+        return editor.Applied ? (editor.Products, editor.Tables) : null;
     }
 }
 
 /// <summary>Content of the resources window. Public so the UI smoke test can reach it.</summary>
 public sealed class ProductsEditor : DockPanel
 {
-    /// <summary>Filter chips: one per group of kinds the user looks for together.</summary>
-    private static readonly (string Name, ProductKind[] Kinds)[] Categories =
-    {
-        ("Explosives", new[] { ProductKind.BulkExplosive, ProductKind.PackagedExplosive }),
-        ("Stemming", new[] { ProductKind.Stemming }),
-        ("Gas bags", new[] { ProductKind.GasBag }),
-        ("Boosters", new[] { ProductKind.Booster }),
-        ("Detonators", new[] { ProductKind.DownholeDetonator, ProductKind.ElectronicDetonator, ProductKind.ElectricDetonator }),
-        ("Surface connectors", new[] { ProductKind.SurfaceConnector }),
-        ("Detonating cord", new[] { ProductKind.DetonatingCord, ProductKind.CordRelay }),
-        ("Harness wire", new[] { ProductKind.HarnessWire }),
-        ("Other", new[] { ProductKind.Other })
-    };
-
     private static readonly uint[] Palette =
     {
         0xFFFFC107, 0xFFFF9800, 0xFFE91E63, 0xFFD32F2F, 0xFFAB47BC,
         0xFF1976D2, 0xFF00897B, 0xFF4CAF50, 0xFFFFEB3B, 0xFF9E9E9E
     };
 
+    /// <summary>The filter of the products whose kind no group lists.</summary>
+    private const string Unassigned = "unassigned";
+
     private static readonly IBrush Warn = new SolidColorBrush(Color.FromUInt32(0xFFF0C13A));
     private static readonly IBrush WarnSoft = new SolidColorBrush(Color.FromUInt32(0x1AF0C13A));
 
     private readonly BlastProject _project;
     private readonly List<Product> _original;
-    private readonly Dictionary<Guid, (int Holes, int Ties, int Rules)> _usage;
+    private readonly Dictionary<string, (int Holes, int Ties, int Rules)> _usage;
     private readonly TextBox _search = new();
     private readonly WrapPanel _chips = new();
     private readonly StackPanel _list = new();
@@ -72,27 +61,57 @@ public sealed class ProductsEditor : DockPanel
     private readonly Border _confirm = new() { IsVisible = false };
     private readonly TextBlock _status = new() { Foreground = Look.Faint, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
     private readonly HashSet<string> _filter = new();
-    private readonly HashSet<ProductKind> _collapsed = new();
-    private Button _add = null!, _dup = null!, _delete = null!, _up = null!, _down = null!;
+    private readonly HashSet<string> _collapsed = new();
+    private readonly CheckBox _showDeleted = new() { Name = "showDeleted" };
+    private readonly WrapPanel _tabs = new() { Margin = new Thickness(10, 6, 10, 0), Name = "resourceTabs" };
+    private readonly Grid _body = new() { ColumnDefinitions = new ColumnDefinitions("360,*") };
+    private readonly CatalogueEditor _tableEditor;
+    private readonly List<Button> _tabButtons = new();
+    private Button _add = null!, _dup = null!, _delete = null!, _up = null!, _down = null!, _restore = null!;
 
     public ProductsEditor(BlastProject project)
     {
         _project = project;
         _original = project.Products.Select(p => p.Clone()).ToList();
         Products = project.Products.Select(p => p.Clone()).ToList();
+        Tables = Domain.ProjectJson.DeepClone(project.Catalogue);
+        _tableEditor = new CatalogueEditor(Tables, Products) { IsVisible = false, Name = "tableEditor" };
         _usage = Usage(project);
-        Selected = Products.FirstOrDefault();
+        Selected = Products.FirstOrDefault(p => !p.Deleted);
 
         var footer = Footer();
         SetDock(footer, Dock.Bottom);
         Children.Add(footer);
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("360,*") };
+        // a section for each table; the products are the first
+        foreach (var (name, table) in new (string, CatalogueEditor.Table?)[] { ("Products", null), ("Families", CatalogueEditor.Table.Families), ("Kinds", CatalogueEditor.Table.Kinds), ("Groups", CatalogueEditor.Table.Groups), ("Types", CatalogueEditor.Table.Types) })
+        {
+            var shown = table;
+            var tab = new Button
+            {
+                Content = L(name),
+                Height = 34,
+                Padding = new Thickness(12, 0),
+                CornerRadius = new CornerRadius(0),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0, 0, 0, 2),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Tag = "section:" + name
+            };
+            tab.Classes.Add("flat");
+            tab.Click += (_, _) => ShowTable(shown);
+            SetTab(tab, table == null);
+            _tabButtons.Add(tab);
+            _tabs.Children.Add(tab);
+        }
+        var tabs = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1), Child = _tabs };
+        SetDock(tabs, Dock.Top);
+        Children.Add(tabs);
         var left = ListPane();
         var right = new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1, 0, 0, 0), Child = new ScrollViewer { Content = _props } };
         Grid.SetColumn(right, 1);
-        body.Children.Add(left);
-        body.Children.Add(right);
-        Children.Add(body);
+        _body.Children.Add(left);
+        _body.Children.Add(right);
+        Children.Add(new Panel { Children = { _body, _tableEditor } });
 
         AddHandler(KeyDownEvent, OnKey, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         Refresh();
@@ -100,11 +119,35 @@ public sealed class ProductsEditor : DockPanel
 
     /// <summary>The edited catalogue (copies; the project changes only when the window is applied).</summary>
     public List<Product> Products { get; }
+    /// <summary>The edited tables above the products (copies, like <see cref="Products"/>).</summary>
+    public ProductCatalogue Tables { get; }
     public Product? Selected { get; private set; }
     public bool Applied { get; set; }
     public Action<bool>? Closing { get; set; }
     /// <summary>Products shown in the list with the current search and kind filter, in list order.</summary>
-    public IReadOnlyList<Product> Visible => Products.Where(Matches).OrderBy(p => (int)p.Kind).ToList();
+    public IReadOnlyList<Product> Visible => Products.Where(Matches).OrderBy(p => KindOf(p.KindId)?.Order ?? int.MaxValue).ToList();
+
+    private CatalogueKind? KindOf(string id) => Tables.Kinds.FirstOrDefault(k => k.Id == id);
+    private string KindName(string id) => KindOf(id) is { } k ? Loc.T(k.Name) : "";
+    private IEnumerable<CatalogueGroup> Groups => Tables.Groups.Where(g => !g.Deleted).OrderBy(g => g.Order);
+
+    /// <summary>Shows the section of a table, or the products with none.</summary>
+    private void ShowTable(CatalogueEditor.Table? table)
+    {
+        _body.IsVisible = table == null;
+        _tableEditor.IsVisible = table != null;
+        if (table is { } t) _tableEditor.Shown = t;
+        else Refresh();
+        var at = table == null ? 0 : (int)table.Value + 1;
+        for (int i = 0; i < _tabButtons.Count; i++) SetTab(_tabButtons[i], i == at);
+    }
+
+    /// <summary>A tab: the open one is underlined in the accent colour, as on the panels of the main window.</summary>
+    private static void SetTab(Button tab, bool open)
+    {
+        tab.BorderBrush = open ? Look.Accent : Brushes.Transparent;
+        tab.Foreground = open ? Look.Text : Look.Muted;
+    }
 
     private static string L(string english) => Loc.Ui(english);
     private static string N(double v, string format = "0.###") => v.ToString(format, CultureInfo.CurrentCulture);
@@ -116,12 +159,12 @@ public sealed class ProductsEditor : DockPanel
     // ---------- usage ----------
 
     /// <summary>Per product: holes whose column or primers use it, ties made with it and loading rules that name it.</summary>
-    private static Dictionary<Guid, (int Holes, int Ties, int Rules)> Usage(BlastProject p)
+    private static Dictionary<string, (int Holes, int Ties, int Rules)> Usage(BlastProject p)
     {
-        var result = new Dictionary<Guid, (int Holes, int Ties, int Rules)>();
-        void Add(IEnumerable<Guid?> ids, int which)
+        var result = new Dictionary<string, (int Holes, int Ties, int Rules)>();
+        void Add(IEnumerable<string?> ids, int which)
         {
-            foreach (var id in ids.OfType<Guid>().Distinct())
+            foreach (var id in ids.OfType<string>().Distinct())
             {
                 result.TryGetValue(id, out var u);
                 result[id] = which switch { 0 => (u.Holes + 1, u.Ties, u.Rules), 1 => (u.Holes, u.Ties + 1, u.Rules), _ => (u.Holes, u.Ties, u.Rules + 1) };
@@ -150,14 +193,16 @@ public sealed class ProductsEditor : DockPanel
 
     private bool Matches(Product p)
     {
-        if (_filter.Count > 0 && !Categories.Where(c => _filter.Contains(c.Name)).Any(c => c.Kinds.Contains(p.Kind))) return false;
+        if (p.Deleted && _showDeleted.IsChecked != true) return false;
+        if (_filter.Count > 0 && !Groups.Where(g => _filter.Contains(g.Id)).Any(g => g.KindIds.Contains(p.KindId))
+            && !(_filter.Contains(Unassigned) && Tables.UnassignedKinds.Any(k => k.Id == p.KindId))) return false;
         var q = (_search.Text ?? "").Trim();
         return q.Length == 0 || p.Name.Contains(q, StringComparison.CurrentCultureIgnoreCase) || p.Manufacturer.Contains(q, StringComparison.CurrentCultureIgnoreCase);
     }
 
     /// <summary>Kind a new product gets without asking: the only kind of the only selected filter chip.</summary>
-    private ProductKind? FilterKind =>
-        _filter.Count == 1 && Categories.First(c => c.Name == _filter.First()).Kinds is { Length: 1 } k ? k[0] : null;
+    private CatalogueKind? FilterKind =>
+        _filter.Count == 1 && Groups.FirstOrDefault(g => g.Id == _filter.First()) is { KindIds.Count: 1 } g ? KindOf(g.KindIds[0]) : null;
 
     // ---------- left pane ----------
 
@@ -174,18 +219,22 @@ public sealed class ProductsEditor : DockPanel
 
         _add = Tool("plus", L("Add"), null, L("Add a resource"));
         _add.Tag = "add";
-        _add.Click += (_, _) => { if (FilterKind is ProductKind k) AddProduct(k); };
+        _add.Click += (_, _) => { if (FilterKind is { } k) AddProduct(k); };
         Ui.DropDown(_add, () => FilterKind != null
             ? Enumerable.Empty<MenuEntry>()
-            : Enum.GetValues<ProductKind>().Select(k => MenuEntry.Item(Loc.Enum(k), () => AddProduct(k))));
+            : Tables.Kinds.Where(k => !k.Deleted).OrderBy(k => k.Order).Select(k => MenuEntry.Item(Loc.T(k.Name), () => AddProduct(k))));
         _dup = Tool("dup", null, Duplicate, L("Duplicate") + " (Ctrl+D)");
         _delete = Tool("trash", null, AskDelete, L("Delete") + " (Del)");
         _up = Tool("arrowup", null, () => Move(-1), L("Move up"));
         _down = Tool("arrowdown", null, () => Move(1), L("Move down"));
-        var tools = Ui.Row(6, _add, _dup, _delete, _up, _down);
+        _restore = Tool("undo", L("Restore"), Restore, L("Restore"));
+        _restore.Tag = "restore";
+        var tools = Ui.Row(6, _add, _dup, _delete, _up, _down, _restore);
+        _showDeleted.Content = L("Show deleted");
+        _showDeleted.IsCheckedChanged += (_, _) => Refresh();
 
         var top = new StackPanel { Margin = new Thickness(14, 14, 14, 10), Children = { _search, _chips } };
-        var bottom = new StackPanel { Spacing = 8, Margin = new Thickness(14, 10, 14, 14), Children = { _confirm, tools } };
+        var bottom = new StackPanel { Spacing = 8, Margin = new Thickness(14, 10, 14, 14), Children = { _confirm, tools, _showDeleted } };
         var dock = new DockPanel();
         SetDock(top, Dock.Top);
         SetDock(bottom, Dock.Bottom);
@@ -236,13 +285,13 @@ public sealed class ProductsEditor : DockPanel
             b.Click += (_, _) => click(false);
             _chips.Children.Add(b);
         }
-        Chip(Loc.F("All {0}", Products.Count), _filter.Count == 0, _ => { _filter.Clear(); Refresh(); });
-        foreach (var (name, kinds) in Categories)
+        Chip(Loc.F("All {0}", Products.Count(p => !p.Deleted)), _filter.Count == 0, _ => { _filter.Clear(); Refresh(); });
+        foreach (var group in Groups)
         {
-            var count = Products.Count(p => kinds.Contains(p.Kind));
-            if (count == 0 && !_filter.Contains(name)) continue;
-            var n = name;
-            Chip($"{L(name)} {count}", _filter.Contains(name), ctrl =>
+            var count = Products.Count(p => !p.Deleted && group.KindIds.Contains(p.KindId));
+            if (count == 0 && !_filter.Contains(group.Id)) continue;
+            var n = group.Id;
+            Chip($"{L(group.Name)} {count}", _filter.Contains(n), ctrl =>
             {
                 if (ctrl) { if (!_filter.Remove(n)) _filter.Add(n); }
                 else if (_filter.Count == 1 && _filter.Contains(n)) _filter.Clear();
@@ -250,6 +299,16 @@ public sealed class ProductsEditor : DockPanel
                 Refresh();
             });
         }
+        var loose = Tables.UnassignedKinds.Select(k => k.Id).ToHashSet();
+        var looseCount = Products.Count(p => !p.Deleted && loose.Contains(p.KindId));
+        if (looseCount == 0 && !_filter.Contains(Unassigned)) return;
+        Chip($"{L("<unassigned>")} {looseCount}", _filter.Contains(Unassigned), ctrl =>
+        {
+            if (ctrl) { if (!_filter.Remove(Unassigned)) _filter.Add(Unassigned); }
+            else if (_filter.Count == 1 && _filter.Contains(Unassigned)) _filter.Clear();
+            else { _filter.Clear(); _filter.Add(Unassigned); }
+            Refresh();
+        });
     }
 
     /// <summary>Main figure of a product for its kind, shown at the right of its list row.</summary>
@@ -283,7 +342,7 @@ public sealed class ProductsEditor : DockPanel
             _list.Children.Add(new TextBlock { Text = L("Nothing found"), Foreground = Look.Faint, Margin = new Thickness(8, 12), TextWrapping = TextWrapping.Wrap });
             return;
         }
-        foreach (var group in visible.GroupBy(p => p.Kind))
+        foreach (var group in visible.GroupBy(p => p.KindId))
         {
             var kind = group.Key;
             var collapsed = _collapsed.Contains(kind);
@@ -296,7 +355,7 @@ public sealed class ProductsEditor : DockPanel
                 HorizontalContentAlignment = HorizontalAlignment.Left,
                 Content = Ui.Row(6,
                     Look.Icon(collapsed ? "right" : "down", 12, Look.Faint),
-                    new TextBlock { Text = Loc.Enum(kind).ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock { Text = KindName(kind).ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
                     new TextBlock { Text = group.Count().ToString(CultureInfo.CurrentCulture), FontSize = 11, Foreground = Look.Faint, FontFamily = Look.Mono, VerticalAlignment = VerticalAlignment.Center })
             };
             head.Classes.Add("flat");
@@ -333,6 +392,7 @@ public sealed class ProductsEditor : DockPanel
             Background = selected ? Look.AccentSoft : Brushes.Transparent,
             BorderBrush = selected ? Look.Accent : Brushes.Transparent,
             BorderThickness = new Thickness(1),
+            Opacity = p.Deleted ? 0.55 : 1,
             Tag = p
         };
         b.Classes.Add("flat");
@@ -441,18 +501,18 @@ public sealed class ProductsEditor : DockPanel
             Background = Look.Ribbon,
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(1),
-            Child = new TextBlock { Text = Loc.Enum(p.Kind), FontSize = 12, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }
+            Child = new TextBlock { Text = KindName(p.KindId), FontSize = 12, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }
         };
         var meta = Ui.Row(8, kindChip);
         if (used != null) meta.Children.Add(Ui.Row(6, new Border { Width = 6, Height = 6, CornerRadius = new CornerRadius(3), Background = Look.Accent, VerticalAlignment = VerticalAlignment.Center }, new TextBlock { Text = used, FontSize = 12, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center }));
         _props.Children.Add(new StackPanel { Spacing = 8, Children = { Ui.Row(12, Swatch(p.Color, 22), title), meta } });
 
-        var kinds = Enum.GetValues<ProductKind>();
-        var kind = new ComboBox { ItemsSource = kinds.Select(k => Loc.Enum(k)).ToList(), SelectedIndex = Array.IndexOf(kinds, p.Kind), HorizontalAlignment = HorizontalAlignment.Stretch, Height = 32, Name = "kind" };
+        var kinds = Tables.Kinds.Where(k => !k.Deleted || k.Id == p.KindId).OrderBy(k => k.Order).ToList();
+        var kind = new ComboBox { ItemsSource = kinds.Select(k => Loc.T(k.Name)).ToList(), SelectedIndex = kinds.FindIndex(k => k.Id == p.KindId), HorizontalAlignment = HorizontalAlignment.Stretch, Height = 32, Name = "kind" };
         kind.SelectionChanged += (_, _) =>
         {
-            if (kind.SelectedIndex < 0 || kinds[kind.SelectedIndex] == p.Kind) return;
-            p.Kind = kinds[kind.SelectedIndex];
+            if (kind.SelectedIndex < 0 || kinds[kind.SelectedIndex].Id == p.KindId) return;
+            p.SetKind(kinds[kind.SelectedIndex]);
             // The new kind may be hidden by the filter: show it rather than lose the product being edited.
             if (!Matches(p)) _filter.Clear();
             Refresh();
@@ -463,7 +523,8 @@ public sealed class ProductsEditor : DockPanel
                 Labeled("Manufacturer", Text("manufacturer", p.Manufacturer, v => p.Manufacturer = v)),
                 Labeled("Kind", kind)),
             // the products of one kind and family are the variants of it in the initiation catalogue
-            Fields(Labeled("Family", Text("family", p.Family, v => p.Family = v)), new Border())));
+            // the record of the family is found or made by name when the window is applied
+            Fields(Labeled("Family", Text("family", p.Family, v => { if (v != p.Family) { p.Family = v; p.FamilyId = null; } })), new Border())));
 
         var fields = KindFields(p);
         if (fields.Count > 0) _props.Children.Add(Section("Parameters", fields.ToArray()));
@@ -559,10 +620,15 @@ public sealed class ProductsEditor : DockPanel
 
     // ---------- actions ----------
 
+    /// <summary>New product of the kind of the table that calculates as <paramref name="kind"/>.</summary>
+    public void AddProduct(ProductKind kind) => AddProduct(Tables.Kinds.First(k => k.Behaviour == kind && !k.Deleted));
+
     /// <summary>New product with sensible values for its kind, placed after the last one of that kind.</summary>
-    public void AddProduct(ProductKind kind)
+    public void AddProduct(CatalogueKind record)
     {
-        var p = new Product { Name = Loc.T("New product"), Kind = kind, Density = 0, Energy = 0, RelativeWeightStrength = 0 };
+        var kind = record.Behaviour;
+        var p = new Product { Name = Loc.T("New product"), Density = 0, Energy = 0, RelativeWeightStrength = 0, IsNew = true };
+        p.SetKind(record);
         switch (kind)
         {
             case ProductKind.BulkExplosive: p.Density = 0.85; p.RelativeWeightStrength = 100; p.Energy = 3.7; p.Vod = 3500; p.Color = 0xFFFFC107; break;
@@ -578,9 +644,9 @@ public sealed class ProductsEditor : DockPanel
             case ProductKind.ElectricDetonator: p.DelayMs = 25; p.Color = 0xFF5C6BC0; break;
             case ProductKind.HarnessWire: p.Color = 0xFF78909C; break;
         }
-        var last = Products.FindLastIndex(x => x.Kind == kind);
+        var last = Products.FindLastIndex(x => x.KindId == record.Id);
         Products.Insert(last < 0 ? Products.Count : last + 1, p);
-        _collapsed.Remove(kind);
+        _collapsed.Remove(record.Id);
         _search.Text = "";
         if (!Matches(p)) _filter.Clear();
         Selected = p;
@@ -592,7 +658,8 @@ public sealed class ProductsEditor : DockPanel
     {
         if (Selected is not { } p) return;
         var c = p.Clone();
-        c.Id = Guid.NewGuid();
+        c.Id = ProductCatalogue.NewId();
+        c.IsNew = true;
         c.Name += " (2)";
         Products.Insert(Products.IndexOf(p) + 1, c);
         Selected = c;
@@ -619,7 +686,7 @@ public sealed class ProductsEditor : DockPanel
             Children =
             {
                 Ui.Row(8, Look.Icon("warn", 15, Warn), new TextBlock { Text = Loc.F("Delete \"{0}\"?", p.Name), FontWeight = FontWeight.SemiBold, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap }),
-                new TextBlock { Text = used + ". " + L("They will be left without this product."), FontSize = 12, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap },
+                new TextBlock { Text = used + ". " + L("They keep it, but it is not offered for new records."), FontSize = 12, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap },
                 Ui.Row(6, yes, no)
             }
         };
@@ -630,10 +697,20 @@ public sealed class ProductsEditor : DockPanel
     {
         var visible = Visible.ToList();
         var i = visible.IndexOf(p);
-        Products.Remove(p);
-        visible.Remove(p);
+        // a product added just now and tied to nothing goes for good
+        if (ProductCatalogue.CanRemove(p)) Products.Remove(p);
+        else p.Deleted = true;
         _confirm.IsVisible = false;
-        Selected = visible.Count == 0 ? Products.FirstOrDefault() : visible[Math.Clamp(i, 0, visible.Count - 1)];
+        visible = Visible.ToList();
+        Selected = visible.Count == 0 ? null : visible[Math.Clamp(i, 0, visible.Count - 1)];
+        Refresh();
+    }
+
+    /// <summary>Brings the selected product back, when its kind and family are there.</summary>
+    private void Restore()
+    {
+        if (Selected is not { Deleted: true } p || !Tables.CanRestore(p)) return;
+        p.Deleted = false;
         Refresh();
     }
 
@@ -643,7 +720,7 @@ public sealed class ProductsEditor : DockPanel
         if (Selected is not { } p) return;
         var i = Products.IndexOf(p);
         var j = i + dir;
-        while (j >= 0 && j < Products.Count && (Products[j].Kind != p.Kind || !Matches(Products[j]))) j += dir;
+        while (j >= 0 && j < Products.Count && (Products[j].KindId != p.KindId || !Matches(Products[j]))) j += dir;
         if (j < 0 || j >= Products.Count) return;
         (Products[i], Products[j]) = (Products[j], Products[i]);
         Refresh();
@@ -722,7 +799,7 @@ public sealed class ProductsEditor : DockPanel
     }
 
     private static bool Same(Product a, Product b) =>
-        a.Name == b.Name && a.Manufacturer == b.Manufacturer && a.Family == b.Family && a.Kind == b.Kind && a.Density == b.Density && a.RelativeWeightStrength == b.RelativeWeightStrength
+        a.Name == b.Name && a.Manufacturer == b.Manufacturer && a.Family == b.Family && a.FamilyId == b.FamilyId && a.KindId == b.KindId && a.Deleted == b.Deleted && a.Density == b.Density && a.RelativeWeightStrength == b.RelativeWeightStrength
         && a.Energy == b.Energy && a.Vod == b.Vod && a.DelayMs == b.DelayMs && a.UnitMass == b.UnitMass && a.UnitLength == b.UnitLength
         && a.WaterResistant == b.WaterResistant && a.Cost == b.Cost && a.Color == b.Color;
 
@@ -730,18 +807,21 @@ public sealed class ProductsEditor : DockPanel
     {
         var changed = ChangedCount;
         var moved = changed == 0 && !_original.Select(p => p.Id).SequenceEqual(Products.Select(p => p.Id));
-        _status.Inlines = new InlineCollection { new Run(Loc.F("Resources: {0}", Products.Count)) };
+        _status.Inlines = new InlineCollection { new Run(Loc.F("Resources: {0}", Products.Count(p => !p.Deleted))) };
         if (changed > 0) _status.Inlines.Add(new Run("  ·  " + Loc.F("changed: {0}", changed)) { Foreground = Look.Accent });
         else if (moved) _status.Inlines.Add(new Run("  ·  " + L("order changed")) { Foreground = Look.Accent });
     }
 
     private void Refresh()
     {
-        if (Selected != null && !Products.Contains(Selected)) Selected = null;
+        if (Selected != null && !Visible.Contains(Selected)) Selected = Visible.FirstOrDefault();
         FillChips();
         FillList();
         FillProps();
         UpdateStatus();
-        _dup.IsEnabled = _delete.IsEnabled = _up.IsEnabled = _down.IsEnabled = Selected != null;
+        _dup.IsEnabled = _up.IsEnabled = _down.IsEnabled = Selected != null;
+        _delete.IsEnabled = Selected is { Deleted: false };
+        _restore.IsVisible = Selected is { Deleted: true };
+        _restore.IsEnabled = Selected != null && Tables.CanRestore(Selected);
     }
 }

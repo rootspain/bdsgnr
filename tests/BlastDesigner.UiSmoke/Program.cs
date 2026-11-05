@@ -29,10 +29,15 @@ var settings = new ProgramSettings { ShowStartupAssistant = false, Language = ar
 // initiation catalogue's position on close) and would leave the smoke settings in the user's file. It is put back at
 // the end, on any exit and after a crash.
 var realSettings = File.Exists(ProgramSettings.SettingsPath) ? File.ReadAllBytes(ProgramSettings.SettingsPath) : null;
+// the user's catalogue too: the run starts without it and leaves it as it was
+var realCatalogue = File.Exists(BlastDesigner.IO.UserCatalogue.FilePath) ? File.ReadAllBytes(BlastDesigner.IO.UserCatalogue.FilePath) : null;
+if (realCatalogue != null) File.Delete(BlastDesigner.IO.UserCatalogue.FilePath);
 void RestoreSettings()
 {
     try
     {
+        if (realCatalogue != null) File.WriteAllBytes(BlastDesigner.IO.UserCatalogue.FilePath, realCatalogue);
+        else if (File.Exists(BlastDesigner.IO.UserCatalogue.FilePath)) File.Delete(BlastDesigner.IO.UserCatalogue.FilePath);
         if (realSettings != null) File.WriteAllBytes(ProgramSettings.SettingsPath, realSettings);
         else if (File.Exists(ProgramSettings.SettingsPath)) File.Delete(ProgramSettings.SettingsPath);
     }
@@ -693,12 +698,12 @@ Step("analysis overlays never stack", () =>
     BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); Pump();
     if (vm.AnalysisOverlays.Count != 0) throw new Exception("closing the timing window left its overlay");
 });
-Step("visualization window: the scrub bar shrinks with the window, no x3, half size at least", () =>
+Step("visualization window: the scrub bar shrinks with the window, no x3, fixed height", () =>
 {
     vm.VisualizeTiming(); Pump();
     var w = BlastDesigner.App.Services.Dialogs.LastShown!;
     if (w.Title != BlastDesigner.App.Services.Loc.T("Visualization")) throw new Exception("window title: " + w.Title);
-    if (w.MinWidth != w.Width / 2 || w.MinHeight != w.Height / 2) throw new Exception($"min size {w.MinWidth}x{w.MinHeight} for {w.Width}x{w.Height}");
+    if (w.MinHeight != w.Height || w.MaxHeight != w.Height || w.MinWidth >= w.Width) throw new Exception($"size limits {w.MinWidth}x{w.MinHeight}-{w.MaxHeight} for {w.Width}x{w.Height}");
     if (w.GetLogicalDescendants().OfType<RadioButton>().Any(r => (r.Content as string) == "x3")) throw new Exception("x3 still offered");
     var slider = w.GetLogicalDescendants().OfType<Slider>().First();
     w.Width = 920; Pump();
@@ -935,6 +940,14 @@ Step("visualization window: the chosen speed, interval and switches come back ne
     void Chip(string tag) => w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == tag).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     TextBox Seconds() => w.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "playbackSeconds");
     foreach (var tag in new[] { "playback:0", "playback:2", "playback:5", "playback:10", "playback:15" }) w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == tag);
+    // the height is fixed and fits the rows, at the smallest width too
+    if (w.MinHeight != w.MaxHeight) throw new Exception("the height of the window should be fixed");
+    var fullWidth = w.Width;
+    w.Width = w.MinWidth; Pump();
+    var rows = w.GetLogicalDescendants().OfType<WrapPanel>().First();
+    var bottom = rows.TranslatePoint(new Point(0, rows.Bounds.Height), w)!.Value.Y;
+    if (bottom > w.Bounds.Height - 4 || rows.Bounds.Height > 32) throw new Exception($"the last row ends at {bottom:0} of {w.Bounds.Height:0}, {rows.Bounds.Height:0} high: it wraps or is cut");
+    w.Width = fullWidth; Pump();
     // round buttons: Play turns into Pause while the blast runs, Stop ends it
     Button Named(string name) => w.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name);
     if (Named("play").Bounds.Width != Named("play").Bounds.Height || Named("play").CornerRadius.TopLeft * 2 != Named("play").Bounds.Width) throw new Exception("the Play button is not round");
@@ -974,7 +987,13 @@ Step("visualization window: the chosen speed, interval and switches come back ne
     w.GetLogicalDescendants().OfType<NumericUpDown>().First().Value = 25;
     foreach (var c in w.GetLogicalDescendants().OfType<CheckBox>()) c.IsChecked = true;
     Pump();
-    BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
+    // a thin title of its own instead of the system one; its cross closes the window
+    if (!w.ExtendClientAreaToDecorationsHint || w.GetLogicalDescendants().OfType<DockPanel>().First(d => d.Name == "titleBar").Bounds.Height != 22) throw new Exception("no thin title bar");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "30e_visualization_title.png"));
+    Tap("titleClose");
+    if (w.IsVisible) throw new Exception("the cross of the title did not close the window");
+    vm.ClearOverlays(); Pump();
 });
 Step("loading dialog", () => { var hole = vm.Project!.Holes.First(h => h.Decks.Count > 1); _ = HoleLoadingWindow.Show(vm, hole, 5); });
 Step("loading dialog drags boundaries and primers", () =>
@@ -1237,11 +1256,139 @@ Step("resources: filter by kind, search, kind fields, delete asks when used", ()
     Click(delete);
     if (ed.Products.Count != count) throw new Exception("used product deleted without asking");
     Pump(); dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39c_resources_delete_used.png"));
-    Click(dlg.GetLogicalDescendants().OfType<Button>().First(b => (string?)b.Tag == "confirmDelete"));
-    if (ed.Products.Count != count - 1 || ed.Products.Contains(used)) throw new Exception("confirmed delete did not remove the product");
+    Click(dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "confirmDelete"));
+    // a deletion is logical: the product stays, hidden from the list, and comes back
+    if (ed.Products.Count != count || !used.Deleted || ed.Visible.Contains(used)) throw new Exception("confirmed delete should hide the product and keep it");
+    var showDeleted = dlg.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "showDeleted");
+    showDeleted.IsChecked = true; Pump();
+    if (!ed.Visible.Contains(used)) throw new Exception("Show deleted should list the deleted product");
+    Click(dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag == used));
+    Click(dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "restore"));
+    if (used.Deleted) throw new Exception("Restore did not bring the product back");
+    showDeleted.IsChecked = false; Pump();
     ed.AddProduct(ProductKind.Booster); Pump();
-    if (ed.Selected?.Kind != ProductKind.Booster || ed.ChangedCount != 2) throw new Exception($"add: {ed.Selected?.Kind}, changed {ed.ChangedCount}");
+    if (ed.Selected?.Kind != ProductKind.Booster || ed.ChangedCount != 1) throw new Exception($"add: {ed.Selected?.Kind}, changed {ed.ChangedCount}");
     dlg.Close();
+});
+Step("resources: the tables add, edit, delete with their children and restore the parent only; applied they reach the project and the user's file", () =>
+{
+    var steps = vm.Doc!.UndoNames.Count;
+    var open = vm.EditResources(); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var ed = dlg.GetLogicalDescendants().OfType<ProductsEditor>().First();
+    var te = dlg.GetLogicalDescendants().OfType<CatalogueEditor>().First();
+    void Click(Button b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    Button ByTag(string tag) => dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == tag);
+    Button ByName(string name) => dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name);
+    void Rename(string text) { var box = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "tableName" && t.IsEffectivelyVisible); box.Text = text; box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
+    // a record added just now and tied to nothing goes for good, without a trace
+    var productsBefore = ed.Products.Count;
+    ed.AddProduct(ProductKind.Booster); Pump();
+    var deleteProduct = dlg.GetLogicalDescendants().OfType<Button>().First(b => b.IsEffectivelyVisible && ToolTip.GetTip(b) is string t && t.StartsWith(BlastDesigner.App.Services.Loc.Ui("Delete")));
+    Click(deleteProduct);
+    if (ed.Products.Count != productsBefore) throw new Exception("a new product should go for good");
+    Click(ByTag("section:Groups"));
+    var groupsBefore = ed.Tables.Groups.Count;
+    Click(ByName("tableAdd"));
+    Click(ByName("tableDelete"));
+    if (ed.Tables.Groups.Count != groupsBefore) throw new Exception("a new group should go for good");
+    // a new kind with a behaviour, a product of it and a family
+    Click(ByTag("section:Kinds"));
+    if (!te.IsVisible) throw new Exception("the Kinds section did not open");
+    Click(ByName("tableAdd"));
+    Rename("Smoke kind");
+    var kind = ed.Tables.Kinds.First(k => k.Name == "Smoke kind");
+    dlg.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "tableBehaviour").SelectedIndex = Array.IndexOf(Enum.GetValues<ProductKind>(), ProductKind.Booster); Pump();
+    if (kind.Behaviour != ProductKind.Booster) throw new Exception("the behaviour of the kind was not set");
+    // the list of behaviours says what they do: it is not the table of kinds
+    var behaviours = dlg.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "tableBehaviour").ItemsSource!.Cast<string>().ToList();
+    if (behaviours.Distinct().Count() != Enum.GetValues<ProductKind>().Length || behaviours.Any(b => ed.Tables.Kinds.Any(k => BlastDesigner.App.Services.Loc.T(k.Name) == b))) throw new Exception("the behaviours repeat the kinds: " + string.Join("; ", behaviours));
+    // under the list, what the chosen behaviour is for; it follows the list
+    TextBlock Note() => dlg.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "tableBehaviourNote");
+    var boosterNote = Note().Text;
+    if (string.IsNullOrEmpty(boosterNote)) throw new Exception("no note under the behaviour");
+    var combo = dlg.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "tableBehaviour");
+    var notes = new HashSet<string>();
+    for (int i = 0; i < behaviours.Count; i++) { combo.SelectedIndex = i; Pump(); notes.Add(Note().Text!); }
+    if (notes.Count != behaviours.Count) throw new Exception($"{notes.Count} notes for {behaviours.Count} behaviours");
+    if (BlastDesigner.App.Services.Loc.Language == "ru" && notes.Any(n => n.Any(c => c is >= 'a' and <= 'z'))) throw new Exception("a note is not translated");
+    combo.SelectedIndex = Array.IndexOf(Enum.GetValues<ProductKind>(), ProductKind.Booster); Pump();
+    if (Note().Text != boosterNote) throw new Exception("the note did not follow the list");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39i_resources_behaviour_note.png"));
+    // a built-in name shows in the language of the program
+    Click(ByTag("row:" + ed.Tables.Kinds[0].Id));
+    var shownName = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "tableName" && t.IsEffectivelyVisible);
+    if (shownName.Text != BlastDesigner.App.Services.Loc.T(ed.Tables.Kinds[0].Name)) throw new Exception("the name field should show the translated name: " + shownName.Text);
+    shownName.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    if (ed.Tables.Kinds[0].Name != "Bulk explosive") throw new Exception("leaving the field unchanged should keep the stored name");
+    Click(ByTag("row:" + kind.Id));
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39f_resources_kinds.png"));
+    Click(ByTag("section:Products"));
+    ed.AddProduct(kind); Pump();
+    var product = ed.Selected!;
+    if (product.KindId != kind.Id || product.Kind != ProductKind.Booster) throw new Exception("the product did not take the kind and its behaviour");
+    // a kind in no group: its products have a chip of their own
+    var looseChip = dlg.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Content is string s && s.StartsWith(BlastDesigner.App.Services.Loc.Ui("<unassigned>"))) ?? throw new Exception("no chip of the unassigned products");
+    Click(looseChip);
+    if (ed.Visible.Count != 1 || ed.Visible[0] != product) throw new Exception($"the unassigned chip shows {ed.Visible.Count} products");
+    Click(dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Content is string s && s.StartsWith(BlastDesigner.App.Services.Loc.F("All {0}", ""))));
+    Click(ByTag("section:Families"));
+    Click(ByName("tableAdd"));
+    Rename("Smoke family");
+    var family = ed.Tables.Families.First(f => f.Name == "Smoke family");
+    family.KindId = kind.Id;
+    product.FamilyId = family.Id;
+    // a group and a type with the kind
+    Click(ByTag("section:Groups"));
+    Click(ByName("tableAdd"));
+    Rename("Smoke group");
+    var group = ed.Tables.Groups.First(g => g.Name == "Smoke group");
+    // the row of the unassigned kinds is worked out: it lists the kind and takes no deletion
+    Click(ByTag("row:unassigned"));
+    if (ByName("tableDelete").IsEnabled) throw new Exception("the unassigned row should not be deleted");
+    if (!dlg.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == "Smoke kind" && t.IsEffectivelyVisible)) throw new Exception("the unassigned row does not list the kind");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39h_resources_unassigned.png"));
+    Click(ByTag("row:" + group.Id));
+    dlg.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "kind:" + kind.Id).IsChecked = true; Pump();
+    if (!group.KindIds.Contains(kind.Id)) throw new Exception("the group did not take the kind");
+    Click(ByTag("section:Types"));
+    Click(ByName("tableAdd"));
+    Rename("Smoke type");
+    dlg.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "kind:" + kind.Id).IsChecked = true; Pump();
+    var type = ed.Tables.Types.First(t => t.Name == "Smoke type");
+    // deleting the type warns of what goes with it, and takes it
+    Click(ByName("tableDelete"));
+    if (type.Deleted) throw new Exception("a type with children should ask first");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39g_resources_delete_type.png"));
+    Click(ByTag("confirmTableDelete"));
+    if (!type.Deleted || !kind.Deleted || !family.Deleted || !product.Deleted) throw new Exception($"the children did not go: {type.Deleted} {kind.Deleted} {family.Deleted} {product.Deleted}");
+    if (!ed.Tables.Types.Contains(type)) throw new Exception("a new type tied to a kind is deleted logically");
+    if (group.Deleted || group.KindIds.Contains(kind.Id)) throw new Exception("the group should stay and lose the kind");
+    // deleted records are hidden, and restoring brings back the parent only
+    if (te.Selected == type) throw new Exception("the deleted type stayed in the list");
+    dlg.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "tableShowDeleted").IsChecked = true; Pump();
+    Click(ByTag("row:" + type.Id));
+    Click(ByName("tableRestore"));
+    if (type.Deleted || !kind.Deleted || !product.Deleted) throw new Exception("restoring should bring back the type only");
+    dlg.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "tableShowDeleted").IsChecked = false; Pump();
+    Click(ByTag("section:Products"));
+    Click(ByTag("apply"));
+    if (!open.IsCompleted) throw new Exception("the window did not close");
+    if (vm.Doc!.UndoNames.Count != steps + 1) throw new Exception("the changes should be one undo step");
+    if (!vm.Project!.Catalogue.Kinds.Any(k => k.Id == kind.Id && k.Deleted) || !vm.Project.Catalogue.Types.Any(t => t.Id == type.Id)) throw new Exception("the tables did not reach the project");
+    var mine = BlastDesigner.IO.UserCatalogue.Load();
+    if (!mine.Tables.Types.Any(t => t.Id == type.Id) || !mine.Tables.Kinds.Any(k => k.Id == kind.Id && k.Deleted) || !mine.Products.Any(p => p.Id == product.Id && p.Deleted))
+        throw new Exception("the records did not reach the user's file");
+    // a deleted product is not offered, the types of the catalogue follow the table
+    var grid = new PropertyGrid();
+    vm.AddProductChoices(grid);
+    if (grid.Choices["ProductId"].Any(c => c.Id == product.Id)) throw new Exception("a deleted product is offered");
+    vm.Undo(); Pump();
+    File.Delete(BlastDesigner.IO.UserCatalogue.FilePath);
 });
 Step("Ctrl+D clears the selection", () =>
 {
@@ -2078,7 +2225,8 @@ Step("initiation catalogue: Type → Family → Variant, user-defined delay, the
     var types = win.GetLogicalDescendants().OfType<Button>().Count(b => (b.Tag as string)?.StartsWith("type:") == true);
     if (types != 7) throw new Exception($"{types} types instead of 7");
     // Electric: the family of the electric detonators and its variants by delay
-    Press("type:Electric");
+    string TypeTag(string name) => "type:" + vm.Project!.Catalogue.Types.First(t => t.Name == name).Id;
+    Press(TypeTag("Electric"));
     if (BlastDesigner.App.Services.Dialogs.LastShown != win || !win.IsVisible) throw new Exception("choosing a type recreated or closed the catalogue");
     if (vm.ActiveConnector?.Kind != ProductKind.ElectricDetonator) throw new Exception("Electric did not pick an electric detonator");
     Chip("family:Electric detonator");
@@ -2091,12 +2239,12 @@ Step("initiation catalogue: Type → Family → Variant, user-defined delay, the
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39d_initiation_catalogue.png"));
     // user defined: a delay of its own on the new ties
-    Press("type:User");
+    Press(TypeTag("User defined"));
     var delay = win.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "tieUserDelay") ?? throw new Exception("no delay for the user-defined type");
     delay.Text = "33"; delay.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
     if (vm.ActiveTieDelayMs != 33 || vm.ActiveConnector != null) throw new Exception("the user-defined delay was not taken");
     // back to the shock tube connectors for the steps after
-    Press("type:ShockTube");
+    Press(TypeTag("Shock tube"));
     if (vm.ActiveTieDelayMs != null || vm.ActiveConnector?.Kind != ProductKind.SurfaceConnector) throw new Exception("shock tube did not go back to a connector");
     // a type lists the products of all its kinds: the shock tube connectors and the downhole detonators
     foreach (var f in vm.Project.Products.Where(p => p.Kind is ProductKind.SurfaceConnector or ProductKind.DownholeDetonator).Select(p => p.FamilyName).Distinct()) Chip("family:" + f);

@@ -72,10 +72,10 @@ public sealed partial class MainViewModel : ObservableObject
     }
     /// <summary>Tie palette ▸ User defined: the delay new ties get instead of a product's; null uses the connector.</summary>
     public double? ActiveTieDelayMs { get; set; }
-    /// <summary>Tie palette ▸ Initiation system chosen (a <see cref="Views.TiePaletteWindow"/> system key).</summary>
+    /// <summary>Tie palette ▸ Initiation system chosen: the id of its record in the table of types.</summary>
     public string? TieSystem { get; set; }
     /// <summary>Initiation catalogue: family chosen for each type (initiation system).</summary>
-    public Dictionary<string, (ProductKind Kind, string Name)> TieFamilyChoice { get; } = new();
+    public Dictionary<string, (string KindId, string Name)> TieFamilyChoice { get; } = new();
     public HighlightOverlay Highlight { get; } = new();
     public List<IOverlay> AnalysisOverlays { get; } = new();
     public double? AnimationTime { get; set; }
@@ -113,7 +113,9 @@ public sealed partial class MainViewModel : ObservableObject
         AnalysisOverlays.Clear();
         doc.Changed += OnDocChanged;
         doc.SelectionChanged += OnSelectionChanged;
-        ActiveConnector = doc.Project.Products.FirstOrDefault(p => p.Kind == ProductKind.SurfaceConnector);
+        var mine = UserCatalogue.Load();
+        ProductCatalogue.Attach(doc.Project, mine.Tables, mine.Products);
+        ActiveConnector = doc.Project.ActiveProducts.FirstOrDefault(p => p.Kind == ProductKind.SurfaceConnector);
         UseMinStemming();
         Timing.Solve(doc.Project);
         if (doc.Project.View.Scale > 0 && doc.FilePath != null) View.Camera.LoadFrom(doc.Project.View);

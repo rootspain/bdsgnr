@@ -136,7 +136,7 @@ public static class AnalysisWindows
         var max = timed.Max(h => h.FiringTimeMs!.Value);
         var min = timed.Min(h => h.FiringTimeMs!.Value);
         var playbackEnd = max > min ? max : max + 1;
-        var slider = new Slider { Minimum = min, Maximum = playbackEnd, Value = playbackEnd, MinWidth = 60, VerticalAlignment = VerticalAlignment.Center };
+        var slider = new Slider { Minimum = min, Maximum = playbackEnd, Value = playbackEnd, MinWidth = 60, Height = 36, MinHeight = 0, VerticalAlignment = VerticalAlignment.Center };
         // the text of the window is the size of its chips, to keep it small on the plan
         const double textSize = 12;
         var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 130, FontSize = textSize };
@@ -297,10 +297,32 @@ public static class AnalysisWindows
         };
         static Control Spaced(Control c) { c.Margin = new Thickness(0, 0, 12, 0); c.VerticalAlignment = VerticalAlignment.Center; return c; }
         Update();
-        const double width = 720, height = 134;
-        var w = Dialogs.ShowWindow("Visualization", panel, width, height, alignBottomToOwner: true);
-        w.MinWidth = width / 2;
-        w.MinHeight = height / 2;
+        // the title and three rows exactly; the height is fixed, so the rows must not wrap: the width stops before that
+        const double width = 720, minWidth = 640, height = 142;
+        Window? shown = null;
+        var close = Ui.Flat(Look.Icon("close", 12, Look.Muted), Loc.T("Close"), () => shown?.Close(), 30, 22);
+        close.Name = "titleClose";
+        close.CornerRadius = new CornerRadius(0);
+        close[DockPanel.DockProperty] = Dock.Right;
+        // a title of its own, thinner than the system one: it moves the window and closes it
+        var title = new DockPanel
+        {
+            Name = "titleBar",
+            Height = 22,
+            Background = Look.Panel,
+            [DockPanel.DockProperty] = Dock.Top,
+            Children = { new Border { Height = 1, Background = Look.LineStrong, [DockPanel.DockProperty] = Dock.Bottom }, close, new TextBlock { Text = Loc.T("Visualization"), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0) } }
+        };
+        title.PointerPressed += (_, e) => { if (shown != null && e.GetCurrentPoint(title).Properties.IsLeftButtonPressed) shown.BeginMoveDrag(e); };
+        // Windows adds the height of its own title to the window when that title goes after the window is shown
+        var w = Dialogs.ShowWindow("Visualization", new DockPanel { Children = { title, panel } }, width, height, alignBottomToOwner: true, beforeShow: b =>
+        {
+            b.ExtendClientAreaToDecorationsHint = true;
+            b.ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
+            b.ExtendClientAreaTitleBarHeightHint = 0;
+        });
+        shown = w;
+        Dialogs.FixHeight(w, minWidth, height);
         w.Closed += (_, _) => { timer.Stop(); vm.ClearOverlays(); s.Save(); };
     }
 
