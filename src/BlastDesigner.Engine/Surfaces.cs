@@ -38,15 +38,64 @@ public static class Surfaces
         };
         int s0 = pts.Count, s1 = pts.Count + 1, s2 = pts.Count + 2;
         var tris = new List<Tri> { MakeTri(all, s0, s1, s2) };
+        // directed edge -> the triangle that has it: the way from a triangle to its neighbours
+        var owner = new Dictionary<long, int>(pts.Count * 6, ConstrainedEdges.Mixed.Instance);
+        void Own(int t)
+        {
+            var r = tris[t];
+            owner[ConstrainedEdges.Key(r.A, r.B)] = t;
+            owner[ConstrainedEdges.Key(r.B, r.C)] = t;
+            owner[ConstrainedEdges.Key(r.C, r.A)] = t;
+        }
+        Own(0);
+        int Across(int a, int b) => owner.TryGetValue(ConstrainedEdges.Key(b, a), out var t) ? t : -1;
+        bool Beyond(int a, int b, Vec3 p) => (all[b].X - all[a].X) * (p.Y - all[a].Y) - (all[b].Y - all[a].Y) * (p.X - all[a].X) < 0;
+        // a triangle whose circle holds the point: walking towards it from the last one made, close by in the order of insertion
+        int Walk(Vec3 p)
+        {
+            var t = tris.Count - 1;
+            for (var step = 0; step < tris.Count && t >= 0; step++)
+            {
+                var r = tris[t];
+                if (r.InCircle(p.X, p.Y)) return t;
+                t = Beyond(r.A, r.B, p) ? Across(r.A, r.B) : Beyond(r.B, r.C, p) ? Across(r.B, r.C) : Beyond(r.C, r.A, p) ? Across(r.C, r.A) : -1;
+            }
+            return -1;
+        }
+        var bad = new List<int>();
+        var seen = new HashSet<int>();
+        var next = new Stack<int>();
+        // The triangles whose circle holds the point touch each other, so they are found from any one of them,
+        // in the order of the list: the triangulation does not depend on how they were found.
+        void FindBad(Vec3 p)
+        {
+            bad.Clear();
+            var first = Walk(p);
+            if (first < 0)
+            {
+                for (int t = 0; t < tris.Count; t++)
+                    if (tris[t].InCircle(p.X, p.Y)) bad.Add(t);
+                return;
+            }
+            seen.Clear();
+            seen.Add(first);
+            next.Push(first);
+            while (next.TryPop(out var t))
+            {
+                bad.Add(t);
+                var r = tris[t];
+                foreach (var n in (ReadOnlySpan<int>)[Across(r.A, r.B), Across(r.B, r.C), Across(r.C, r.A)])
+                    if (n >= 0 && seen.Add(n) && tris[n].InCircle(p.X, p.Y)) next.Push(n);
+            }
+            bad.Sort();
+        }
 
         // Insert points in spatially coherent order for speed.
         var order = Enumerable.Range(0, pts.Count).OrderBy(i => Math.Floor((pts[i].X - minX) / Math.Max(1e-9, (maxX - minX) / 64))).ThenBy(i => pts[i].Y).ToList();
         foreach (var i in order)
         {
             var p = all[i];
-            var bad = new List<int>();
-            for (int t = 0; t < tris.Count; t++)
-                if (tris[t].InCircle(p.X, p.Y)) bad.Add(t);
+            FindBad(p);
             var edges = new Dictionary<(int, int), int>();
             foreach (var t in bad)
             {
@@ -55,13 +104,25 @@ public static class Surfaces
                 AddEdge(edges, tr.B, tr.C);
                 AddEdge(edges, tr.C, tr.A);
             }
+            foreach (var t in bad)
+            {
+                var tr = tris[t];
+                owner.Remove(ConstrainedEdges.Key(tr.A, tr.B));
+                owner.Remove(ConstrainedEdges.Key(tr.B, tr.C));
+                owner.Remove(ConstrainedEdges.Key(tr.C, tr.A));
+            }
             for (int k = bad.Count - 1; k >= 0; k--)
             {
                 tris[bad[k]] = tris[^1];
                 tris.RemoveAt(tris.Count - 1);
+                if (bad[k] < tris.Count) Own(bad[k]);
             }
             foreach (var (e, count) in edges)
-                if (count == 1) tris.Add(MakeTri(all, e.Item1, e.Item2, i));
+                if (count == 1)
+                {
+                    tris.Add(MakeTri(all, e.Item1, e.Item2, i));
+                    Own(tris.Count - 1);
+                }
         }
 
         var result = new List<int>(tris.Count * 3);

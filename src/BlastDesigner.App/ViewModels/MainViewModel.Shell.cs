@@ -88,8 +88,8 @@ public sealed partial class MainViewModel
             G("Data exchange", M("Import", "import", "File/Import", big: true), M("Export", "export", "File/Export", big: true),
                 M("Merge with file…", "merge", "File/Merge…"), M("Copy image", "image", "Edit/Copy image")),
             G("Print", M("Print plan", "print", "File/Print/Plan…", "Ctrl P", true), M("Reports", "report", "File/Print/Reports…"), M("Report designer", "edit", "Tools/Report designer…")),
-            G("Settings", M("Program settings", "gear", "Edit/Program settings…", big: true), M("Blast properties", "edit", "Edit/Blast properties…"), M("Design data", "edit", "Edit/Design data…"),
-                M("Site coordinate system", "north", "Edit/Site coordinate system…"), M("Visual style", "eye", "Edit/Visual style…"))
+            G("Settings", M("Blast properties", "edit", "Edit/Blast properties…"), M("Design data", "edit", "Edit/Design data…"),
+                M("Site coordinate system", "north", "Edit/Site coordinate system…"))
         }),
         new Stage("Topography", new()
         {
@@ -162,7 +162,7 @@ public sealed partial class MainViewModel
                 M("Charge in 3D", "charge", "View/Loading"), M("Tolerances", "check", "Calculations/Design tolerance check"), M("Fly through", "send", "View/Fly through")),
             G("Volumes", M("Quantities", "chart", "Calculations/Quantities", "Ctrl⇧Q", true), M("Dashboard", "dash", "View/Dashboard", big: true),
                 M("Volume between surfaces", "cube", "Tools/Surfaces/Volume…"), M("Volume overview", "polygon", "Calculations/Volume overview"), M("Costs", "money", "Calculations/Project costs")),
-            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…")),
+            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…"), M("Resources", "layers", "Edit/Available resources…")),
             G("Environment", M("Exclusion zone", "exclusion", "Calculations/Environmental prediction/Exclusion zone calculator", big: true),
                 M("Vibration", "wave", "Calculations/Vibration/Vibration"), M("Vibration map", "wave", "Calculations/Vibration/Vibration map"), M("Airblast map", "air", "Calculations/Vibration/Airblast map"),
                 M("Flyrock", "frag", "Calculations/Environmental prediction/Flyrock prediction"), M("Scale law", "wave", "Calculations/Environmental prediction/Scale law calculator"),

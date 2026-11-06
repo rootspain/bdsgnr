@@ -41,6 +41,10 @@ public sealed class PropertyGrid : Grid
     public IReadOnlyList<PropertySection>? Sections { get; set; }
     /// <summary>Titles of the groups folded; shared with the next grid so a fold outlasts the selection.</summary>
     public HashSet<string> Collapsed { get; set; } = new();
+    /// <summary>The titles of the groups fold them, as in the narrow panel; a window shows its groups whole.</summary>
+    public bool Foldable { get; set; } = true;
+    /// <summary>Short texts stand two to a row, as numbers do; in the narrow panel each takes the whole row.</summary>
+    public bool TextInColumns { get; set; }
     /// <summary>Unit shown in the field of a property, by property name.</summary>
     public Dictionary<string, string> Units { get; } = new();
 
@@ -174,6 +178,7 @@ public sealed class PropertyGrid : Grid
             if (wide || column == 1) { row++; column = 0; }
             else column = 1;
         }
+        if (!Foldable) return FormKit.Section(Loc.Ui(title), g);
         var chevron = new ContentControl { Content = Look.Icon(g.IsVisible ? "up" : "down", 13, Look.Faint), [DockPanel.DockProperty] = Dock.Right, VerticalAlignment = VerticalAlignment.Center };
         var head = new Button
         {
@@ -227,12 +232,13 @@ public sealed class PropertyGrid : Grid
             return (new DockPanel { MinHeight = 30, Children = { editor, new TextBlock { Text = caption, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap } } }, true);
         }
         Compact(editor);
+        if (TextInColumns && p.PropertyType == typeof(string) && editor is TextBox text) text.ClearValue(TextBox.FontFamilyProperty);
         var point = p.PropertyType == typeof(Vec3);
         if (point) caption += " X · Y · Z";
         if (unit != null && (point || editor is not TextBox)) caption += ", " + unit;
         else if (unit != null && editor is TextBox box)
             box.InnerRightContent = new TextBlock { Text = unit, FontSize = 11, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
-        return (Captioned(caption, editor), point || p.PropertyType == typeof(string) || editor is StackPanel);
+        return (Captioned(caption, editor), point || (p.PropertyType == typeof(string) && (!TextInColumns || editor is TextBox { AcceptsReturn: true })) || editor is StackPanel);
     }
 
     private static Control Captioned(string caption, Control field) => new StackPanel
@@ -249,7 +255,8 @@ public sealed class PropertyGrid : Grid
         switch (editor)
         {
             case TextBox box:
-                box.Height = box.MinHeight = 30;
+                box.Height = box.AcceptsReturn ? double.NaN : 30;
+                box.MinHeight = box.AcceptsReturn ? 64 : 30;
                 box.Padding = new Thickness(8, 4);
                 box.FontFamily = Look.Mono;
                 box.Background = Look.Field;
@@ -259,7 +266,11 @@ public sealed class PropertyGrid : Grid
                 combo.MinHeight = 30;
                 combo.HorizontalAlignment = HorizontalAlignment.Stretch;
                 break;
-            case Grid parts:
+            case CalendarDatePicker date:
+                date.MinHeight = 30;
+                date.HorizontalAlignment = HorizontalAlignment.Stretch;
+                break;
+            case Panel parts:
                 foreach (var part in parts.Children) Compact(part);
                 break;
         }

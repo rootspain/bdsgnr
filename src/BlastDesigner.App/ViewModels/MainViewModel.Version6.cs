@@ -113,25 +113,14 @@ public sealed partial class MainViewModel
         var editor = new ListEditor<InitiationRule>(copy, r => $"{r.Priority}. {r.Name}",
             () => new InitiationRule { Name = Loc.T("New rule"), Priority = copy.Count, DetonatorId = Project.Products.FirstOrDefault(p => p.IsDetonator)?.Id, BoosterId = Project.Products.FirstOrDefault(p => p.Kind == ProductKind.Booster)?.Id },
             r => { var c = ProjectJson.DeepClone(r); c.Id = Guid.NewGuid(); c.Name += " (2)"; return c; }, grid);
-        if (!await Dialogs.Custom("Initiation rules", editor, width: 820, height: 520)) return;
+        if (!await Dialogs.Custom("Initiation rules", editor, width: 920, height: 640, form: true, bare: true)) return;
         Change("Edit initiation rules", p => p.InitiationRules = copy);
     }
 
-    public Task EditTolerances() => EditPart("Design tolerances", p => p.Tolerances, (p, v) => p.Tolerances = v);
-    public Task EditFlyrockModel() => EditPart("Flyrock constants", p => p.Flyrock, (p, v) => p.Flyrock = v);
-    public async Task EditFragmentationModel()
-    {
-        if (Doc == null) return;
-        if (await FragmentationWindow.Show(this) is not { } edited) return;
-        Change("Fragmentation inputs", p => p.Fragmentation = edited);
-        // the unit last chosen is the one of the projects and presets that have none
-        if (edited.SizeUnit is { } unit && unit != Settings.FragmentSizeUnit)
-        {
-            Settings.FragmentSizeUnit = SizeUnits.Default = unit;
-            Settings.Save();
-        }
-    }
-    public Task EditCoordinates() => EditPart("Site coordinate system", p => p.Coordinates, (p, v) => p.Coordinates = v);
+    public Task EditTolerances() => ProjectPropertiesWindow.Show(this, "Design tolerances");
+    public Task EditFlyrockModel() => ProjectPropertiesWindow.Show(this, "Flyrock constants");
+    public Task EditFragmentationModel() => ProjectPropertiesWindow.Show(this, "Fragmentation inputs");
+    public Task EditCoordinates() => ProjectPropertiesWindow.Show(this, "Site coordinate system");
 
     // ---- holes --------------------------------------------------------------------------
 

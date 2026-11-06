@@ -53,6 +53,16 @@
       <Setter Property="BorderBrush" Value="{x:Static svc:Look.AccentPressed}"/>
       <Setter Property="Foreground" Value="{x:Static svc:Look.OnAccent}"/>
     </Style>
+    <Style Selector="ContextMenu">
+      <Setter Property="WindowManagerAddShadowHint" Value="True"/>
+    </Style>
+    <!-- the items of every list of commands and of its submenus; the text keeps clear of the outline of the menu -->
+    <Style Selector="ContextMenu MenuItem, MenuItem MenuItem">
+      <Setter Property="Padding" Value="14,6"/>
+    </Style>
+    <Style Selector="MenuItem /template/ Popup#PART_Popup">
+      <Setter Property="WindowManagerAddShadowHint" Value="True"/>
+    </Style>
     <Style Selector="TextBlock.caption">
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Margin" Value="4,6,4,2"/>

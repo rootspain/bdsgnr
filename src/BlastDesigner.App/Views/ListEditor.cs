@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Media;
 using BlastDesigner.App.Services;
 
 namespace BlastDesigner.App.Views;
@@ -8,7 +9,8 @@ namespace BlastDesigner.App.Views;
 /// <summary>Master/detail editor for a list: items on the left, a property grid for the selected item on the right.</summary>
 public sealed class ListEditor<T> : Grid where T : class
 {
-    private readonly ListBox _list = new() { MinWidth = 200 };
+    private readonly ListBox _list = new() { Background = Brushes.Transparent, Margin = new Thickness(6) };
+    private readonly StackPanel _detail = new() { Spacing = 16, Margin = new Thickness(16, 14) };
     private readonly PropertyGrid _grid;
     private readonly Func<T, string> _display;
     private readonly Func<T>? _create;
@@ -21,31 +23,30 @@ public sealed class ListEditor<T> : Grid where T : class
         _create = create;
         _clone = clone;
         _grid = grid ?? new PropertyGrid();
-        ColumnDefinitions = new ColumnDefinitions("220,8,*");
-        RowDefinitions = new RowDefinitions("*,Auto");
+        if (_grid.Sections == null) FormLayouts.Apply(_grid, typeof(T));
+        ColumnDefinitions = new ColumnDefinitions("290,*");
 
-        var buttons = new WrapPanel { Margin = new Thickness(0, 4) };
-        if (create != null) buttons.Children.Add(Btn("Add", () => Insert(create())));
-        if (clone != null) buttons.Children.Add(Btn("Duplicate", () => { if (Selected is { } s) Insert(clone(s)); }));
-        buttons.Children.Add(Btn("Delete", () =>
+        var buttons = new WrapPanel { Margin = new Thickness(10, 8, 6, 6) };
+        void Add(Button b) { b.Margin = new Thickness(0, 0, 4, 4); buttons.Children.Add(b); }
+        if (create != null) Add(FormKit.Tool("plus", Loc.Ui("Add"), () => Insert(create())));
+        if (clone != null) Add(FormKit.Tool("dup", null, () => { if (Selected is { } s) Insert(clone(s)); }, Loc.Ui("Duplicate")));
+        Add(FormKit.Tool("trash", null, () =>
         {
             if (Selected is not { } s) return;
             var i = Items.IndexOf(s);
             Items.Remove(s);
             Reload(Math.Min(i, Items.Count - 1));
             Changed?.Invoke();
-        }));
-        buttons.Children.Add(Btn("▲", () => Move(-1)));
-        buttons.Children.Add(Btn("▼", () => Move(1)));
+        }, Loc.Ui("Delete")));
+        Add(FormKit.Tool("arrowup", null, () => Move(-1)));
+        Add(FormKit.Tool("arrowdown", null, () => Move(1)));
 
-        SetColumn(_list, 0);
-        SetRow(buttons, 1);
-        var scroll = new ScrollViewer { Content = _grid };
-        SetColumn(scroll, 2);
-        SetRowSpan(scroll, 2);
-        Children.Add(_list);
-        Children.Add(buttons);
-        Children.Add(scroll);
+        DockPanel.SetDock(buttons, Dock.Bottom);
+        _detail.Children.Add(_grid);
+        var right = new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1, 0, 0, 0), Child = new ScrollViewer { Content = _detail } };
+        SetColumn(right, 1);
+        Children.Add(new DockPanel { Children = { buttons, _list } });
+        Children.Add(right);
 
         _list.SelectionChanged += (_, _) =>
         {
@@ -67,12 +68,11 @@ public sealed class ListEditor<T> : Grid where T : class
     public event Action<T?>? SelectionChanged;
     public event Action? Changed;
 
-    private static Button Btn(string text, Action a)
-    {
-        var b = new Button { Content = Loc.T(text), Margin = new Thickness(0, 0, 4, 4) };
-        b.Click += (_, _) => a();
-        return b;
-    }
+    /// <summary>Width of the list; the fields of the selected item take the rest.</summary>
+    public double ListWidth { set => ColumnDefinitions[0].Width = new GridLength(value); }
+
+    /// <summary>Something more about the selected item, under its fields.</summary>
+    public void AddBelow(Control c) => _detail.Children.Add(c);
 
     private void Insert(T item)
     {

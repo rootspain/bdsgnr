@@ -19,7 +19,7 @@ internal sealed class ConstrainedEdges
     /// Hash for edge keys. The default hash of a long is its two halves xor-ed, so the edges of nearby vertices
     /// (close indices) all collided and building a survey surface took ten times longer.
     /// </summary>
-    private sealed class Mixed : IEqualityComparer<long>
+    internal sealed class Mixed : IEqualityComparer<long>
     {
         public static readonly Mixed Instance = new();
         public bool Equals(long a, long b) => a == b;
@@ -36,7 +36,7 @@ internal sealed class ConstrainedEdges
     /// <summary>Segments that could not be forced: they cross another forced segment or pass through a vertex.</summary>
     public int Skipped { get; private set; }
 
-    private static long Key(int a, int b) => ((long)a << 32) | (uint)b;
+    internal static long Key(int a, int b) => ((long)a << 32) | (uint)b;
     private static long Undirected(int a, int b) => a < b ? Key(a, b) : Key(b, a);
 
     private void Index(int t)

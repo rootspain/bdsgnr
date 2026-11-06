@@ -172,17 +172,17 @@ public sealed partial class MainViewModel
             await EditTimingLine(line);
             return;
         }
-        var template = ProjectJson.DeepClone(first);
-        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "Triangles", "Vertices", "Points" } };
+        var template = first.EditCopy();
+        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "Triangles", "Vertices", "Points", "KindName" } };
         AddProductChoices(grid);
+        FormLayouts.Apply(grid, first.GetType());
         grid.SetTargets(template, sel);
-        var layerBox = new Avalonia.Controls.ComboBox { ItemsSource = Project!.Layers.Select(l => l.Name).ToList(), SelectedIndex = Project.Layers.FindIndex(l => l.Id == first.LayerId), MinWidth = 200 };
-        var panel = new Avalonia.Controls.StackPanel { Spacing = 6 };
-        if (sel.Count > 1) panel.Children.Add(new Avalonia.Controls.TextBlock { Text = Loc.F("{0} objects: only the fields you change are applied to all of them.", sel.Count) });
-        panel.Children.Add(new Avalonia.Controls.TextBlock { Text = Loc.T("Layer") });
-        panel.Children.Add(layerBox);
-        panel.Children.Add(new Avalonia.Controls.ScrollViewer { Content = grid, MaxHeight = 560 });
-        if (!await Dialogs.Custom(Loc.F("Edit {0}", Loc.T(first.KindName)), panel)) return;
+        var layerBox = new Avalonia.Controls.ComboBox { ItemsSource = Project!.Layers.Select(l => l.Name).ToList(), SelectedIndex = Project.Layers.FindIndex(l => l.Id == first.LayerId), MinHeight = 32, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch };
+        var panel = new Avalonia.Controls.StackPanel { Spacing = 12 };
+        panel.Children.Add(FormKit.Labeled(Loc.T("Layer"), layerBox));
+        panel.Children.Add(new Avalonia.Controls.ScrollViewer { Content = grid, MaxHeight = 560, Padding = new Avalonia.Thickness(0, 0, 10, 0) });
+        var subtitle = sel.Count > 1 ? Loc.F("{0} objects: only the fields you change are applied to all of them.", sel.Count) : null;
+        if (!await Dialogs.Custom(Loc.F("Edit {0}", Loc.T(first.KindName)), panel, width: 620, subtitle: subtitle, form: true)) return;
         var changed = grid.Changed.ToList();
         var newLayer = layerBox.SelectedIndex >= 0 ? Project.Layers[layerBox.SelectedIndex].Id : first.LayerId;
         var ids = sel.Select(e => e.Id).ToHashSet();
@@ -248,27 +248,15 @@ public sealed partial class MainViewModel
 
     // ---- project settings dialogs ------------------------------------------------------------
 
-    private async Task EditPart<T>(string title, Func<BlastProject, T> get, Action<BlastProject, T> set, params string[] exclude) where T : class
-    {
-        if (Doc == null) return;
-        var edited = await Dialogs.EditObject(title, get(Project!), exclude);
-        if (edited != null) Change(title, p => set(p, edited));
-    }
-
-    public Task EditBlastProperties() => EditPart("Blast properties", p => p.Header, (p, v) => p.Header = v);
-    public Task EditDesignData() => EditPart("Design data", p => p.Design, (p, v) => { v.HoleTypes = p.Design.HoleTypes; v.MaterialTypes = p.Design.MaterialTypes; p.Design = v; });
-    public Task EditOutcomes() => EditPart("Blast outcomes", p => p.Outcomes, (p, v) => p.Outcomes = v);
-    public Task EditSummaryBlock() => EditPart("Summary block", p => p.Summary, (p, v) => p.Summary = v);
-    public Task EditCostSchema() => EditPart("Resource cost schema", p => p.Costs, (p, v) => p.Costs = v);
-    public async void EditElectronicSettings() => await EditPart("Electronic timing preferences", p => p.Electronic, (p, v) => p.Electronic = v);
-    public Task EditVibrationModel() => EditPart("Vibration site constants", p => p.Vibration, (p, v) => p.Vibration = v);
-
-    public async Task EditHoleTypes()
-    {
-        if (Doc == null) return;
-        var r = await TypeTableWindow.Show("Hole and material types", Project!.Design.HoleTypes, Project.Design.MaterialTypes);
-        if (r != null) Change("Hole and material types", p => { p.Design.HoleTypes = r.Value.Holes; p.Design.MaterialTypes = r.Value.Materials; });
-    }
+    public Task EditProjectProperties() => ProjectPropertiesWindow.Show(this, "Blast properties");
+    public Task EditBlastProperties() => ProjectPropertiesWindow.Show(this, "Blast properties");
+    public Task EditDesignData() => ProjectPropertiesWindow.Show(this, "Design data");
+    public Task EditOutcomes() => ProjectPropertiesWindow.Show(this, "Blast outcomes");
+    public Task EditSummaryBlock() => ProjectPropertiesWindow.Show(this, "Summary block");
+    public Task EditCostSchema() => ProjectPropertiesWindow.Show(this, "Resource cost schema");
+    public async void EditElectronicSettings() => await ProjectPropertiesWindow.Show(this, "Electronic timing preferences");
+    public Task EditVibrationModel() => ProjectPropertiesWindow.Show(this, "Vibration site constants");
+    public Task EditHoleTypes() => ProjectPropertiesWindow.Show(this, "Hole and material types");
 
     public async Task EditResources()
     {
@@ -286,22 +274,6 @@ public sealed partial class MainViewModel
         var mine = UserCatalogue.Load();
         mine.Remember(tablesBefore, productsBefore, Project!.Catalogue, Project.Products);
         mine.Save();
-    }
-
-    public async Task EditVisualStyle()
-    {
-        var edited = await Dialogs.EditObject("Visual style", new VisualStyle
-        {
-            BackgroundColor = Settings.BackgroundColor,
-            SelectionColor = Settings.SelectionColor,
-            CollarSizePixels = Settings.CollarSizePixels
-        });
-        if (edited == null) return;
-        Settings.BackgroundColor = edited.BackgroundColor;
-        Settings.SelectionColor = edited.SelectionColor;
-        Settings.CollarSizePixels = edited.CollarSizePixels;
-        Settings.Save();
-        View.Redraw();
     }
 
     public Task EditProgramSettings() => SettingsWindow.Show(Settings, ApplyProgramSettings, s => PreviewBackground = s?.BackgroundColor);
@@ -369,14 +341,6 @@ public sealed partial class MainViewModel
         }));
         ReportReprogrammed(timed);
     }
-}
-
-/// <summary>Editable display preferences (Edit ▸ Visual style).</summary>
-public sealed class VisualStyle
-{
-    public uint BackgroundColor { get; set; }
-    public uint SelectionColor { get; set; }
-    public double CollarSizePixels { get; set; }
 }
 
 public sealed class TransformParameters

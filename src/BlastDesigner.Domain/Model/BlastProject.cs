@@ -15,7 +15,7 @@ public sealed class BlastProject
     /// <summary>The tables above the products: types, kinds, groups and families.</summary>
     public ProductCatalogue Catalogue { get; set; } = new();
     /// <summary>The products offered for anything new; the deleted ones only go on showing where they are used.</summary>
-    public IEnumerable<Product> ActiveProducts => Products.Where(p => !p.Deleted);
+    [JsonIgnore] public IEnumerable<Product> ActiveProducts => Products.Where(p => !p.Deleted);
     public List<Layer> Layers { get; set; } = new();
     public List<Entity> Entities { get; set; } = new();
     public List<HoleRow> Rows { get; set; } = new();
@@ -42,6 +42,9 @@ public sealed class BlastProject
 
     [JsonIgnore] public IEnumerable<Hole> Holes => Entities.OfType<Hole>();
     [JsonIgnore] public IEnumerable<TieEntity> Ties => Entities.OfType<TieEntity>();
+
+    /// <summary>The same project in a new object, for changing a list of it without touching the original.</summary>
+    internal BlastProject ShallowCopy() => (BlastProject)MemberwiseClone();
 
     public Product? FindProduct(string? id) => id is null ? null : Products.FirstOrDefault(p => p.Id == id);
     public Layer? FindLayer(Guid id) => Layers.FirstOrDefault(l => l.Id == id);

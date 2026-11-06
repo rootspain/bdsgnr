@@ -13,28 +13,31 @@ using BlastDesigner.Rendering;
 
 namespace BlastDesigner.App.Views;
 
-/// <summary>Edit ▸ Hole and material types (names, colours, default diameters and densities).</summary>
+/// <summary>The page of hole and material types in the project properties (names, colours, default diameters and densities).</summary>
 public static class TypeTableWindow
 {
-    public static async Task<(List<TypeDefinition> Holes, List<TypeDefinition> Materials)?> Show(string title, List<TypeDefinition> holes, List<TypeDefinition> materials)
+    public static Control Editor(List<TypeDefinition> holes, List<TypeDefinition> materials)
     {
-        var h = ProjectJson.DeepClone(holes);
-        var m = ProjectJson.DeepClone(materials);
-        var he = new ListEditor<TypeDefinition>(h, t => $"{t.Index}. {t.Name}", null, null);
+        var he = new ListEditor<TypeDefinition>(holes, t => $"{t.Index}. {t.Name}", null, null);
         he.Grid.Exclude = new() { nameof(TypeDefinition.Index), nameof(TypeDefinition.Density) };
         he.Reload(0);
-        var me = new ListEditor<TypeDefinition>(m, t => $"{t.Index}. {t.Name}", null, null);
+        var me = new ListEditor<TypeDefinition>(materials, t => $"{t.Index}. {t.Name}", null, null);
         me.Grid.Exclude = new() { nameof(TypeDefinition.Index), nameof(TypeDefinition.Diameter) };
         me.Reload(0);
-        var tabs = new TabControl
+        var host = new ContentControl { Content = he };
+        Button holeChip = null!, materialChip = null!;
+        void Show(bool hole)
         {
-            ItemsSource = new[]
-            {
-                new TabItem { Header = Loc.T("Hole types"), Content = he },
-                new TabItem { Header = Loc.T("Material types"), Content = me }
-            }
-        };
-        return await Dialogs.Custom(title, tabs, width: 760, height: 520) ? (h, m) : null;
+            host.Content = hole ? he : me;
+            Ui.SetChip(holeChip, hole);
+            Ui.SetChip(materialChip, !hole);
+        }
+        holeChip = Ui.Chip(Loc.T("Hole types"), () => Show(true), true);
+        materialChip = Ui.Chip(Loc.T("Material types"), () => Show(false));
+        var chips = Ui.Row(6, holeChip, materialChip);
+        chips.Margin = new Thickness(12, 10);
+        DockPanel.SetDock(chips, Dock.Top);
+        return new DockPanel { Children = { chips, host } };
     }
 }
 
@@ -50,12 +53,15 @@ public static class LoadingRulesWindow
             () => new LoadingRule { Name = Loc.T("New rule"), Priority = copy.Count, StemmingProductId = vm.Project!.Products.FirstOrDefault(p => p.Kind == ProductKind.Stemming)?.Id },
             r => { var c = ProjectJson.DeepClone(r); c.Id = Guid.NewGuid(); c.Name += " (2)"; return c; }, rulesGrid);
 
-        var deckHost = new ContentControl();
+        var deckHost = new ContentControl { Height = 340 };
+        // the deck list shows its selected row, and that must not scroll the fields of the rule down to it
+        deckHost.AddHandler(Control.RequestBringIntoViewEvent, (_, e) => e.Handled = true);
         var hint = new TextBlock
         {
             Text = Loc.T("Decks are built from the bottom of the hole upward. Length 0 fills the column up to the top stemming."),
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 6)
+            FontSize = 11.5,
+            Foreground = Look.Faint
         };
         void ShowDecks(LoadingRule? r)
         {
@@ -66,19 +72,13 @@ public static class LoadingRulesWindow
                 () => new DeckTemplate { ProductId = vm.Project!.Products.FirstOrDefault(p => p.IsExplosive)?.Id },
                 d => ProjectJson.DeepClone(d), dg);
             de.Reload(r.Decks.Count > 0 ? 0 : -1);
-            deckHost.Content = de;
+            deckHost.Content = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), ClipToBounds = true, Child = de };
         }
         ruleEditor.SelectionChanged += ShowDecks;
         ShowDecks(ruleEditor.Selected);
 
-        var grid = new Grid { RowDefinitions = new RowDefinitions("*,Auto,*") };
-        Grid.SetRow(ruleEditor, 0);
-        Grid.SetRow(hint, 1);
-        Grid.SetRow(deckHost, 2);
-        grid.Children.Add(ruleEditor);
-        grid.Children.Add(hint);
-        grid.Children.Add(deckHost);
-        return await Dialogs.Custom("Loading rules", grid, width: 900, height: 720) ? copy : null;
+        ruleEditor.AddBelow(FormKit.Section(Loc.Ui("Decks"), new StackPanel { Spacing = 8, Children = { hint, deckHost } }));
+        return await Dialogs.Custom("Loading rules", ruleEditor, width: 1040, height: 780, form: true, bare: true) ? copy : null;
     }
 }
 
@@ -88,7 +88,7 @@ public static class TextImportWindow
     public static async Task<TextImportFormat?> Show(string[] lines, string fileName)
     {
         var fmt = TextImportFormat.Guess(lines);
-        var preview = new TextBox { IsReadOnly = true, FontFamily = new FontFamily("Consolas, Menlo, DejaVu Sans Mono, monospace"), Height = 160, Text = string.Join("\n", lines.Take(15)), TextWrapping = TextWrapping.NoWrap };
+        var preview = new TextBox { IsReadOnly = true, FontFamily = Look.Mono, FontSize = 12, Background = Look.Field, BorderBrush = Look.LineStrong, Height = 160, Text = string.Join("\n", lines.Take(15)), TextWrapping = TextWrapping.NoWrap };
         var delim = new ComboBox { ItemsSource = new[] { Loc.T("Comma"), Loc.T("Semicolon"), Loc.T("Tab"), "|", Loc.T("Space") }, SelectedIndex = Array.IndexOf(new[] { ',', ';', '\t', '|', ' ' }, fmt.Delimiter) };
         var skip = new NumericUpDown { Value = fmt.SkipLines, Minimum = 0, Maximum = 100, Width = 120 };
         var kind = new ComboBox { ItemsSource = Enum.GetValues<ImportDataKind>().Select(k => Loc.Enum(k)).ToList(), SelectedIndex = (int)fmt.Kind };
@@ -116,8 +116,8 @@ public static class TextImportWindow
                     Margin = new Thickness(0, 0, 6, 6),
                     Children =
                     {
-                        new TextBlock { Text = i < header.Length ? header[i] : $"#{i + 1}", FontWeight = FontWeight.SemiBold },
-                        new TextBlock { Text = parts[i], Foreground = Look.Muted },
+                        new TextBlock { Text = i < header.Length ? header[i] : $"#{i + 1}", FontWeight = FontWeight.SemiBold, Foreground = Look.TextSoft },
+                        new TextBlock { Text = parts[i], FontSize = 12, Foreground = Look.Muted, Margin = new Thickness(0, 0, 0, 4) },
                         cb
                     }
                 });
@@ -127,8 +127,6 @@ public static class TextImportWindow
         skip.ValueChanged += (_, _) => BuildColumns();
         BuildColumns();
 
-        var load = new Button { Content = Loc.T("Load template…") };
-        var save = new Button { Content = Loc.T("Save template…") };
         TextImportFormat Collect() => new()
         {
             Delimiter = new[] { ',', ';', '\t', '|', ' ' }[Math.Max(0, delim.SelectedIndex)],
@@ -139,13 +137,13 @@ public static class TextImportWindow
             SwapXY = swap.IsChecked == true,
             DecimalSeparator = comma.IsChecked == true ? "," : "."
         };
-        save.Click += async (_, _) =>
+        async void SaveTemplate()
         {
             Directory.CreateDirectory(ProgramSettings.ImportFormatsFolder);
             var path = await Dialogs.SaveFile("Save import template", "format.json", ".json", ("Import template", new[] { "*.json" }));
             if (path != null) Collect().Save(path);
-        };
-        load.Click += async (_, _) =>
+        }
+        async void LoadTemplate()
         {
             var path = await Dialogs.OpenFile("Load import template", ("Import template", new[] { "*.json" }));
             if (path == null) return;
@@ -155,33 +153,36 @@ public static class TextImportWindow
             kind.SelectedIndex = (int)fmt.Kind;
             dupes.IsChecked = fmt.SkipDuplicates;
             BuildColumns();
-        };
+        }
 
-        var options = new WrapPanel
+        foreach (var c in new Control[] { delim, kind, skip })
         {
-            Children =
-            {
-                Labeled("Delimiter", delim), Labeled("Header lines", skip), Labeled("Data", kind),
-                new StackPanel { Margin = new Thickness(0, 0, 12, 0), Children = { dupes, swap, comma } },
-                new StackPanel { Spacing = 4, Children = { load, save } }
-            }
-        };
+            c.Width = double.NaN;
+            c.MinHeight = 32;
+            c.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
         var panel = new StackPanel
         {
-            Spacing = 8,
+            Spacing = 16,
+            Margin = new Thickness(16, 14),
             Children =
             {
-                new TextBlock { Text = fileName, FontWeight = FontWeight.SemiBold },
-                preview, options,
-                new TextBlock { Text = Loc.T("Assign a field to each column"), Classes = { "caption" } },
-                new ScrollViewer { Content = columns, MaxHeight = 260, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto }
+                FormKit.Section(Loc.Ui("Preview"), preview),
+                FormKit.Section(Loc.Ui("Format"), new StackPanel
+                {
+                    Spacing = 10,
+                    Children =
+                    {
+                        FormKit.Fields(3, FormKit.Labeled(Loc.T("Delimiter"), delim), FormKit.Labeled(Loc.T("Header lines"), skip), FormKit.Labeled(Loc.T("Data"), kind)),
+                        FormKit.Fields(3, dupes, swap, comma)
+                    }
+                }),
+                FormKit.Section(Loc.T("Assign a field to each column"), new ScrollViewer { Content = columns, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto })
             }
         };
-        return await Dialogs.Custom("Import text file", panel, width: 980, height: 680) ? Collect() : null;
+        var templates = Ui.Row(6, FormKit.Tool("open", Loc.T("Load template…"), LoadTemplate), FormKit.Tool("save", Loc.T("Save template…"), SaveTemplate));
+        return await Dialogs.Custom("Import text file", new ScrollViewer { Content = panel }, width: 980, height: 720, subtitle: fileName, form: true, bare: true, aside: templates) ? Collect() : null;
     }
-
-    private static Control Labeled(string label, Control c) =>
-        new StackPanel { Margin = new Thickness(0, 0, 12, 0), Children = { new TextBlock { Text = Loc.T(label) }, c } };
 }
 
 /// <summary>Tools ▸ Report designer: choose sections and layout of the PDF report.</summary>
@@ -190,20 +191,22 @@ public static class ReportDesignerWindow
     public static async Task<ReportOptions?> Show()
     {
         var opt = new ReportOptions { Title = Loc.T("Blast report") };
-        var title = new TextBox { Text = opt.Title, MinWidth = 300 };
+        var title = FormKit.Text(opt.Title);
         var checks = Enum.GetValues<ReportSections>().Where(s => s is not ReportSections.None and not ReportSections.All)
             .Select(s => (s, new CheckBox { Content = Loc.Enum(s), IsChecked = true })).ToList();
         var landscape = new CheckBox { Content = Loc.T("Landscape") };
-        var timing = new ComboBox { ItemsSource = Enum.GetValues<TimingLabelMode>().Select(m => Loc.Enum(m)).ToList(), SelectedIndex = (int)TimingLabelMode.InholeTime };
-        var panel = new StackPanel { Spacing = 6 };
-        panel.Children.Add(new TextBlock { Text = Loc.T("Title") });
-        panel.Children.Add(title);
-        panel.Children.Add(new TextBlock { Text = Loc.T("Sections"), Classes = { "caption" } });
-        foreach (var (_, cb) in checks) panel.Children.Add(cb);
-        panel.Children.Add(landscape);
-        panel.Children.Add(new TextBlock { Text = Loc.T("Timing labels on the plan") });
-        panel.Children.Add(timing);
-        if (!await Dialogs.Custom("Report designer", panel)) return null;
+        var timing = new ComboBox { ItemsSource = Enum.GetValues<TimingLabelMode>().Select(m => Loc.Enum(m)).ToList(), SelectedIndex = (int)TimingLabelMode.InholeTime, MinHeight = 32, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var panel = new StackPanel
+        {
+            Spacing = 16,
+            Children =
+            {
+                FormKit.Labeled(Loc.T("Title"), title),
+                FormKit.Section(Loc.T("Sections"), FormKit.Fields(2, checks.Select(c => (Control)c.Item2).ToArray())),
+                FormKit.Section(Loc.Ui("Page"), new StackPanel { Spacing = 10, Children = { landscape, FormKit.Labeled(Loc.T("Timing labels on the plan"), timing) } })
+            }
+        };
+        if (!await Dialogs.Custom("Report designer", panel, width: 620, form: true)) return null;
         opt.Title = title.Text ?? opt.Title;
         opt.Sections = checks.Where(c => c.Item2.IsChecked == true).Aggregate(ReportSections.None, (a, c) => a | c.s);
         opt.Landscape = landscape.IsChecked == true;

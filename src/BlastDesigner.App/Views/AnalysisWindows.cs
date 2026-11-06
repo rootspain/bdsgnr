@@ -115,7 +115,10 @@ public static class AnalysisWindows
     {
         var v = new Viewport { ProjectSource = () => vm.Project, OptionsSource = options ?? vm.BuildSceneOptions, LockPlan = false, SurfaceWireframe = vm.Settings.SurfaceWireframe };
         v.ViewMenu = () => new[] { MenuEntry.Item("Zoom all", v.ZoomAll) };
+        // the selection shows in it too
         vm.ModelRefreshed += v.Redraw;
+        vm.SelectionChanged += v.Redraw;
+        v.DetachedFromVisualTree += (_, _) => { vm.ModelRefreshed -= v.Redraw; vm.SelectionChanged -= v.Redraw; };
         return v;
     }
 
@@ -177,8 +180,10 @@ public static class AnalysisWindows
             s.IsochroneIntervalMs = overlay.IntervalMs;
             s.ShowIsochrones = overlay.Contours;
             s.ColourHolesByTime = overlay.ColourHoles;
-            var fired = timed.Count(h => h.FiringTimeMs <= vm.AnimationTime);
-            label.Text = Loc.F("{0:0} ms — {1}/{2} holes", vm.AnimationTime, fired, timed.Count);
+            // the holes of now: an undo replaces them
+            var holes = vm.Project?.Holes.Where(h => h.FiringTimeMs.HasValue).ToList() ?? new();
+            var fired = holes.Count(h => h.FiringTimeMs <= vm.AnimationTime);
+            label.Text = Loc.F("{0:0} ms — {1}/{2} holes", vm.AnimationTime, fired, holes.Count);
             vm.View.Redraw();
         }
         slider.PropertyChanged += (_, e) => { if (e.Property == RangeBase.ValueProperty) Update(); };
@@ -328,13 +333,13 @@ public static class AnalysisWindows
 
     public static void TimeEnvelope(MainViewModel vm)
     {
-        var p = vm.Project!;
-        Timing.Solve(p);
-        var window = new NumericUpDown { Value = (decimal)p.Vibration.WindowMs, Minimum = 1, Maximum = 500, Width = 120, FormatString = "0" };
+        Timing.Solve(vm.Project!);
+        var window = new NumericUpDown { Value = (decimal)vm.Project.Vibration.WindowMs, Minimum = 1, Maximum = 500, Width = 120, FormatString = "0" };
         var view = new SkiaView();
         var summary = new TextBlock { Margin = new Thickness(0, 6) };
         void Update()
         {
+            if (vm.Project is not { } p) return;
             // Read the control here, on the UI thread: Paint runs on the render thread and must not touch controls.
             var windowMs = (double)(window.Value ?? 8);
             var env = Timing.TimeEnvelope(p, windowMs);
@@ -696,7 +701,7 @@ public static class AnalysisWindows
         void ResetOrientation()
         {
             view.Camera.Pitch = 90;
-            view.Camera.Yaw = p.Header.BlastOrientation;
+            view.Camera.Yaw = vm.Project?.Header.BlastOrientation ?? view.Camera.Yaw;
             view.ZoomAll();
         }
         void Resize(double step)
@@ -963,7 +968,10 @@ public static class AnalysisWindows
             Refresh();
         }
         Refresh();
-        Dialogs.ShowWindow("Attachment manager", WithButtons(host, ("Add…", Add), ("Open…", Open), ("Remove…", Remove)), 640, 400);
+        var header = FormKit.Header(Loc.T("Attachment manager"), aside: Ui.Row(6, FormKit.Tool("plus", Loc.T("Add…"), Add), FormKit.Tool("open", Loc.T("Open…"), Open), FormKit.Tool("trash", Loc.T("Remove…"), Remove)));
+        DockPanel.SetDock(header, Dock.Top);
+        host.Margin = new Thickness(12);
+        Dialogs.ShowWindow("Attachment manager", new DockPanel { Background = Look.Ground, Children = { header, host } }, 720, 440);
     }
 
     // ---- help ------------------------------------------------------------------------------

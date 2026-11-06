@@ -616,6 +616,102 @@ public class SurfaceAndQuantityTests
         Assert.Equal(1140 * Math.Pow(10, -1.6), ppv, 6);
         Assert.Equal(100, Vibration.AllowableCharge(m, 100, ppv), 3);
     }
+
+    /// <summary>The prediction written out plainly: every window of every hole, summed and searched from scratch.</summary>
+    private static Vibration.Prediction PlainPrediction(BlastProject project, Vec3 receiver)
+    {
+        var m = project.Vibration;
+        var holes = project.Holes.Where(h => !h.IsDummy).Select(h => (H: h, Q: Charging.ExplosiveMass(project, h), D: Vec3.Distance(h.Collar, receiver))).Where(x => x.Q > 0).ToList();
+        var timed = holes.Where(x => x.H.FiringTimeMs.HasValue).OrderBy(x => x.H.FiringTimeMs).ToList();
+        var best = new Vibration.Prediction(0, 0, 0, 0, 0);
+        if (timed.Count == 0)
+        {
+            foreach (var x in holes)
+            {
+                var ppv = Vibration.Ppv(m, x.D, x.Q);
+                if (ppv > best.Ppv) best = new(ppv, Vibration.KPaToDb(Vibration.AirblastKPa(m, x.D, x.Q)), x.Q, x.D, 0);
+            }
+            return best;
+        }
+        for (int i = 0; i < timed.Count; i++)
+        {
+            var t0 = timed[i].H.FiringTimeMs!.Value;
+            double q = 0, d = double.MaxValue;
+            for (int j = i; j < timed.Count && timed[j].H.FiringTimeMs!.Value < t0 + m.WindowMs; j++)
+            {
+                q += timed[j].Q;
+                d = Math.Min(d, timed[j].D);
+            }
+            var ppv = Vibration.Ppv(m, d, q);
+            if (ppv > best.Ppv) best = new(ppv, Vibration.KPaToDb(Vibration.AirblastKPa(m, d, q)), q, d, t0);
+        }
+        return best;
+    }
+
+    private static BlastProject VibrationBlast(int delayMs, bool ties = true)
+    {
+        var p = BlastProject.CreateNew();
+        var rng = new Random(7);
+        var holes = new List<Hole>();
+        for (int i = 0; i < 60; i++)
+            holes.Add(p.Add(new Hole { Label = (i + 1).ToString(), Collar = new Vec3(i % 10 * 5 + rng.NextDouble(), i / 10 * 4 + rng.NextDouble(), rng.NextDouble()), Length = 8 + rng.NextDouble() * 6, IsDummy = i % 13 == 5 }));
+        Charging.ApplyRules(p, holes);
+        if (ties)
+        {
+            p.Add(new InitiationPoint { Position = holes[0].Collar, HoleId = holes[0].Id });
+            for (int i = 1; i < holes.Count; i++) Timing.Connect(p, holes[i - 1].Id, holes[i].Id, null, delayMs == 0 ? 0 : delayMs + rng.Next(5));
+        }
+        Timing.Solve(p);
+        return p;
+    }
+
+    [Theory]
+    [InlineData(3, true, 8)]    // a few holes in each window
+    [InlineData(40, true, 8)]   // one hole in each window
+    [InlineData(0, true, 8)]    // all at once: one window of the whole blast
+    [InlineData(3, false, 8)]   // no timing: each hole on its own
+    [InlineData(3, true, 0)]    // no window at all
+    public void Vibration_MapIsThePlainPredictionOfEachCell(int delayMs, bool ties, double windowMs)
+    {
+        var p = VibrationBlast(delayMs, ties);
+        p.Vibration.WindowMs = windowMs;
+        var area = new Bounds3 { Min = new Vec3(-300, -200, 0), Max = new Vec3(350, 250, 10) };
+        var ppv = Vibration.Map(p, area, 9, 7, false);
+        var air = Vibration.Map(p, area, 9, 7, true);
+        for (int i = 0; i < 9; i++)
+            for (int j = 0; j < 7; j++)
+            {
+                var at = new Vec3(area.Min.X + (area.Max.X - area.Min.X) * (i + 0.5) / 9, area.Min.Y + (area.Max.Y - area.Min.Y) * (j + 0.5) / 7, area.Center.Z);
+                var plain = PlainPrediction(p, at);
+                Assert.Equal(plain, Vibration.Predict(p, at));
+                Assert.Equal(plain.Ppv, ppv[i, j]);
+                Assert.Equal(plain.AirblastDb, air[i, j]);
+            }
+    }
+
+    [Fact]
+    public void TimingVectors_AreWorkedOutAgainOnlyWhenTheHolesChange()
+    {
+        var p = VibrationBlast(3);
+        var overlay = new TimingVectorOverlay();
+        var first = overlay.Analysis(p);
+        Assert.Same(first, overlay.Analysis(p));
+        var moved = p.Holes.First();
+        moved.Translate(new Vec3(1, 0, 0));
+        var afterMove = overlay.Analysis(p);
+        Assert.NotSame(first, afterMove);
+        p.Holes.Last().ElectronicTimeMs = 5000;
+        Timing.Solve(p);
+        var afterTime = overlay.Analysis(p);
+        Assert.NotSame(afterMove, afterTime);
+        overlay.NeighbourRadius = 20;
+        Assert.NotSame(afterTime, overlay.Analysis(p));
+        // after an undo the same values are new holes
+        var same = overlay.Analysis(p);
+        var back = ProjectJson.Deserialize(ProjectJson.Serialize(p));
+        Timing.Solve(back);
+        Assert.NotSame(same, overlay.Analysis(back));
+    }
 }
 
 public class FileFormatTests
@@ -699,6 +795,219 @@ public class FileFormatTests
         Assert.Equal(2000, SizeUnits.FromCm(200, SizeUnit.Mm));
         Assert.Equal(200, SizeUnits.FromCm(200, SizeUnit.Cm));
         Assert.Equal(150, SizeUnits.ToCm(1500, SizeUnit.Mm));
+    }
+
+    private static SurfaceEntity Mesh(int side)
+    {
+        var s = new SurfaceEntity { Name = "Survey" };
+        for (int y = 0; y < side; y++)
+            for (int x = 0; x < side; x++) s.Vertices.Add(new Vec3(x, y, x * 0.1 + y));
+        for (int y = 0; y + 1 < side; y++)
+            for (int x = 0; x + 1 < side; x++)
+            {
+                int a = y * side + x;
+                s.Triangles.AddRange(new[] { a, a + 1, a + side, a + 1, a + side + 1, a + side });
+            }
+        return s;
+    }
+
+    [Fact]
+    public void Document_SelectionAlone_IsNoChangeOfTheModel()
+    {
+        var p = BlastProject.CreateNew();
+        var h = p.Add(new Hole { Label = "1" });
+        var doc = new Document(p);
+        int changed = 0, selected = 0;
+        doc.Changed += (_, _) => changed++;
+        doc.SelectionChanged += (_, _) => selected++;
+        doc.Select(new[] { h.Id });
+        Assert.Equal((0, 1), (changed, selected));
+        Assert.True(doc.CanUndo);
+        doc.Undo();
+        Assert.Empty(doc.Selection);
+        doc.Redo();
+        Assert.Single(doc.Selection);
+        Assert.Equal(0, changed);
+        Assert.False(doc.IsModified);
+        // an undo of the model still tells
+        doc.Execute("Move", pr => pr.FindEntity(h.Id)!.Translate(new Vec3(1, 0, 0)));
+        doc.Undo();
+        Assert.Equal(2, changed);
+    }
+
+    [Fact]
+    public void Document_UndoBringsBackTheMeshes()
+    {
+        var p = BlastProject.CreateNew();
+        var first = Mesh(5);
+        var second = Mesh(4);
+        p.Add(first); p.Add(second); p.Add(new Hole { Label = "1" });
+        var (vertices, triangles) = (first.Vertices.ToList(), first.Triangles.ToList());
+        var doc = new Document(p);
+
+        // a move, an edit of the mesh, a change of something else, a deletion: each comes back
+        doc.Execute("Move", pr => pr.FindEntity(first.Id)!.Translate(new Vec3(10, 0, 0)));
+        var moved = ((SurfaceEntity)doc.Project.FindEntity(first.Id)!).Vertices.ToList();
+        doc.Execute("Cut", pr => ((SurfaceEntity)pr.FindEntity(first.Id)!).Triangles.RemoveRange(0, 3));
+        doc.Execute("Rename", pr => ((SurfaceEntity)pr.FindEntity(first.Id)!).Name = "Renamed");
+        doc.Execute("Delete", pr => pr.Entities.RemoveAll(e => e.Id == first.Id));
+        Assert.Null(doc.Project.FindEntity(first.Id));
+
+        SurfaceEntity Now() => (SurfaceEntity)doc.Project.FindEntity(first.Id)!;
+        doc.Undo();
+        Assert.Equal("Renamed", Now().Name);
+        Assert.Equal(triangles.Count - 3, Now().Triangles.Count);
+        doc.Undo();
+        Assert.Equal("Survey", Now().Name);
+        doc.Undo();
+        Assert.Equal(triangles, Now().Triangles);
+        Assert.Equal(moved, Now().Vertices);
+        doc.Undo();
+        Assert.Equal(vertices, Now().Vertices);
+        Assert.Equal(16, ((SurfaceEntity)doc.Project.FindEntity(second.Id)!).Vertices.Count);
+        doc.Redo(); doc.Redo(); doc.Redo(); doc.Redo();
+        Assert.Null(doc.Project.FindEntity(first.Id));
+        doc.Undo();
+        Assert.Equal(moved, Now().Vertices);
+        Assert.Equal(triangles.Count - 3, Now().Triangles.Count);
+
+        // a restored surface changed in place is noticed: the snapshot must not take it for the stored mesh
+        doc.Execute("Move again", pr => pr.FindEntity(first.Id)!.Translate(new Vec3(0, 5, 0)));
+        doc.Undo();
+        Assert.Equal(moved, Now().Vertices);
+    }
+
+    [Fact]
+    public void Document_MeshesInTheUndoHistoryStayWithinTheirLimit()
+    {
+        var p = BlastProject.CreateNew();
+        var s = p.Add(Mesh(40));
+        var doc = new Document(p) { MaxMeshBytes = 200_000 };
+        for (int i = 0; i < 20; i++) doc.Execute("Move", pr => pr.FindEntity(s.Id)!.Translate(new Vec3(1, 0, 0)));
+        // 1600 vertices of 24 bytes each move, the triangles once
+        Assert.InRange(doc.UndoNames.Count, 2, 6);
+        doc.Undo();
+        Assert.Equal(19, ((SurfaceEntity)doc.Project.FindEntity(s.Id)!).Vertices[0].X);
+    }
+
+    [Fact]
+    public void Document_Capture_IsTheProjectOfThatMomentAndChangesNothing()
+    {
+        var p = BlastProject.CreateNew();
+        var s = p.Add(Mesh(4));
+        var h = p.Add(new Hole { Label = "1" });
+        p.Attachments.Add(new Attachment { FileName = "a.txt", Data = new byte[] { 1, 2, 3 } });
+        var doc = new Document(p);
+        doc.Execute("Move", pr => pr.FindEntity(h.Id)!.Translate(new Vec3(1, 0, 0)));
+        var live = doc.Project;
+        var state = doc.Capture();
+        var undoSteps = doc.UndoNames.Count;
+        doc.Execute("Later", pr => { pr.FindEntity(s.Id)!.Translate(new Vec3(7, 0, 0)); pr.FindEntity(h.Id)!.Translate(new Vec3(7, 0, 0)); });
+
+        var copy = Task.Run(state).Result;
+        Assert.NotSame(live, copy);
+        Assert.Equal(1, ((Hole)copy.FindEntity(h.Id)!).Collar.X);
+        var surface = (SurfaceEntity)copy.FindEntity(s.Id)!;
+        Assert.Equal(0, surface.Vertices[0].X);
+        Assert.Equal(s.Triangles.Count, surface.Triangles.Count);
+        Assert.Equal(new byte[] { 1, 2, 3 }, copy.Attachments[0].Data);
+        Assert.Same(live, doc.Project);
+        Assert.Equal(undoSteps + 1, doc.UndoNames.Count);
+        // it makes a whole file
+        using var file = new MemoryStream();
+        ProjectFile.Write(copy, file);
+        file.Position = 0;
+        Assert.Equal(surface.Vertices, ((SurfaceEntity)ProjectFile.Read(file).FindEntity(s.Id)!).Vertices);
+    }
+
+    [Fact]
+    public void Recovery_AWriteStartedBeforeAClearLeavesNoFile()
+    {
+        var dir = Directory.CreateTempSubdirectory("recovery").FullName;
+        try
+        {
+            var store = new RecoveryStore(dir);
+            var p = BlastProject.CreateNew();
+            store.Write(p, null, store.Ticket);
+            Assert.Single(store.Pending());
+            var ticket = store.Ticket;
+            store.Clear(null, p.Id);
+            store.Write(p, null, ticket);
+            Assert.Empty(Directory.GetFiles(dir));
+            store.Write(p, null);
+            Assert.Single(store.Pending());
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
+    [Fact]
+    public void ProjectFile_KeepsTheProductsOnce()
+    {
+        var json = System.Text.Encoding.UTF8.GetString(ProjectJson.Serialize(BlastProject.CreateNew()));
+        Assert.DoesNotContain("activeProducts", json);
+    }
+
+    [Fact]
+    public void Document_FailedChange_LetsTheListenersSolveTheRestoredProject()
+    {
+        var p = BlastProject.CreateNew();
+        var a = p.Add(new Hole { Label = "1", Collar = new Vec3(10, 20, 0) });
+        var b = p.Add(new Hole { Label = "2", Collar = new Vec3(14, 20, 0) });
+        p.Add(new InitiationPoint { Position = a.Collar, HoleId = a.Id });
+        Timing.Connect(p, a.Id, b.Id, null, 25);
+        Timing.Solve(p);
+        var doc = new Document(p);
+        doc.Select(new[] { a.Id }, record: false);
+        doc.Changed += (_, _) => Timing.Solve(doc.Project);
+
+        Assert.Throws<InvalidOperationException>(() => doc.Execute("Fail", pr =>
+        {
+            pr.Entities.RemoveAll(e => e is Hole);
+            throw new InvalidOperationException();
+        }));
+
+        Assert.Equal(2, doc.Project.Holes.Count(h => h.FiringTimeMs.HasValue));
+        Assert.Equal(25, doc.Project.Holes.First(h => h.Label == "2").FiringTimeMs);
+        Assert.Equal(b.Collar, doc.Project.Ties.Single().ToPos);
+        Assert.Contains(a.Id, doc.Selection);
+        Assert.False(doc.IsModified);
+        Assert.False(doc.CanUndo);
+    }
+
+    [Fact]
+    public void EditCopy_OfASurface_SharesTheMeshAndKeepsTheFieldsApart()
+    {
+        var s = new SurfaceEntity { Name = "Survey", Vertices = { new Vec3(0, 0, 0), new Vec3(1, 0, 0), new Vec3(0, 1, 0) }, Triangles = { 0, 1, 2 } };
+        var copy = (SurfaceEntity)s.EditCopy();
+        Assert.Same(s.Vertices, copy.Vertices);
+        Assert.Equal(1, copy.TriangleCount);
+        copy.Name = "Edited";
+        Assert.Equal("Survey", s.Name);
+        // anything else is a copy of its own
+        var line = new PolylineEntity { Points = { new Vec3(0, 0, 0) } };
+        Assert.NotSame(line.Points, ((PolylineEntity)line.EditCopy()).Points);
+    }
+
+    [Fact]
+    public void SafeFile_ReplacesTheFile_AndAFailureLeavesTheOldOne()
+    {
+        var dir = Directory.CreateTempSubdirectory("safefile").FullName;
+        var path = Path.Combine(dir, "settings.json");
+        try
+        {
+            SafeFile.WriteAllText(path, "старое");
+            SafeFile.WriteAllText(path, "новое");
+            Assert.Equal("новое", File.ReadAllText(path));
+            File.SetAttributes(path, FileAttributes.ReadOnly);
+            Assert.ThrowsAny<Exception>(() => SafeFile.WriteAllText(path, "третье"));
+            Assert.Equal("новое", File.ReadAllText(path));
+            Assert.Single(Directory.GetFiles(dir));
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+            Directory.Delete(dir, true);
+        }
     }
 
     [Fact]

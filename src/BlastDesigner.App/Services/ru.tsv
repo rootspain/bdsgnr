@@ -1001,8 +1001,6 @@ View everything	Показать всё
 View selection	Показать выделенное
 View tools	Инструменты просмотра
 Visible	Видимый
-Visual style	Визуальный стиль
-Visual style…	Визуальный стиль…
 Visualize timing	Визуализация времени
 Vod	Скорость детонации
 Volume	Объём
@@ -1663,7 +1661,6 @@ ui:Program settings	Настройки
 ui:Blast properties	Свойства взрыва
 ui:Design data	Проектные данные
 ui:Site coordinate system	Система координат
-ui:Visual style	Оформление
 ui:Laser wizard	Мастер лазера
 ui:Survey points	Точки съёмки
 ui:Survey stations	Станции съёмки
@@ -1808,6 +1805,38 @@ ui:Vibration records	Анализ сейсмограмм
 ui:Fragmentation	Фрагментация
 ui:Prediction	Прогноз
 ui:Inputs	Исходные данные
+ui:Resources	Ресурсы
+ui:Blast	Взрыв
+ui:Place	Место
+ui:Author and notes	Автор и заметки
+ui:Rock	Порода
+ui:Results	Результаты
+ui:Digging	Экскавация
+ui:Rating	Оценка
+ui:Intervals	Интервалы
+ui:Limits	Пределы
+ui:Airblast	ВУВ
+ui:Summary block	Блок сводки
+ui:Position	Положение
+ui:Redrilling	Перебуривание
+ui:Move	Сдвиг
+ui:Rotate	Поворот
+ui:Scale	Масштаб
+ui:Station	Станция
+ui:Heights	Высоты
+ui:Points	Точки
+ui:Surface	Поверхность
+ui:Layer	Слой
+ui:Display	Отображение
+ui:Type	Тип
+ui:Rule	Правило
+ui:Alternates	Замены
+ui:Deck	Заряд
+ui:Decks	Заряды
+ui:Preview	Образец
+ui:Format	Формат
+ui:Page	Страница
+ui:t/m³	т/м³
 ui:Quality control	Контроль качества
 ui:Bullseye	Мишень
 ui:Exceptions	Аналитика
@@ -2135,7 +2164,11 @@ ui:No resources yet: add one with the button on the left.	Ресурсов по�
 ui:Select a resource in the list.	Выберите ресурс в списке.
 ui:General	Основное
 ui:Manufacturer	Производитель
-ui:Kind	Тип
+ui:Product kind	Вид
+ui:Every product has a kind. It sets how the program calculates the product in the charge, the ties and the quantities. Types and groups are made up of kinds, and each family belongs to a kind.	Вид есть у каждого продукта. Он определяет, как программа считает продукт в заряде, связях и объёмах. Из видов составляются типы и группы, а каждое семейство относится к одному виду.
+ui:Types are step 1 of the Initiation catalogue: the initiation systems whose products are used for ties. A type is made up of kinds and only narrows the choice. Types do not affect the calculations.	Типы — это шаг 1 окна «Каталог СИ»: системы инициирования, продукты которых используются для связей. Тип состоит из видов и только сужает выбор. На расчёты типы не влияют.
+ui:Families are step 2 of the Initiation catalogue: within a type they bring together the products of one line, and the Variant step then picks a product by its delay. Families do not affect the calculations.	Семейства — это шаг 2 окна «Каталог СИ»: внутри типа они объединяют продукты одной линейки, а на шаге «Вариант» выбирается продукт по задержке. На расчёты семейства не влияют.
+ui:Groups are the filter chips above the list on the Products tab. With a chip of one kind chosen, Add makes a product of that kind at once. Groups do not affect the calculations.	Группы — это чипы-фильтры над списком на вкладке «Продукты». Если выбран чип с одним видом, кнопка «Добавить» сразу создаёт продукт этого вида. На расчёты группы не влияют.
 ui:Parameters	Параметры
 ui:Cost and colour	Стоимость и цвет
 ui:Cost	Стоимость
@@ -2157,6 +2190,18 @@ ui:Viewport	Вьюпорт
 ui:Snapping and picking	Привязка и выбор
 ui:Files	Файлы
 ui:Interface language	Язык интерфейса
+ui:Project properties	Свойства проекта
+ui:Deleted or moved	Удалён или перемещён
+ui:Size: {0}	Размер: {0}
+ui:<calculating...>	<вычисляется...>
+{0:0} KB	{0:0} КБ
+Project properties	Свойства проекта
+Project properties…	Свойства проекта…
+Vibration events	События вибрации
+ui:Designing	Проектирование
+ui:Predictions	Прогнозы
+ui:Totals	Итоги
+ui:Shift	Смещение
 ui:Applies after a restart	Применится после перезапуска
 ui:Dark	Тёмная
 ui:Light	Светлая

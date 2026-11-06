@@ -164,7 +164,9 @@ public static class Version6Windows
         var host = new ContentControl();
         void Refresh()
         {
-            var kpis = Analysis.Dashboard(vm.Project!);
+            // an undo replaces the project, and these windows stay open while another one opens, with none in between
+            if (vm.Project is not { } p) return;
+            var kpis = Analysis.Dashboard(p);
             var panel = new WrapPanel();
             foreach (var g in kpis.GroupBy(k => k.Group))
             {
@@ -193,19 +195,19 @@ public static class Version6Windows
 
     public static void BurdenCheck(MainViewModel vm)
     {
-        var p = vm.Project!;
         var tol = Number(20, 1, 90);
         var host = new ContentControl();
         List<Analysis.BurdenCheck> checks = new();
         void Update()
         {
+            if (vm.Project is not { } p) return;
             checks = Analysis.CheckBurden(p, (double)(tol.Value ?? 20) / 100);
             host.Content = Table(new[] { "Hole", "Burden", "Spacing", "Hole ahead", "" },
                 checks.OrderBy(c => c.Hole.Label).Select(c => new[] { c.Hole.Label, c.Burden is double b ? F(b) : Loc.T("front row"), c.Spacing is double s ? F(s) : "", c.AheadHole?.Label ?? "", c.Low ? "⚠ " + Loc.T("Low burden") : c.High ? "⚠ " + Loc.T("High burden") : "" }));
         }
         tol.ValueChanged += (_, _) => Update();
         Update();
-        var top = Stack(Note(Loc.F("Burden is measured towards the free face (blast orientation {0:0}°). Design burden {1:0.00} m, spacing {2:0.00} m.", p.Header.BlastOrientation, p.Design.Burden, p.Design.Spacing)), Inputs(("Tolerance (%)", tol)));
+        var top = Stack(Note(Loc.F("Burden is measured towards the free face (blast orientation {0:0}°). Design burden {1:0.00} m, spacing {2:0.00} m.", vm.Project!.Header.BlastOrientation, vm.Project.Design.Burden, vm.Project.Design.Spacing)), Inputs(("Tolerance (%)", tol)));
         Dialogs.ShowWindow("Burden check view", WithButtons(Stack(top, host),
             ("Select flagged holes", () => vm.Doc!.Select(checks.Where(c => c.Low || c.High).Select(c => c.Hole.Id))),
             ("Highlight", () => Highlight(vm, checks.Where(c => c.Low || c.High).Select(c => c.Hole.Id))),
@@ -254,13 +256,13 @@ public static class Version6Windows
 
     public static void ChargeVsTime(MainViewModel vm)
     {
-        var p = vm.Project!;
-        var bin = Number(p.Vibration.WindowMs, 1, 1000);
+        var bin = Number(vm.Project!.Vibration.WindowMs, 1, 1000);
         var chart = new SkiaView();
         var info = new TextBlock { Margin = new Thickness(0, 6) };
         List<Analysis.ChargeTimePoint> pts = new();
         void Update()
         {
+            if (vm.Project is not { } p) return;
             pts = Analysis.ChargeVsTime(p, (double)(bin.Value ?? 8));
             chart.Paint = (c, w, h) => Chart.Draw(c, w, h, new[]
             {
@@ -278,13 +280,13 @@ public static class Version6Windows
 
     public static void TimingOverlap(MainViewModel vm)
     {
-        var p = vm.Project!;
-        var radius = Number(p.Design.Spacing * 1.5, 0.5, 1000, 0.5);
-        var window = Number(p.Vibration.WindowMs, 0.5, 1000, 0.5);
+        var radius = Number(vm.Project!.Design.Spacing * 1.5, 0.5, 1000, 0.5);
+        var window = Number(vm.Project.Vibration.WindowMs, 0.5, 1000, 0.5);
         var host = new ContentControl();
         List<(Hole A, Hole B, double DeltaMs, double Distance)> pairs = new();
         void Update()
         {
+            if (vm.Project is not { } p) return;
             pairs = Analysis.TimingOverlap(p, (double)(radius.Value ?? 6), (double)(window.Value ?? 8));
             host.Content = Table(new[] { "Hole", "Neighbour", "Δt (ms)", "Distance (m)" }, pairs.Select(x => new[] { x.A.Label, x.B.Label, F(x.DeltaMs, "0.#"), F(x.Distance) }));
         }
@@ -298,12 +300,12 @@ public static class Version6Windows
 
     public static void VolumeOverview(MainViewModel vm)
     {
-        var p = vm.Project!;
         var modes = new[] { "All", "Row", "Hole type", "Material type" };
         var by = new ComboBox { ItemsSource = modes.Select(Loc.T).ToList(), SelectedIndex = 1, Width = 180 };
         var host = new ContentControl();
         void Update()
         {
+            if (vm.Project is not { } p) return;
             var groups = Analysis.VolumeOverview(p, modes[Math.Max(0, by.SelectedIndex)]);
             host.Content = Table(new[] { "Group", "Holes", "Volume m³", "Tonnes", "Explosive kg", "Drilled m", "kg/m³" },
                 groups.Select(g => new[] { g.Group, g.Holes.ToString(), F(g.Volume, "0"), F(g.Tonnes, "0"), F(g.ExplosiveKg, "0.0"), F(g.DrilledM, "0.0"), F(g.PowderFactor, "0.000") }));
@@ -317,12 +319,12 @@ public static class Version6Windows
 
     public static void Flyrock(MainViewModel vm)
     {
-        var p = vm.Project!;
         var host = new ContentControl();
         var info = Note("");
-        Engine.Flyrock.Report r = Engine.Flyrock.Compute(p);
+        Engine.Flyrock.Report r = Engine.Flyrock.Compute(vm.Project!);
         void Update()
         {
+            if (vm.Project is not { } p) return;
             r = Engine.Flyrock.Compute(p);
             host.Content = Table(new[] { "Hole", "kg/m", "Burden m", "Stemming m", "Face burst m", "Cratering m", "Rifling m", "Max m" },
                 r.Holes.OrderByDescending(h => h.Max).Select(h => new[] { h.Hole.Label, F(h.ChargePerMetre, "0.0"), F(h.Burden), F(h.Stemming), F(h.FaceBurst, "0"), F(h.Cratering, "0"), F(h.Rifling, "0"), F(h.Max, "0") }));
@@ -335,6 +337,7 @@ public static class Version6Windows
             ("Constants…", () => _ = vm.EditFlyrockModel()),
             ("Draw clearance zone", () =>
             {
+                if (vm.Project is not { } p) return;
                 var poly = Engine.Flyrock.ClearancePolygon(p, r);
                 if (poly.Count > 2) vm.Change("Flyrock clearance zone", pr => pr.Add(new PolylineEntity { Points = poly, Closed = true, Kind = LineKind.ClearanceZone, Label = Loc.F("Flyrock clearance {0:0} m", r.Clearance) }, pr.GetOrCreateLayer(StandardLayers.Analysis, 0xFFDC2626, "Analysis")));
             }),
@@ -345,16 +348,16 @@ public static class Version6Windows
 
     public static void Fragmentation(MainViewModel vm)
     {
-        var p = vm.Project!;
         var chart = new SkiaView();
         var info = new SelectableTextBlock { Margin = new Thickness(0, 6), TextWrapping = TextWrapping.Wrap };
-        Engine.Fragmentation.Result r = Engine.Fragmentation.Compute(p);
+        Engine.Fragmentation.Result r = Engine.Fragmentation.Compute(vm.Project!);
         // the sizes in the unit of the fragmentation inputs
-        var unit = SizeUnits.Of(p.Fragmentation);
+        var unit = SizeUnits.Of(vm.Project!.Fragmentation);
         string Size(double cm) => SizeUnits.FromCm(cm, unit).ToString(SizeUnits.Format(unit), CultureInfo.CurrentCulture) + " " + Loc.Ui(SizeUnits.Symbol(unit));
         List<(double, double)> InUnit(List<(double SizeCm, double PassingPct)> curve) => curve.Select(c => (SizeUnits.FromCm(c.SizeCm, unit), c.PassingPct)).ToList();
         void Update()
         {
+            if (vm.Project is not { } p) return;
             var sel = vm.Doc!.SelectedHoles.ToList();
             r = Engine.Fragmentation.Compute(p, sel.Count > 0 ? sel : null);
             unit = SizeUnits.Of(p.Fragmentation);
@@ -373,29 +376,31 @@ public static class Version6Windows
             chart.InvalidateVisual();
         }
         Update();
+        // it reports on the selected holes when there are any
         vm.ModelRefreshed += Update;
+        vm.SelectionChanged += Update;
         var w = Dialogs.ShowWindow("Fragmentation prediction", WithButtons(Stack(new Panel(), chart, info),
             ("Inputs…", () => _ = vm.EditFragmentationModel()),
             ("Recalculate", Update),
             ("Export CSV…", () => _ = vm.SaveCsv("Export fragmentation", "_fragmentation", Interchange.ExportFragmentation(r, unit)))), 900, 600);
-        w.Closed += (_, _) => vm.ModelRefreshed -= Update;
+        w.Closed += (_, _) => { vm.ModelRefreshed -= Update; vm.SelectionChanged -= Update; };
     }
 
     /// <summary>Site-law regression of the project's vibration records, plus a scale-law calculator for any distance and charge.</summary>
     public static void SiteLaw(MainViewModel vm)
     {
-        var p = vm.Project!;
-        var records = ProjectJson.DeepClone(p.VibrationRecords);
+        var records = ProjectJson.DeepClone(vm.Project!.VibrationRecords);
         var chart = new SkiaView();
         var result = new SelectableTextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6) };
         var distance = Number(500, 1, 100000, 10);
-        var charge = Number(Math.Max(1, Timing.MaxInstantaneousCharge(p, p.Vibration.WindowMs)), 0.1, 1e6, 10);
+        var charge = Number(Math.Max(1, Timing.MaxInstantaneousCharge(vm.Project, vm.Project.Vibration.WindowMs)), 0.1, 1e6, 10);
         var confidence = Number(95, 50, 99.9, 1);
         var calc = new TextBlock { Margin = new Thickness(0, 4), TextWrapping = TextWrapping.Wrap };
         Engine.SiteLaw.Fit? fit = null;
         var editor = new ListEditor<VibrationRecord>(records, r => $"{(r.Use ? "" : "✗ ")}{(r.Name.Length > 0 ? r.Name : "?")}  {r.PpvMm:0.##} mm/s @ {r.DistanceM:0} m",
             () => new VibrationRecord { Name = Loc.F("Event {0}", records.Count + 1), Date = DateTime.Today, ChargeKg = (double)(charge.Value ?? 100), DistanceM = (double)(distance.Value ?? 500) },
             r => ProjectJson.DeepClone(r));
+        editor.ListWidth = 190;
         void Update()
         {
             fit = Engine.SiteLaw.Regress(records);
@@ -417,6 +422,7 @@ public static class Version6Windows
             chart.InvalidateVisual();
             result.Text = fit == null ? Loc.T("Add at least two events with distance, charge and PPV to fit the site law.") :
                 Loc.F("PPV = K · (D/√Q)^-B.  Events: {0}.  K(50 %) = {1:0}, B = {2:0.000}, R² = {3:0.000}, standard error {4:0.000} (log10).  K at {5:0.#} % = {6:0}.", fit.Count, fit.K50, fit.B, fit.R2, fit.StdError, conf * 100, fit.KAt(conf));
+            if (vm.Project is not { } p) return;
             var d = (double)(distance.Value ?? 500);
             var q = (double)(charge.Value ?? 100);
             var k = fit?.K50 ?? p.Vibration.SiteK;
@@ -440,7 +446,7 @@ public static class Version6Windows
         right.Children.Add(chart);
         right.Children.Add(result);
         right.Children.Add(calcPanel);
-        var split = new Grid { ColumnDefinitions = new ColumnDefinitions("420,8,*") };
+        var split = new Grid { ColumnDefinitions = new ColumnDefinitions("540,8,*") };
         Grid.SetColumn(right, 2);
         split.Children.Add(editor);
         split.Children.Add(right);
@@ -472,11 +478,11 @@ public static class Version6Windows
 
     public static void ExclusionZone(MainViewModel vm)
     {
-        var p = vm.Project!;
         var text = new SelectableTextBlock { Margin = new Thickness(8), FontSize = 14 };
-        Engine.ExclusionZone.Result r = Engine.ExclusionZone.Compute(p);
+        Engine.ExclusionZone.Result r = Engine.ExclusionZone.Compute(vm.Project!);
         void Update()
         {
+            if (vm.Project is not { } p) return;
             r = Engine.ExclusionZone.Compute(p);
             text.Text = string.Join("\n", new[]
             {
@@ -495,6 +501,7 @@ public static class Version6Windows
             ("Recalculate", Update),
             ("Draw exclusion zone", () =>
             {
+                if (vm.Project is not { } p) return;
                 var holes = p.Holes.Where(h => !h.IsDummy).ToList();
                 if (holes.Count == 0) return;
                 var zone = GeneralOps.ClearanceZone(holes, r.Radius);
@@ -507,12 +514,12 @@ public static class Version6Windows
 
     public static void Tolerances(MainViewModel vm)
     {
-        var p = vm.Project!;
         var host = new ContentControl();
         var info = Note("");
         List<ToleranceResult> results = new();
         void Update()
         {
+            if (vm.Project is not { } p) return;
             results = Tolerance.Check(p);
             var t = p.Tolerances;
             host.Content = Table(new[] { "Hole", "Collar dev m", "Depth dev m", "Toe dev m", "Angle dev °", "Bearing dev °", "Result" },

@@ -34,21 +34,6 @@ public sealed class PreviewOverlay : IOverlay
         Snap = null;
     }
 
-    /// <summary>
-    /// A copy for one frame. The frame is drawn on the render thread while tools keep changing the lists on the UI thread;
-    /// drawing the live lists failed with "collection was modified".
-    /// </summary>
-    public PreviewOverlay Snapshot()
-    {
-        var copy = new PreviewOverlay { ScreenRect = ScreenRect, Snap = Snap, Moving = Moving, MoveOffset = MoveOffset };
-        foreach (var (pts, closed, col) in Lines) copy.Lines.Add((pts.ToArray(), closed, col));
-        foreach (var (pts, col) in Guides) copy.Guides.Add((pts.ToArray(), col));
-        copy.Points.AddRange(Points);
-        copy.Labels.AddRange(Labels);
-        copy.Markers.AddRange(Markers);
-        return copy;
-    }
-
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, PathEffect = SKPathEffect.CreateDash(new[] { 5f, 3f }, 0) };
@@ -117,7 +102,7 @@ public sealed class TimingContourOverlay : IOverlay
     public double? AnimationTimeMs { get; set; }
 
     // The contours of the last holes and interval: rebuilt only when a hole moves or changes time, not on every frame
-    // of panning or of the animation. Drawn on the render thread, so guarded.
+    // of panning or of the animation.
     private readonly object _lock = new();
     private int _key;
     private List<PolylineEntity> _contours = new();
@@ -350,9 +335,35 @@ public sealed class TimingVectorOverlay : IOverlay
     public double ReliefLow { get; set; } = 4;
     public double ReliefHigh { get; set; } = 15;
 
+    // The analysis of the last holes: rebuilt only when a hole moves or changes time, not on every frame of panning.
+    private readonly object _lock = new();
+    private BlastProject? _project;
+    private int _key;
+    private List<Timing.HoleTimingAnalysis> _analysis = new();
+
+    /// <summary>The analysis drawn: the last one while nothing it depends on has changed.</summary>
+    public List<Timing.HoleTimingAnalysis> Analysis(BlastProject project)
+    {
+        var key = new HashCode();
+        key.Add(NeighbourRadius); key.Add(project.Vibration.WindowMs);
+        foreach (var h in project.Holes) { key.Add(h.Collar); key.Add(h.FiringTimeMs); key.Add(h.IsDummy); }
+        var k = key.ToHashCode();
+        lock (_lock)
+        {
+            // undo brings a new project with new holes, whose values the results read
+            if (_project != project || _key != k)
+            {
+                _analysis = Timing.Analyse(project, NeighbourRadius, project.Vibration.WindowMs);
+                _project = project;
+                _key = k;
+            }
+            return _analysis;
+        }
+    }
+
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
-        var res = Timing.Analyse(project, NeighbourRadius, project.Vibration.WindowMs);
+        var res = Analysis(project);
         using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2 };
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var text = new SKPaint { IsAntialias = true, TextSize = 9, Color = PlanRenderer.Ink };

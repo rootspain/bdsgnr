@@ -23,6 +23,31 @@ public sealed partial class MainViewModel
 
     public List<MenuEntry> BuildMenu() => AddVersion6Menus(BuildBaseMenu());
 
+    /// <summary>
+    /// The recent files for a menu: the name of each over its folder, when it was opened, and in the tip its size or that it is
+    /// gone. A file from before the times were kept shows when it changed.
+    /// </summary>
+    public IEnumerable<MenuEntry> RecentEntries() => Settings.RecentFiles.Select(f =>
+    {
+        var known = Settings.RecentOpened.ContainsKey(f);
+        return new MenuEntry
+        {
+            Header = System.IO.Path.GetFileName(f),
+            Detail = BlastDesigner.App.Views.Ui.ShortPath(System.IO.Path.GetDirectoryName(f) ?? ""),
+            Note = known ? IO.ProgramSettings.FormatDateTime(Settings.RecentOpened[f]) : null,
+            Later = () => IO.ProgramSettings.ReadFile(f) is { } file
+                ? (SizeTip(FileSize(file.Size)), known ? null : IO.ProgramSettings.FormatDateTime(file.Changed))
+                : (Loc.Ui("Deleted or moved"), null),
+            Pending = SizeTip(Loc.Ui("<calculating...>")),
+            Action = Run(() => OpenRecent(f))
+        };
+    });
+
+    private static string SizeTip(string size) => Loc.F(Loc.Ui("Size: {0}"), size);
+
+    private static string FileSize(long bytes) =>
+        bytes < 1024 * 1024 ? Loc.F("{0:0} KB", Math.Max(1, bytes / 1024.0)) : Loc.F("{0:0.0} MB", bytes / 1048576.0);
+
     private List<MenuEntry> BuildBaseMenu() => new()
     {
         Sub("File",
@@ -56,7 +81,7 @@ public sealed partial class MainViewModel
                 Item("Reports…", Run(PrintReports), P, "Ctrl+P"),
                 Item("Plan…", Run(PrintPlan), P)),
             Separator,
-            new MenuEntry { Header = "Recent files", Dynamic = () => Settings.RecentFiles.Select((f, i) => Item($"{i + 1} {f}", Run(() => OpenRecent(f)))) },
+            new MenuEntry { Header = "Recent files", Dynamic = RecentEntries },
             Separator,
             Item("Exit", Run(Exit), null, "Alt+F4")),
         Sub("Edit",
@@ -79,8 +104,8 @@ public sealed partial class MainViewModel
             Separator,
             Item("Program settings…", Run(EditProgramSettings)),
             Item("Templates…", Run(ManageTemplates)),
-            Item("Visual style…", Run(EditVisualStyle)),
             Separator,
+            Item("Project properties…", Run(EditProjectProperties), P),
             Item("Blast properties…", Run(EditBlastProperties), P),
             Item("Design data…", Run(EditDesignData), P),
             Item("Hole and material types…", Run(EditHoleTypes), P),

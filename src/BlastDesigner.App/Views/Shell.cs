@@ -152,6 +152,21 @@ public static class Ui
         };
     }
 
+    /// <summary>A folder cut in the middle to fit a menu: the drive and the last folders stay ("D:\Работа\…\Взрывы\2026").</summary>
+    public static string ShortPath(string folder, int max = 48)
+    {
+        if (folder.Length <= max) return folder;
+        var parts = folder.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var tail = "";
+        for (int i = parts.Length - 1; i > 0; i--)
+        {
+            var longer = Path.DirectorySeparatorChar + parts[i] + tail;
+            if (parts[0].Length + 2 + longer.Length > max) break;
+            tail = longer;
+        }
+        return tail.Length > 0 ? $"{parts[0]}{Path.DirectorySeparatorChar}…{tail}" : "…" + folder[^(max - 1)..];
+    }
+
     public static StackPanel Row(double spacing, params Control[] children)
     {
         var p = new StackPanel { Orientation = Orientation.Horizontal, Spacing = spacing, VerticalAlignment = VerticalAlignment.Center };

@@ -13,7 +13,8 @@ namespace BlastDesigner.App.Views;
 /// </summary>
 public sealed class CatalogueEditor : Grid
 {
-    public enum Table { Families, Kinds, Groups, Types }
+    /// <summary>The tables in the order of their tabs, after the products.</summary>
+    public enum Table { Types, Kinds, Families, Groups }
 
     private static readonly IBrush Warn = new SolidColorBrush(Color.FromUInt32(0xFFF0C13A));
     private static readonly IBrush WarnSoft = new SolidColorBrush(Color.FromUInt32(0x1AF0C13A));
@@ -180,7 +181,7 @@ public sealed class CatalogueEditor : Grid
         _props.Children.Add(Labeled("Name", name));
         switch (r)
         {
-            case CatalogueFamily family: _props.Children.Add(Labeled("Kind", FamilyKind(family))); break;
+            case CatalogueFamily family: _props.Children.Add(Labeled("Product kind", FamilyKind(family))); break;
             case CatalogueKind kind: _props.Children.Add(Labeled("How the program calculates it", Behaviour(kind))); break;
             case CatalogueGroup group: _props.Children.Add(Labeled("Kinds", KindChecks(group.KindIds))); break;
             case CatalogueType type:

@@ -14,30 +14,8 @@ using BlastDesigner.IO;
 namespace BlastDesigner.App.Views;
 
 /// <summary>Edit ▸ Fragmentation inputs: the Kuz-Ram rock factor (Cunningham A and Protodyakonov f) and the rock mass, drilling and size thresholds.</summary>
-public static class FragmentationWindow
-{
-    public static async Task<FragmentationModel?> Show(MainViewModel vm)
-    {
-        var form = new FragmentationForm(vm.Project!);
-        var w = new Window
-        {
-            Title = Loc.T("Fragmentation inputs"),
-            Width = 640,
-            Height = 820,
-            MinWidth = 520,
-            MinHeight = 480,
-            Background = Look.Ground,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = form
-        };
-        form.Closing = ok => { form.Applied = ok; w.Close(); };
-        await Dialogs.ShowModal(w);
-        return form.Applied ? form.Draft : null;
-    }
-}
-
 /// <summary>
-/// Content of the fragmentation inputs window. Public so the UI smoke test can reach it.
+/// The fragmentation inputs page of the project properties. Public so the UI smoke test can reach it.
 /// The rock factor has two fields: A (Cunningham, the international classification) and f (Protodyakonov, the rock
 /// strength σc = 10·f MPa). They are not converted into each other by a formula: entering one puts in the other the
 /// matching value of the other table (<see cref="RockTypes"/> for A, <see cref="Categories"/> for f, see <see cref="Matching"/>).
@@ -239,9 +217,6 @@ public sealed class FragmentationForm : DockPanel
         var header = Header();
         SetDock(header, Dock.Top);
         Children.Add(header);
-        var footer = Footer();
-        SetDock(footer, Dock.Bottom);
-        Children.Add(footer);
 
         var body = new StackPanel { Spacing = 18, Margin = new Thickness(16, 14, 16, 18) };
         body.Children.Add(RockFactorCard());
@@ -259,10 +234,6 @@ public sealed class FragmentationForm : DockPanel
         }));
         Children.Add(new ScrollViewer { Content = body });
 
-        AddHandler(KeyDownEvent, (_, e) =>
-        {
-            if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.Control) { Commit(); Closing?.Invoke(true); e.Handled = true; }
-        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         Refresh();
     }
 
@@ -320,8 +291,6 @@ public sealed class FragmentationForm : DockPanel
         catch (InvalidDataException) { await Dialogs.Info(L("The file is not a fragmentation preset.")); }
         catch (Exception ex) { Dialogs.ShowError(ex); }
     }
-    public bool Applied { get; set; }
-    public Action<bool>? Closing { get; set; }
 
     /// <summary>The rock factor the calculation uses with the inputs as they are now.</summary>
     public double RockFactor => Fragmentation.RockFactor(Draft, _p.Design.RockDensity);
@@ -370,44 +339,6 @@ public sealed class FragmentationForm : DockPanel
             Padding = new Thickness(16, 12),
             Child = g
         };
-    }
-
-    private Control Footer()
-    {
-        var cancel = new Button
-        {
-            Content = Loc.T("Cancel"),
-            Height = 32,
-            Padding = new Thickness(14, 0),
-            CornerRadius = new CornerRadius(6),
-            BorderBrush = Look.LineStrong,
-            BorderThickness = new Thickness(1),
-            Background = Brushes.Transparent,
-            VerticalContentAlignment = VerticalAlignment.Center,
-            IsCancel = true
-        };
-        cancel.Click += (_, _) => Closing?.Invoke(false);
-        var ok = new Button
-        {
-            Content = L("Apply"),
-            Height = 32,
-            Padding = new Thickness(16, 0),
-            CornerRadius = new CornerRadius(6),
-            BorderThickness = new Thickness(1),
-            VerticalContentAlignment = VerticalAlignment.Center,
-            Classes = { "primary" },
-            Name = "apply"
-        };
-        // Not IsDefault: Enter commits the field being typed in; Ctrl+Enter applies.
-        ToolTip.SetTip(ok, L("Apply") + " (Ctrl+Enter)");
-        ok.Click += (_, _) => { Commit(); Closing?.Invoke(true); };
-        var hint = new TextBlock { Text = L("Enter — confirm the field, Ctrl+Enter — apply, Esc — cancel"), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        var buttons = Ui.Row(8, cancel, ok);
-        var dock = new DockPanel();
-        SetDock(buttons, Dock.Right);
-        dock.Children.Add(buttons);
-        dock.Children.Add(hint);
-        return new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(16, 12), Child = dock };
     }
 
     /// <summary>The two rock factor fields side by side, each with what it means and where its value comes from.</summary>

@@ -8,6 +8,8 @@ namespace BlastDesigner.IO;
 public sealed class ProgramSettings
 {
     public List<string> RecentFiles { get; set; } = new();
+    /// <summary>When each of the <see cref="RecentFiles"/> was last opened or saved under its name; those from before this was kept have no time.</summary>
+    public Dictionary<string, DateTime> RecentOpened { get; set; } = new();
     /// <summary>Files pinned at the top of the startup assistant; they stay there when they drop off <see cref="RecentFiles"/>.</summary>
     public List<string> PinnedFiles { get; set; } = new();
     public string LastFolder { get; set; } = string.Empty;
@@ -157,7 +159,27 @@ public sealed class ProgramSettings
     public void Save()
     {
         Directory.CreateDirectory(AppDataFolder);
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, ProjectJson.Indented));
+        SafeFile.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, ProjectJson.Indented));
+    }
+
+    /// <summary>A date and time as the system writes them: the regional settings on Windows and macOS, the locale on Linux.</summary>
+    public static string FormatDateTime(DateTime time) => time.ToString("g", System.Globalization.CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// Size and time of change of a file, null when it is gone or out of reach. A path on a lost network drive can take many
+    /// seconds to answer, so this is for a background thread.
+    /// </summary>
+    public static (long Size, DateTime Changed)? ReadFile(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            return file.Exists ? (file.Length, file.LastWriteTime) : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or System.Security.SecurityException)
+        {
+            return null;
+        }
     }
 
     public void AddRecent(string path)
@@ -165,7 +187,32 @@ public sealed class ProgramSettings
         RecentFiles.RemoveAll(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
         RecentFiles.Insert(0, path);
         if (RecentFiles.Count > MaxRecentFiles) RecentFiles.RemoveRange(MaxRecentFiles, RecentFiles.Count - MaxRecentFiles);
+        RecentOpened[path] = DateTime.Now;
+        foreach (var gone in RecentOpened.Keys.Where(k => !RecentFiles.Contains(k)).ToList()) RecentOpened.Remove(gone);
         LastFolder = Path.GetDirectoryName(path) ?? LastFolder;
+    }
+}
+
+/// <summary>Writes a file so that a failure on the way leaves the old one whole.</summary>
+public static class SafeFile
+{
+    /// <summary>The text goes to a temporary file next to the target, reaches the disk, and only then replaces it.</summary>
+    public static void WriteAllText(string path, string text)
+    {
+        var tmp = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            using (var fs = new FileStream(tmp, FileMode.CreateNew, FileAccess.Write))
+            {
+                fs.Write(System.Text.Encoding.UTF8.GetBytes(text));
+                fs.Flush(true);
+            }
+            File.Move(tmp, path, true);
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
     }
 }
 

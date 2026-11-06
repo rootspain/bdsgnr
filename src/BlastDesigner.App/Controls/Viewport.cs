@@ -113,7 +113,7 @@ public sealed class Viewport : Control
         var opt = OptionsSource?.Invoke() ?? new SceneOptions();
         var all = new List<IOverlay>(opt.Overlays);
         all.AddRange(Overlays);
-        all.Add(Preview.Snapshot());
+        all.Add(Preview);
         var options = new SceneOptions
         {
             Selection = opt.Selection,
@@ -137,10 +137,15 @@ public sealed class Viewport : Control
             MovedEntities = Preview.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null,
             MoveOffset = Preview.MoveOffset
         };
-        // The draw runs later on the render thread while the UI thread keeps moving the camera (orbit, pan):
-        // a snapshot keeps every frame consistent instead of mixing two camera positions.
-        var cam = Camera.Clone();
-        context.Custom(new SkiaDraw(new Rect(Bounds.Size), canvas => PlanRenderer.Render(canvas, cam, project, options), ShowFps ? _stats : null));
+        // The frame is recorded here on the UI thread and the render thread only plays it back: it never reads the model
+        // or the camera, which the UI thread goes on changing. Drawn from the live lists a frame could fail or mix two states.
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        using var recorder = new SKPictureRecorder();
+        var canvas = recorder.BeginRecording(new SKRect(0, 0, (float)Bounds.Width, (float)Bounds.Height));
+        try { PlanRenderer.Render(canvas, Camera, project, options); }
+        catch (Exception ex) { IO.Log.Error("Render failed", ex); }
+        var frame = recorder.EndRecording();
+        context.Custom(new SkiaDraw(new Rect(Bounds.Size), frame, System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds, ShowFps ? _stats : null));
     }
 
     /// <summary>
@@ -171,18 +176,30 @@ public sealed class Viewport : Control
     private sealed class SkiaDraw : ICustomDrawOperation
     {
         private static bool _backendLogged;
-        private readonly Action<SKCanvas> _draw;
+        private readonly object _gate = new();
+        private SKPicture? _frame;
+        private readonly double _recordMs;
         private readonly FrameStats? _stats;
 
-        public SkiaDraw(Rect bounds, Action<SKCanvas> draw, FrameStats? stats)
+        public SkiaDraw(Rect bounds, SKPicture frame, double recordMs, FrameStats? stats)
         {
             Bounds = bounds;
-            _draw = draw;
+            _frame = frame;
+            _recordMs = recordMs;
             _stats = stats;
         }
 
         public Rect Bounds { get; }
-        public void Dispose() { }
+
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                _frame?.Dispose();
+                _frame = null;
+            }
+        }
+
         public bool Equals(ICustomDrawOperation? other) => false;
         public bool HitTest(Point p) => true;
 
@@ -200,10 +217,11 @@ public sealed class Viewport : Control
             canvas.Save();
             canvas.ClipRect(new SKRect(0, 0, (float)Bounds.Width, (float)Bounds.Height));
             var start = System.Diagnostics.Stopwatch.GetTimestamp();
-            try { _draw(canvas); }
+            try { lock (_gate) if (_frame != null) canvas.DrawPicture(_frame); }
             catch (Exception ex) { IO.Log.Error("Render failed", ex); }
-            _stats?.Draw(canvas, Bounds, System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
-            DrawMs += System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            var ms = _recordMs + System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            _stats?.Draw(canvas, Bounds, ms);
+            DrawMs += ms;
             Interlocked.Increment(ref _framesDrawn);
             canvas.Restore();
         }

@@ -499,6 +499,13 @@ Step("ribbon commands resolve", () =>
     var stages = vm.BuildStages();
     if (vm.MissingCommands.Count > 0) throw new Exception("unresolved: " + string.Join(" | ", vm.MissingCommands.Distinct()));
     Console.WriteLine($"     {stages.Count} stages, {stages.Sum(s => s.Groups.Count)} groups, {stages.Sum(s => s.Groups.Sum(g => g.Items.Count))} commands");
+    // the fragmentation group opens the available resources
+    var resources = stages.SelectMany(s => s.Groups).First(g => g.Name == "Fragmentation").Items.Single(i => i.Label == "Resources");
+    if (BlastDesigner.App.Services.Loc.Language == "ru" && BlastDesigner.App.Services.Loc.Ui(resources.Label) != "Ресурсы") throw new Exception("the button is not translated");
+    resources.Run!(); Pump();
+    var resourcesWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
+    if (resourcesWindow.Title != BlastDesigner.App.Services.Loc.T("Available resources")) throw new Exception("the button opened " + resourcesWindow.Title);
+    resourcesWindow.Close(); Pump();
 });
 Step("shell translations", () =>
 {
@@ -1334,9 +1341,39 @@ Step("resources: the tables add, edit, delete with their children and restore th
     Click(looseChip);
     if (ed.Visible.Count != 1 || ed.Visible[0] != product) throw new Exception($"the unassigned chip shows {ed.Visible.Count} products");
     Click(dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Content is string s && s.StartsWith(BlastDesigner.App.Services.Loc.F("All {0}", ""))));
+    // the tabs go down the chain, and the one clicked is the one underlined
+    var tabs = dlg.GetLogicalDescendants().OfType<Button>().Where(b => (b.Tag as string)?.StartsWith("section:") == true).ToList();
+    var tabOrder = string.Join(",", tabs.Select(b => ((string)b.Tag!)["section:".Length..]));
+    if (tabOrder != "Products,Types,Kinds,Families,Groups") throw new Exception("the tabs go " + tabOrder);
+    notes.Clear();
+    foreach (var tab in tabs)
+    {
+        Click(tab);
+        var underlined = tabs.Where(b => b.BorderBrush == BlastDesigner.App.Services.Look.Accent).ToList();
+        if (underlined.Count != 1 || underlined[0] != tab) throw new Exception($"{tab.Tag} open, underlined: {string.Join(",", underlined.Select(b => b.Tag))}");
+        // what a table is for shows on its tab, next to the count of resources; the products need no such note
+        var tableNote = dlg.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "tableNote");
+        var noted = (string)tab.Tag! != "section:Products";
+        if (tableNote.IsEffectivelyVisible != noted) throw new Exception($"the note on {tab.Tag}: {tableNote.IsEffectivelyVisible}");
+        if (!noted) continue;
+        if (BlastDesigner.App.Services.Loc.Language == "ru" && tableNote.Text!.Any(c => c is >= 'a' and <= 'z')) throw new Exception("the note is not translated");
+        if (!notes.Add(tableNote.Text!)) throw new Exception("the same note on two tabs");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, $"39j_resources_note_{((string)tab.Tag!)["section:".Length..]}.png"));
+    }
+    Click(tabs[0]);
+    // the field of the table of kinds is called a kind, in the product and in the family alike
+    void KindLabelShown(string where)
+    {
+        var label = BlastDesigner.App.Services.Loc.Ui("Product kind");
+        if (BlastDesigner.App.Services.Loc.Language == "ru" && label != "Вид") throw new Exception("the kind field is called " + label);
+        if (!dlg.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == label && t.IsEffectivelyVisible)) throw new Exception("no kind field in " + where);
+    }
+    KindLabelShown("the product");
     Click(ByTag("section:Families"));
     Click(ByName("tableAdd"));
     Rename("Smoke family");
+    KindLabelShown("the family");
     var family = ed.Tables.Families.First(f => f.Name == "Smoke family");
     family.KindId = kind.Id;
     product.FamilyId = family.Id;
@@ -2538,6 +2575,355 @@ Step("DXF import window: hidden layers as chips with a note, toggles, Import ret
     dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "61_dxf_import.png"));
     form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "import").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     if (!task.IsCompleted || task.Result?.HiddenLayers != CadHiddenLayers.Skip) throw new Exception("Import did not return the chosen options");
+});
+Step("A selection touches no model views, the fragmentation window follows it; the recovery file is made in the background", () =>
+{
+    vm.Change("Setup", p =>
+    {
+        var h = p.Add(new Hole { Label = "selection-only", Collar = new Vec3(5, 6, 7) });
+        Charging.ApplyRules(p, new[] { h });
+    });
+    Pump();
+    var hole = vm.Project!.Holes.First(h => h.Label == "selection-only");
+    vm.Doc!.ClearSelection(); Pump();
+    Version6Windows.Fragmentation(vm); Pump();
+    var window = BlastDesigner.App.Services.Dialogs.LastShown!;
+    string Report() => string.Join(" ", window.GetLogicalDescendants().OfType<SelectableTextBlock>().Select(t => t.Text));
+    var all = Report();
+    int models = 0, refreshes = 0;
+    Action model = () => models++, refresh = () => refreshes++;
+    vm.ModelRefreshed += model;
+    vm.SelectionRefreshed += refresh;
+    vm.Doc.Select(new[] { hole.Id }); Pump();
+    if (models != 0 || refreshes != 1) throw new Exception($"a selection: {models} model refreshes, {refreshes} selection refreshes");
+    if (Report() == all) throw new Exception("the fragmentation window did not follow the selection");
+    vm.Undo(); Pump();
+    if (models != 0 || vm.Doc.Selection.Count != 0) throw new Exception($"undo of a selection: {models} model refreshes, {vm.Doc.Selection.Count} selected");
+    vm.ModelRefreshed -= model;
+    vm.SelectionRefreshed -= refresh;
+    window.Close(); Pump();
+
+    var file = vm.Recovery.PathFor(vm.Doc.FilePath, vm.Project.Id);
+    var writing = vm.WriteRecovery();
+    while (!writing.IsCompleted) { Pump(); Thread.Sleep(5); }
+    using (var stream = File.OpenRead(file))
+    {
+        var back = ProjectFile.Read(stream);
+        if (back.Entities.Count != vm.Project.Entities.Count || !back.Holes.Any(h => h.Label == "selection-only")) throw new Exception("the recovery file is not the project");
+    }
+    vm.Recovery.Clear(vm.Doc.FilePath, vm.Project.Id);
+    if (File.Exists(file)) throw new Exception("the recovery file stayed");
+});
+Step("Open windows read the project of the moment: after an undo, and with no project at all", () =>
+{
+    vm.Doc!.ClearSelection(); Pump();
+    vm.Change("Setup", p =>
+    {
+        var h = p.Add(new Hole { Label = "open-window", Collar = new Vec3(8, 9, 10) });
+        Charging.ApplyRules(p, new[] { h });
+        p.Add(new InitiationPoint { Position = h.Collar, HoleId = h.Id });
+    });
+    Pump();
+    var doc = vm.Doc;
+    var windows = new List<Window>();
+    string Text(Window w) => string.Join(" ", w.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text));
+    try
+    {
+        // an undo brings back new objects: the holes counted while the blast plays are the ones of now
+        var timed = vm.Project!.Holes.Count(h => h.FiringTimeMs.HasValue);
+        vm.VisualizeTiming(); Pump();
+        var timing = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var slider = timing.GetLogicalDescendants().OfType<Slider>().First();
+        vm.Undo(); Pump();
+        slider.Value = slider.Minimum; Pump();
+        if (!Text(timing).Contains($"/{timed - 1} ")) throw new Exception($"timing window after an undo, {timed - 1} timed: {Text(timing)}");
+        BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
+        vm.Redo(); Pump();
+
+        void Follows(Action open, Action<BlastProject> edit, bool recalculate = false)
+        {
+            open(); Pump();
+            var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+            windows.Add(w);
+            void Shown()
+            {
+                Pump();
+                if (!recalculate) return;
+                w.GetLogicalDescendants().OfType<Button>().First(b => b.Content as string == BlastDesigner.App.Services.Loc.T("Recalculate"))
+                    .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                Pump();
+            }
+            var before = Text(w);
+            vm.Change("Edit", edit); Shown();
+            if (Text(w) == before) throw new Exception(w.Title + " did not show the change");
+            vm.Undo(); Shown();
+            if (Text(w) != before) throw new Exception(w.Title + " after an undo: " + Text(w));
+        }
+        Follows(() => Version6Windows.Flyrock(vm), p => p.Flyrock.SafetyFactor += 1);
+        Follows(() => Version6Windows.Fragmentation(vm), p => p.Fragmentation.OversizeCm += 10);
+        Follows(() => Version6Windows.Tolerances(vm), p => p.Tolerances.CollarXY += 1);
+        Follows(() => Version6Windows.ExclusionZone(vm), p => p.Vibration.PpvLimit += 1, recalculate: true);
+        Version6Windows.Dashboard(vm); Pump();
+        windows.Add(BlastDesigner.App.Services.Dialogs.LastShown!);
+        // opening another project goes through no project at all, with these windows still open
+        vm.Detach(); Pump();
+    }
+    finally
+    {
+        if (vm.Doc == null) vm.Attach(doc);
+        foreach (var w in windows) w.Close();
+        Pump();
+    }
+});
+Step("The edit windows, tables and messages have the look of the input forms and apply what was typed", () =>
+{
+    Button Pick(Window w, Func<Button, bool> which) => w.GetLogicalDescendants().OfType<Button>().First(which);
+    void Press(Button b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    void Look(Window w, string shot)
+    {
+        if (w.Background != BlastDesigner.App.Services.Look.Ground) throw new Exception(w.Title + ": no background of the program");
+        if (!w.GetLogicalDescendants().OfType<Button>().Any(b => b.Classes.Contains("primary"))) throw new Exception(w.Title + ": no main button");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, shot + ".png"));
+    }
+    void Opens(string shot, Func<Task> open)
+    {
+        var task = open(); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        Look(w, shot);
+        Press(Pick(w, b => b.IsCancel));
+        if (!task.IsCompleted) throw new Exception(w.Title + " did not close");
+    }
+    var cancelled = vm.Doc!.UndoNames.Count;
+    Opens("70_project_properties", vm.EditProjectProperties);
+    Opens("70j_layer", () => vm.EditLayer(vm.Project!.Layers[0]));
+    Opens("71b_loading_rules", vm.EditLoadingRules);
+    Opens("71c_initiation_rules", vm.EditInitiationRules);
+    Opens("72_transform", () => BlastDesigner.App.Services.Dialogs.EditObject("Transform coordinates", new BlastDesigner.App.ViewModels.TransformParameters()));
+    Opens("72b_pattern", () => BlastDesigner.App.Services.Dialogs.EditObject("Pattern properties", new BlastDesigner.Engine.PatternParameters()));
+    Opens("72c_las", () => BlastDesigner.App.Services.Dialogs.EditObject("LIDAR import", new BlastDesigner.App.ViewModels.MainViewModel.LasImportOptions()));
+    Opens("73_prompt", () => BlastDesigner.App.Services.Dialogs.Prompt("Text", "Text", "abc"));
+    Opens("73b_number", () => BlastDesigner.App.Services.Dialogs.PromptNumber("Expand polygon", "Distance (m), negative shrinks", 5));
+    Opens("73c_choose", () => BlastDesigner.App.Services.Dialogs.Choose("Print plan", "Scale", new[] { "1:250", "1:500" }));
+    Opens("74_report_designer", ReportDesignerWindow.Show);
+    Opens("74b_text_import", () => TextImportWindow.Show(new[] { "Hole,X,Y,Z", "1,10,20,300", "2,14,20,300" }, "holes.csv"));
+    if (vm.Doc.UndoNames.Count != cancelled) throw new Exception("a cancelled window changed the project");
+
+    // a number still being typed counts when the window is applied
+    var factor = vm.Project!.Flyrock.SafetyFactor;
+    var edit = vm.EditFlyrockModel(); Pump();
+    var window = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var box = window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propSafetyFactor");
+    box.Focus(); Pump();
+    box.Text = (factor + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    Press(Pick(window, b => b.Classes.Contains("primary")));
+    if (!edit.IsCompleted || vm.Project!.Flyrock.SafetyFactor != factor + 1) throw new Exception($"safety factor {vm.Project!.Flyrock.SafetyFactor}, typed {factor + 1}");
+    vm.Undo(); Pump();
+
+    // the list of a table: adding, and the fields of the selected item
+    var rules = vm.Project!.InitiationRules.Count;
+    var editing = vm.EditInitiationRules(); Pump();
+    window = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Press(window.GetLogicalDescendants().OfType<Button>().First(b => b.Content is StackPanel));
+    if (!window.GetLogicalDescendants().OfType<TextBox>().Any(b => b.Name == "propName" && b.IsEffectivelyVisible)) throw new Exception("no fields for the new rule");
+    Press(Pick(window, b => b.Classes.Contains("primary")));
+    if (!editing.IsCompleted || vm.Project!.InitiationRules.Count != rules + 1) throw new Exception("the new rule was not kept");
+    vm.Undo(); Pump();
+
+    vm.Change("Setup", p => p.Add(new TextEntity { Text = "edit", Position = new Vec3(1, 2, 3) }));
+    Pump();
+    vm.Doc.Select(new[] { vm.Project!.Entities.OfType<TextEntity>().Last().Id }); Pump();
+    vm.EditSelected(); Pump();
+    window = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Look(window, "72d_edit_selected");
+    Press(Pick(window, b => b.IsCancel));
+    vm.Doc.ClearSelection(); Pump();
+    vm.Undo(); vm.Undo(); Pump();
+
+    AnalysisWindows.AttachmentManager(vm); Pump();
+    window = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "74c_attachments.png"));
+    window.Close(); Pump();
+
+    var question = BlastDesigner.App.Services.Dialogs.Confirm("Remove all loading rules?"); Pump();
+    window = BlastDesigner.App.Services.Dialogs.LastMessage!;
+    Look(window, "75_message");
+    var answers = window.GetLogicalDescendants().OfType<Button>().ToList();
+    if (answers.Count != 2 || !answers[^1].Classes.Contains("primary")) throw new Exception("the main answer is not at the right end");
+    Press(answers[0]);
+    if (!question.IsCompleted || question.Result) throw new Exception("No did not answer no");
+
+    if (vm.BuildStages().SelectMany(s => s.Groups).SelectMany(g => g.Items).Any(i => i.Label == "Visual style")) throw new Exception("Visual style is still on the ribbon");
+});
+Step("Menus stand out from the ribbon, recent files show the name over a shortened folder", () =>
+{
+    var app = Avalonia.Application.Current!;
+    if (!app.TryGetResource("MenuFlyoutPresenterBackground", null, out var ground) || ground != BlastDesigner.App.Services.Look.Popup) throw new Exception("menus have the ground of the theme");
+    var recent = vm.Settings.RecentFiles.ToList();
+    vm.Settings.RecentFiles = new() { @"C:\Projects\mine\123.bdp", @"D:\Работа\Карьер Северный\Проекты буровзрывных работ\Взрывы\2026\Участок_7_блок_12.bdp" };
+    try
+    {
+        var entries = vm.RecentEntries().ToList();
+        if (entries[0].Header != "123.bdp" || entries[0].Detail != @"C:\Projects\mine") throw new Exception($"{entries[0].Header} / {entries[0].Detail}");
+        var cut = entries[1].Detail!;
+        if (cut.Length > 48 || !cut.StartsWith(@"D:\…\") || !cut.EndsWith(@"\2026")) throw new Exception(cut);
+        if (entries[1].Header != "Участок_7_блок_12.bdp") throw new Exception(entries[1].Header);
+        // what the disk knows comes after the menu is open: a lost drive holds up nothing
+        using (var answer = new ManualResetEventSlim())
+        {
+            var slow = (MenuItem)BlastDesigner.App.Tools.MenuEntry.Build(new[] { new BlastDesigner.App.Tools.MenuEntry { Header = "slow.bdp", Detail = @"\\lost\share", Pending = "wait", Later = () => { answer.Wait(); return ("late tip", "late note"); } } })[0];
+            var slowTip = (TextBlock)Avalonia.Controls.ToolTip.GetTip(slow)!;
+            if (slowTip.Text != "wait") throw new Exception("the tip should say it is coming: " + slowTip.Text);
+            if (Avalonia.Controls.ToolTip.GetPlacement(slow) != PlacementMode.Right) throw new Exception("the tip would cover the next rows");
+            answer.Set();
+            for (int i = 0; i < 200 && slowTip.Text == "wait"; i++) { Pump(); Thread.Sleep(5); }
+            if (Avalonia.Controls.ToolTip.GetTip(slow) != slowTip || slowTip.Text != "late tip" || !((StackPanel)slow.Header!).GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == "late note")) throw new Exception("the late answer did not reach the item");
+        }
+        var gone = entries[1].Later!();
+        if (gone.Tip != BlastDesigner.App.Services.Loc.Ui("Deleted or moved") || gone.Note != null) throw new Exception($"gone: {gone}");
+        var real = Path.Combine(outDir, "recent-size.bdp");
+        File.WriteAllBytes(real, new byte[3 * 1024]);
+        vm.Settings.RecentFiles.Add(real);
+        var present = vm.RecentEntries().Last();
+        var read = present.Later!();
+        var size = BlastDesigner.App.Services.Loc.Ui("Size: {0}");
+        if (!present.Pending!.StartsWith(size[..^3]) || !present.Pending.Contains(BlastDesigner.App.Services.Loc.Ui("<calculating...>"))) throw new Exception(present.Pending);
+        if (read.Tip != string.Format(size, BlastDesigner.App.Services.Loc.F("{0:0} KB", 3.0)) || read.Note != ProgramSettings.FormatDateTime(File.GetLastWriteTime(real)) || present.Note != null) throw new Exception($"present: {read}, {present.Note}");
+        vm.Settings.RecentFiles.Remove(real);
+        File.Delete(real);
+        // when it was opened, as the system writes it; a file that is gone shows none
+        var when = new DateTime(2026, 11, 5, 14, 7, 0);
+        vm.Settings.RecentOpened[vm.Settings.RecentFiles[0]] = when;
+        if (vm.RecentEntries().First().Note != when.ToString("g", System.Globalization.CultureInfo.CurrentCulture) || entries[1].Note != null) throw new Exception($"opened: {vm.RecentEntries().First().Note} / {entries[1].Note}");
+        window.Ribbon.Select(0); Pump();
+        var tip = BlastDesigner.App.Services.Loc.Ui("Recent");
+        var open = window.GetLogicalDescendants().OfType<Button>().First(b => (Avalonia.Controls.ToolTip.GetTip(b) as string)?.StartsWith(tip) == true);
+        open.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        var menu = BlastDesigner.App.Views.Ui.LastMenu!;
+        var firstRow = menu.ItemsSource!.Cast<MenuItem>().First();
+        Avalonia.Controls.ToolTip.SetIsOpen(firstRow, true); Pump();
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "36c_recent_menu.png"));
+        Avalonia.Controls.ToolTip.SetIsOpen(firstRow, false); Pump();
+        if (!menu.IsOpen || menu.ItemsSource!.Cast<MenuItem>().First().Header is not StackPanel) throw new Exception("the recent files are not on two lines");
+        menu.Close(); Pump();
+    }
+    finally { vm.Settings.RecentFiles = recent; }
+});
+Step("Project properties: the commands open their page, one undo step for several pages, nothing on an untouched window", () =>
+{
+    (ProjectPropertiesForm Form, Window Window, Task Task) Open(Func<Task> open)
+    {
+        var task = open(); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        return (w.GetLogicalDescendants().OfType<ProjectPropertiesForm>().Single(), w, task);
+    }
+    void Press(Window w, Func<Button, bool> which) { w.GetLogicalDescendants().OfType<Button>().First(which).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    foreach (var (page, open) in new (string, Func<Task>)[]
+    {
+        ("Blast properties", vm.EditBlastProperties), ("Blast properties", vm.EditProjectProperties), ("Site coordinate system", vm.EditCoordinates), ("Design data", vm.EditDesignData),
+        ("Hole and material types", vm.EditHoleTypes), ("Design tolerances", vm.EditTolerances), ("Vibration site constants", vm.EditVibrationModel), ("Flyrock constants", vm.EditFlyrockModel),
+        ("Fragmentation inputs", vm.EditFragmentationModel), ("Resource cost schema", vm.EditCostSchema), ("Blast outcomes", vm.EditOutcomes), ("Summary block", vm.EditSummaryBlock)
+    })
+    {
+        var (form, w, task) = Open(open);
+        if (form.Shown != page) throw new Exception($"{page}: opened on {form.Shown}");
+        Press(w, b => b.IsCancel);
+        if (!task.IsCompleted) throw new Exception(page + " did not close");
+    }
+    // every page opens, and an untouched window changes nothing, the fragmentation page included
+    var steps = vm.Doc!.UndoNames.Count;
+    var all = Open(vm.EditProjectProperties);
+    foreach (var page in all.Window.GetLogicalDescendants().OfType<Button>().Select(b => b.Tag as string).Where(t => t?.StartsWith("page:") == true).ToList())
+    {
+        Press(all.Window, b => b.Tag as string == page);
+        if (all.Form.Shown != page![5..]) throw new Exception("the page did not open: " + page);
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        all.Window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, $"77_project_{page[5..].Replace(' ', '_')}.png"));
+    }
+    if (all.Window.GetLogicalDescendants().OfType<Button>().Count(b => (b.Tag as string)?.StartsWith("page:") == true) != 13) throw new Exception("expected 13 pages");
+    Press(all.Window, b => b.Classes.Contains("primary"));
+    if (!all.Task.IsCompleted || vm.Doc.UndoNames.Count != steps) throw new Exception("an untouched window made an undo step");
+
+    var (factor, collar, name) = (vm.Project!.Flyrock.SafetyFactor, vm.Project.Tolerances.CollarXY, vm.Project.Header.Name);
+    var two = Open(vm.EditFlyrockModel);
+    TextBox Box(string n) => two.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == n);
+    Box("propSafetyFactor").Text = (factor + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    Box("propSafetyFactor").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    Press(two.Window, b => b.Tag as string == "page:Design tolerances");
+    Box("propCollarXY").Focus(); Pump();
+    Box("propCollarXY").Text = (collar + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+    // back to the first page: what was typed there is still in its field
+    Press(two.Window, b => b.Tag as string == "page:Flyrock constants");
+    if (Box("propSafetyFactor").Text != (factor + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)) throw new Exception("the page lost what was typed");
+    Press(two.Window, b => b.Classes.Contains("primary"));
+    if (vm.Project!.Flyrock.SafetyFactor != factor + 1 || vm.Project.Tolerances.CollarXY != collar + 1) throw new Exception($"applied {vm.Project.Flyrock.SafetyFactor}, {vm.Project.Tolerances.CollarXY}");
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("two pages should be one undo step");
+    vm.Undo(); Pump();
+    if (vm.Project!.Flyrock.SafetyFactor != factor || vm.Project.Tolerances.CollarXY != collar || vm.Project.Header.Name != name) throw new Exception("the undo did not bring both pages back");
+
+    // the types are kept when the design data change, and the other way round
+    var typeName = vm.Project.Design.HoleTypes[0].Name;
+    var types = Open(vm.EditHoleTypes);
+    types.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propName").Text = "Smoke type";
+    types.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propName").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    Press(types.Window, b => b.Tag as string == "page:Design data");
+    types.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propBurden").Text = "7";
+    types.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propBurden").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    Press(types.Window, b => b.Classes.Contains("primary"));
+    if (vm.Project!.Design.HoleTypes[0].Name != "Smoke type" || vm.Project.Design.Burden != 7) throw new Exception($"{vm.Project.Design.HoleTypes[0].Name}, {vm.Project.Design.Burden}");
+    vm.Undo(); Pump();
+    if (vm.Project!.Design.HoleTypes[0].Name != typeName) throw new Exception("the type was not undone");
+});
+Step("Esc cancels a form from any of its fields", () =>
+{
+    void Press(Window w) => w.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null);
+    foreach (var (name, open) in new (string, Func<Task>)[] { ("properties", vm.EditBlastProperties), ("design", vm.EditDesignData), ("rules", vm.EditInitiationRules) })
+    {
+        var task = open(); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        Press(w); Pump();
+        if (!task.IsCompleted) throw new Exception($"{name}: Esc with nothing focused");
+        task = open(); Pump();
+        w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var count = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(w).OfType<Control>().Count(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled);
+        w.Close(); Pump();
+        var failed = new List<string>();
+        for (int i = 0; i < count; i++)
+        {
+            task = open(); Pump();
+            w = BlastDesigner.App.Services.Dialogs.LastShown!;
+            var field = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(w).OfType<Control>().Where(c => c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled).ElementAt(i);
+            field.Focus(); Pump();
+            Press(w); Pump();
+            if (task.IsCompleted) continue;
+            failed.Add($"{field.GetType().Name} {field.Name} in {field.Parent?.GetType().Name}");
+            w.Close(); Pump();
+        }
+        if (failed.Count > 0) throw new Exception($"{name}: Esc stayed in {string.Join("; ", failed)}");
+    }
+});
+// last: the messages these errors open stay open
+Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>
+{
+    vm.Change("Setup", p =>
+    {
+        var h = p.Add(new Hole { Label = "failed-change", Collar = new Vec3(1, 2, 3) });
+        p.Add(new InitiationPoint { Position = h.Collar, HoleId = h.Id });
+    });
+    Pump();
+    var timed = vm.Project!.Holes.Count(h => h.FiringTimeMs.HasValue);
+    if (timed == 0) throw new Exception("nothing timed to check");
+    if (vm.Change("Fail", _ => throw new InvalidOperationException("planned"))) throw new Exception("the change should have failed");
+    Pump();
+    if (vm.Project!.Holes.Count(h => h.FiringTimeMs.HasValue) != timed) throw new Exception("a failed change lost the times");
+    var marker = "planned failure " + Guid.NewGuid();
+    async void Failing() { await Task.Yield(); throw new InvalidOperationException(marker); }
+    Failing();
+    Pump();
+    if (!File.ReadAllText(Log.FilePath).Contains(marker)) throw new Exception("the error did not reach the log");
 });
 UsageLog.Stop();
 RestoreSettings();

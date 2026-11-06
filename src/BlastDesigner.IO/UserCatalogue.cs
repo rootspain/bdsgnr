@@ -35,7 +35,7 @@ public sealed class UserCatalogue
     {
         path ??= FilePath;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(this, ProjectJson.Indented));
+        SafeFile.WriteAllText(path, JsonSerializer.Serialize(this, ProjectJson.Indented));
     }
 
     /// <summary>Takes the records that differ between two states of a project: new, edited, deleted or restored ones.</summary>

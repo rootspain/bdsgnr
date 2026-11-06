@@ -6,6 +6,49 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.2.5 — 2026-11-05
+
+### Changed
+- Available resources: the tabs go Products, Types, Kinds, Families, Groups; on the tabs of the tables the bottom of the
+  window says where and what they are used for.
+- Analysis ribbon: the Fragmentation group has a Resources button, which opens the Available resources window.
+- The triangulation is faster: 40,000 points take 0.3 s instead of 4.6 s, and the time grows almost linearly. The result is the same.
+- The edit windows and tables have the modern look: a title band, fields in groups with their units, a bottom bar with a hint
+  and an Apply button. This covers blast properties, design data, outcomes, costs, electronic settings, vibration, tolerances,
+  flyrock, the coordinate system, the summary block, layer and object properties, operation parameters, hole and material
+  types, loading and initiation rules, text import, the report designer and attachments.
+- Messages and small prompts for a value have the same look.
+- The Visual style command is gone: the same fields are in the program settings.
+- The list of recent files shows the date and time each file was opened, in the format of the system. The startup window now writes dates the same way.
+  The tip of a row gives the size of the file, or says it was deleted or moved; the disk is asked in the background, the tip says
+  "<calculating...>" until it answers, and a lost path does not hold the menu up.
+- New Project properties window: blast properties, the coordinate system, design data, types, tolerances, vibration and flyrock
+  constants, vibration events, fragmentation, electronic settings, costs, outcomes and the summary block are pages on the left.
+  The older commands and buttons open their page, and changes on several pages are undone in one step.
+- A click on an object no longer solves the times and rebuilds the model panels: only what depends on the selection is updated.
+- Changes and undo are faster in a project with a large surface: a mesh that did not change is not stored again on each step.
+  Undo keeps meshes within 512 MB; beyond that the oldest steps go.
+- Autosave no longer stops the work: the recovery file is made in the background.
+- The vibration map is built about 10 times faster.
+- Selecting a large surface is much quicker: its mesh is no longer copied for the Properties tab.
+- Timing arrows on the plan are worked out when the holes change, not on every frame.
+
+### Fixed
+- Esc closes windows that open with no field chosen, such as Blast properties: the key went to the plan of the main window.
+- Drop-down menus no longer blend into the ribbon: they have their own ground, outline, rounded corners and item highlight.
+  Recent files show the file name with the folder below it, cut in the middle; the tip gives the full path.
+- The render thread no longer reads the project: a frame is recorded on the main thread and only played back. A frame cannot
+  break off or mix two states while the project changes.
+- The first frame of a large surface is no longer held up: on a survey of 90,000 points it took 17 s, now 0.2 s.
+- Open analysis windows kept calculating on the earlier state of the project after an undo: Flyrock prediction,
+  Fragmentation prediction, Exclusion zone calculator, Design tolerance check, Burden check view, Timing overlap,
+  Time envelope, Time envelope overview, Volume overview, Scale law calculator, the count of holes in Visualization.
+- Opening another project or closing the current one with the Fragmentation prediction or Dashboard window open gave an error.
+- After an operation that ended in an error, hole times and tie labels no longer vanish until the next change.
+- An error in a command no longer closes the program with work not saved: it is shown in a message and written to the log.
+- A failure while writing the settings or the catalogue file no longer damages the old file.
+- Available resources: the Kind field of a product and a family is now called Product kind.
+
 ## 0.2.4 — 2026-11-04
 
 ### New

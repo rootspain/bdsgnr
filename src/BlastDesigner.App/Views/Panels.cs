@@ -180,7 +180,7 @@ public sealed class PropertiesPanel : DockPanel
             return;
         }
         _header.Text = sel.Count == 1 ? Loc.T(first.KindName) : $"{Loc.T(first.KindName)} × {sel.Count}";
-        var template = ProjectJson.DeepClone(first);
+        var template = first.EditCopy();
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
         var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid);

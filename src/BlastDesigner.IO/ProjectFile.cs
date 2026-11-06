@@ -214,6 +214,9 @@ public sealed class TemplateStore
 /// <summary>Writes crash-recovery copies of the open project to a temp folder.</summary>
 public sealed class RecoveryStore
 {
+    private readonly object _gate = new();
+    private int _ticket;
+
     public RecoveryStore(string folder)
     {
         Folder = folder;
@@ -225,18 +228,33 @@ public sealed class RecoveryStore
     public string PathFor(string? projectPath, Guid projectId) =>
         Path.Combine(Folder, $"{(projectPath != null ? Path.GetFileNameWithoutExtension(projectPath) : "untitled")}_{projectId:N}{ProjectFile.Extension}.recovery");
 
-    public void Write(BlastProject project, string? projectPath)
+    /// <summary>Taken before a write in the background: a <see cref="Clear"/> after it makes that write come to nothing.</summary>
+    public int Ticket { get { lock (_gate) return _ticket; } }
+
+    /// <summary>
+    /// Writes the recovery file. With a <paramref name="ticket"/> the file stays away if the project was saved or closed
+    /// in the meantime: a recovery file left behind would offer old work at the next start.
+    /// </summary>
+    public void Write(BlastProject project, string? projectPath, int? ticket = null)
     {
         var path = PathFor(projectPath, project.Id);
         var tmp = path + ".tmp";
         using (var fs = File.Create(tmp)) ProjectFile.Write(project, fs);
-        File.Move(tmp, path, true);
+        lock (_gate)
+        {
+            if (ticket is int t && t != _ticket) File.Delete(tmp);
+            else File.Move(tmp, path, true);
+        }
     }
 
     public void Clear(string? projectPath, Guid projectId)
     {
         var p = PathFor(projectPath, projectId);
-        if (File.Exists(p)) File.Delete(p);
+        lock (_gate)
+        {
+            _ticket++;
+            if (File.Exists(p)) File.Delete(p);
+        }
     }
 
     public IEnumerable<FileInfo> Pending() =>

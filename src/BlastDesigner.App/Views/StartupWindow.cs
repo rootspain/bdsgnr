@@ -209,9 +209,8 @@ public sealed class StartupForm : DockPanel
         catch { return false; }
     }
 
-    private static string AppVersion => typeof(StartupForm).Assembly.GetName().Version?.ToString(3) ?? "0.2.4";
+    private static string AppVersion => typeof(StartupForm).Assembly.GetName().Version?.ToString(3) ?? "0.2.5";
 
-    private static CultureInfo Culture => CultureInfo.GetCultureInfo(Loc.Language == "ru" ? "ru-RU" : "en-US");
 
     private void Finish(StartupChoice c, string? path = null) => Done?.Invoke(c, path);
 
@@ -507,10 +506,10 @@ public sealed class StartupForm : DockPanel
 
     private static string When(DateTime d)
     {
-        var c = Culture;
-        if (d.Date == DateTime.Today) return Loc.Ui("Today") + ", " + d.ToString("HH:mm", c);
-        if (d.Date == DateTime.Today.AddDays(-1)) return Loc.Ui("Yesterday") + ", " + d.ToString("HH:mm", c);
-        return d.ToString("dd.MM.yyyy", c);
+        var c = CultureInfo.CurrentCulture;
+        if (d.Date == DateTime.Today) return Loc.Ui("Today") + ", " + d.ToString("t", c);
+        if (d.Date == DateTime.Today.AddDays(-1)) return Loc.Ui("Yesterday") + ", " + d.ToString("t", c);
+        return d.ToString("d", c);
     }
 
     private void Select(int index)

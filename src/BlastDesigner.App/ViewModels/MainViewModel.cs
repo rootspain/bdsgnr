@@ -38,7 +38,7 @@ public sealed partial class MainViewModel : ObservableObject
         View.SurfaceWireframe = settings.SurfaceWireframe;
         View.PointerWorldMoved += p => Coordinates = $"X {p.X:0.00}   Y {p.Y:0.00}   Z {p.Z:0.00}";
         _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(Math.Max(1, settings.AutosaveMinutes)) };
-        _autosave.Tick += (_, _) => WriteRecovery();
+        _autosave.Tick += (_, _) => _ = WriteRecovery();
         _autosave.Start();
         _tool = new SelectTool(this);
     }
@@ -90,6 +90,8 @@ public sealed partial class MainViewModel : ObservableObject
     public event Action? DragPreview;
     public void RaiseDragPreview() => DragPreview?.Invoke();
     public event Action? SelectionRefreshed;
+    /// <summary>The selection itself changed; <see cref="SelectionRefreshed"/> also comes with every change of the model.</summary>
+    public event Action? SelectionChanged;
     public event Action? ToolChanged;
 
     public void SetStatus(string text)
@@ -164,6 +166,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
         SelectionRefreshed?.Invoke();
+        SelectionChanged?.Invoke();
         var sel = Doc?.SelectedEntities.ToList() ?? new();
         if (sel.Count > 0)
         {
@@ -291,11 +294,22 @@ public sealed partial class MainViewModel : ObservableObject
         return (max + 1).ToString();
     }
 
-    private void WriteRecovery()
+    private bool _writingRecovery;
+
+    /// <summary>The recovery file: the state is taken here, at once; making the file, which took seconds with a survey, goes on in the background.</summary>
+    public async Task WriteRecovery()
     {
-        if (Doc is not { IsModified: true }) return;
-        try { Recovery.Write(Doc.Project, Doc.FilePath); }
+        if (_writingRecovery || Doc is not { IsModified: true } doc) return;
+        _writingRecovery = true;
+        try
+        {
+            var ticket = Recovery.Ticket;
+            var path = doc.FilePath;
+            var state = doc.Capture();
+            await Task.Run(() => Recovery.Write(state(), path, ticket));
+        }
         catch (Exception ex) { Log.Error("Autosave failed", ex); }
+        finally { _writingRecovery = false; }
     }
 
     public void MoveSelection(Vec3 delta)

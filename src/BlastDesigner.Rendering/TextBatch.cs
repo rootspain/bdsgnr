@@ -11,8 +11,7 @@ internal sealed class TextBatch
     private readonly Dictionary<(SKColor Color, float Size), List<(string Text, float X, float Y)>> _groups = new();
 
     // Glyphs and advances by typeface, size and text: hole numbers and delays repeat from frame to frame, and turning
-    // each into glyphs through the native library was most of the cost. One cache per thread (the viewport draws on the
-    // render thread, exports on the UI thread); emptied when it grows large.
+    // each into glyphs through the native library was most of the cost. One cache per thread; emptied when it grows large.
     [ThreadStatic] private static Dictionary<(IntPtr Typeface, float Size, string Text), (ushort[] Glyphs, float[] Advances)>? _glyphs;
 
     public void Add(string text, float x, float y, SKColor color, float size)

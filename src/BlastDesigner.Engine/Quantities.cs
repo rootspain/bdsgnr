@@ -214,46 +214,83 @@ public static class Vibration
     /// Predicts the worst PPV and airblast at a receiver by grouping holes that fire within the model window.
     /// When no timing exists every hole is treated as a single delay.
     /// </summary>
-    public static Prediction Predict(BlastProject project, Vec3 receiver)
+    public static Prediction Predict(BlastProject project, Vec3 receiver) => new Charges(project).At(receiver);
+
+    /// <summary>
+    /// The charges of a blast and the holes firing within the model window of each one: all that does not depend on the
+    /// receiver, worked out once for a whole map.
+    /// </summary>
+    private sealed class Charges
     {
-        var m = project.Vibration;
-        var holes = project.Holes.Where(h => !h.IsDummy).Select(h => (H: h, Q: Charging.ExplosiveMass(project, h), D: Vec3.Distance(h.Collar, receiver))).Where(x => x.Q > 0).ToList();
-        if (holes.Count == 0) return new Prediction(0, 0, 0, 0, 0);
-        var timed = holes.Where(x => x.H.FiringTimeMs.HasValue).OrderBy(x => x.H.FiringTimeMs).ToList();
-        var best = new Prediction(0, 0, 0, 0, 0);
-        if (timed.Count == 0)
+        private readonly VibrationModel _m;
+        private readonly List<(Vec3 Collar, double Q)> _holes;
+        private readonly (Vec3 Collar, double Time, double Q, int End)[] _windows;
+        private readonly double[] _distance;
+        private readonly int[] _nearest;
+
+        public Charges(BlastProject project)
         {
-            foreach (var x in holes)
+            _m = project.Vibration;
+            var holes = project.Holes.Where(h => !h.IsDummy).Select(h => (H: h, Q: Charging.ExplosiveMass(project, h))).Where(x => x.Q > 0).ToList();
+            _holes = holes.Select(x => (x.H.Collar, x.Q)).ToList();
+            var timed = holes.Where(x => x.H.FiringTimeMs.HasValue).OrderBy(x => x.H.FiringTimeMs).ToList();
+            _windows = new (Vec3, double, double, int)[timed.Count];
+            _distance = new double[timed.Count];
+            _nearest = new int[timed.Count];
+            for (int i = 0; i < timed.Count; i++)
             {
-                var ppv = Ppv(m, x.D, x.Q);
-                if (ppv > best.Ppv) best = new Prediction(ppv, KPaToDb(AirblastKPa(m, x.D, x.Q)), x.Q, x.D, 0);
+                var t0 = timed[i].H.FiringTimeMs!.Value;
+                double q = 0;
+                int j = i;
+                for (; j < timed.Count && timed[j].H.FiringTimeMs!.Value < t0 + _m.WindowMs; j++) q += timed[j].Q;
+                _windows[i] = (timed[i].H.Collar, t0, q, j);
+            }
+        }
+
+        public Prediction At(Vec3 receiver)
+        {
+            var best = new Prediction(0, 0, 0, 0, 0);
+            if (_windows.Length == 0)
+            {
+                foreach (var (collar, q) in _holes)
+                {
+                    var d = Vec3.Distance(collar, receiver);
+                    var ppv = Ppv(_m, d, q);
+                    if (ppv > best.Ppv) best = new Prediction(ppv, KPaToDb(AirblastKPa(_m, d, q)), q, d, 0);
+                }
+                return best;
+            }
+            for (int i = 0; i < _windows.Length; i++) _distance[i] = Vec3.Distance(_windows[i].Collar, receiver);
+            // the nearest hole of each window, as the window slides: _nearest[head..tail) holds its candidates, nearest
+            // first, so all the holes firing at once (a window of the whole blast) still cost one pass
+            int head = 0, tail = 0, next = 0;
+            for (int i = 0; i < _windows.Length; i++)
+            {
+                var (_, time, q, end) = _windows[i];
+                for (; next < end; next++)
+                {
+                    while (tail > head && _distance[_nearest[tail - 1]] >= _distance[next]) tail--;
+                    _nearest[tail++] = next;
+                }
+                while (head < tail && _nearest[head] < i) head++;
+                var d = head < tail ? _distance[_nearest[head]] : double.MaxValue;
+                var ppv = Ppv(_m, d, q);
+                if (ppv > best.Ppv) best = new Prediction(ppv, KPaToDb(AirblastKPa(_m, d, q)), q, d, time);
             }
             return best;
         }
-        for (int i = 0; i < timed.Count; i++)
-        {
-            var t0 = timed[i].H.FiringTimeMs!.Value;
-            double q = 0, d = double.MaxValue;
-            for (int j = i; j < timed.Count && timed[j].H.FiringTimeMs!.Value < t0 + m.WindowMs; j++)
-            {
-                q += timed[j].Q;
-                d = Math.Min(d, timed[j].D);
-            }
-            var ppv = Ppv(m, d, q);
-            if (ppv > best.Ppv) best = new Prediction(ppv, KPaToDb(AirblastKPa(m, d, q)), q, d, t0);
-        }
-        return best;
     }
 
     /// <summary>PPV (or airblast dB) grid over an area for map display.</summary>
     public static double[,] Map(BlastProject project, Bounds3 area, int nx, int ny, bool airblast)
     {
         var grid = new double[nx, ny];
+        var charges = new Charges(project);
         for (int i = 0; i < nx; i++)
             for (int j = 0; j < ny; j++)
             {
                 var p = new Vec3(area.Min.X + (area.Max.X - area.Min.X) * (i + 0.5) / nx, area.Min.Y + (area.Max.Y - area.Min.Y) * (j + 0.5) / ny, area.Center.Z);
-                var pr = Predict(project, p);
+                var pr = charges.At(p);
                 grid[i, j] = airblast ? pr.AirblastDb : pr.Ppv;
             }
         return grid;

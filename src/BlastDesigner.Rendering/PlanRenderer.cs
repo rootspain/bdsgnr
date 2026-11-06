@@ -280,11 +280,12 @@ public static class PlanRenderer
             EndMove(mc);
         }
         var holeLabels = new TextBatch();
+        var labelSides = HoleLabelLayout.Sides(view);
         foreach (var h in holes)
         {
             // labels of dragged holes follow them at once, the rest go into one batch
-            if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(cam, project, h, view, opt, text, own); own.Flush(canvas, text); EndMove(mc); }
-            else DrawHoleLabels(cam, project, h, view, opt, text, holeLabels);
+            if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(cam, project, h, view, labelSides, opt, text, own); own.Flush(canvas, text); EndMove(mc); }
+            else DrawHoleLabels(cam, project, h, view, labelSides, opt, text, holeLabels);
         }
         holeLabels.Flush(canvas, text);
         var productsKey = ProductsKey(project);
@@ -650,7 +651,6 @@ public static class PlanRenderer
         if (tri == 0) return;
 
         var mesh = _surfaceMeshes.GetValue(s, _ => new SurfaceMesh());
-        // The same surface can be drawn by the viewport's render thread and by an export on the UI thread.
         lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe);
     }
 
@@ -690,7 +690,7 @@ public static class PlanRenderer
             mesh.OrderedColors = Array.Empty<SKColor>();
             mesh.Order = Array.Empty<int>();
             mesh.Keys = Array.Empty<float>();
-            mesh.Edges = UniqueEdges(s.Triangles, tri);
+            mesh.Edges = Array.Empty<int>();
             double minZ = double.MaxValue, maxZ = double.MinValue;
             if (range is { } shared) (minZ, maxZ) = shared;
             else foreach (var v in s.Vertices) { if (v.Z < minZ) minZ = v.Z; if (v.Z > maxZ) maxZ = v.Z; }
@@ -781,6 +781,7 @@ public static class PlanRenderer
         if (s.ShowWireframe && !hideWireframe && cam.Scale > 0.5 && tri <= WireframeTriangleCap)
         {
             float w = (float)cam.Width, hgt = (float)cam.Height;
+            if (mesh.Edges.Length == 0) mesh.Edges = UniqueEdges(s.Triangles, tri);
             var edges = mesh.Edges;
             using var wire = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 0.5f, Color = (selected ?? color).WithAlpha(110) };
             using var path = new SKPath();
@@ -804,7 +805,9 @@ public static class PlanRenderer
             {
                 int a = tris[3 * t + k], b = tris[3 * t + (k + 1) % 3];
                 long key = a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
-                if (seen.Add(key)) { result.Add(a); result.Add(b); }
+                // spread by an odd factor, which keeps keys distinct: the default hash of a long xors its halves, and the
+                // edges of nearby vertices all collided, so a survey grid of 90 000 points took 17 s before its first frame
+                if (seen.Add(key * unchecked((long)0x9E3779B97F4A7C15UL))) { result.Add(a); result.Add(b); }
             }
         return result.ToArray();
     }
@@ -965,7 +968,7 @@ public static class PlanRenderer
         }
     }
 
-    private static void DrawHoleLabels(Camera cam, BlastProject project, Hole h, ViewState view, SceneOptions opt, SKPaint text, TextBatch batch)
+    private static void DrawHoleLabels(Camera cam, BlastProject project, Hole h, ViewState view, (List<HoleLabel> Left, List<HoleLabel> Right) sides, SceneOptions opt, SKPaint text, TextBatch batch)
     {
         if (cam.Scale < 1.2) return;
         var (x, y) = cam.ToScreen(h.Collar);
@@ -978,7 +981,7 @@ public static class PlanRenderer
         text.TextSize = 10;
         // each side top to bottom in the order of its list, the column centred on the collar; a label with nothing to
         // say for this hole (no time yet, no detonator) leaves no gap
-        var (left, right) = HoleLabelLayout.Sides(view);
+        var (left, right) = sides;
         var number = selected ? opt.SelectionColor : new SKColor(_dark ? 0xFF60A5FAu : 0xFF1D4ED8u);
         var timing = selected ? opt.SelectionColor : Adapt(new SKColor(0xFFB91C1C));
         var ink = text.Color;

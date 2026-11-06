@@ -28,6 +28,9 @@ public static class Look
     public static readonly SolidColorBrush AccentPressed = Brush(0xFFE0962A);
     public static readonly SolidColorBrush Blue = Brush(0xFF4C9BFF);
     public static readonly SolidColorBrush OnAccent = Brush(0xFF15181C);
+    /// <summary>Menus lie over the ribbon and the panels: a ground and an outline of their own keep them apart from what is under them.</summary>
+    public static readonly SolidColorBrush Popup = Brush(0xFF2A2F36);
+    public static readonly SolidColorBrush PopupLine = Brush(0xFF5A636E);
 
     public static readonly FontFamily Mono = new("JetBrains Mono, Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace");
 
@@ -55,10 +58,19 @@ public static class Look
         AccentHover.Color = Mix(a, Colors.White, 0.18);
         AccentPressed.Color = Mix(a, Colors.Black, 0.12);
         OnAccent.Color = Luminance(a) > 0.5 ? Color.FromUInt32(0xFF15181C) : Colors.White;
+        Popup.Color = Color.FromUInt32(light ? 0xFFFFFFFF : 0xFF2A2F36);
+        PopupLine.Color = Color.FromUInt32(light ? 0xFFB4BCC6 : 0xFF5A636E);
 
         if (Application.Current is { } app)
         {
             app.RequestedThemeVariant = light ? Avalonia.Styling.ThemeVariant.Light : Avalonia.Styling.ThemeVariant.Dark;
+            // what the menus and their submenus take from the Fluent theme
+            app.Resources["MenuFlyoutPresenterBackground"] = Popup;
+            app.Resources["MenuFlyoutPresenterBorderBrush"] = PopupLine;
+            app.Resources["MenuFlyoutPresenterBorderThemeThickness"] = new Thickness(1);
+            app.Resources["OverlayCornerRadius"] = new CornerRadius(8);
+            app.Resources["MenuFlyoutItemBackgroundPointerOver"] = AccentSoft;
+            app.Resources["MenuFlyoutItemBackgroundPressed"] = AccentSoft;
             foreach (var fluent in app.Styles.OfType<Avalonia.Themes.Fluent.FluentTheme>())
                 foreach (var palette in fluent.Palettes.Values)
                     palette.Accent = a;

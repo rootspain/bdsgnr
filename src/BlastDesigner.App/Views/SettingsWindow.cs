@@ -557,6 +557,7 @@ public sealed class SettingsForm : DockPanel
         var d = new ProgramSettings();
         d.Upgrade();
         d.RecentFiles = Edited.RecentFiles;
+        d.RecentOpened = Edited.RecentOpened;
         d.PinnedFiles = Edited.PinnedFiles;
         d.Window = Edited.Window;
         d.LastFolder = Edited.LastFolder;

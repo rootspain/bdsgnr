@@ -1,5 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -72,6 +74,25 @@ public static class Dialogs
         Dispatcher.UIThread.Post(() => _ = Show("Error", ex.Message, new[] { "OK" }));
     }
 
+    private static bool _failureShown;
+
+    /// <summary>
+    /// An error nothing else caught: it goes to the log, and to the user unless such a message is already open (an error
+    /// repeated on every layout pass would otherwise open window after window).
+    /// </summary>
+    public static void ShowFailure(Exception ex)
+    {
+        Log.Error("Unhandled error", ex);
+        if (_failureShown) return;
+        _failureShown = true;
+        Dispatcher.UIThread.Post(async () =>
+        {
+            try { await Show("Error", ex.Message, new[] { "OK" }); }
+            catch (Exception shown) { Log.Error("Could not show an error", shown); }
+            finally { _failureShown = false; }
+        });
+    }
+
     public static async Task<int> Show(string title, string message, string[] buttons)
     {
         var w = new Window
@@ -81,75 +102,94 @@ public static class Dialogs
             MinWidth = 320,
             MaxWidth = 720,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            CanResize = false
+            CanResize = false,
+            Background = Look.Ground
         };
         int result = -1;
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        // the main answer is the accented one, at the right end as in the input windows
+        var shown = new Button[buttons.Length];
         for (int i = 0; i < buttons.Length; i++)
         {
             var idx = i;
-            var b = new Button { Content = Loc.T(buttons[i]), MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center, IsDefault = i == 0, IsCancel = i == buttons.Length - 1 };
-            b.Click += (_, _) => { result = idx; w.Close(); };
-            panel.Children.Add(b);
+            void Answer() { result = idx; w.Close(); }
+            var b = i == 0 ? FormKit.Primary(Loc.T(buttons[i]), Answer) : FormKit.Secondary(Loc.T(buttons[i]), Answer);
+            b.IsDefault = i == 0;
+            b.IsCancel = i == buttons.Length - 1;
+            shown[buttons.Length - 1 - i] = b;
         }
-        w.Content = new StackPanel
-        {
-            Margin = new Thickness(16),
-            Children = { new SelectableTextBlock { Text = message, TextWrapping = TextWrapping.Wrap }, panel }
-        };
+        var footer = FormKit.Footer(null, shown);
+        DockPanel.SetDock(footer, Dock.Bottom);
+        w.Content = new DockPanel { Children = { footer, new SelectableTextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = Look.Text, Margin = new Thickness(20, 18) } } };
+        LastMessage = w;
         if (Owner != null && Owner.IsVisible) await w.ShowDialog(Owner); else w.Show();
         return result;
     }
 
     public static async Task<string?> Prompt(string title, string label, string value = "")
     {
-        var box = new TextBox { Text = value, MinWidth = 280 };
-        var ok = await Custom(title, new StackPanel { Spacing = 6, Children = { new TextBlock { Text = label }, box } }, () => true, box);
+        var box = FormKit.Text(value);
+        box.MinWidth = 320;
+        var ok = await Custom(title, FormKit.Labeled(label, box), () => true, box);
         return ok ? box.Text : null;
     }
 
     public static async Task<double?> PromptNumber(string title, string label, double value)
     {
-        var box = new NumericUpDown { Value = (decimal)value, FormatString = "0.###", MinWidth = 200, Increment = 1 };
-        var ok = await Custom(title, new StackPanel { Spacing = 6, Children = { new TextBlock { Text = label }, box } }, () => box.Value.HasValue, box);
+        var box = new NumericUpDown { Value = (decimal)value, FormatString = "0.###", MinWidth = 320, Increment = 1, Background = Look.Field, BorderBrush = Look.LineStrong };
+        var ok = await Custom(title, FormKit.Labeled(label, box), () => box.Value.HasValue, box);
         return ok ? (double?)box.Value : null;
     }
 
     public static async Task<int?> Choose(string title, string label, IReadOnlyList<string> items, int selected = 0)
     {
         if (items.Count == 0) return null;
-        var combo = new ComboBox { ItemsSource = items, SelectedIndex = Math.Clamp(selected, 0, items.Count - 1), MinWidth = 280 };
-        var ok = await Custom(title, new StackPanel { Spacing = 6, Children = { new TextBlock { Text = label }, combo } }, () => combo.SelectedIndex >= 0, combo);
+        var combo = new ComboBox { ItemsSource = items, SelectedIndex = Math.Clamp(selected, 0, items.Count - 1), MinWidth = 320, MinHeight = 32, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var ok = await Custom(title, FormKit.Labeled(label, combo), () => combo.SelectedIndex >= 0, combo);
         return ok ? combo.SelectedIndex : null;
     }
 
-    /// <summary>Shows arbitrary content with OK/Cancel. Returns true on OK.</summary>
-    public static async Task<bool> Custom(string title, Control content, Func<bool>? validate = null, Control? focus = null, double? width = null, double? height = null)
+    /// <summary>
+    /// Shows arbitrary content between the title band and the bottom bar. Returns true on OK. A <paramref name="form"/> has fields
+    /// that take Enter themselves and is applied with Ctrl+Enter; <paramref name="bare"/> content reaches the edges of the window.
+    /// Given only a width the window takes the height of its content.
+    /// </summary>
+    public static async Task<bool> Custom(string title, Control content, Func<bool>? validate = null, Control? focus = null, double? width = null, double? height = null, string? subtitle = null, bool form = false, bool bare = false, Control? aside = null)
     {
         var w = new Window
         {
             Title = Loc.T(title),
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            SizeToContent = width == null ? SizeToContent.WidthAndHeight : SizeToContent.Manual,
-            MinWidth = 340
+            SizeToContent = width == null ? SizeToContent.WidthAndHeight : height == null ? SizeToContent.Height : SizeToContent.Manual,
+            MinWidth = 380,
+            Background = Look.Ground
         };
-        if (width != null) { w.Width = width.Value; w.Height = height ?? 500; }
+        if (width != null) w.Width = width.Value;
+        if (height != null) w.Height = height.Value;
         bool ok = false;
-        var okBtn = new Button { Content = Loc.T("OK"), MinWidth = 80, IsDefault = true, HorizontalContentAlignment = HorizontalAlignment.Center };
-        var cancel = new Button { Content = Loc.T("Cancel"), MinWidth = 80, IsCancel = true, HorizontalContentAlignment = HorizontalAlignment.Center };
-        okBtn.Click += (_, _) =>
+        void Apply()
         {
+            // the field being typed in takes its text when it loses focus, and Ctrl+Enter does not take the focus from it
+            if (w.FocusManager?.GetFocusedElement() is TextBox box) box.RaiseEvent(new RoutedEventArgs(InputElement.LostFocusEvent));
             if (validate?.Invoke() == false) return;
             ok = true;
             w.Close();
-        };
-        cancel.Click += (_, _) => w.Close();
-        var dock = new DockPanel { Margin = new Thickness(12) };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 10, 0, 0), Children = { okBtn, cancel } };
-        DockPanel.SetDock(buttons, Dock.Bottom);
-        dock.Children.Add(buttons);
-        dock.Children.Add(content);
-        w.Content = dock;
+        }
+        var apply = FormKit.Primary(form ? Loc.Ui("Apply") : Loc.T("OK"), Apply);
+        apply.IsDefault = !form;
+        ToolTip.SetTip(apply, apply.Content + " (Ctrl+Enter)");
+        var cancel = FormKit.Secondary(Loc.T("Cancel"), w.Close);
+        cancel.IsCancel = true;
+        var header = FormKit.Header(Loc.T(title), subtitle, aside);
+        var footer = FormKit.Footer(form ? Loc.Ui("Enter — confirm the field, Ctrl+Enter — apply, Esc — cancel") : null, cancel, apply);
+        DockPanel.SetDock(header, Dock.Top);
+        DockPanel.SetDock(footer, Dock.Bottom);
+        w.Content = new DockPanel { Children = { header, footer, bare ? content : new Border { Padding = new Thickness(16, 14), Child = content } } };
+        w.AddHandler(InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key != Key.Enter || e.KeyModifiers != KeyModifiers.Control) return;
+            Apply();
+            e.Handled = true;
+        }, RoutingStrategies.Tunnel);
         if (focus != null) w.Opened += (_, _) => focus.Focus();
         LastShown = w;
         if (Owner != null) await w.ShowDialog(Owner); else w.Show();
@@ -169,10 +209,14 @@ public static class Dialogs
     {
         var copy = Domain.ProjectJson.DeepClone(obj);
         var grid = new PropertyGrid { Exclude = exclude.ToHashSet() };
+        FormLayouts.Apply(grid, typeof(T));
         grid.SetTarget(copy);
-        var scroll = new ScrollViewer { Content = grid, MaxHeight = 640, MinWidth = 440 };
-        return await Custom(title, scroll) ? copy : null;
+        var scroll = new ScrollViewer { Content = grid, MaxHeight = 640, Padding = new Thickness(0, 0, 10, 0) };
+        return await Custom(title, scroll, width: 620, form: true) ? copy : null;
     }
+
+    /// <summary>The most recent message window (used by the UI smoke test).</summary>
+    public static Window? LastMessage { get; private set; }
 
     /// <summary>The most recent tool window opened by <see cref="ShowWindow"/> (used by the UI smoke test).</summary>
     public static Window? LastShown { get; private set; }

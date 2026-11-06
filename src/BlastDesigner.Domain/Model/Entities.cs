@@ -50,6 +50,9 @@ public abstract class Entity
         return c;
     }
 
+    /// <summary>A copy whose plain fields a property editor changes; the original keeps its values until they are applied.</summary>
+    public virtual Entity EditCopy() => ProjectJson.DeepClone<Entity>(this);
+
     /// <summary>Distance in plan from p to the entity's drawn geometry, used for picking.</summary>
     public virtual double PickDistance(Vec3 p) =>
         GetVertices().Select(v => Vec3.Distance2D(v, p)).DefaultIfEmpty(double.MaxValue).Min();
@@ -204,6 +207,18 @@ public sealed class SurfaceEntity : Entity
     public override void Transform(Func<Vec3, Vec3> f) { for (int i = 0; i < Vertices.Count; i++) Vertices[i] = f(Vertices[i]); InvalidateIndex(); }
 
     public override double PickDistance(Vec3 p) => ElevationAt(p.X, p.Y).HasValue ? 0.5 : double.MaxValue;
+
+    /// <summary>Shares the mesh, which property editors leave out: copied through JSON it took longer than all the rest of a click.</summary>
+    public override Entity EditCopy() => (Entity)MemberwiseClone();
+
+    /// <summary>The same surface with no mesh, for storing it apart; the original stays as it is.</summary>
+    public SurfaceEntity WithoutMesh()
+    {
+        var c = (SurfaceEntity)MemberwiseClone();
+        c.Vertices = new();
+        c.Triangles = new();
+        return c;
+    }
 
     // Plan-grid index of triangles, built lazily for fast elevation queries.
     private Dictionary<(int, int), List<int>>? _index;

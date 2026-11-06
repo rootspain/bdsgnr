@@ -13,6 +13,17 @@ namespace BlastDesigner.App.Tools;
 public sealed class MenuEntry
 {
     public string Header { get; init; } = string.Empty;
+    /// <summary>A smaller second line under the header (the folder of a recent file).</summary>
+    public string? Detail { get; init; }
+    /// <summary>A small text at the right end of the header line (when a recent file was opened).</summary>
+    public string? Note { get; init; }
+    /// <summary>
+    /// What has to be asked of the disk, run on a background thread once the menu is open so that a lost drive cannot hold it up:
+    /// the tip of the item and, when it has none yet, its note.
+    /// </summary>
+    public Func<(string Tip, string? Note)>? Later { get; init; }
+    /// <summary>The tip until <see cref="Later"/> has answered.</summary>
+    public string? Pending { get; init; }
     public Action? Action { get; init; }
     public Func<bool>? IsEnabled { get; init; }
     public Func<bool>? IsChecked { get; init; }
@@ -38,11 +49,37 @@ public sealed class MenuEntry
 
     public static List<Control> Build(IEnumerable<MenuEntry> entries) => entries.Select(BuildOne).ToList();
 
+    private static async void FillLater(MenuEntry e, MenuItem item)
+    {
+        // one text for both: it changes in place, also while the tip is on the screen
+        var shownTip = new TextBlock { Text = e.Pending };
+        ToolTip.SetTip(item, shownTip);
+        // beside the menu, not at the pointer: over the next rows it would stop the tips of the rows it covers
+        ToolTip.SetPlacement(item, PlacementMode.Right);
+        ToolTip.SetHorizontalOffset(item, 8);
+        try
+        {
+            var (tip, note) = await Task.Run(e.Later!);
+            shownTip.Text = tip;
+            if (note != null && item.Header is StackPanel { Children: [Grid title, ..] } && title.Children[^1] is TextBlock shown) shown.Text = note;
+        }
+        catch (Exception ex) { IO.Log.Error("Could not read a menu item", ex); }
+    }
+
     private static Control BuildOne(MenuEntry e)
     {
         if (e.IsSeparator) return new Separator();
         var header = Loc.T(e.Header);
         var mi = new MenuItem { Header = e.IsChecked != null ? (e.IsChecked() ? "✓ " : "    ") + header : header };
+        if (e.Detail != null)
+        {
+            var title = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Children = { new TextBlock { Text = header } } };
+            var note = new TextBlock { Text = e.Note, FontSize = 11, Foreground = Look.Muted, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Margin = new Avalonia.Thickness(24, 0, 0, 0) };
+            Grid.SetColumn(note, 1);
+            title.Children.Add(note);
+            mi.Header = new StackPanel { Spacing = 1, Children = { title, new TextBlock { Text = e.Detail, FontSize = 11, Foreground = Look.Muted } } };
+        }
+        if (e.Later != null) FillLater(e, mi);
         if (e.Gesture != null) mi.InputGesture = KeyGesture.Parse(e.Gesture);
         if (e.Icon != null) mi.Icon = Look.Icon(e.Icon, 16, Look.TextSoft, 2);
         if (e.IsEnabled != null) mi.IsEnabled = e.IsEnabled();

@@ -35,7 +35,8 @@ public partial class App : Application
         // main window, and Esc would reach the plan instead of closing it: such a window takes the focus itself.
         Window.WindowOpenedEvent.AddClassHandler<Window>((w, _) =>
         {
-            if (w is MainWindow || w.FocusManager?.GetFocusedElement() != null) return;
+            // the focus of the program is one: left on the plan it is not null, and only the window it lies in counts
+            if (w is MainWindow || (w.FocusManager?.GetFocusedElement() as Visual)?.GetVisualRoot() == w) return;
             w.Focusable = true;
             w.Focus();
         });
@@ -44,7 +45,22 @@ public partial class App : Application
         Log.Info("Application started");
         if (settings.UsageLogging) UsageLog.Start(Changelog.Current.ToString());
         // what is still in memory reaches the file also when the program fails
-        AppDomain.CurrentDomain.UnhandledException += (_, _) => UsageLog.Flush();
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            Log.Error("Fatal error", e.ExceptionObject as Exception);
+            UsageLog.Flush();
+        };
+        // An error in a command (most run as async void) would otherwise close the program with the work not saved.
+        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) =>
+        {
+            e.Handled = true;
+            Dialogs.ShowFailure(e.Exception);
+        };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            e.SetObserved();
+            Dialogs.ShowFailure(e.Exception.InnerException ?? e.Exception);
+        };
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var window = new MainWindow(settings);

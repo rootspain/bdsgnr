@@ -60,6 +60,17 @@ public sealed class ProductsEditor : DockPanel
     private readonly StackPanel _props = new() { Spacing = 18, Margin = new Thickness(18, 16) };
     private readonly Border _confirm = new() { IsVisible = false };
     private readonly TextBlock _status = new() { Foreground = Look.Faint, FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
+    /// <summary>Beside the status, on the tabs that need it: what the table is for.</summary>
+    private readonly TextBlock _tableNote = new()
+    {
+        Name = "tableNote",
+        Foreground = Look.Muted,
+        FontSize = 12,
+        TextWrapping = TextWrapping.Wrap,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(24, 0, 24, 0),
+        IsVisible = false
+    };
     private readonly HashSet<string> _filter = new();
     private readonly HashSet<string> _collapsed = new();
     private readonly CheckBox _showDeleted = new() { Name = "showDeleted" };
@@ -83,7 +94,7 @@ public sealed class ProductsEditor : DockPanel
         SetDock(footer, Dock.Bottom);
         Children.Add(footer);
         // a section for each table; the products are the first
-        foreach (var (name, table) in new (string, CatalogueEditor.Table?)[] { ("Products", null), ("Families", CatalogueEditor.Table.Families), ("Kinds", CatalogueEditor.Table.Kinds), ("Groups", CatalogueEditor.Table.Groups), ("Types", CatalogueEditor.Table.Types) })
+        foreach (var (name, table) in new (string, CatalogueEditor.Table?)[] { ("Products", null), ("Types", CatalogueEditor.Table.Types), ("Kinds", CatalogueEditor.Table.Kinds), ("Families", CatalogueEditor.Table.Families), ("Groups", CatalogueEditor.Table.Groups) })
         {
             var shown = table;
             var tab = new Button
@@ -136,6 +147,15 @@ public sealed class ProductsEditor : DockPanel
     {
         _body.IsVisible = table == null;
         _tableEditor.IsVisible = table != null;
+        _tableNote.Text = table switch
+        {
+            CatalogueEditor.Table.Types => L("Types are step 1 of the Initiation catalogue: the initiation systems whose products are used for ties. A type is made up of kinds and only narrows the choice. Types do not affect the calculations."),
+            CatalogueEditor.Table.Kinds => L("Every product has a kind. It sets how the program calculates the product in the charge, the ties and the quantities. Types and groups are made up of kinds, and each family belongs to a kind."),
+            CatalogueEditor.Table.Families => L("Families are step 2 of the Initiation catalogue: within a type they bring together the products of one line, and the Variant step then picks a product by its delay. Families do not affect the calculations."),
+            CatalogueEditor.Table.Groups => L("Groups are the filter chips above the list on the Products tab. With a chip of one kind chosen, Add makes a product of that kind at once. Groups do not affect the calculations."),
+            _ => null
+        };
+        _tableNote.IsVisible = _tableNote.Text != null;
         if (table is { } t) _tableEditor.Shown = t;
         else Refresh();
         var at = table == null ? 0 : (int)table.Value + 1;
@@ -521,7 +541,7 @@ public sealed class ProductsEditor : DockPanel
             Labeled("Name", Text("name", p.Name, v => { p.Name = v; title.Text = string.IsNullOrWhiteSpace(v) ? L("(no name)") : v; })),
             Fields(
                 Labeled("Manufacturer", Text("manufacturer", p.Manufacturer, v => p.Manufacturer = v)),
-                Labeled("Kind", kind)),
+                Labeled("Product kind", kind)),
             // the products of one kind and family are the variants of it in the initiation catalogue
             // the record of the family is found or made by name when the window is applied
             Fields(Labeled("Family", Text("family", p.Family, v => { if (v != p.Family) { p.Family = v; p.FamilyId = null; } })), new Border())));
@@ -781,7 +801,9 @@ public sealed class ProductsEditor : DockPanel
         var dock = new DockPanel();
         DockPanel.SetDock(buttons, Dock.Right);
         dock.Children.Add(buttons);
+        DockPanel.SetDock(_status, Dock.Left);
         dock.Children.Add(_status);
+        dock.Children.Add(_tableNote);
         return new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(16, 12), Child = dock };
     }
 
