@@ -45,6 +45,8 @@ public sealed class SceneOptions
     public bool HideWireframes { get; init; }
     /// <summary>Surface wireframes on selected surfaces only.</summary>
     public bool WireframesOnSelected { get; init; }
+    /// <summary>Only the blast is drawn: holes, initiation points and ties, the ties also when the view has them switched off.</summary>
+    public bool HideGeometry { get; init; }
     /// <summary>Objects drawn shifted by <see cref="MoveOffset"/> (live preview while they are dragged).</summary>
     public ISet<Guid>? MovedEntities { get; init; }
     public Vec3 MoveOffset { get; init; }
@@ -124,7 +126,7 @@ public static class PlanRenderer
 
         if (view.ShowGrid) DrawGrid(canvas, cam, stroke, text);
 
-        var entities = project.Entities.Where(Visible).ToList();
+        var entities = project.Entities.Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity)).ToList();
         if (view.ReverseDrawOrder) entities.Reverse();
 
         // Every surface shares one height scale, from the lowest point of any shown surface to the highest: by elevation
@@ -247,13 +249,15 @@ public static class PlanRenderer
         // Ties and rows refer to holes by id: one lookup table per frame, instead of searching the whole project for
         // each end of each tie (with a survey under the blast that was most of the frame).
         Dictionary<Guid, Entity>? byId = null;
-        if (view.ShowTies || view.ShowRows)
+        var showTies = view.ShowTies || opt.HideGeometry;
+        var showRows = view.ShowRows && !opt.HideGeometry;
+        if (showTies || showRows)
         {
             byId = new Dictionary<Guid, Entity>(project.Entities.Count);
             foreach (var e in project.Entities) byId.TryAdd(e.Id, e);
         }
-        if (view.ShowTies) DrawTies(canvas, cam, project, entities.OfType<TieEntity>(), byId!, opt, text);
-        if (view.ShowRows) DrawRows(canvas, cam, project, byId!, stroke);
+        if (showTies) DrawTies(canvas, cam, project, entities.OfType<TieEntity>(), byId!, opt, text);
+        if (showRows) DrawRows(canvas, cam, project, byId!, stroke);
 
         var holes = entities.OfType<Hole>().Where(h => HoleVisible(view, h)).ToList();
         if (!cam.IsPlan) holes = holes.OrderBy(h => cam.Depth(h.Collar)).ToList();

@@ -209,7 +209,7 @@ public sealed class StartupForm : DockPanel
         catch { return false; }
     }
 
-    private static string AppVersion => typeof(StartupForm).Assembly.GetName().Version?.ToString(3) ?? "0.2.5";
+    private static string AppVersion => typeof(StartupForm).Assembly.GetName().Version?.ToString(3) ?? "0.3.1";
 
 
     private void Finish(StartupChoice c, string? path = null) => Done?.Invoke(c, path);

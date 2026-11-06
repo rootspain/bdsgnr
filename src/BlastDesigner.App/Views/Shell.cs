@@ -550,9 +550,13 @@ public sealed class ToolPanel : Border
         if (tool.Name == "Tie")
         {
             var chain = new CheckBox { Content = Loc.Ui("Tie chain"), IsChecked = _vm.TieChain, Name = "tieChain", VerticalAlignment = VerticalAlignment.Center };
-            ToolTip.SetTip(chain, Loc.Ui("On: ties go in turn through the holes on the line. Off: one tie from the first hole to the last"));
+            ToolTip.SetTip(chain, Loc.Ui("On: ties are built as a chain through all the holes captured by the drawn line. Off: one tie from the start hole to the end hole, whether or not other holes lie on the way"));
             chain.IsCheckedChanged += (_, _) => _vm.TieChain = chain.IsChecked == true;
             _fields.Children.Add(chain);
+            var goOn = new CheckBox { Content = Loc.Ui("Continue after creating"), IsChecked = _vm.TieContinue, Name = "tieContinue", VerticalAlignment = VerticalAlignment.Center };
+            ToolTip.SetTip(goOn, Loc.Ui("On: the entry goes on from the hole just tied, as with Shift held. A click on that hole again or Esc finishes it"));
+            goOn.IsCheckedChanged += (_, _) => _vm.TieContinue = goOn.IsChecked == true;
+            _fields.Children.Add(goOn);
             var capture = new CheckBox
             {
                 Content = Ui.Row(6, new TextBlock { Text = Loc.Ui("Capture width"), VerticalAlignment = VerticalAlignment.Center }, Look.Kbd("F")),

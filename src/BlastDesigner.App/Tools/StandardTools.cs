@@ -333,10 +333,10 @@ public sealed class TieTool : Tool
         GoOnOrFinish(hit, p);
     }
 
-    /// <summary>After a tie: with Shift held the entry goes on from its hole, otherwise it is finished.</summary>
+    /// <summary>After a tie: with Shift held or Continue after creating on the entry goes on from its hole, otherwise it is finished.</summary>
     private void GoOnOrFinish(Entity hit, ToolPointer p)
     {
-        if (p.Modifiers.HasFlag(KeyModifiers.Shift)) _from = hit;
+        if (p.Modifiers.HasFlag(KeyModifiers.Shift) || Vm.TieContinue) _from = hit;
         else Finish();
     }
 

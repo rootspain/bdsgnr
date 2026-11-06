@@ -322,6 +322,22 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
         var (sx, sy) = view.Camera.ToScreen(h.Collar);
         if (sx < 0 || sy < 0 || sx > view.Bounds.Width || sy > view.Bounds.Height) throw new Exception($"hole {h.Label} is outside the plan on opening ({sx:0},{sy:0} in {view.Bounds.Width:0}x{view.Bounds.Height:0})");
     }
+    // the geometry is off at first, and comes back with the check box; printing has its button
+    var hideGeometry = w.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "hideGeometry");
+    if (hideGeometry.IsChecked != true || !view.OptionsSource!().HideGeometry) throw new Exception("the geometry should be hidden on opening");
+    if (vm.BuildSceneOptions().HideGeometry) throw new Exception("the main plan lost its geometry");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06e_first_movement_no_geometry.png"));
+    hideGeometry.IsChecked = false; Pump();
+    if (view.OptionsSource!().HideGeometry) throw new Exception("the check box did not bring the geometry back");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06f_first_movement_geometry.png"));
+    // on the screen, not only in the options: the viewport builds the options of its frame itself
+    if (File.ReadAllBytes(Path.Combine(outDir, "06e_first_movement_no_geometry.png")).SequenceEqual(File.ReadAllBytes(Path.Combine(outDir, "06f_first_movement_geometry.png")))) throw new Exception("the check box changes nothing on the plan");
+    var wide = view.Camera.Scale;
+    hideGeometry.IsChecked = true; Pump();
+    if (view.Camera.Scale <= wide) throw new Exception($"the blast should fill the plan: scale {wide} to {view.Camera.Scale}");
+    if (!w.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "print")) throw new Exception("no print button");
     // the plan keeps its own arrow style; the window's settings show on its chips and size field
     var buttons = w.GetLogicalDescendants().OfType<Button>().ToList();
     if (buttons.Any(b => (b.Tag as string) == "shape:2")) throw new Exception("the Auto shape is still offered");
@@ -1997,10 +2013,29 @@ Step("tie tool: ties joined to the initiation point run away from it, at 0 ms to
         var (x, y) = vm.View.Camera.ToScreen(h.Collar);
         vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar, Left = true, ClickCount = 1, Modifiers = shift ? Avalonia.Input.KeyModifiers.Shift : Avalonia.Input.KeyModifiers.None });
     }
+    var entered = vm.Doc.UndoNames.Count;
     // drawn from the far end: the first tie reaches no point yet, the second joins both to the tied hole
     Click(ids[3]); Click(ids[2], shift: true); Click(ids[1]); Pump();
     if (!vm.Project!.Ties.Any(t => t.FromId == ids[1] && t.ToId == ids[2]) || !vm.Project.Ties.Any(t => t.FromId == ids[2] && t.ToId == ids[3]))
         throw new Exception("the ties of the entry should run away from the hole joined to the initiation point");
+    while (vm.Doc.UndoNames.Count > entered) vm.Undo();
+    // Continue after creating: off, a tie ends the entry; on, it goes on from the hole as with Shift, until that hole is clicked again
+    bool Tied(Guid a, Guid b) => vm.Project!.Ties.Any(t => (t.FromId == a && t.ToId == b) || (t.FromId == b && t.ToId == a));
+    var goOn = window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == "tieContinue") ?? throw new Exception("no Continue after creating box on the tie panel");
+    if (goOn.IsChecked != false || vm.TieContinue) throw new Exception("Continue after creating should be off by default");
+    Click(ids[3]); Click(ids[2]); Click(ids[1]); Pump();
+    if (!Tied(ids[3], ids[2]) || Tied(ids[2], ids[1])) throw new Exception("with the box off the entry should end with the tie");
+    vm.ActiveTool!.Cancel();
+    while (vm.Doc.UndoNames.Count > entered) vm.Undo();
+    goOn.IsChecked = true; Pump();
+    Click(ids[3]); Click(ids[2]); Click(ids[1]); Pump();
+    if (!Tied(ids[3], ids[2]) || !Tied(ids[2], ids[1])) throw new Exception("with the box on the entry should go on from the hole");
+    var ties = vm.Project!.Ties.Count();
+    Click(ids[1]); Click(ids[3]); Pump();
+    if (vm.Project!.Ties.Count() != ties) throw new Exception("a click on the last hole should finish the entry");
+    vm.ActiveTool!.Cancel();
+    goOn.IsChecked = false; Pump();
+    while (vm.Doc.UndoNames.Count > entered) vm.Undo();
     while (vm.Doc.UndoNames.Count > steps) vm.Undo();
     if (vm.Project.Ties.Count() != tiesBefore) throw new Exception("the ties were not undone");
     vm.ActiveConnector = connector; vm.ActiveTieDelayMs = delay;

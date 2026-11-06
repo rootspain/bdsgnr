@@ -648,6 +648,7 @@ public static class AnalysisWindows
 
     static double _firstMovementArrowSize = BlastDesigner.Engine.FirstMovement.DefaultArrowSize;
     static bool _firstMovementGradient;
+    static bool _firstMovementHideGeometry = true;
     static FirstMovementOverlay? _firstMovementOpen;
     static bool _firstMovementOnPlan;
 
@@ -679,7 +680,7 @@ public static class AnalysisWindows
             var drag = vm.View.Preview;
             return new SceneOptions
             {
-                Selection = o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, Overlays = new IOverlay[] { overlay },
+                Selection = o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, Overlays = new IOverlay[] { overlay }, HideGeometry = _firstMovementHideGeometry,
                 MovedEntities = drag.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null, MoveOffset = drag.MoveOffset
             };
         });
@@ -780,6 +781,19 @@ public static class AnalysisWindows
             if (path != null) File.WriteAllText(path, BlastDesigner.Engine.FirstMovement.ToCsv(overlay.Arrows(vm.Project!)) + Environment.NewLine);
         };
 
+        var print = new Button
+        {
+            Content = IconText("print", "Print"),
+            Height = 32,
+            Padding = new Thickness(12, 0),
+            CornerRadius = new CornerRadius(8),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Name = "print"
+        };
+
+        var hideGeometry = new CheckBox { Content = Loc.Ui("Hide geometry"), IsChecked = _firstMovementHideGeometry, Name = "hideGeometry", VerticalAlignment = VerticalAlignment.Center };
+        hideGeometry.IsCheckedChanged += (_, _) => { _firstMovementHideGeometry = hideGeometry.IsChecked == true; view.ZoomAll(); };
+
         var header = new Border
         {
             Background = Look.Panel,
@@ -790,7 +804,7 @@ public static class AnalysisWindows
         };
 
         // action bar: what the arrows are, and what to do with them
-        var actions = Ui.Row(14, Ui.Row(8, onPlan, new TextBlock { Text = Loc.T("Show on plan"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }), export);
+        var actions = Ui.Row(14, hideGeometry, Ui.Row(8, onPlan, new TextBlock { Text = Loc.T("Show on plan"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }), export, print);
         var note = new TextBlock
         {
             Text = Loc.F("{0} arrows", arrowCount) + "  ·  " + Loc.T("The arrows show where the rock moves first, from the firing times of the neighbouring holes"),

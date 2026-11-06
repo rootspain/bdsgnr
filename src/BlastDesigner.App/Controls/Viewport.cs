@@ -128,6 +128,7 @@ public sealed class Viewport : Control
             SurfaceColors = opt.SurfaceColors,
             AnimationTimeMs = opt.AnimationTimeMs,
             HiddenEntities = opt.HiddenEntities,
+            HideGeometry = opt.HideGeometry,
             SliceHalfWidth = opt.SliceHalfWidth,
             TopInset = opt.TopInset,
             HideWireframes = SurfaceWireframe == IO.ProgramSettings.WireframeNever
@@ -637,10 +638,11 @@ public sealed class Viewport : Control
         if (Bounds.Width >= 1 && Bounds.Height >= 1) { Camera.Width = Bounds.Width; Camera.Height = Bounds.Height; }
         // only what is drawn: hidden layers, display switches, hole filters and hidden objects do not count
         var visibleLayers = project.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
-        var hidden = OptionsSource?.Invoke().HiddenEntities;
+        var options = OptionsSource?.Invoke();
+        var hidden = options?.HiddenEntities;
         var b = Bounds3.Empty;
         foreach (var e in project.Entities)
-            if (e is not TieEntity && visibleLayers.Contains(e.LayerId) && Shown(project, e, hidden)) b.Add(e.GetBounds());
+            if (e is not TieEntity && (options?.HideGeometry != true || e is Hole or InitiationPoint) && visibleLayers.Contains(e.LayerId) && Shown(project, e, hidden)) b.Add(e.GetBounds());
         if (b.IsEmpty) { Camera.Target = Vec3.Zero; Camera.Scale = 5; }
         else Camera.Fit(b);
         CameraChanged?.Invoke();

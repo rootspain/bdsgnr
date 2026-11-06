@@ -59,6 +59,8 @@ public sealed partial class MainViewModel : ObservableObject
     public HashSet<Guid> HiddenEntities { get; } = new();
     /// <summary>Tie tool panel ▸ Tie chain: a line ties the holes on its way in turn; off, one tie from start to end.</summary>
     public bool TieChain { get; set; } = true;
+    /// <summary>Tie tool panel ▸ Continue after creating: the entry goes on from the hole just tied, as with Shift held.</summary>
+    public bool TieContinue { get; set; }
     /// <summary>Tie tool panel ▸ Capture width: grey lines beside the tie being drawn show what it captures; kept in the settings.</summary>
     public bool TieCaptureShown
     {
