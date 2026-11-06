@@ -204,6 +204,7 @@ public sealed partial class MainViewModel
     {
         ("Point", "point", "Point", () => DrawPointTool(PointKind.General)),
         ("Polyline", "polyline", "Polyline", () => DrawPolylineTool(false)),
+        ("Section line", "sectionline", "Section line", DrawSectionLineTool),
         ("Polygon", "polygon", "Polygon", () => DrawPolylineTool(true)),
         ("Circle", "circle", "Circle", DrawCircleTool),
         ("Arrow", "arrow", "Arrow", DrawArrowTool),

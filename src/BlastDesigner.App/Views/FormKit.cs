@@ -68,16 +68,45 @@ public static class FormKit
         return b;
     }
 
-    /// <summary>A group of fields under a small capital title.</summary>
-    public static Control Section(string title, Control content) => new StackPanel
+    /// <summary>A tab of a window; <see cref="SetTab"/> marks the open one.</summary>
+    public static Button Tab(string text, Action click)
     {
-        Spacing = 8,
-        Children =
+        var tab = new Button
         {
-            new TextBlock { Text = title.ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue },
-            content
+            Content = text,
+            Height = 34,
+            Padding = new Thickness(12, 0),
+            CornerRadius = new CornerRadius(0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0, 0, 0, 2),
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        tab.Classes.Add("flat");
+        tab.Click += (_, _) => click();
+        return tab;
+    }
+
+    /// <summary>The open tab is underlined in the accent colour, as on the panels of the main window.</summary>
+    public static void SetTab(Button tab, bool open)
+    {
+        tab.BorderBrush = open ? Look.Accent : Brushes.Transparent;
+        tab.Foreground = open ? Look.Text : Look.Muted;
+    }
+
+    /// <summary>A group of fields under a small capital title, with what acts on the whole group at the right end of the title.</summary>
+    public static Control Section(string title, Control content, Control? aside = null)
+    {
+        var caption = new TextBlock { Text = title.ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue, VerticalAlignment = VerticalAlignment.Center };
+        var head = new DockPanel();
+        if (aside != null)
+        {
+            aside.VerticalAlignment = VerticalAlignment.Center;
+            DockPanel.SetDock(aside, Dock.Right);
+            head.Children.Add(aside);
         }
-    };
+        head.Children.Add(caption);
+        return new StackPanel { Spacing = 8, Children = { head, content } };
+    }
 
     public static Control Labeled(string label, Control field) => new StackPanel
     {
@@ -152,6 +181,8 @@ public static class FormLayouts
         [typeof(MainViewModel.LasImportOptions)] = Of("m: CellSize, MaxEdge", S("Points", "CellSize KeepLowest"), S("Surface", "MaxEdge CreateSurface")),
         [typeof(PatternParameters)] = Of("m: Burden, Spacing, EdgeOffset; °: Orientation", S("Pattern", "Burden Spacing Pattern Orientation EdgeOffset"), S("Numbering", "LabelPrefix StartNumber")),
         [typeof(Layer)] = Of("", S("Layer", "Name Group Color LineWidth"), S("Display", "Visible Locked Frozen ShowText")),
+        [typeof(ReportFrame)] = Of("", S("", "MarginMm LineWidthMm")),
+        [typeof(ReportStamp)] = Of("", S("Stamp", "Name Place Attach Pages")),
         [typeof(TypeDefinition)] = Of("mm: Diameter", S("Type", "Name Color Diameter Density")),
         [typeof(LoadingRule)] = Of("m: MinLength, MaxLength, StemmingLength, SoftCollarExtraStemming; mm: MinDiameter, MaxDiameter",
             S("Rule", "Name Priority"), S("Applies to", "HoleType MinLength MaxLength MinDiameter MaxDiameter Wet"), S("Stemming", "StemmingLength StemmingProductId MinStemmingDiameters SoftCollarExtraStemming"),

@@ -948,7 +948,7 @@ Tie palette	Палитра СИ
 Ties	Связи
 Ties: {0}	Связей: {0}
 Time	Время
-Time at the line (ms)	Время на линии (мс)
+Time at the line (ms)	Время на фронте (мс)
 Time envelope	Время на ступень
 Time offset (ms)	Смещение времени (мс)
 Time offset (s)	Смещение времени (с)
@@ -956,7 +956,7 @@ Time step ms	Шаг времени, мс
 Timing	Время
 Timing labels	Подписи времени
 Timing labels on the plan	Подписи времени на плане
-Timing line	Линия времени
+Timing line	Фронт отбойки ЭСИ
 Timing recalculated	Времена пересчитаны
 Title	Заголовок
 To horizon	На горизонт
@@ -1763,7 +1763,7 @@ ui:Delete ties	Удалить связи
 ui:Electronic	Электронное (ЭСИ)
 ui:Time by click	Время щелчком
 ui:Along row	Вдоль ряда
-ui:Timing line	Линия времени
+ui:Timing line	Фронт отбойки ЭСИ
 ui:Opening point	Точка начала
 ui:V pattern	V-схема
 ui:Encoding sequence	Порядок кодирования
@@ -2192,6 +2192,74 @@ ui:Files	Файлы
 ui:Interface language	Язык интерфейса
 ui:Project properties	Свойства проекта
 ui:Deleted or moved	Удалён или перемещён
+Section line	Линия разреза
+Add section line	Добавить линию разреза
+Previous section line	Предыдущая линия разреза
+Next section line	Следующая линия разреза
+ui:The blast has no section lines. Draw one with the Section line tool.	Во взрыве нет линий разреза. Нарисуйте их инструментом «Линия разреза».
+ui:Footer	Колонтитул
+ui:Date and time	Дата и время
+ui:Page number	Номер страницы
+ui:Vertical alignment of the whole column of captions: click for the next one	Выравнивание по вертикали для всей колонки подписей: щелчок меняет его
+ui:Vertical alignment of the whole column of texts: click for the next one	Выравнивание по вертикали для всей колонки текстов: щелчок меняет его
+ui:With Shift the step is 4 times smaller	С Shift шаг в 4 раза меньше
+ui:Alignment of the caption: click for the next one	Выравнивание подписи: щелчок меняет его
+ui:Alignment of the text: click for the next one	Выравнивание текста: щелчок меняет его
+ui:Pan up	Сдвинуть вверх
+ui:Pan down	Сдвинуть вниз
+ui:Pan left	Сдвинуть влево
+ui:Pan right	Сдвинуть вправо
+ui:The scale is set in the options of the plan	Масштаб задан в параметрах плана
+ui:The frame is locked: click to fit the drawing to the objects that show again	Кадр закреплён. Щелчок снова вписывает чертёж в видимые объекты
+ui:Lock the frame: the check boxes will not change the scale and position of the drawing	Закрепить кадр: галочки не будут менять масштаб и положение чертежа
+Attach	Присоединить
+Horizontal	Горизонтально
+Vertical	Вертикально
+Specified	На указанных
+ui:New page	Новая страница
+ui:After the title	После заголовка
+ui:At the top of each page, after the title. {name} is the name of the blast; the fields of the stamps work too	Вверху каждой страницы, после заголовка. {name} — название взрыва; работают и поля штампов
+ui:Coord. grid	Коорд. сетка
+ui:Load design…	Загрузить дизайн…
+ui:Replace the choices of the report, the frame, the stamps and the visibility with those of a file	Заменить параметры отчёта, рамку, штампы и видимость значениями из файла
+Load report design	Загрузить дизайн отчёта
+ui:The file is not a report design.	Этот файл не является дизайном отчёта.
+ui:Save design…	Сохранить дизайн…
+ui:Save the choices of the report, the frame, the stamps and the visibility to a file	Сохранить параметры отчёта, рамку, штампы и видимость в файл
+Save report design	Сохранить дизайн отчёта
+Report design file	Файл дизайна отчёта
+ui:On pages	На страницах
+ui:on all	на всех
+ui:specified	указанных
+ui:Page numbers, separated by spaces	Номера страниц через пробел
+ui:Report preview	Предпросмотр отчёта
+ui:Report	Отчёт
+ui:Report design	Дизайн отчёта
+ui:Save PDF…	Сохранить PDF…
+ui:Print…	Печать…
+ui:Previous page	Предыдущая страница
+ui:Next page	Следующая страница
+ui:Zoom in	Увеличить
+ui:Zoom out	Уменьшить
+ui:Width	По ширине
+ui:Whole page	Страница целиком
+ui:Frame	Рамка
+ui:Stamp	Штамп
+ui:Stamp text	Содержание штампа
+ui:Sheet	Лист
+ui:Fields:	Поля:
+ui:Building the pages…	Страницы строятся…
+ui:Pages: {0}	Страниц: {0}
+ui:Sent to the default printer: this desktop has no print dialog.	Отправлено на принтер по умолчанию: в этой среде нет диалога печати.
+Margin mm	Отступ от края, мм
+Line width mm	Толщина линии, мм
+Width mm	Ширина, мм
+Pages	Страницы
+Bottom right	Внизу справа
+Bottom left	Внизу слева
+Bottom wide	Внизу на всю ширину
+Top right	Вверху справа
+First	Только первая
 ui:Hide geometry	Не показывать геометрию
 ui:Size: {0}	Размер: {0}
 ui:<calculating...>	<вычисляется...>
@@ -2266,8 +2334,8 @@ ui:One scale for all surfaces: grey-blue at the lowest point, cream at the highe
 ui:Colour: elevation, one scale for all surfaces	Цвет — отметка, одна шкала для всех поверхностей
 ui:Each kind has its colour; one height scale for all surfaces, darker at the lowest point, lighter at the highest	У каждого типа свой цвет; одна шкала высот для всех поверхностей: темнее в самой низкой точке, светлее в самой высокой
 ui:Colour: kind of surface; one height scale for all, darker at the lowest point, lighter at the highest	Цвет — тип поверхности; шкала высот общая: темнее в самой низкой точке, светлее в самой высокой
-Click up to four points of the timing line (double-click or Enter to finish); selected holes (or all) are programmed from it.	Щёлкните до четырёх точек линии времени (двойной щелчок или Enter — готово); выбранные (или все) скважины получат время от неё.
-Time line (contour)	Линия времени (контурная)
+Click up to four points of the timing line (double-click or Enter to finish); selected holes (or all) are programmed from it.	Щёлкните до четырёх точек фронта отбойки ЭСИ (двойной щелчок или Enter — готово); выбранные (или все) скважины получат время от него.
+Time line (contour)	Фронт отбойки ЭСИ (контурный)
 Burn line	Линия горения
 Advanced burn	Расширенная линия горения
 Reverse line direction	Обратное направление линии
@@ -2285,7 +2353,7 @@ Time of the first hole, ms	Время первой скважины, мс
 Holes with a time set by hand keep it.	Скважины с временем, заданным вручную, не перезаписываются.
 {0} holes timed, {1} with manual time kept	Время задано {0} скважинам, ручное время сохранено у {1}
 Maximum delay {0} ms exceeded, holes not timed: {1}	Превышено максимальное замедление {0} мс, время не задано скважинам: {1}
-Timing lines	Линии времени
+Timing lines	Фронты отбойки ЭСИ
 Segments: {0} · {1} m	Отрезков: {0} · {1} м
 Selected holes: {0}	Выбрано скважин: {0}
 All holes: {0}	Все скважины: {0}
@@ -2294,7 +2362,7 @@ Shortest interval between neighbours: {0} ms	Мин. интервал между
 Up to {0} holes fire within one {1} ms window	До {0} скв. срабатывают в одном окне {1} мс
 No two holes within one {0} ms window	Нет совпадений в окне {0} мс
 {0} holes with a time set by hand keep it	{0} скв. с временем, заданным вручную, сохранят его
-{0} holes are out of reach of the line	{0} скв. вне досягаемости линии
+{0} holes are out of reach of the line	{0} скв. вне досягаемости фронта
 {0} holes would pass the maximum delay {1} ms and stay as they are	{0} скв. превысят максимальное время {1} мс и останутся без изменений
 ui:Mouse wheel or ↑/↓ change a value; Ctrl+Enter applies, Esc cancels	Колесо мыши или ↑/↓ меняют значение; Ctrl+Enter — применить, Esc — отмена
 ui:Line type	Тип линии
@@ -2304,7 +2372,7 @@ ui:Direction	Направление
 ui:Burn with angles	Горение с углами
 ui:Segments	Отрезки
 ui:Contour line	Контурная
-ui:Time grows with the distance from the line	Время растёт с удалением от линии
+ui:Time grows with the distance from the line	Время растёт с удалением от фронта
 ui:Burn line	Горение
 ui:The signal runs along the line and spreads to the sides	Сигнал идёт вдоль линии и расходится в стороны
 ui:The front spreads to the sides at set angles	Фронт расходится в стороны под заданными углами
@@ -2323,8 +2391,8 @@ ui:Exponent	Показатель
 ui:Relief along the line	Замедление вдоль линии
 ui:Left front angle	Угол фронта слева
 ui:Right front angle	Угол фронта справа
-ui:The angle arms are drawn from the first point on the plan; the relief to each side is the relief along the line × tan(angle).	Лучи углов на плане идут от первой точки; замедление в каждую сторону = замедление вдоль линии × tg(угла).
-ui:No hole gets a time from this line	Ни одна скважина не получит время от этой линии
+ui:The angle arms are drawn from the first point on the plan; the relief to each side is the relief along the line × tan(angle).	Лучи углов на плане идут от первой точки; замедление в каждую сторону = замедление вдоль фронта × tg(угла).
+ui:No hole gets a time from this line	Ни одна скважина не получит время от этого фронта
 ui:Holes	Скважины
 ui:Elevation	Отметка
 ui:Temperature	Температура
@@ -2342,11 +2410,11 @@ ui:Deck sequence	Послед. зарядов
 ui:Surface time	Время поверхности
 ui:°C	°C
 Decks: {0}	Заряды: {0}
-Edit timing line	Изменить линию времени
-Holes of this line: {0}	Скважин этой линии: {0}
-ui:Reprogram the holes from the changed line	Перепрограммировать скважины по изменённой линии
-ui:Off: only the line changes, the holes keep their times	Выключено: меняется только линия, время скважин остаётся прежним
-Timing line moved: {0} holes reprogrammed	Линия времени перемещена: перепрограммировано скважин — {0}
+Edit timing line	Изменить фронт отбойки ЭСИ
+Holes of this line: {0}	Скважин этого фронта: {0}
+ui:Reprogram the holes from the changed line	Перепрограммировать скважины по изменённому фронту
+ui:Off: only the line changes, the holes keep their times	Выключено: меняется только фронт, время скважин остаётся прежним
+Timing line moved: {0} holes reprogrammed	Фронт отбойки ЭСИ перемещён: перепрограммировано скважин — {0}
 Visualization	Визуализация
 Arrow {0:0.0} m	Стрелка {0:0.0} м
 Increase arrow	Увеличить стрелку
@@ -2492,14 +2560,14 @@ ui:Apply, save and close	Применить, сохранить и закрыт�
 ui:Nothing changes until Apply or OK	Ничего не меняется до «Применить» или «OK»
 ui:Only when selected	Только когда выделена
 Add holes	Добавить скважины
-Add the holes with an electronic detonator that are on no timing line, program them from this line and select its holes	Добавить скважины с электронным детонатором, не привязанные ни к одной линии времени, запрограммировать от этой линии и выделить её скважины
-Every hole with an electronic detonator is already on a timing line.	Все скважины с электронным детонатором уже привязаны к линиям времени.
-Add holes to timing line	Добавить скважины в линию времени
-Timing line: {0} holes added, {1} holes timed, {2} with manual time kept	Линия времени: добавлено скважин {0}, запрограммировано {1}, с ручным временем оставлено {2}
+Add the holes with an electronic detonator that are on no timing line, program them from this line and select its holes	Добавить скважины с электронным детонатором, не привязанные ни к одному фронту отбойки ЭСИ, запрограммировать от этого фронта и выделить его скважины
+Every hole with an electronic detonator is already on a timing line.	Все скважины с электронным детонатором уже привязаны к фронтам отбойки ЭСИ.
+Add holes to timing line	Добавить скважины во фронт отбойки ЭСИ
+Timing line: {0} holes added, {1} holes timed, {2} with manual time kept	Фронт отбойки ЭСИ: добавлено скважин {0}, запрограммировано {1}, с ручным временем оставлено {2}
 Select assigned	Выделить назначенные
-Select the holes this timing line programs	Выделить скважины, которые инициирует эта линия времени
-The timing line programs no holes	Линия времени не инициирует ни одной скважины
-Timing line: {0} holes selected	Линия времени: выделено скважин {0}
+Select the holes this timing line programs	Выделить скважины, которые инициирует этот фронт отбойки ЭСИ
+The timing line programs no holes	Фронт отбойки ЭСИ не инициирует ни одной скважины
+Timing line: {0} holes selected	Фронт отбойки ЭСИ: выделено скважин {0}
 Build the surface from the survey (all its lines as breaklines; faces and bench platforms as surfaces of their kinds)	Построить поверхность по съёмке (все её линии — структурные; откосы и площадки уступов — отдельными поверхностями своих типов)
 ui:Direction, °	Отбойка, °
 ui:Edge offset, m	Отступ, м

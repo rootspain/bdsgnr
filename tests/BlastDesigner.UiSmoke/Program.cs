@@ -322,6 +322,11 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
         var (sx, sy) = view.Camera.ToScreen(h.Collar);
         if (sx < 0 || sy < 0 || sx > view.Bounds.Width || sy > view.Bounds.Height) throw new Exception($"hole {h.Label} is outside the plan on opening ({sx:0},{sy:0} in {view.Bounds.Width:0}x{view.Bounds.Height:0})");
     }
+    // the arrows stay off the main plan until the switch says so
+    var planSwitch = w.GetLogicalDescendants().OfType<ToggleSwitch>().First(t => t.Name == "onPlan");
+    if (planSwitch.IsChecked != false || vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.FirstMovementOverlay>().Any()) throw new Exception("the arrows should not be on the plan at first");
+    planSwitch.IsChecked = true; Pump();
+    if (!vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.FirstMovementOverlay>().Any()) throw new Exception("the switch did not put the arrows on the plan");
     // the geometry is off at first, and comes back with the check box; printing has its button
     var hideGeometry = w.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "hideGeometry");
     if (hideGeometry.IsChecked != true || !view.OptionsSource!().HideGeometry) throw new Exception("the geometry should be hidden on opening");
@@ -428,7 +433,7 @@ Step("save and reload", () =>
 Step("pdf report", () =>
 {
     using var fs = File.Create(Path.Combine(outDir, "report.pdf"));
-    BlastDesigner.Rendering.Reports.WritePdf(vm.Project!, fs, new BlastDesigner.Rendering.ReportOptions());
+    BlastDesigner.Rendering.Reports.WritePdf(vm.Project!, fs, new BlastDesigner.Domain.Model.ReportOptions());
 });
 Step("exports", () =>
 {
@@ -670,7 +675,7 @@ Step("dropdown buttons open menus", () =>
         held.Close(); Pump();
     }
     var order = string.Join(",", vm.DrawingTools().Select(e => e.Header));
-    if (order != "Point,Polyline,Polygon,Circle,Arrow,Text,Dimension,North point") throw new Exception("drawing tools order: " + order);
+    if (order != "Point,Polyline,Section line,Polygon,Circle,Arrow,Text,Dimension,North point") throw new Exception("drawing tools order: " + order);
     vm.DrawingTools().First(e => e.Header == "Circle").Action!(); Pump();
     if (vm.ActiveTool?.Name != "Circle" || vm.DrawingTool != "Circle") throw new Exception("picking Circle did not start it");
     buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
@@ -713,7 +718,9 @@ Step("analysis overlays never stack", () =>
             a.Run(); Pump(); b.Run(); Pump();
             var n = vm.AnalysisOverlays.Count;
             if (n > 1) throw new Exception($"{a.Name} then {b.Name}: {n} overlays on the plan");
-            if (a.Name != b.Name && (n != 1 || vm.AnalysisOverlays[0].GetType() != b.Kind)) throw new Exception($"{a.Name} then {b.Name}: expected only {b.Name}, got {n}");
+            // the first movement window leaves the plan as it is while its switch is off
+            var shown = b.Name == "movement" ? a : b;
+            if (a.Name != b.Name && (n != 1 || vm.AnalysisOverlays[0].GetType() != shown.Kind)) throw new Exception($"{a.Name} then {b.Name}: expected only {shown.Name}, got {n}");
             vm.ClearOverlays(); BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); Pump();
         }
     vm.VisualizeTiming(); Pump(); vm.VisualizeTiming(); Pump();
@@ -2740,7 +2747,6 @@ Step("The edit windows, tables and messages have the look of the input forms and
     Opens("73_prompt", () => BlastDesigner.App.Services.Dialogs.Prompt("Text", "Text", "abc"));
     Opens("73b_number", () => BlastDesigner.App.Services.Dialogs.PromptNumber("Expand polygon", "Distance (m), negative shrinks", 5));
     Opens("73c_choose", () => BlastDesigner.App.Services.Dialogs.Choose("Print plan", "Scale", new[] { "1:250", "1:500" }));
-    Opens("74_report_designer", ReportDesignerWindow.Show);
     Opens("74b_text_import", () => TextImportWindow.Show(new[] { "Hole,X,Y,Z", "1,10,20,300", "2,14,20,300" }, "holes.csv"));
     if (vm.Doc.UndoNames.Count != cancelled) throw new Exception("a cancelled window changed the project");
 
@@ -2939,6 +2945,563 @@ Step("Esc cancels a form from any of its fields", () =>
         }
         if (failed.Count > 0) throw new Exception($"{name}: Esc stayed in {string.Join("; ", failed)}");
     }
+});
+Step("Report preview: pages from the choices, the design of the report, a PDF file and the printer, the blast untouched", () =>
+{
+    var saved = BlastDesigner.Domain.ProjectJson.DeepClone(vm.Settings.ReportDesign);
+    var steps = vm.Doc!.UndoNames.Count;
+    (ReportPreviewForm Form, Window Window, Task Task) Open(Func<Task> open)
+    {
+        var task = open(); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var form = w.GetLogicalDescendants().OfType<ReportPreviewForm>().Single();
+        Wait(form);
+        return (form, w, task);
+    }
+    void Wait(ReportPreviewForm form)
+    {
+        for (int i = 0; i < 4000 && !form.Ready.IsCompleted; i++) { Pump(); Thread.Sleep(5); }
+        Pump();
+        if (!form.Ready.IsCompleted) throw new Exception("the pages were not built");
+    }
+    void Press(Window w, string name) { w.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    void Shot(Window w, string name) { Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, name + ".png")); }
+
+    var report = Open(vm.PrintReports);
+    var pages = report.Form.Document?.Pages.Count ?? 0;
+    if (pages == 0) throw new Exception("no pages");
+    // the pages and the zoom stand under the page, in its middle, whichever tab is open
+    void Centred()
+    {
+        var controls = report.Window.GetLogicalDescendants().OfType<StackPanel>().First(c => c.Name == "pageControls");
+        var area = report.Window.GetLogicalDescendants().OfType<ScrollViewer>().First(c => c.Name == "pages");
+        var middle = area.TranslatePoint(new Point(area.Bounds.Width / 2, 0), report.Window)!.Value;
+        var under = controls.TranslatePoint(new Point(controls.Bounds.Width / 2, 0), report.Window)!.Value;
+        if (Math.Abs(middle.X - under.X) > 1 || under.Y < middle.Y + area.Bounds.Height - 1) throw new Exception($"the controls at {under}, the middle of the page at {middle}");
+    }
+    Centred();
+    Shot(report.Window, "80_preview_report");
+    var text = report.Window.GetLogicalDescendants().OfType<TextBlock>();
+    if (text.First(t => t.Name == "pageText").Text != $"1 / {pages}") throw new Exception(text.First(t => t.Name == "pageText").Text);
+    report.Form.GoTo(pages); Pump();
+    if (report.Form.Page != pages - 1) throw new Exception("the last page is not " + report.Form.Page);
+    // PgUp and PgDn turn the pages, on both tabs and from a field; they stop at the ends
+    void PageKey(Avalonia.Input.Key key, Avalonia.Input.PhysicalKey physical) { report.Window.KeyPress(key, Avalonia.Input.RawInputModifiers.None, physical, null); Pump(); }
+    void PageUp() => PageKey(Avalonia.Input.Key.PageUp, Avalonia.Input.PhysicalKey.PageUp);
+    void PageDown() => PageKey(Avalonia.Input.Key.PageDown, Avalonia.Input.PhysicalKey.PageDown);
+    if (pages < 2) throw new Exception("the keys need two pages");
+    PageDown();
+    if (report.Form.Page != pages - 1) throw new Exception("PgDn went past the last page");
+    PageUp();
+    if (report.Form.Page != pages - 2) throw new Exception("PgUp did not turn the page: " + report.Form.Page);
+    report.Form.GoTo(0); Pump();
+    PageUp();
+    if (report.Form.Page != 0) throw new Exception("PgUp went before the first page");
+    Press(report.Window, "tabDesign");
+    PageDown();
+    if (report.Form.Page != 1) throw new Exception("PgDn on the design tab: " + report.Form.Page);
+    var marginBox = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propMarginMm");
+    marginBox.Focus(); Pump();
+    PageUp();
+    if (report.Form.Page != 0) throw new Exception("PgUp from a field: " + report.Form.Page);
+    Press(report.Window, "tabReport");
+    // the wheel: down the next page, up the one before, with Ctrl the zoom; a tall page scrolls first
+    var sheetArea = report.Window.GetLogicalDescendants().OfType<ScrollViewer>().First(c => c.Name == "pages");
+    var overPage = sheetArea.TranslatePoint(new Point(sheetArea.Bounds.Width / 2, sheetArea.Bounds.Height / 2), report.Window)!.Value;
+    void Wheel(double y, Avalonia.Input.RawInputModifiers keys = Avalonia.Input.RawInputModifiers.None) { report.Window.MouseWheel(overPage, new Vector(0, y), keys); Pump(); }
+    Wheel(-1);
+    if (report.Form.Page != 1) throw new Exception("the wheel down: page " + report.Form.Page);
+    Wheel(1);
+    if (report.Form.Page != 0) throw new Exception("the wheel up: page " + report.Form.Page);
+    var fitted = report.Form.ZoomLevel;
+    Wheel(1, Avalonia.Input.RawInputModifiers.Control);
+    if (report.Form.ZoomLevel <= fitted || report.Form.Page != 0) throw new Exception("Ctrl and the wheel should zoom");
+    Press(report.Window, "fitWidth");
+    Pump();
+    if (sheetArea.Extent.Height > sheetArea.Viewport.Height + 2)
+    {
+        Wheel(-1);
+        if (report.Form.Page != 0) throw new Exception("a tall page should scroll before it turns");
+    }
+    report.Form.GoTo(0);
+    sheetArea.Offset = default;
+    Press(report.Window, "fitPage");
+    Pump();
+    // the choices rebuild the pages
+    byte[] FirstPage() { using var page = report.Form.Document!.Rasterize(0, 36); return page.Bytes; }
+    var withHeader = FirstPage();
+    report.Window.GetLogicalDescendants().OfType<ToggleSwitch>().First(c => c.Name == "sectionHeader").IsChecked = false; Pump();
+    Wait(report.Form);
+    if (FirstPage().SequenceEqual(withHeader)) throw new Exception("the header is still in the report");
+    var noPageBox = report.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "newPageHeader");
+    if (noPageBox.IsEffectivelyVisible) throw new Exception("a section switched off still asks for its page");
+    // a section on a page of its own, or going on after the one before
+    var byPages = report.Form.Document!.Pages.Count;
+    var quantities = report.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "newPageOutcomes");
+    if (quantities.IsChecked != false) throw new Exception("New page should be off at first");
+    quantities.IsChecked = true; Pump();
+    Wait(report.Form);
+    if (report.Form.Document!.Pages.Count <= byPages) throw new Exception("the section did not start a page");
+    if (report.Form.Page >= report.Form.Document.Pages.Count) throw new Exception("the page is past the end");
+    // a burst of changes makes one set of pages
+    var first = report.Form.Document;
+    var title = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "reportTitle" && b.IsEffectivelyVisible);
+    title.Text = "A"; title.Text = "AB"; title.Text = "ABC"; Pump();
+    Wait(report.Form);
+    if (report.Form.Document == first || report.Form.Document!.Title != "ABC") throw new Exception("the title did not reach the report: " + report.Form.Document?.Title);
+    // what follows the title is a field of its own
+    var addition = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "titleAddition");
+    if (addition.Text != "— {name}") throw new Exception("the text after the title: " + addition.Text);
+    var withName = report.Form.Document;
+    addition.Text = "- {name}"; Pump();
+    Wait(report.Form);
+    if (report.Form.Document == withName) throw new Exception("the text after the title did not rebuild the pages");
+    // the plan in the same window, at a scale
+    Press(report.Window, "kindPlan");
+    Wait(report.Form);
+    if (report.Form.Document!.Pages.Count != 1) throw new Exception("the plan is one sheet");
+    report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "planScale").SelectedIndex = 2; Pump();
+    Wait(report.Form);
+    Shot(report.Window, "80b_preview_plan");
+
+    // the design: a frame and a stamp, shown at once and kept for the next reports
+    Button TabOf(string name) => report.Window.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name);
+    void DesignCentred() { Pump(); Centred(); }
+    if (TabOf("tabReport").BorderBrush != BlastDesigner.App.Services.Look.Accent || TabOf("tabDesign").BorderBrush == BlastDesigner.App.Services.Look.Accent) throw new Exception("the open tab is not underlined");
+    Press(report.Window, "tabDesign");
+    if (TabOf("tabDesign").BorderBrush != BlastDesigner.App.Services.Look.Accent || TabOf("tabReport").BorderBrush == BlastDesigner.App.Services.Look.Accent) throw new Exception("the underline did not follow the tab");
+    DesignCentred();
+    var frame = report.Window.GetLogicalDescendants().OfType<ToggleSwitch>().First(s => s.Name == "propVisible");
+    frame.IsChecked = true; Pump();
+    Wait(report.Form);
+    var plain = report.Form.Document!;
+    Press(report.Window, "listAdd");
+    Wait(report.Form);
+    if (report.Form.Design.Stamps.Count != 1 || report.Form.Design.Stamps[0].Rows.Count == 0) throw new Exception("no stamp with its rows");
+    if (report.Form.Document == plain) throw new Exception("the stamp did not rebuild the pages");
+    var rows = report.Form.Design.Stamps[0].Rows.Count;
+    Press(report.Window, "addStampRow");
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].Rows.Count != rows + 1) throw new Exception("the row was not added");
+    // the name takes its row, the place and the way the stamp adjoins share the next one
+    var nameBox = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propName" && b.IsEffectivelyVisible);
+    var placeBox = report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propPlace");
+    var attachRow = report.Window.GetLogicalDescendants().OfType<StackPanel>().First(c => c.Name == "propAttach");
+    if (nameBox.Bounds.Width < placeBox.Bounds.Width * 1.6) throw new Exception($"the name is {nameBox.Bounds.Width} wide, the place {placeBox.Bounds.Width}");
+    var placeAt = placeBox.TranslatePoint(default, report.Window)!.Value;
+    var attachAt = attachRow.TranslatePoint(default, report.Window)!.Value;
+    if (Math.Abs(placeAt.Y - attachAt.Y) > 2 || attachAt.X <= placeAt.X) throw new Exception($"the place at {placeAt}, the switch at {attachAt}");
+    var chipsEnd = attachRow.Children.Last().TranslatePoint(new Point(attachRow.Children.Last().Bounds.Width, 0), report.Window)!.Value.X;
+    var fieldsEnd = nameBox.TranslatePoint(new Point(nameBox.Bounds.Width, 0), report.Window)!.Value.X;
+    if (chipsEnd > fieldsEnd + 1) throw new Exception($"the switch runs out of its row: {chipsEnd} and {fieldsEnd}");
+    if (report.Form.Design.Stamps[0].Attach != BlastDesigner.Domain.Model.StampAttach.Vertical) throw new Exception("Vertical should be the first choice");
+    Press(report.Window, "AttachHorizontal");
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].Attach != BlastDesigner.Domain.Model.StampAttach.Horizontal) throw new Exception("the switch did not reach the stamp");
+    Press(report.Window, "AttachVertical");
+    Wait(report.Form);
+
+    // a stamp on given pages: the field of the numbers comes with that choice
+    var stampPages = report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propPages");
+    var stampNumbers = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "stampPages");
+    if (stampPages.ItemCount != 3 || stampNumbers.IsEffectivelyVisible) throw new Exception("three choices and no field at first");
+    stampPages.SelectedIndex = 2; Pump();
+    stampNumbers = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "stampPages");
+    stampPages = report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propPages");
+    if (Math.Abs(stampNumbers.TranslatePoint(default, report.Window)!.Value.Y - stampPages.TranslatePoint(default, report.Window)!.Value.Y) > 1) throw new Exception("the page numbers are not on the line of the pages");
+    Shot(report.Window, "80k_preview_stamp_numbers");
+    if (!stampNumbers.IsEffectivelyVisible) throw new Exception("the field of the numbers did not come");
+    Wait(report.Form);
+    stampNumbers.Text = "1"; Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].PageNumbers != "1" || !report.Form.Design.Stamps[0].IsOn(1) || report.Form.Design.Stamps[0].IsOn(2)) throw new Exception("the numbers did not reach the stamp");
+    Shot(report.Window, "80h_preview_stamp_pages");
+    report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propPages").SelectedIndex = 0; Pump();
+    Wait(report.Form);
+    if (report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "stampPages").IsEffectivelyVisible) throw new Exception("the field stayed");
+
+    // the two columns of the stamp have their widths, over the columns they set
+    var labelWidth = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "stampLabelWidth");
+    var textWidth = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "stampTextWidth");
+    var firstRow = labelWidth.GetLogicalAncestors().OfType<Grid>().First().Parent as StackPanel;
+    var cells = firstRow!.Children.OfType<Grid>().Skip(1).First().Children.OfType<TextBox>().ToList();
+    if (Math.Abs(labelWidth.Bounds.Width - cells[0].Bounds.Width) > 1 || Math.Abs(textWidth.Bounds.Width - cells[1].Bounds.Width) > 1) throw new Exception($"the widths do not stand over their columns: {labelWidth.Bounds.Width}/{cells[0].Bounds.Width}, {textWidth.Bounds.Width}/{cells[1].Bounds.Width}");
+    var narrow = report.Form.Document;
+    labelWidth.Text = "30"; textWidth.Text = "60"; Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].LabelWidthMm != 30 || report.Form.Design.Stamps[0].TextWidthMm != 60 || report.Form.Document == narrow) throw new Exception("the widths did not reach the stamp");
+    labelWidth.Text = "abc"; Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].LabelWidthMm != 30) throw new Exception("a wrong width was taken");
+    labelWidth.Text = "0"; Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].LabelWidthMm != 0) throw new Exception("a width of 0 was not taken");
+    labelWidth.Text = "30"; Pump();
+    Wait(report.Form);
+    // the alignment of a cell goes round its three values
+    var aligned = report.Form.Document;
+    var alignText = report.Window.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "stampTextAlign");
+    alignText.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].Rows[0].TextAlign != StampAlign.Center || report.Form.Document == aligned) throw new Exception("the alignment did not reach the stamp");
+    alignText.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    alignText.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].Rows[0].TextAlign != StampAlign.Left) throw new Exception("the alignment did not come round");
+    // the vertical alignment is on the line of the widths and acts on a whole column
+    var verticalBefore = report.Form.Document;
+    var vertical = report.Window.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "stampLabelVerticalAlign");
+    vertical.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps[0].LabelVerticalAlign != StampVerticalAlign.Bottom || report.Form.Design.Stamps[0].TextVerticalAlign != StampVerticalAlign.Middle || report.Form.Document == verticalBefore) throw new Exception("the vertical alignment did not reach its column");
+    vertical.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    vertical.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    Wait(report.Form);
+    Shot(report.Window, "80i_preview_vertical_align");
+    // the footer: the date is one or the other, the number has the pages of a stamp
+    T Footer<T>(string name) where T : Control => report.Window.GetLogicalDescendants().OfType<T>().First(c => c.Name == name);
+    var footer = report.Form.Design.Footer;
+    if (!footer.DateWithTime || Footer<CheckBox>("footerDateOnly").IsChecked != false || Footer<CheckBox>("footerDateTime").IsChecked != true) throw new Exception("the footer should start with the date and time");
+    Footer<CheckBox>("footerDateOnly").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (footer.DateWithTime || Footer<CheckBox>("footerDateTime").IsChecked != false) throw new Exception("the two boxes of the date are not a choice");
+    Footer<CheckBox>("footerDateTime").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    Footer<ToggleSwitch>("footerDate").IsChecked = false; Pump();
+    if (footer.ShowDate || Footer<CheckBox>("footerDateTime").IsEffectivelyVisible) throw new Exception("the switch of the date did not close its group");
+    Footer<ToggleSwitch>("footerDate").IsChecked = true; Pump();
+    Footer<ComboBox>("footerPages").SelectedIndex = 2; Pump();
+    Footer<TextBox>("footerPageNumbers").Text = "2"; Pump();
+    Wait(report.Form);
+    if (footer.NumberedPages != StampPages.Specified || footer.PageNumbers != "2") throw new Exception("the pages of the number did not reach the footer");
+    Footer<TextBox>("footerPageNumbers").BringIntoView(); Pump();
+    Shot(report.Window, "80j_preview_footer");
+    Footer<ComboBox>("footerPages").SelectedIndex = 0; Pump();
+    Wait(report.Form);
+    var listButtons = report.Window.GetLogicalDescendants().OfType<ListEditor<ReportStamp>>().Single().GetLogicalDescendants().OfType<WrapPanel>().First().Children;
+    if (listButtons.Select(b => b.Bounds.Y).Distinct().Count() != 2) throw new Exception("the small buttons of the stamps do not fit on one line");
+    if (report.Window.GetLogicalDescendants().OfType<ComboBox>().Any(c => c.Name is "propLabelVerticalAlign" or "propTextVerticalAlign")) throw new Exception("the vertical alignment is on the form as a list too");
+    labelWidth.Text = "30"; Pump();
+    Wait(report.Form);
+    Shot(report.Window, "80c_preview_design");
+
+    // the frame: its switch is on the title of the group, the pages are all of them or those given
+    var section = report.Window.GetLogicalDescendants().OfType<ToggleSwitch>().First(s => s.Name == "propVisible").Parent as DockPanel;
+    if (section?.Children.OfType<TextBlock>().FirstOrDefault()?.Text != BlastDesigner.App.Services.Loc.Ui("Frame").ToUpper(System.Globalization.CultureInfo.CurrentCulture)) throw new Exception("the frame switch is not on the title of its group");
+    var numbers = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "framePages");
+    if (numbers.IsVisible || !report.Form.Design.Frame.OnAllPages) throw new Exception("all pages should be the first choice, with no field");
+    Press(report.Window, "framePagesSome");
+    if (!numbers.IsEffectivelyVisible || report.Form.Design.Frame.OnAllPages) throw new Exception("the field did not come");
+    Wait(report.Form);
+    numbers.Text = "1"; Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Frame.Pages != "1" || !report.Form.Design.Frame.IsOn(1) || report.Form.Design.Frame.IsOn(2)) throw new Exception("the pages were not taken");
+    Shot(report.Window, "80f_preview_frame_pages");
+    Press(report.Window, "framePagesAll");
+    Wait(report.Form);
+    if (numbers.IsVisible || !report.Form.Design.Frame.IsOn(2)) throw new Exception("back to all pages");
+
+    // the kinds of object of the design redraw the sheet and leave the main window alone
+    byte[] Sheet() { using var page = report.Form.Document!.Rasterize(0, 72); return page.Bytes; }
+    // the whole blast on the sheet: at 1:500 it can be out of it
+    Press(report.Window, "tabReport");
+    report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "planScale").SelectedIndex = 0; Pump();
+    Wait(report.Form);
+    Press(report.Window, "tabDesign");
+    var kind = report.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "kind:" + new Hole().KindName);
+    var drawn = Sheet();
+    if (kind.IsChecked != true) throw new Exception("every kind should be on at first");
+    if (vm.HiddenEntities.Count != 0) throw new Exception("hidden objects before the switch");
+    kind.IsChecked = false; Pump();
+    Wait(report.Form);
+    if (Sheet().SequenceEqual(drawn)) throw new Exception("the switch did not redraw the sheet");
+    if (!report.Form.Design.HiddenKinds.Contains(new Hole().KindName)) throw new Exception("the design did not take the switch");
+    if (vm.HiddenEntities.Count != 0) throw new Exception("the switch reached the main window");
+    Shot(report.Window, "80e_preview_visibility");
+    kind.IsChecked = true; Pump();
+    Wait(report.Form);
+    if (!Sheet().SequenceEqual(drawn)) throw new Exception("the sheet did not come back");
+
+    // the design goes to a file of its own
+    if (!report.Window.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "saveDesign" && b.IsEffectivelyVisible)) throw new Exception("no Save design button");
+    var designFile = Path.Combine(outDir, "smoke" + ReportDesignFile.Extension);
+    report.Form.SaveDesign(designFile);
+    var inFile = ReportDesignFile.Load(designFile);
+    if (inFile.Stamps.Count != 1) throw new Exception("the stamp is not in the file");
+    if (inFile.Report.Title != "ABC" || inFile.Report.TitleAddition != "- {name}" || inFile.Report.Sections.HasFlag(BlastDesigner.Domain.Model.ReportSections.Header) || !inFile.Report.NewPage.HasFlag(BlastDesigner.Domain.Model.ReportSections.Outcomes))
+        throw new Exception("the choices of the report are not in the file");
+    // and comes back from it: the fields and the check boxes show it, the pages are drawn with it, nothing of the old one stays
+    var before = report.Form.Document;
+    report.Form.Design.HiddenKinds.Add("Text");
+    var other = new BlastDesigner.Domain.Model.ReportDesign { Frame = { Visible = true, MarginMm = 7 }, HiddenKinds = { new Hole().KindName }, ShowGrid = true };
+    var otherFile = Path.Combine(outDir, "other" + ReportDesignFile.Extension);
+    ReportDesignFile.Save(otherFile, other);
+    report.Form.LoadDesign(otherFile); Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Frame.MarginMm != 7 || report.Form.Design.Stamps.Count != 0 || report.Form.Design.HiddenKinds.Contains("Text") || !report.Form.Design.HiddenKinds.Contains(new Hole().KindName) || !report.Form.Design.ShowGrid)
+        throw new Exception("the design was not taken from the file");
+    bool? Box(string tag) => report.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == tag).IsChecked;
+    if (Box("grid") != true || Box("kind:" + new Hole().KindName) != false) throw new Exception("the check boxes show the old visibility");
+    if (report.Form.Document == before) throw new Exception("the pages were not redrawn");
+    if (report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propMarginMm" && b.IsEffectivelyVisible).Text != "7") throw new Exception("the field shows the old design");
+    Shot(report.Window, "80g_preview_design_loaded");
+    // a file that is no design changes nothing; the design with the stamp comes back, on the other tab too
+    var notDesign = Path.Combine(outDir, "not-a-design" + ReportDesignFile.Extension);
+    File.WriteAllText(notDesign, "not a design");
+    try { report.Form.LoadDesign(notDesign); throw new Exception("a wrong file was taken"); }
+    catch (InvalidDataException) { }
+    if (report.Form.Design.Frame.MarginMm != 7) throw new Exception("a wrong file changed the design");
+    Press(report.Window, "tabReport");
+    report.Form.LoadDesign(designFile); Pump();
+    Wait(report.Form);
+    if (report.Form.Design.Stamps.Count != 1) throw new Exception("the stamp did not come back");
+    // the Report tab shows what came from the file
+    if (report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "titleAddition").Text != "- {name}") throw new Exception("the field after the title shows the old value");
+    if (report.Window.GetLogicalDescendants().OfType<ToggleSwitch>().First(c => c.Name == "sectionHeader").IsChecked != false) throw new Exception("the section switch shows the old value");
+    if (report.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "newPageOutcomes").IsChecked != true) throw new Exception("New page shows the old value");
+    Press(report.Window, "tabDesign");
+    if (!report.Window.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "addStampRow" || b.Name == "listAdd")) throw new Exception("no design panel after loading");
+
+    // the file and the printer take the pages of the screen
+    var pdf = Path.Combine(outDir, "preview.pdf");
+    using (var stream = File.Create(pdf)) report.Form.Document!.WritePdf(stream);
+    if (new FileInfo(pdf).Length < 1000) throw new Exception("the PDF is empty");
+    if (OperatingSystem.IsWindows())
+    {
+        const string printer = "Microsoft Print to PDF";
+        if (System.Drawing.Printing.PrinterSettings.InstalledPrinters.Cast<string>().Contains(printer))
+        {
+            var printed = Path.GetFullPath(Path.Combine(outDir, "printed.pdf"));
+            File.Delete(printed);
+            var settings = new System.Drawing.Printing.PrinterSettings { PrinterName = printer, PrintToFile = true, PrintFileName = printed };
+            var document = report.Form.Document!;
+            if (!Task.Run(() => BlastDesigner.App.Services.WindowsPrinting.Send(document, settings)).Wait(TimeSpan.FromSeconds(90))) throw new Exception("the printer did not answer");
+            for (int i = 0; i < 400 && (!File.Exists(printed) || new FileInfo(printed).Length == 0); i++) Thread.Sleep(25);
+            if (!File.Exists(printed) || new FileInfo(printed).Length < 1000) throw new Exception("nothing printed");
+            Console.WriteLine($"     printed {new FileInfo(printed).Length / 1024} KB through {printer}");
+        }
+        else Console.WriteLine("     no PDF printer here: the print job not run");
+    }
+
+    report.Window.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null); Pump();
+    if (!report.Task.IsCompleted) throw new Exception("Esc did not close the preview");
+    if (!vm.Settings.ReportDesign.Frame.Visible || vm.Settings.ReportDesign.Stamps.Count != 1) throw new Exception("the design was not kept");
+    if (vm.Doc.UndoNames.Count != steps) throw new Exception("the preview changed the blast");
+
+    // the design command opens on its tab, the next report has the frame
+    var design = Open(vm.EditReportDesign);
+    if (!design.Window.GetLogicalDescendants().OfType<ToggleSwitch>().Any(s => s.Name == "propVisible" && s.IsEffectivelyVisible)) throw new Exception("not on the design tab");
+    design.Form.Closing!(); Pump();
+
+    // the very first time the kinds of object start as in the main window; from then on they are the design's own, with the grid
+    var holeKind = "kind:" + new Hole().KindName;
+    vm.Settings.ReportDesign.KindsChosen = false;
+    vm.Settings.ReportDesign.HiddenKinds.Clear();
+    foreach (var h in vm.Project!.Holes) vm.HiddenEntities.Add(h.Id);
+    var hiddenHoles = Open(vm.EditReportDesign);
+    var holeBox = hiddenHoles.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == holeKind);
+    if (holeBox.IsChecked != false || !hiddenHoles.Form.Design.HiddenKinds.Contains(new Hole().KindName)) throw new Exception("the holes hidden in the main window should start off");
+    hiddenHoles.Form.Closing!(); Pump();
+    // the main window changes, the design does not follow
+    vm.HiddenEntities.Clear();
+    bool? HoleBox(Window w) => w.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == holeKind).IsChecked;
+    CheckBox GridBox(Window w) => w.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "grid");
+    var own = Open(vm.EditReportDesign);
+    if (HoleBox(own.Window) != false) throw new Exception("the design followed the main window");
+    if (GridBox(own.Window).IsChecked != false) throw new Exception("the grid should be off at first");
+    own.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == holeKind).IsChecked = true; Pump();
+    Wait(own.Form);
+    using (var off = own.Form.Document!.Rasterize(0, 72))
+    {
+        var noGrid = off.Bytes;
+        GridBox(own.Window).IsChecked = true; Pump();
+        Wait(own.Form);
+        using var on = own.Form.Document!.Rasterize(0, 72);
+        if (on.Bytes.SequenceEqual(noGrid)) throw new Exception("the grid switch did not redraw the sheet");
+    }
+    own.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == holeKind).IsChecked = false; Pump();
+    Wait(own.Form);
+    if (vm.HiddenEntities.Count != 0) throw new Exception("the check box reached the main window");
+    own.Form.Closing!(); Pump();
+    // in the settings file, not only in memory
+    var written = ProgramSettings.Load().ReportDesign;
+    if (!written.ShowGrid || !written.KindsChosen || !written.HiddenKinds.Contains(new Hole().KindName)) throw new Exception("the visibility is not in the settings file");
+    var again = Open(vm.EditReportDesign);
+    if (HoleBox(again.Window) != false || GridBox(again.Window).IsChecked != true) throw new Exception("the check boxes did not come back");
+    again.Form.Closing!(); Pump();
+
+    // the buttons of the view: the arrows and the zoom change the sheet, the lock holds the frame through the check boxes
+    var aimed = Open(vm.PrintPlan);
+    aimed.Form.Design.HiddenKinds.Clear();
+    Press(aimed.Window, "tabDesign");
+    Pump();
+    var pad = aimed.Window.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.CameraPad>().Single();
+    byte[] AimedSheet()
+    {
+        Pump();
+        Wait(aimed.Form);
+        using var page = aimed.Form.Document!.Rasterize(0, 72);
+        return page.Bytes;
+    }
+    // first pages with the kinds just cleared
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Right);
+    AimedSheet();
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Left);
+    var start = AimedSheet();
+    foreach (var (at, expected) in new[]
+    {
+        (new Point(56, 10), BlastDesigner.App.Controls.CameraCommand.Up), (new Point(56, 100), BlastDesigner.App.Controls.CameraCommand.Down),
+        (new Point(10, 56), BlastDesigner.App.Controls.CameraCommand.Left), (new Point(100, 56), BlastDesigner.App.Controls.CameraCommand.Right),
+        (new Point(56, 56), BlastDesigner.App.Controls.CameraCommand.Lock), (new Point(140, 30), BlastDesigner.App.Controls.CameraCommand.ZoomIn),
+        (new Point(140, 80), BlastDesigner.App.Controls.CameraCommand.ZoomOut), (new Point(2, 2), BlastDesigner.App.Controls.CameraCommand.None)
+    })
+        if (BlastDesigner.App.Controls.CameraPad.At(at) != expected) throw new Exception("the button at " + at + " is not " + expected);
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Right);
+    var moved = AimedSheet();
+    if (moved.SequenceEqual(start)) throw new Exception("the arrow did not move the drawing");
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Left);
+    if (!AimedSheet().SequenceEqual(start)) throw new Exception("the opposite arrow did not bring the drawing back");
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.ZoomIn);
+    if (AimedSheet().SequenceEqual(start)) throw new Exception("the zoom did not change the drawing");
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.ZoomOut);
+    AimedSheet();
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Lock);
+    if (!pad.Locked || !aimed.Form.Design.View.Locked) throw new Exception("the frame did not lock");
+    AimedSheet();
+    Shot(aimed.Window, "report-design-pad");
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Lock);
+    if (pad.Locked || aimed.Form.Design.View.LockedHiddenKinds.Count != 0) throw new Exception("the frame did not unlock");
+    // Shift moves it by a quarter of the step
+    var panned = aimed.Form.Design.View.PanX;
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Right);
+    var whole = panned - aimed.Form.Design.View.PanX;
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Left);
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Right, fine: true);
+    if (Math.Abs(panned - aimed.Form.Design.View.PanX - whole / 4) > 1e-9) throw new Exception("the fine step is not a quarter of the step");
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.Left, fine: true);
+    var zoomed = aimed.Form.Design.View.Zoom;
+    for (var i = 0; i < 4; i++) pad.Press(BlastDesigner.App.Controls.CameraCommand.ZoomIn, fine: true);
+    if (Math.Abs(aimed.Form.Design.View.Zoom / zoomed - 1.2) > 1e-9) throw new Exception("four fine zoom steps are not one step");
+    for (var i = 0; i < 4; i++) pad.Press(BlastDesigner.App.Controls.CameraCommand.ZoomOut, fine: true);
+    // a fixed scale has no zoom
+    aimed.Form.Design.View.Zoom = 1;
+    Press(aimed.Window, "tabReport"); Pump();
+    var scaleBox = aimed.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "planScale");
+    scaleBox.SelectedIndex = 2; Pump();
+    if (pad.CanZoom) throw new Exception("the zoom buttons should be off at a fixed scale");
+    pad.Press(BlastDesigner.App.Controls.CameraCommand.ZoomIn);
+    if (aimed.Form.Design.View.Zoom != 1) throw new Exception("a dead zoom button zoomed");
+    scaleBox.SelectedIndex = 0; Pump();
+    if (!pad.CanZoom) throw new Exception("the zoom buttons should come back");
+    // each tab has the width of its panel, within limits, and the settings file keeps it
+    aimed.Form.ResizePanel(450); Pump();
+    Press(aimed.Window, "tabDesign"); Pump();
+    aimed.Form.ResizePanel(520); Pump();
+    if (aimed.Form.ReportPanelWidth != 450 || aimed.Form.DesignPanelWidth != 520) throw new Exception("the tabs do not keep their widths");
+    aimed.Form.ResizePanel(10); Pump();
+    if (aimed.Form.DesignPanelWidth != 480) throw new Exception("the panel went narrower than its tab needs");
+    aimed.Form.ResizePanel(100000); Pump();
+    if (aimed.Form.DesignPanelWidth > aimed.Form.Bounds.Width - 300) throw new Exception("the panel left no room for the page");
+    aimed.Form.ResizePanel(520); Pump();
+    aimed.Form.Closing!(); Pump();
+    var panels = ProgramSettings.Load();
+    if (panels.ReportPanelWidth != 450 || panels.ReportDesignPanelWidth != 520) throw new Exception("the widths of the panels are not in the settings file");
+    var reopened = Open(vm.PrintPlan);
+    if (reopened.Form.ReportPanelWidth != 450 || reopened.Form.DesignPanelWidth != 520) throw new Exception("the widths did not come back");
+    reopened.Form.Closing!(); Pump();
+
+    // the plan command, and the print button of the first movement window with its sheet
+    var plan = Open(vm.PrintPlan);
+    if (plan.Form.Document!.Pages.Count != 1) throw new Exception("the plan command opened " + plan.Form.Document.Pages.Count + " pages");
+    plan.Form.Closing!(); Pump();
+    // the first movement sheet is on offer without its window
+    var fromReports = Open(vm.PrintReports);
+    // the visibility is alive only on a page with the plan
+    Press(fromReports.Window, "tabDesign"); Pump();
+    Wait(fromReports.Form);
+    bool VisibilityOn() => fromReports.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "grid").IsEffectivelyEnabled;
+    var planPage = fromReports.Form.Document!.Pages.ToList().FindIndex(p => p.HasPlan);
+    var otherPage = fromReports.Form.Document.Pages.ToList().FindIndex(p => !p.HasPlan);
+    if (planPage < 0 || otherPage < 0) throw new Exception("the report should have pages with and without the plan");
+    fromReports.Form.GoTo(planPage); Pump();
+    if (!VisibilityOn()) throw new Exception("the visibility should be on with the plan on the screen");
+    fromReports.Form.GoTo(otherPage); Pump();
+    if (VisibilityOn()) throw new Exception("the visibility should be off on a page without the plan");
+    if (fromReports.Window.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.CameraPad>().Single().IsEffectivelyEnabled) throw new Exception("the buttons of the view should be off too");
+    Shot(fromReports.Window, "80l_preview_visibility_off");
+    fromReports.Form.GoTo(planPage); Pump();
+    Press(fromReports.Window, "tabReport"); Pump();
+    Press(fromReports.Window, "kindFirstMovement"); Pump();
+    Wait(fromReports.Form);
+    if (fromReports.Form.Document!.Title != BlastDesigner.App.Services.Loc.T("First movement") || fromReports.Form.Document.Pages.Count != 1) throw new Exception("the Reports command has no first movement sheet");
+    fromReports.Form.Closing!(); Pump();
+
+    // the section line: two clicks and the entry ends, on the list before the polygon
+    var drawingTools = vm.DrawingToolList.Select(t => t.Header).ToList();
+    if (drawingTools.IndexOf("Section line") != drawingTools.IndexOf("Polygon") - 1) throw new Exception("the section line should stand before the polygon");
+    var collar = vm.Project!.Holes.First().Collar;
+    vm.DrawSectionLineTool(); Pump();
+    void SectionClick(double dx, double dy)
+    {
+        var (cx, cy) = vm.View.Camera.ToScreen(collar);
+        var (sx, sy) = (cx + dx * 5, cy - dy * 5);
+        var at = vm.View.Camera.ToWorld(sx, sy, collar.Z);
+        vm.ActiveTool!.PointerPressed(new ToolPointer { X = sx, Y = sy, World = at, Snapped = at, Left = true, ClickCount = 1 });
+    }
+    SectionClick(-20, 0); SectionClick(20, 0); Pump();
+    SectionClick(-20, 3); SectionClick(20, 3); Pump();
+    var sectionLines = BlastDesigner.Rendering.Reports.SectionLines(vm.Project);
+    if (sectionLines.Count != 2 || sectionLines.Any(l => l.Points.Count != 2 || l.Closed)) throw new Exception("two clicks should make one section line: " + sectionLines.Count);
+    vm.SelectTool(); Pump();
+    // the window goes from line to line and prints
+    AnalysisWindows.ShowSection(vm, sectionLines[0].Points[0], sectionLines[0].Points[1]); Pump();
+    var sectionWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
+    string SectionNumber() => sectionWindow.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "sectionNumber").Text ?? "";
+    void SectionPress(string name) { sectionWindow.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    if (SectionNumber() != "1 / 2") throw new Exception("the section window shows " + SectionNumber());
+    SectionPress("sectionNext");
+    if (SectionNumber() != "2 / 2") throw new Exception("the arrow did not go to the next line: " + SectionNumber());
+    SectionPress("sectionNext");
+    if (SectionNumber() != "1 / 2") throw new Exception("the arrow did not go round: " + SectionNumber());
+    SectionPress("sectionPrevious");
+    if (SectionNumber() != "2 / 2") throw new Exception("the arrow did not go back: " + SectionNumber());
+    Shot(sectionWindow, "81_section_window");
+    SectionPress("print");
+    var sectionSheet = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var sectionForm = sectionSheet.GetLogicalDescendants().OfType<ReportPreviewForm>().Single();
+    Wait(sectionForm);
+    if (sectionForm.Document!.Pages.Count != 2 || sectionForm.Page != 1) throw new Exception($"the sheets of the sections: {sectionForm.Document.Pages.Count}, on {sectionForm.Page}");
+    Shot(sectionSheet, "81b_section_sheet");
+    sectionForm.GoTo(0); Pump();
+    Shot(sectionSheet, "81c_section_sheet_holes");
+    sectionForm.Closing!(); Pump();
+    sectionWindow.Close(); Pump();
+    // the chip and the section of the report
+    var sectionReport = Open(vm.PrintReports);
+    if (sectionReport.Form.Design.Report.Sections.HasFlag(ReportSections.CrossSection) && sectionReport.Form.Document!.Pages.Count == 0) throw new Exception("no pages");
+    Press(sectionReport.Window, "kindCrossSection"); Pump();
+    Wait(sectionReport.Form);
+    if (sectionReport.Form.Document!.Pages.Count != 2) throw new Exception("the chip of the sections shows " + sectionReport.Form.Document.Pages.Count + " pages");
+    sectionReport.Form.Closing!(); Pump();
+    vm.Change("Smoke no section lines", p => p.Entities.RemoveAll(e => e is PolylineEntity { Kind: BlastDesigner.Domain.Model.LineKind.CrossSection })); Pump();
+    var noSections = Open(vm.PrintReports);
+    Press(noSections.Window, "kindCrossSection"); Pump();
+    Wait(noSections.Form);
+    if (noSections.Window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "status").Text != BlastDesigner.App.Services.Loc.Ui("The blast has no section lines. Draw one with the Section line tool.")) throw new Exception("no word on the missing section lines");
+    noSections.Form.Closing!(); Pump();
+    vm.FirstMovement(); Pump();
+    var arrows = BlastDesigner.App.Services.Dialogs.LastShown!;
+    if (arrows.Title == BlastDesigner.App.Services.Loc.T("First movement"))
+    {
+        arrows.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "print").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        var sheet = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var form = sheet.GetLogicalDescendants().OfType<ReportPreviewForm>().Single();
+        Wait(form);
+        if (form.Document!.Title != BlastDesigner.App.Services.Loc.T("First movement") || form.Document.Pages.Count != 1) throw new Exception("not the first movement sheet");
+        Shot(sheet, "80d_preview_first_movement");
+        form.Closing!(); Pump();
+        arrows.Close(); Pump();
+    }
+    vm.ClearOverlays();
+    vm.Settings.ReportDesign = saved;
 });
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>

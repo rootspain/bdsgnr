@@ -185,36 +185,6 @@ public static class TextImportWindow
     }
 }
 
-/// <summary>Tools ▸ Report designer: choose sections and layout of the PDF report.</summary>
-public static class ReportDesignerWindow
-{
-    public static async Task<ReportOptions?> Show()
-    {
-        var opt = new ReportOptions { Title = Loc.T("Blast report") };
-        var title = FormKit.Text(opt.Title);
-        var checks = Enum.GetValues<ReportSections>().Where(s => s is not ReportSections.None and not ReportSections.All)
-            .Select(s => (s, new CheckBox { Content = Loc.Enum(s), IsChecked = true })).ToList();
-        var landscape = new CheckBox { Content = Loc.T("Landscape") };
-        var timing = new ComboBox { ItemsSource = Enum.GetValues<TimingLabelMode>().Select(m => Loc.Enum(m)).ToList(), SelectedIndex = (int)TimingLabelMode.InholeTime, MinHeight = 32, HorizontalAlignment = HorizontalAlignment.Stretch };
-        var panel = new StackPanel
-        {
-            Spacing = 16,
-            Children =
-            {
-                FormKit.Labeled(Loc.T("Title"), title),
-                FormKit.Section(Loc.T("Sections"), FormKit.Fields(2, checks.Select(c => (Control)c.Item2).ToArray())),
-                FormKit.Section(Loc.Ui("Page"), new StackPanel { Spacing = 10, Children = { landscape, FormKit.Labeled(Loc.T("Timing labels on the plan"), timing) } })
-            }
-        };
-        if (!await Dialogs.Custom("Report designer", panel, width: 620, form: true)) return null;
-        opt.Title = title.Text ?? opt.Title;
-        opt.Sections = checks.Where(c => c.Item2.IsChecked == true).Aggregate(ReportSections.None, (a, c) => a | c.s);
-        opt.Landscape = landscape.IsChecked == true;
-        opt.PlanTimingLabels = (TimingLabelMode)Math.Max(0, timing.SelectedIndex);
-        return opt;
-    }
-}
-
 /// <summary>Tie palette: picks the surface connector used by the Tie tool.</summary>
 /// <summary>
 /// Initiation catalogue (was the tie palette): what new ties are made with, chosen down the hierarchy

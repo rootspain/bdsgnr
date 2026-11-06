@@ -97,20 +97,9 @@ public sealed class ProductsEditor : DockPanel
         foreach (var (name, table) in new (string, CatalogueEditor.Table?)[] { ("Products", null), ("Types", CatalogueEditor.Table.Types), ("Kinds", CatalogueEditor.Table.Kinds), ("Families", CatalogueEditor.Table.Families), ("Groups", CatalogueEditor.Table.Groups) })
         {
             var shown = table;
-            var tab = new Button
-            {
-                Content = L(name),
-                Height = 34,
-                Padding = new Thickness(12, 0),
-                CornerRadius = new CornerRadius(0),
-                Background = Brushes.Transparent,
-                BorderThickness = new Thickness(0, 0, 0, 2),
-                VerticalContentAlignment = VerticalAlignment.Center,
-                Tag = "section:" + name
-            };
-            tab.Classes.Add("flat");
-            tab.Click += (_, _) => ShowTable(shown);
-            SetTab(tab, table == null);
+            var tab = FormKit.Tab(L(name), () => ShowTable(shown));
+            tab.Tag = "section:" + name;
+            FormKit.SetTab(tab, table == null);
             _tabButtons.Add(tab);
             _tabs.Children.Add(tab);
         }
@@ -159,14 +148,7 @@ public sealed class ProductsEditor : DockPanel
         if (table is { } t) _tableEditor.Shown = t;
         else Refresh();
         var at = table == null ? 0 : (int)table.Value + 1;
-        for (int i = 0; i < _tabButtons.Count; i++) SetTab(_tabButtons[i], i == at);
-    }
-
-    /// <summary>A tab: the open one is underlined in the accent colour, as on the panels of the main window.</summary>
-    private static void SetTab(Button tab, bool open)
-    {
-        tab.BorderBrush = open ? Look.Accent : Brushes.Transparent;
-        tab.Foreground = open ? Look.Text : Look.Muted;
+        for (int i = 0; i < _tabButtons.Count; i++) FormKit.SetTab(_tabButtons[i], i == at);
     }
 
     private static string L(string english) => Loc.Ui(english);

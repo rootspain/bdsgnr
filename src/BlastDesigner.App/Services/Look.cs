@@ -113,6 +113,7 @@ public static class Look
         ["measure"] = "M3 17L17 3l4 4L7 21z M7 13l2 2 M10 10l2 2 M13 7l2 2",
         ["polyline"] = "M4 18l5-9 5 5 6-9",
         ["polygon"] = "M5 8l7-5 7 5-3 11H8z",
+        ["sectionline"] = "M5 19L19 5 M2 16l6 6 M16 2l6 6",
         ["text"] = "M5 6V4h14v2 M12 4v16 M9 20h6",
         ["circle"] = "M12 4a8 8 0 1 0 0.01 0 M12 11.2a0.8 0.8 0 1 0 0.01 0",
         ["dimension"] = "M4 7v10 M20 7v10 M4 12h16 M7 9.5L4 12l3 2.5 M17 9.5l3 2.5-3 2.5",
@@ -175,6 +176,7 @@ public static class Look
         ["gear"] = "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6",
         ["search"] = "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14 M20 20l-4-4",
         ["lock"] = "M6 11h12v9H6z M8 11V8a4 4 0 0 1 8 0v3",
+        ["unlock"] = "M6 11h12v9H6z M8 11V8a4 4 0 0 1 7.5-2",
         ["help"] = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14 M12 17v.5",
         ["menu"] = "M4 6h16 M4 12h16 M4 18h16",
         ["down"] = "M6 9l6 6 6-6",
@@ -182,6 +184,13 @@ public static class Look
         ["right"] = "M9 6l6 6-6 6",
         ["left"] = "M15 6l-6 6 6 6",
         ["plus"] = "M12 5v14 M5 12h14",
+        ["minus"] = "M5 12h14",
+        ["alignLeft"] = "M4 6h16 M4 12h10 M4 18h13",
+        ["alignCenter"] = "M4 6h16 M7 12h10 M5.5 18h13",
+        ["alignRight"] = "M4 6h16 M10 12h10 M7 18h13",
+        ["alignTop"] = "M4 4h16 M7 9h10 M7 13h10",
+        ["alignMiddle"] = "M4 4h16 M4 20h16 M7 10h10 M7 14h10",
+        ["alignBottom"] = "M4 20h16 M7 11h10 M7 15h10",
         ["split"] = "M4 12h16 M8 8l4-4 4 4 M8 16l4 4 4-4",
         ["trash"] = "M4 7h16 M10 11v6 M14 11v6 M6 7l1 13h10l1-13 M9 7V4h6v3",
         ["wand"] = "M4 20L16 8 M14 6l4 4 M18 3v3 M21 6h-3 M8 3v2 M9 4H7",
@@ -197,14 +206,20 @@ public static class Look
 
     public static bool HasIcon(string key) => Paths.ContainsKey(key);
 
-    /// <summary>Stroke icon scaled from its 24×24 box to <paramref name="size"/> pixels.</summary>
-    public static Control Icon(string key, double size = 18, IBrush? brush = null, double stroke = 1.7)
+    /// <summary>The outline of an icon in its 24×24 box, for what draws it itself.</summary>
+    public static Geometry Shape(string key)
     {
         if (!Cache.TryGetValue(key, out var geo))
             Cache[key] = geo = Geometry.Parse(Paths.TryGetValue(key, out var d) ? d : Paths["point"]);
+        return geo;
+    }
+
+    /// <summary>Stroke icon scaled from its 24×24 box to <paramref name="size"/> pixels.</summary>
+    public static Control Icon(string key, double size = 18, IBrush? brush = null, double stroke = 1.7)
+    {
         var path = new Avalonia.Controls.Shapes.Path
         {
-            Data = geo,
+            Data = Shape(key),
             Stroke = brush ?? Text,
             StrokeThickness = stroke,
             StrokeLineCap = PenLineCap.Round,

@@ -8,6 +8,12 @@ namespace BlastDesigner.IO;
 public sealed class ProgramSettings
 {
     public List<string> RecentFiles { get; set; } = new();
+    /// <summary>The frame and the stamps of the reports: they go with the user, from blast to blast.</summary>
+    public ReportDesign ReportDesign { get; set; } = new();
+    /// <summary>Width of the panel of the Report tab of the preview window.</summary>
+    public double ReportPanelWidth { get; set; } = 380;
+    /// <summary>Width of the panel of the Report design tab of the preview window.</summary>
+    public double ReportDesignPanelWidth { get; set; } = 600;
     /// <summary>When each of the <see cref="RecentFiles"/> was last opened or saved under its name; those from before this was kept have no time.</summary>
     public Dictionary<string, DateTime> RecentOpened { get; set; } = new();
     /// <summary>Files pinned at the top of the startup assistant; they stay there when they drop off <see cref="RecentFiles"/>.</summary>

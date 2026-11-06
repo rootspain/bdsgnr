@@ -45,6 +45,14 @@ public sealed class PropertyGrid : Grid
     public bool Foldable { get; set; } = true;
     /// <summary>Short texts stand two to a row, as numbers do; in the narrow panel each takes the whole row.</summary>
     public bool TextInColumns { get; set; }
+    /// <summary>Properties that take the whole row of their group.</summary>
+    public HashSet<string> WideFields { get; } = new();
+    /// <summary>Enum properties shown as a row of chips, one for each value, instead of a list.</summary>
+    public HashSet<string> Chips { get; } = new();
+    /// <summary>A control of the caller's in the cell after a property; it moves to each new form of the grid.</summary>
+    public Dictionary<string, Control> Beside { get; } = new();
+    /// <summary>The two columns of the fields of a section, with the gap between them.</summary>
+    public string FieldColumns { get; set; } = "*,8,*";
     /// <summary>Unit shown in the field of a property, by property name.</summary>
     public Dictionary<string, string> Units { get; } = new();
 
@@ -155,7 +163,7 @@ public sealed class PropertyGrid : Grid
             var names = Sections[i].Names;
             var listed = names.SelectMany(n => cells.Where(c => c.Name == n));
             if (i == Sections.Count - 1) listed = listed.Concat(cells.Where(c => !Sections.Any(s => s.Names.Contains(c.Name))));
-            var fields = listed.Select(c => (c.Cell, c.Wide)).ToList();
+            var fields = listed.SelectMany(c => Beside.TryGetValue(c.Name, out var extra) ? new[] { (c.Cell, c.Wide), (extra, false) } : new[] { (c.Cell, c.Wide) }).ToList();
             if (fields.Count > 0) body.Children.Add(Section(Sections[i].Title, fields));
         }
         SetColumnSpan(body, 2);
@@ -165,7 +173,7 @@ public sealed class PropertyGrid : Grid
     /// <summary>A group: its title folds it, under it the fields two to a row, a wide one on a row of its own.</summary>
     private Control Section(string title, List<(Control Cell, bool Wide)> fields)
     {
-        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,8,*"), RowSpacing = 8, IsVisible = !Collapsed.Contains(title) };
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions(FieldColumns), RowSpacing = 8, IsVisible = !Collapsed.Contains(title) };
         int row = 0, column = 0;
         foreach (var (cell, wide) in fields)
         {
@@ -174,11 +182,12 @@ public sealed class PropertyGrid : Grid
             SetRow(cell, row);
             SetColumn(cell, column * 2);
             if (wide) SetColumnSpan(cell, 3);
+            (cell.Parent as Panel)?.Children.Remove(cell);
             g.Children.Add(cell);
             if (wide || column == 1) { row++; column = 0; }
             else column = 1;
         }
-        if (!Foldable) return FormKit.Section(Loc.Ui(title), g);
+        if (!Foldable) return title.Length == 0 ? g : FormKit.Section(Loc.Ui(title), g);
         var chevron = new ContentControl { Content = Look.Icon(g.IsVisible ? "up" : "down", 13, Look.Faint), [DockPanel.DockProperty] = Dock.Right, VerticalAlignment = VerticalAlignment.Center };
         var head = new Button
         {
@@ -238,7 +247,7 @@ public sealed class PropertyGrid : Grid
         if (unit != null && (point || editor is not TextBox)) caption += ", " + unit;
         else if (unit != null && editor is TextBox box)
             box.InnerRightContent = new TextBlock { Text = unit, FontSize = 11, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
-        return (Captioned(caption, editor), point || (p.PropertyType == typeof(string) && (!TextInColumns || editor is TextBox { AcceptsReturn: true })) || editor is StackPanel);
+        return (Captioned(caption, editor), point || WideFields.Contains(p.Name) || (p.PropertyType == typeof(string) && (!TextInColumns || editor is TextBox { AcceptsReturn: true })) || (editor is StackPanel && !Chips.Contains(p.Name)));
     }
 
     private static Control Captioned(string caption, Control field) => new StackPanel
@@ -408,6 +417,21 @@ public sealed class PropertyGrid : Grid
                 return panel;
             }
             var values = Enum.GetValues(enumType).Cast<object>().ToList();
+            if (Chips.Contains(p.Name))
+            {
+                var chips = new List<Button>();
+                foreach (var v in values)
+                {
+                    var chip = Ui.Chip(Loc.Enum(v), () =>
+                    {
+                        Set(p, v);
+                        for (int i = 0; i < chips.Count; i++) Ui.SetChip(chips[i], values[i].Equals(v));
+                    }, v.Equals(value));
+                    chip.Name = p.Name + v;
+                    chips.Add(chip);
+                }
+                return Ui.Row(4, chips.Cast<Control>().ToArray());
+            }
             System.Collections.IEnumerable items = values.Select(Loc.Enum).ToList();
             if (EnumColors.TryGetValue(enumType, out var colorOf))
                 items = values.Select(v => (Control)Ui.Row(8,

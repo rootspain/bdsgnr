@@ -648,9 +648,23 @@ public static class AnalysisWindows
 
     static double _firstMovementArrowSize = BlastDesigner.Engine.FirstMovement.DefaultArrowSize;
     static bool _firstMovementGradient;
+    static FirstMovementOverlay.ArrowShape _firstMovementShape;
     static bool _firstMovementHideGeometry = true;
     static FirstMovementOverlay? _firstMovementOpen;
     static bool _firstMovementOnPlan;
+
+    /// <summary>Why a blast has no arrows of the first movement.</summary>
+    public static string NoFirstMovement(BlastProject p) =>
+        Loc.T(BlastDesigner.Engine.FirstMovement.AllAtOnce(p) ? "All holes fire at the same time, the direction cannot be determined." : "No hole is initiated. Add an initiation point and ties, or electronic times.");
+
+    /// <summary>The sheet of the first movement with the choices last made in its window, whether it is open or not.</summary>
+    public static FirstMovementSheet FirstMovementPage(double yaw = 0) => new()
+    {
+        Title = Loc.T("First movement"),
+        HideGeometry = _firstMovementHideGeometry,
+        Yaw = yaw,
+        Arrows = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize, Shape = _firstMovementShape, Gradient = _firstMovementGradient, LegendTitle = Loc.T("Colour by direction") }
+    };
 
     /// <summary>
     /// "First Movement" window: its own plan with the arrows,
@@ -667,10 +681,10 @@ public static class AnalysisWindows
         }
         var p = vm.Project!;
         Timing.Solve(p);
-        var overlay = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize, Gradient = _firstMovementGradient, LegendTitle = Loc.T("Colour by direction") };
+        var overlay = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize, Shape = _firstMovementShape, Gradient = _firstMovementGradient, LegendTitle = Loc.T("Colour by direction") };
         if (overlay.Arrows(p).Count == 0)
         {
-            _ = Dialogs.Info(Loc.T(BlastDesigner.Engine.FirstMovement.AllAtOnce(p) ? "All holes fire at the same time, the direction cannot be determined." : "No hole is initiated. Add an initiation point and ties, or electronic times."));
+            _ = Dialogs.Info(NoFirstMovement(p));
             return;
         }
         var view = SecondaryViewport(vm, () =>
@@ -693,6 +707,7 @@ public static class AnalysisWindows
         {
             _firstMovementArrowSize = overlay.ArrowSize;
             _firstMovementGradient = overlay.Gradient;
+            _firstMovementShape = overlay.Shape;
             for (var i = 0; i < colourChips.Count; i++) Ui.SetChip(colourChips[i], overlay.Gradient == (i == 1));
             size.Text = Loc.F("{0:0.0} m", overlay.ArrowSize);
             for (var i = 0; i < shapeChips.Count; i++) Ui.SetChip(shapeChips[i], (int)overlay.Shape == i);
@@ -759,12 +774,12 @@ public static class AnalysisWindows
         fit.Name = "fit";
         var viewGroup = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(1), Child = Ui.Row(0, reset, fit) };
 
-        var onPlan = new ToggleSwitch { IsChecked = true, OnContent = "", OffContent = "", Name = "onPlan", VerticalAlignment = VerticalAlignment.Center };
+        var onPlan = new ToggleSwitch { IsChecked = _firstMovementOnPlan, OnContent = "", OffContent = "", Name = "onPlan", VerticalAlignment = VerticalAlignment.Center };
         // Same calculation on the main plan, drawn in its usual arrow style (orange line arrows).
         var planOverlay = new FirstMovementOverlay { PlanStyle = true };
         onPlan.IsCheckedChanged += (_, _) => { _firstMovementOnPlan = onPlan.IsChecked == true; vm.ShowFirstMovementOnPlan(planOverlay, _firstMovementOnPlan); };
-        (_firstMovementOpen, _firstMovementOnPlan) = (planOverlay, true);
-        vm.ShowFirstMovementOnPlan(planOverlay, true);
+        _firstMovementOpen = planOverlay;
+        if (_firstMovementOnPlan) vm.ShowFirstMovementOnPlan(planOverlay, true);
         var export = new Button
         {
             Content = IconText("export", "Export CSV…"),
@@ -790,6 +805,7 @@ public static class AnalysisWindows
             VerticalContentAlignment = VerticalAlignment.Center,
             Name = "print"
         };
+        print.Click += (_, _) => Ui.Safe(() => _ = ReportPreviewWindow.Show(vm, ReportKind.FirstMovement, FirstMovementPage(view.Camera.Yaw)));
 
         var hideGeometry = new CheckBox { Content = Loc.Ui("Hide geometry"), IsChecked = _firstMovementHideGeometry, Name = "hideGeometry", VerticalAlignment = VerticalAlignment.Center };
         hideGeometry.IsCheckedChanged += (_, _) => { _firstMovementHideGeometry = hideGeometry.IsChecked == true; view.ZoomAll(); };
@@ -853,36 +869,94 @@ public static class AnalysisWindows
         }) { Repeat = false });
     }
 
+    static double? _sectionHalfWidth;
+    /// <summary>Turns the open section window to a line.</summary>
+    static Action<Vec3, Vec3>? _sectionAim;
+
+    /// <summary>The sheets of the sections with the width last set in their window, of the lines of the blast or of one that was only picked.</summary>
+    public static CrossSectionSheet SectionPage((Vec3 A, Vec3 B)? line = null) => new() { Title = Loc.T("Section view"), HalfWidth = _sectionHalfWidth, Line = line };
+
     public static void ShowSection(MainViewModel vm, Vec3 a, Vec3 b)
     {
-        var width = new NumericUpDown { Value = (decimal)Math.Max(2, vm.Project!.Design.Spacing), Minimum = 0.5m, Maximum = 500, Width = 120, FormatString = "0.#" };
+        if (_sectionAim is { } aim && Dialogs.ActivateExisting("Section view")) { aim(a, b); return; }
+        var width = new NumericUpDown { Value = (decimal)(_sectionHalfWidth ?? Reports.SectionHalfWidth(vm.Project!)), Minimum = 0.5m, Maximum = 500, Width = 120, FormatString = "0.#" };
         Viewport? view = null;
         view = SecondaryViewport(vm, () =>
         {
             var o = vm.BuildSceneOptions();
             return new SceneOptions { Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = (double)(width.Value ?? 5) };
         });
-        var mid = Vec3.Lerp(a, b, 0.5);
-        var holesZ = vm.Project.Holes.Any() ? vm.Project.Holes.Average(h => h.Collar.Z - h.Length / 2) : mid.Z;
-        view.Camera.Target = mid.WithZ(holesZ);
-        view.Camera.Pitch = 0;
-        view.Camera.Yaw = GeoMath.Bearing(a, b) - 90;
-        width.ValueChanged += (_, _) => view.Redraw();
-        var fit = new Button { Content = Loc.T("Zoom all") };
-        fit.Click += (_, _) =>
+        var line = (A: a, B: b);
+        var number = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 44, TextAlignment = TextAlignment.Center, FontFamily = Look.Mono, Foreground = Look.Text, Name = "sectionNumber" };
+        Button previous = null!, next = null!;
+        // where the line of the window stands among those of the blast, -1 for one that was only picked
+        int Index(List<PolylineEntity> lines) => lines.FindIndex(l => l.Points[0].Equals(line.A) && l.Points[^1].Equals(line.B));
+        void ShowNumber()
         {
+            if (vm.Project is not { } project) return;
+            var lines = Reports.SectionLines(project);
+            var at = Index(lines);
+            number.Text = at >= 0 ? $"{at + 1} / {lines.Count}" : "";
+            previous.IsEnabled = next.IsEnabled = lines.Count > 0;
+        }
+        void Fit()
+        {
+            if (vm.Project is not { } project) return;
+            var mid = Vec3.Lerp(line.A, line.B, 0.5);
             var bb = Bounds3.Empty;
-            foreach (var e in vm.Project.Entities.Where(e => e is Hole)) foreach (var v in e.GetVertices()) if (Math.Abs(view.Camera.Depth(v)) <= (double)(width.Value ?? 5)) bb.Add(v);
-            if (!bb.IsEmpty) view.Camera.Fit(bb, 0.1);
+            foreach (var e in project.Entities.Where(e => e is Hole)) foreach (var v in e.GetVertices()) if (Math.Abs(view.Camera.Depth(v)) <= (double)(width.Value ?? 5)) bb.Add(v);
+            if (!bb.IsEmpty)
+            {
+                view.Camera.Fit(bb, 0.1);
+                // the fit goes to the middle of what it found: the slice stays on the line
+                view.Camera.MoveTargetToDepth(view.Camera.Depth(mid.WithZ(view.Camera.Target.Z)));
+            }
             view.Redraw();
-        };
-        var top = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(6), Children = { new TextBlock { Text = Loc.T("Half width (m)"), VerticalAlignment = VerticalAlignment.Center }, width, fit } };
+        }
+        void Aim(Vec3 from, Vec3 to)
+        {
+            line = (from, to);
+            var mid = Vec3.Lerp(from, to, 0.5);
+            var holesZ = vm.Project!.Holes.Any() ? vm.Project.Holes.Average(h => h.Collar.Z - h.Length / 2) : mid.Z;
+            view.Camera.Pitch = 0;
+            view.Camera.Yaw = GeoMath.Bearing(from, to) - 90;
+            view.Camera.Target = mid.WithZ(holesZ);
+            ShowNumber();
+        }
+        void Step(int by)
+        {
+            if (vm.Project is not { } project) return;
+            var lines = Reports.SectionLines(project);
+            if (lines.Count == 0) return;
+            var at = Index(lines);
+            var target = lines[at < 0 ? (by > 0 ? 0 : lines.Count - 1) : (at + by + lines.Count) % lines.Count];
+            Aim(target.Points[0], target.Points[^1]);
+            Fit();
+        }
+        previous = Ui.Flat(Look.Icon("left", 16, Look.TextSoft), Loc.T("Previous section line"), () => Step(-1), 32, 32);
+        next = Ui.Flat(Look.Icon("right", 16, Look.TextSoft), Loc.T("Next section line"), () => Step(1), 32, 32);
+        previous.Name = "sectionPrevious";
+        next.Name = "sectionNext";
+        Aim(a, b);
+        width.ValueChanged += (_, _) => { _sectionHalfWidth = (double?)width.Value; view.Redraw(); };
+        var fit = new Button { Content = Loc.T("Zoom all") };
+        fit.Click += (_, _) => Fit();
+        var print = FormKit.Tool("print", Loc.T("Print"), () =>
+        {
+            var at = Index(Reports.SectionLines(vm.Project!));
+            _ = ReportPreviewWindow.Show(vm, ReportKind.CrossSection, sections: SectionPage(at >= 0 ? null : (line.A, line.B)), page: Math.Max(0, at));
+        });
+        print.Name = "print";
+        var top = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(6), Children = { new TextBlock { Text = Loc.T("Half width (m)"), VerticalAlignment = VerticalAlignment.Center }, width, fit, Ui.Row(2, previous, number, next), print } };
         var dock = new DockPanel();
         DockPanel.SetDock(top, Dock.Top);
         dock.Children.Add(top);
         dock.Children.Add(view);
         var w = Dialogs.ShowWindow("Section view", dock, 900, 520);
-        w.Opened += (_, _) => fit.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        w.Opened += (_, _) => Fit();
+        _sectionAim = (from, to) => { Aim(from, to); Fit(); };
+        vm.ModelRefreshed += ShowNumber;
+        w.Closed += (_, _) => { _sectionAim = null; vm.ModelRefreshed -= ShowNumber; };
     }
 
     public static void HorizontalSlice(MainViewModel vm)

@@ -275,7 +275,7 @@ public sealed partial class MainViewModel
                 Item("Delete tie up", Run(DeleteTieUp), P)),
             Item("Survey stations…", () => AnalysisWindows.SurveyStations(this), P),
             Item("Laser wizard…", Run(LaserWizard), P),
-            Item("Report designer…", Run(PrintReports), P),
+            Item("Report designer…", Run(EditReportDesign), P),
             Item("Vibration analysis…", () => AnalysisWindows.VibrationAnalysis(this), P)),
         Sub("Help",
             Item("Contents", () => AnalysisWindows.Help(), null, "F1"),
@@ -360,7 +360,7 @@ public sealed partial class MainViewModel
         ("Drawing tools", new()
         {
             ("·", "Point", () => DrawPointTool(PointKind.General), "Point"), ("T", "Text", DrawTextTool, "Text"), ("➝", "Arrow", DrawArrowTool, "Arrow"),
-            ("〰", "Polyline", () => DrawPolylineTool(false), "Polyline"), ("⬠", "Polygon", () => DrawPolylineTool(true), "Polygon"),
+            ("〰", "Polyline", () => DrawPolylineTool(false), "Polyline"), ("⟋", "Section line", DrawSectionLineTool, "Section line"), ("⬠", "Polygon", () => DrawPolylineTool(true), "Polygon"),
             ("📏", "Measure", MeasureTool, "Measure"), ("↔", "Dimension", DrawDimensionTool, "Dimension"), ("◯", "Circle", DrawCircleTool, "Circle"),
             ("⇧", "North point", () => DrawPointTool(PointKind.NorthPoint), "North point")
         })

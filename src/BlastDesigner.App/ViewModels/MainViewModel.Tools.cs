@@ -55,6 +55,11 @@ public sealed partial class MainViewModel
             Change(closed ? "Add polygon" : "Add polyline", p => p.Add(new PolylineEntity { Points = pts, Closed = closed, Kind = kind }, layer));
         }) { Measure = DistLabel });
 
+    /// <summary>A section line: a polyline of one segment, so the entry ends with its second point.</summary>
+    public void DrawSectionLineTool() =>
+        SetTool(new PickPointsTool(this, "Section line", "Click two points of the section line.", 2, 2, false, pts =>
+            Change("Add section line", p => p.Add(new PolylineEntity { Points = pts, Kind = LineKind.CrossSection }))) { Measure = DistLabel });
+
     /// <summary>
     /// Name of the point tool of a kind: the English name the toolbars and the rail know it by (so its button lights up
     /// while it is on), translated for the tool panel like every tool name.

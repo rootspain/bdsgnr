@@ -45,6 +45,8 @@ public sealed class SceneOptions
     public bool HideWireframes { get; init; }
     /// <summary>Surface wireframes on selected surfaces only.</summary>
     public bool WireframesOnSelected { get; init; }
+    /// <summary>The coordinate grid whatever the view says; null follows the view.</summary>
+    public bool? ShowGrid { get; init; }
     /// <summary>Only the blast is drawn: holes, initiation points and ties, the ties also when the view has them switched off.</summary>
     public bool HideGeometry { get; init; }
     /// <summary>Objects drawn shifted by <see cref="MoveOffset"/> (live preview while they are dragged).</summary>
@@ -124,7 +126,7 @@ public static class PlanRenderer
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = Ink, Typeface = SKTypeface.Default };
 
-        if (view.ShowGrid) DrawGrid(canvas, cam, stroke, text);
+        if (opt.ShowGrid ?? view.ShowGrid) DrawGrid(canvas, cam, stroke, text);
 
         var entities = project.Entities.Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity)).ToList();
         if (view.ReverseDrawOrder) entities.Reverse();
@@ -199,6 +201,7 @@ public static class PlanRenderer
             switch (e)
             {
                 case PolylineEntity pl:
+                    if (pl.Kind == LineKind.CrossSection) stroke.StrokeWidth *= 2;
                     DrawPolyline(canvas, cam, pl.Points, pl.Closed, stroke);
                     if (pl.Closed && pl.Kind == LineKind.ClearanceZone)
                     {

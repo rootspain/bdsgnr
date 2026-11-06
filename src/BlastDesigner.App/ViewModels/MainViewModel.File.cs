@@ -382,28 +382,16 @@ public sealed partial class MainViewModel
 
     // ---- print ------------------------------------------------------------------------
 
-    public async Task PrintReports()
-    {
-        if (Doc == null) return;
-        var opt = await ReportDesignerWindow.Show();
-        if (opt == null) return;
-        var path = await Dialogs.SaveFile("Save report", BaseName + "_report.pdf", ".pdf", ("PDF", new[] { "*.pdf" }));
-        if (path == null) return;
-        await using (var fs = File.Create(path)) Reports.WritePdf(Project!, fs, opt);
-        Timing.Solve(Project!);
-        await OfferOpen(path);
-    }
+    public Task PrintReports() => ReportPreviewWindow.Show(this, ReportKind.Report);
+    public Task PrintPlan() => ReportPreviewWindow.Show(this, ReportKind.Plan);
+    public Task EditReportDesign() => ReportPreviewWindow.Show(this, ReportKind.Report, design: true);
 
-    public async Task PrintPlan()
+    /// <summary>Writes a report on the screen to a PDF file the user chooses.</summary>
+    public async Task SaveReport(ReportDocument report, string suffix)
     {
-        if (Doc == null) return;
-        var choice = await Dialogs.Choose("Print plan", Loc.T("Scale"), new[] { Loc.T("Fit to page"), "1:250", "1:500", "1:1000", "1:2000" });
-        if (choice == null) return;
-        double? scale = choice switch { 1 => 250, 2 => 500, 3 => 1000, 4 => 2000, _ => null };
-        var landscape = await Dialogs.Confirm(Loc.T("Landscape orientation?"));
-        var path = await Dialogs.SaveFile("Save plan", BaseName + "_plan.pdf", ".pdf", ("PDF", new[] { "*.pdf" }));
+        var path = await Dialogs.SaveFile("Save report", BaseName + suffix + ".pdf", ".pdf", ("PDF", new[] { "*.pdf" }));
         if (path == null) return;
-        await using (var fs = File.Create(path)) Reports.WritePlanPdf(Project!, fs, scale, landscape, Project!.Header.Name);
+        await Task.Run(() => { using var fs = File.Create(path); report.WritePdf(fs); });
         await OfferOpen(path);
     }
 

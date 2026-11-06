@@ -28,7 +28,12 @@ public sealed class ListEditor<T> : Grid where T : class
 
         var buttons = new WrapPanel { Margin = new Thickness(10, 8, 6, 6) };
         void Add(Button b) { b.Margin = new Thickness(0, 0, 4, 4); buttons.Children.Add(b); }
-        if (create != null) Add(FormKit.Tool("plus", Loc.Ui("Add"), () => Insert(create())));
+        if (create != null)
+        {
+            var add = FormKit.Tool("plus", Loc.Ui("Add"), () => Insert(create()));
+            add.Name = "listAdd";
+            Add(add);
+        }
         if (clone != null) Add(FormKit.Tool("dup", null, () => { if (Selected is { } s) Insert(clone(s)); }, Loc.Ui("Duplicate")));
         Add(FormKit.Tool("trash", null, () =>
         {
@@ -38,8 +43,16 @@ public sealed class ListEditor<T> : Grid where T : class
             Reload(Math.Min(i, Items.Count - 1));
             Changed?.Invoke();
         }, Loc.Ui("Delete")));
-        Add(FormKit.Tool("arrowup", null, () => Move(-1)));
-        Add(FormKit.Tool("arrowdown", null, () => Move(1)));
+        // narrow, for the four small buttons to stay on one line under a narrow list
+        void Arrow(string icon, int step)
+        {
+            var b = FormKit.Tool(icon, null, () => Move(step));
+            b.MinWidth = 0;
+            b.Padding = new Thickness(3, 0);
+            Add(b);
+        }
+        Arrow("arrowup", -1);
+        Arrow("arrowdown", 1);
 
         DockPanel.SetDock(buttons, Dock.Bottom);
         _detail.Children.Add(_grid);
