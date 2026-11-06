@@ -3474,6 +3474,21 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     Shot(sectionSheet, "81c_section_sheet_holes");
     sectionForm.Closing!(); Pump();
     sectionWindow.Close(); Pump();
+    // the button of the Properties tab, only on a line of the type Cross section
+    var secondLine = sectionLines[1].Id;
+    void SectionKind(BlastDesigner.Domain.Model.LineKind kind) { vm.Change("Smoke section kind", p => p.Entities.OfType<BlastDesigner.Domain.Model.PolylineEntity>().First(l => l.Id == secondLine).Kind = kind); Pump(); }
+    Button? SectionButton() => window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "sectionAlongLine");
+    vm.Doc!.Select(new[] { secondLine }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    (SectionButton() ?? throw new Exception("no section button on a section line")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    sectionWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
+    if (SectionNumber() != "2 / 2") throw new Exception("the button opened the section of " + SectionNumber());
+    sectionWindow.Close(); Pump();
+    SectionKind(BlastDesigner.Domain.Model.LineKind.General);
+    if (SectionButton() != null) throw new Exception("the section button stayed on a plain polyline");
+    SectionKind(BlastDesigner.Domain.Model.LineKind.CrossSection);
+    if (SectionButton() == null) throw new Exception("the section button did not come with the type");
+    vm.Doc!.Select(Array.Empty<Guid>()); Pump();
     // the chip and the section of the report
     var sectionReport = Open(vm.PrintReports);
     if (sectionReport.Form.Design.Report.Sections.HasFlag(ReportSections.CrossSection) && sectionReport.Form.Document!.Pages.Count == 0) throw new Exception("no pages");

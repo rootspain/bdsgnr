@@ -31,7 +31,7 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - Tie panel: a Continue after creating check box, off by default. The entry of ties goes on from the hole just tied, as with
   Shift held; a click on that hole again or Esc finishes it.
 - **Section lines.** The Drawing list has a Section line tool: one segment, the entry ends with the second click, of the type Cross section.
-  The line is drawn thicker than a polyline. In the Section window arrows go to the previous and next line, the Print button opens the preview.
+  The line is drawn thicker than a polyline. In the Section window arrows go to the previous and next line, the Print button opens the preview. The Properties tab of a line of that type has a Section along line button.
   The preview has a Section chip and sheet, one sheet per line, and the report a Cross section section after the Plan.
 
 ### Changed
