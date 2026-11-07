@@ -404,6 +404,8 @@ public class ReportTests
         using var two = Reports.BuildCrossSections(WithSections(2), sheet, new ReportDesign(), Now);
         Assert.Equal(2, two.Pages.Count);
         Assert.DoesNotContain(two.Pages, page => page.HasPlan);
+        Assert.All(two.Pages, page => Assert.True(page.HasSection));
+        Assert.False(none.Pages[0].HasSection);
         // holes on the sheet, each along its own line
         using var a = two.Rasterize(0, 72);
         using var b = two.Rasterize(1, 72);
@@ -413,6 +415,73 @@ public class ReportTests
         // a line that was only picked takes the place of those of the blast
         using var picked = Reports.BuildCrossSections(WithSections(2), new CrossSectionSheet { Title = "Section", Line = (new Vec3(-5, 0, 300), new Vec3(75, 0, 300)) }, new ReportDesign(), Now);
         Assert.Single(picked.Pages);
+    }
+
+    [Fact]
+    public void ASectionGoesAlongTheFirstSegmentOfItsLine()
+    {
+        var bent = WithSections(1);
+        var line = bent.Entities.OfType<PolylineEntity>().Single();
+        var (a, b) = (line.Points[0], line.Points[1]);
+        line.Points.Add(new Vec3(75, 60, 300));
+        var sheet = new CrossSectionSheet { Title = "Section" };
+        using var along = Reports.BuildCrossSections(bent, sheet, new ReportDesign(), Now);
+        using var first = Reports.BuildCrossSections(bent, new CrossSectionSheet { Title = "Section", Line = (a, b) }, new ReportDesign(), Now);
+        using var ends = Reports.BuildCrossSections(bent, new CrossSectionSheet { Title = "Section", Line = (a, line.Points[^1]) }, new ReportDesign(), Now);
+        using var shown = along.Rasterize(0, 72);
+        using var wanted = first.Rasterize(0, 72);
+        using var other = ends.Rasterize(0, 72);
+        Assert.Equal(wanted.Bytes, shown.Bytes);
+        Assert.NotEqual(other.Bytes, shown.Bytes);
+    }
+
+    [Fact]
+    public void EachSectionHasAPageOfItsOwnInTheReport()
+    {
+        var p = WithSections(3);
+        var ids = Reports.SectionLines(p).Select(l => (Guid?)l.Id).ToList();
+        using var report = Reports.Build(p, new ReportOptions { Sections = ReportSections.Header | ReportSections.Plan | ReportSections.CrossSection | ReportSections.Quantities }, new ReportDesign(), Now);
+        Assert.Equal(ids, report.Pages.Where(page => page.HasSection).Select(page => page.Section!.Line));
+        Assert.DoesNotContain(report.Pages, page => page.HasPlan && page.HasSection);
+        // what follows does not share the last of them
+        Assert.False(report.Pages[^1].HasSection);
+    }
+
+    [Fact]
+    public void EachSectionHasItsVisibility()
+    {
+        var p = WithSections(2);
+        var ids = Reports.SectionLines(p).Select(l => l.Id).ToList();
+        var sheet = new CrossSectionSheet { Title = "Section" };
+        byte[] Sheet(ReportDesign design, int index)
+        {
+            using var document = Reports.BuildCrossSections(p, sheet, design, Now);
+            using var page = document.Rasterize(index, 72);
+            return page.Bytes;
+        }
+        var plain = new ReportDesign();
+        var own = new ReportDesign { Sections = { [ids[0]] = new SectionVisibility { View = { Zoom = 2 } } } };
+        Assert.NotEqual(Sheet(plain, 0), Sheet(own, 0));
+        Assert.Equal(Sheet(plain, 1), Sheet(own, 1));
+        // a line without its own takes what lines start from, and so does the sheet of a line only picked
+        var start = new ReportDesign { Section = { View = { Zoom = 2 } } };
+        Assert.Equal(Sheet(own, 0), Sheet(start, 0));
+        Assert.Same(start.Section, start.SectionOf(null));
+        Assert.Same(start.Section, start.SectionOf(ids[1]));
+    }
+
+    [Fact]
+    public void APageOfTheReportKnowsItHasASection()
+    {
+        var p = WithSections(1);
+        using var apart = Reports.Build(p, new ReportOptions { Sections = ReportSections.Plan | ReportSections.CrossSection, NewPage = ReportSections.CrossSection }, new ReportDesign(), Now);
+        Assert.Equal(2, apart.Pages.Count);
+        Assert.True(apart.Pages[0].HasPlan);
+        Assert.False(apart.Pages[0].HasSection);
+        Assert.False(apart.Pages[1].HasPlan);
+        Assert.True(apart.Pages[1].HasSection);
+        using var without = Reports.Build(p, new ReportOptions { Sections = ReportSections.Plan }, new ReportDesign(), Now);
+        Assert.DoesNotContain(without.Pages, page => page.HasSection);
     }
 
     [Fact]
@@ -771,6 +840,72 @@ public class ReportTests
             return page.Bytes;
         }
         Assert.Equal(Sheet(1), Sheet(3));
+    }
+
+    private static byte[] SectionPixels(BlastProject p, ReportDesign design)
+    {
+        using var sheet = Reports.BuildCrossSections(p, new CrossSectionSheet { Title = "Section" }, design, Now);
+        using var page = sheet.Rasterize(0, 72);
+        return page.Bytes;
+    }
+
+    [Fact]
+    public void WhatASectionShowsIsItsOwn()
+    {
+        var p = WithSections(1);
+        var hole = new Hole().KindName;
+        var plain = new ReportDesign();
+        foreach (var section in new[]
+        {
+            new ReportDesign { Section = { HiddenKinds = { hole } } },
+            new ReportDesign { Section = { ShowGrid = true } },
+            new ReportDesign { Section = { View = { Zoom = 2 } } },
+            new ReportDesign { Section = { View = { PanX = 0.02 } } },
+            new ReportDesign { Section = { View = { PanY = 0.02 } } }
+        })
+        {
+            Assert.NotEqual(SectionPixels(p, plain), SectionPixels(p, section));
+            Assert.Equal(PlanPixels(p, plain), PlanPixels(p, section));
+        }
+        foreach (var plan in new[]
+        {
+            new ReportDesign { HiddenKinds = { hole } },
+            new ReportDesign { ShowGrid = true },
+            new ReportDesign { View = { Zoom = 2 } },
+            new ReportDesign { View = { PanX = 0.02 } }
+        })
+        {
+            Assert.NotEqual(PlanPixels(p, plain), PlanPixels(p, plan));
+            Assert.Equal(SectionPixels(p, plain), SectionPixels(p, plan));
+        }
+    }
+
+    [Fact]
+    public void TheLockHoldsTheFrameOfASection()
+    {
+        var p = WithSections(1);
+        var hole = new Hole().KindName;
+        var open = new ReportDesign { Section = { HiddenKinds = { hole } } };
+        var held = new ReportDesign { Section = { HiddenKinds = { hole }, View = { Locked = true } } };
+        var fitted = new ReportDesign { Section = { HiddenKinds = { hole }, View = { Locked = true, LockedHiddenKinds = { hole } } } };
+        Assert.NotEqual(SectionPixels(p, open), SectionPixels(p, held));
+        Assert.Equal(SectionPixels(p, open), SectionPixels(p, fitted));
+    }
+
+    [Fact]
+    public void TheVisibilityOfTheSectionsGoesWithTheDesignFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + BlastDesigner.IO.ReportDesignFile.Extension);
+        try
+        {
+            var line = Guid.NewGuid();
+            BlastDesigner.IO.ReportDesignFile.Save(path, new ReportDesign { Sections = { [line] = new SectionVisibility { HiddenKinds = { "Text" }, ShowGrid = true, View = { Locked = true, Zoom = 1.44, PanX = 0.2 } } } });
+            var section = BlastDesigner.IO.ReportDesignFile.Load(path).Sections[line];
+            Assert.Equal(new[] { "Text" }, section.HiddenKinds);
+            Assert.True(section.ShowGrid);
+            Assert.Equal((true, 1.44, 0.2), (section.View.Locked, section.View.Zoom, section.View.PanX));
+        }
+        finally { File.Delete(path); }
     }
 
     [Fact]

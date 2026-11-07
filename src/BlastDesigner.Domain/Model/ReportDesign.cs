@@ -169,6 +169,15 @@ public sealed class DrawingView
     }
 }
 
+/// <summary>What the drawing of a section shows and how it is framed.</summary>
+public sealed class SectionVisibility
+{
+    /// <summary>Kinds of object left out, by <see cref="Entity.KindName"/>.</summary>
+    public List<string> HiddenKinds { get; set; } = new();
+    public bool ShowGrid { get; set; }
+    public DrawingView View { get; set; } = new();
+}
+
 /// <summary>What is drawn around the content of every report: it belongs to the user, not to one blast.</summary>
 public sealed class ReportDesign
 {
@@ -187,4 +196,11 @@ public sealed class ReportDesign
     /// <summary>The coordinate grid on the drawings of a report, whatever the main window shows.</summary>
     public bool ShowGrid { get; set; }
     public DrawingView View { get; set; } = new();
+    /// <summary>The same for the drawing of a section, apart from the plan: what a section line starts from, and a line only picked keeps.</summary>
+    public SectionVisibility Section { get; set; } = new();
+    /// <summary>What the section of each line has made its own, by the id of the line.</summary>
+    public Dictionary<Guid, SectionVisibility> Sections { get; set; } = new();
+
+    /// <summary>What the section of a line shows; null for a line only picked.</summary>
+    public SectionVisibility SectionOf(Guid? line) => line is Guid id && Sections.TryGetValue(id, out var own) ? own : Section;
 }

@@ -54,6 +54,7 @@ public sealed class SettingsForm : DockPanel
     private static readonly uint[] LightBackgrounds = { 0xFFFFFFFF, 0xFFF6F7F9, 0xFFFFFBF0, 0xFFEEF4FA };
     private static readonly uint[] Highlights = { 0xFF4C9BFF, 0xFFFF00FF, 0xFF22D3EE, 0xFFFACC15, 0xFF4ADE80 };
     private static readonly uint[] Geometry = { 0xFFC9CFD6, 0xFF8A929D, 0xFF9B7BFF, 0xFF22B8C8, 0xFF1B1F24 };
+    private static readonly uint[] SectionLines = { ProgramSettings.DefaultSectionLine, 0xFFFACC15, 0xFFFF00FF, 0xFF22D3EE, 0xFF4ADE80 };
 
     private readonly StackPanel _body = new() { Spacing = 26, Margin = new Thickness(22, 18, 22, 24) };
     private readonly ScrollViewer _scroll;
@@ -403,6 +404,8 @@ public sealed class SettingsForm : DockPanel
         }, "geometryByLayers"), new TextBlock { Text = L("Layer colours"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }));
         geometry.Children.Add(picker);
         yield return Row("Geometry colour", geometry, "Lines, points, polygons and text without their own colour");
+
+        yield return Row("Section line", ColourPicker("sectionLine", Edited.SectionLineColor, SectionLines, c => Edited.SectionLineColor = c), "Section lines without their own colour");
 
         yield return Row("Selected objects colour", ColourPicker("selection", Edited.SelectionColor, Highlights, c => Edited.SelectionColor = c));
 

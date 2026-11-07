@@ -54,6 +54,8 @@ public sealed class SceneOptions
     public Vec3 MoveOffset { get; init; }
     /// <summary>Colour of drawing objects (lines, points, polygons, text…) without their own colour; null uses the layer colours.</summary>
     public SKColor? GeometryColor { get; init; }
+    /// <summary>Colour of section lines without their own colour, before <see cref="GeometryColor"/>; null treats them as other lines.</summary>
+    public SKColor? SectionLineColor { get; init; }
     /// <summary>Surface fill by kind; null fills every surface with the elevation ramp.</summary>
     public IReadOnlyDictionary<SurfaceKind, SKColor>? SurfaceColors { get; init; }
 }
@@ -99,12 +101,15 @@ public static class PlanRenderer
         bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && InSlice(e);
         bool InSlice(Entity e)
         {
-            if (opt.SliceHalfWidth is not double w) return true;
+            // a surface is cut to the band when it is drawn: its triangles can cross the band with no vertex in it
+            if (opt.SliceHalfWidth is not double w || e is SurfaceEntity) return true;
             foreach (var v in e.GetVertices()) if (Math.Abs(cam.Depth(v)) <= w) return true;
             return false;
         }
         SKColor ColorOf(Entity e)
         {
+            if (opt.SectionLineColor is SKColor section && e.Color == null && e is PolylineEntity { Kind: LineKind.CrossSection })
+                return Adapt(section);
             if (opt.GeometryColor is SKColor g && e.Color == null && e is PolylineEntity or PointEntity or TextEntity or CircleEntity or ArrowEntity or DimensionEntity)
                 return Adapt(g);
             return Adapt(new(e.Color ?? (layerById.TryGetValue(e.LayerId, out var l) ? l.Color : 0xFF000000)));
@@ -127,6 +132,8 @@ public static class PlanRenderer
         using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = Ink, Typeface = SKTypeface.Default };
 
         if (opt.ShowGrid ?? view.ShowGrid) DrawGrid(canvas, cam, stroke, text);
+        // a sheet of a section asks for its grid: the views on the screen go by the switch of the plan, and have none
+        if (opt.ShowGrid == true && opt.SliceHalfWidth != null && cam.Pitch == 0) DrawSectionGrid(canvas, cam, stroke, text);
 
         var entities = project.Entities.Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity)).ToList();
         if (view.ReverseDrawOrder) entities.Reverse();
@@ -147,7 +154,7 @@ public static class PlanRenderer
             foreach (var s in entities.OfType<SurfaceEntity>())
             {
                 var mc = BeginMove(s);
-                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes || (opt.WireframesOnSelected && !opt.Selection.Contains(s.Id)));
+                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes || (opt.WireframesOnSelected && !opt.Selection.Contains(s.Id)), opt.SliceHalfWidth);
                 EndMove(mc);
             }
 
@@ -646,35 +653,36 @@ public static class PlanRenderer
     private static SKColor Shade(SKColor c, double f) =>
         new((byte)Math.Clamp(c.Red * f, 0, 255), (byte)Math.Clamp(c.Green * f, 0, 255), (byte)Math.Clamp(c.Blue * f, 0, 255), c.Alpha);
 
-    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null, bool hideWireframe = false)
+    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null, bool hideWireframe = false, double? slice = null)
     {
         // A point cloud coloured by kind shows its measured points, not a mesh made up between them.
         if (fill is SKColor pc && s.Kind == SurfaceKind.PointCloud)
         {
-            DrawPointCloud(c, cam, s, selected ?? pc);
+            DrawPointCloud(c, cam, s, selected ?? pc, slice);
             return;
         }
         int tri = s.TriangleCount;
         if (tri == 0) return;
 
         var mesh = _surfaceMeshes.GetValue(s, _ => new SurfaceMesh());
-        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe);
+        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe, slice);
     }
 
-    private static void DrawPointCloud(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color)
+    private static void DrawPointCloud(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, double? slice)
     {
-        if (s.Vertices.Count == 0) return;
-        var pts = new SKPoint[s.Vertices.Count];
+        var shown = slice is double band ? s.Vertices.Where(v => Math.Abs(cam.Depth(v)) <= band).ToList() : s.Vertices;
+        if (shown.Count == 0) return;
+        var pts = new SKPoint[shown.Count];
         for (int i = 0; i < pts.Length; i++)
         {
-            var (x, y) = cam.ToScreen(s.Vertices[i]);
+            var (x, y) = cam.ToScreen(shown[i]);
             pts[i] = new SKPoint(x, y);
         }
         using var paint = new SKPaint { IsAntialias = true, Color = color.WithAlpha(_dark ? (byte)200 : (byte)220), StrokeWidth = pts.Length > 50_000 ? 1.5f : 2.5f, StrokeCap = SKStrokeCap.Round };
         c.DrawPoints(SKPointMode.Points, pts, paint);
     }
 
-    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe)
+    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe, double? slice)
     {
         // The per-triangle fill colour depends only on the geometry, the theme, the fill and the shared elevation range,
         // so compute the expensive normal shading and colouring once and reuse it; only the projection runs per frame.
@@ -737,7 +745,7 @@ public static class PlanRenderer
             double dx = v.X - target.X, dy = v.Y - target.Y, dz = v.Z - target.Z;
             vs[i] = new SKPoint((float)(hw + (dx * right.X + dy * right.Y + dz * right.Z) * scale),
                                 (float)(hh - (dx * up.X + dy * up.Y + dz * up.Z) * scale));
-            if (!plan) vd[i] = (float)(dx * toViewer.X + dy * toViewer.Y + dz * toViewer.Z);
+            if (!plan || slice != null) vd[i] = (float)(dx * toViewer.X + dy * toViewer.Y + dz * toViewer.Z);
         }
         var pts = mesh.Points;
         var tris = s.Triangles;
@@ -778,9 +786,13 @@ public static class PlanRenderer
             soupCols = mesh.OrderedColors;
         }
 
-        using (var skVertices = SKVertices.CreateCopy(SKVertexMode.Triangles, soupPts, soupCols))
-        using (var vpaint = new SKPaint { IsAntialias = false })
+        if (slice is double band) (soupPts, soupCols) = CutToSlice(mesh, tris, tri, plan, (float)band);
+        if (soupPts.Length > 0)
+        {
+            using var skVertices = SKVertices.CreateCopy(SKVertexMode.Triangles, soupPts, soupCols);
+            using var vpaint = new SKPaint { IsAntialias = false };
             c.DrawVertices(skVertices, SKBlendMode.Modulate, vpaint);
+        }
 
         // Wireframe: every edge once, skipping edges fully outside the view (a path of every triangle's outline drew shared
         // edges twice). With the whole surface in view it is the costliest part of a frame, so by default it waits while
@@ -795,11 +807,75 @@ public static class PlanRenderer
             for (int k = 0; k < edges.Length; k += 2)
             {
                 var p0 = vs[edges[k]]; var p1 = vs[edges[k + 1]];
+                if (slice is double edgeBand && !CutToSlice(ref p0, ref p1, vd[edges[k]], vd[edges[k + 1]], (float)edgeBand)) continue;
                 if ((p0.X < 0 && p1.X < 0) || (p0.X > w && p1.X > w) || (p0.Y < 0 && p1.Y < 0) || (p0.Y > hgt && p1.Y > hgt)) continue;
                 path.MoveTo(p0); path.LineTo(p1);
             }
             c.DrawPath(path, wire);
         }
+    }
+
+    /// <summary>The triangles of a surface cut to the band around the target plane. The view is a parallel projection, so depth runs straight across a triangle on the screen too.</summary>
+    private static (SKPoint[] Points, SKColor[] Colors) CutToSlice(SurfaceMesh mesh, List<int> tris, int tri, bool plan, float band)
+    {
+        var points = new List<SKPoint>();
+        var colors = new List<SKColor>();
+        var vd = mesh.VertexDepth;
+        // two planes add at most two corners to a triangle
+        Span<(SKPoint P, float D)> corners = new (SKPoint, float)[5], cut = new (SKPoint, float)[5];
+        for (int i = 0; i < tri; i++)
+        {
+            int t = plan ? i : mesh.Order[i];
+            float d0 = vd[tris[3 * t]], d1 = vd[tris[3 * t + 1]], d2 = vd[tris[3 * t + 2]];
+            if ((d0 > band && d1 > band && d2 > band) || (d0 < -band && d1 < -band && d2 < -band)) continue;
+            corners[0] = (mesh.Points[3 * t], d0);
+            corners[1] = (mesh.Points[3 * t + 1], d1);
+            corners[2] = (mesh.Points[3 * t + 2], d2);
+            int n = Cut(corners[..3], cut, band, 1);
+            n = Cut(cut[..n], corners, band, -1);
+            for (int k = 1; k + 1 < n; k++)
+            {
+                points.Add(corners[0].P); points.Add(corners[k].P); points.Add(corners[k + 1].P);
+                for (int j = 0; j < 3; j++) colors.Add(mesh.SoupColors[3 * t]);
+            }
+        }
+        return (points.ToArray(), colors.ToArray());
+    }
+
+    /// <summary>The corners of a polygon on the inner side of one plane of the band, and where its edges cross the plane; how many there are.</summary>
+    private static int Cut(ReadOnlySpan<(SKPoint P, float D)> from, Span<(SKPoint P, float D)> to, float band, int side)
+    {
+        int n = 0;
+        for (int i = 0; i < from.Length; i++)
+        {
+            var (p, d) = from[i];
+            var (q, e) = from[(i + 1) % from.Length];
+            float u = side * d - band, v = side * e - band;
+            if (u <= 0) to[n++] = (p, d);
+            if ((u < 0 && v > 0) || (u > 0 && v < 0))
+            {
+                var t = u / (u - v);
+                to[n++] = (new SKPoint(p.X + (q.X - p.X) * t, p.Y + (q.Y - p.Y) * t), d + (e - d) * t);
+            }
+        }
+        return n;
+    }
+
+    /// <summary>A wireframe edge cut to the band around the target plane; false when none of it is in the band.</summary>
+    private static bool CutToSlice(ref SKPoint a, ref SKPoint b, float da, float db, float band)
+    {
+        if ((da > band && db > band) || (da < -band && db < -band)) return false;
+        float start = 0, end = 1;
+        if (da != db)
+        {
+            float x = (band - da) / (db - da), y = (-band - da) / (db - da);
+            start = Math.Max(0, Math.Min(x, y));
+            end = Math.Min(1, Math.Max(x, y));
+        }
+        var (p, q) = (a, b);
+        a = new SKPoint(p.X + (q.X - p.X) * start, p.Y + (q.Y - p.Y) * start);
+        b = new SKPoint(p.X + (q.X - p.X) * end, p.Y + (q.Y - p.Y) * end);
+        return true;
     }
 
     /// <summary>Each triangle edge once, as pairs of vertex indices.</summary>
@@ -1206,6 +1282,31 @@ public static class PlanRenderer
             var (sx2, sy2) = cam.ToScreen(new Vec3(maxX, y, cam.Target.Z));
             c.DrawLine(sx1, sy1, sx2, sy2, stroke);
             if (Math.Abs(cam.Yaw) < 1e-6) c.DrawText(y.ToString("0"), 2, sy1 - 2, text);
+        }
+        text.TextSize = 11;
+    }
+
+    /// <summary>The grid of a section: a line at each elevation, with its figure, and lines across at the same step along the section.</summary>
+    private static void DrawSectionGrid(SKCanvas c, Camera cam, SKPaint stroke, SKPaint text)
+    {
+        var step = NiceStep(100 / cam.Scale);
+        double halfWidth = cam.Width / 2 / cam.Scale, halfHeight = cam.Height / 2 / cam.Scale;
+        float w = (float)cam.Width, h = (float)cam.Height;
+        var target = cam.Target;
+        stroke.Color = _dark ? new SKColor(0xFF242930) : new SKColor(0xFFE5E7EB);
+        stroke.StrokeWidth = 1;
+        text.Color = new SKColor(0xFF9CA3AF);
+        text.TextSize = 9;
+        for (var z = Math.Floor((target.Z - halfHeight) / step) * step; z <= target.Z + halfHeight; z += step)
+        {
+            var y = cam.ToScreen(target.WithZ(z)).Y;
+            c.DrawLine(0, y, w, y, stroke);
+            c.DrawText(z.ToString("0"), 2, y - 2, text);
+        }
+        for (var d = Math.Floor(-halfWidth / step) * step; d <= halfWidth; d += step)
+        {
+            var x = cam.ToScreen(target + cam.Right * d).X;
+            c.DrawLine(x, 0, x, h, stroke);
         }
         text.TextSize = 11;
     }

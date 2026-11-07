@@ -9,6 +9,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.1 — 2026-11-06
 
 ### New
+- **Line vertices.** The vertices of selected polylines and polygons show round grips. Dragging a grip moves the vertex,
+  snapping to other objects; Esc cancels. The whole line still moves by the part between its vertices.
+  Shift and a click on a selected line add a vertex, Ctrl and a click on a grip delete it.
 - **Report preview window.** The report, the plan and the First movement sheet show on the screen before they are saved: pages,
   zoom and the choices on the left. From there a report goes to a PDF file or through the print dialog of Windows, macOS or Linux.
   The drawings of a report have no surface mesh. The text after the title at the top of the pages is a field with substitutions such as {name}. Sections have switches, and each can
@@ -26,12 +29,12 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The Footer section switches on the date, with or without the time, and the page number on all, the first or given pages.
   A column of a stamp of width 0 does not show. The caption and the text of each line of a stamp have their own alignment:
   buttons on the line go through left, centre and right. Buttons on the line of the widths align a whole column vertically.
-  The section is active only with a page with the plan on the screen. Beside them a ring of arrows and zoom buttons move and scale the drawing on the sheet. The lock in the middle of the ring
+  The plan and each section have these settings of their own: the check boxes and the ring act on the drawing of the page, named in the heading. A page without a drawing has no such section. On the sheets of a section the grid shows the elevations. In the report each section has a page of its own. Beside them a ring of arrows and zoom buttons move and scale the drawing on the sheet. The lock in the middle of the ring
   holds the frame: the check boxes no longer change the scale and position of the drawing. With Shift the step of the arrows and the zoom is 4 times smaller.
 - Tie panel: a Continue after creating check box, off by default. The entry of ties goes on from the hole just tied, as with
   Shift held; a click on that hole again or Esc finishes it.
 - **Section lines.** The Drawing list has a Section line tool: one segment, the entry ends with the second click, of the type Cross section.
-  The line is drawn thicker than a polyline. In the Section window arrows go to the previous and next line, the Print button opens the preview. The Properties tab of a line of that type has a Section along line button.
+  The line is drawn thicker than a polyline. In the Section window arrows go to the previous and next line, the Print button opens the preview. The Properties tab of a line of that type has a Section along line button. A surface in a section and a horizontal slice is cut to the half width. A section goes along the first segment of the line. The colour of the line on the screen is set in the Viewport section of the program settings.
   The preview has a Section chip and sheet, one sheet per line, and the report a Cross section section after the Plan.
 
 ### Changed

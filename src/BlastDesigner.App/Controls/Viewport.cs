@@ -125,6 +125,7 @@ public sealed class Viewport : Control
             DrawTieLegend = opt.DrawTieLegend,
             DrawElevationScale = opt.DrawElevationScale,
             GeometryColor = opt.GeometryColor,
+            SectionLineColor = opt.SectionLineColor,
             SurfaceColors = opt.SurfaceColors,
             AnimationTimeMs = opt.AnimationTimeMs,
             HiddenEntities = opt.HiddenEntities,

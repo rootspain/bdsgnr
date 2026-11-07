@@ -35,6 +35,9 @@ public sealed class ProgramSettings
     public const uint DarkBackground = 0xFF101215, LightBackground = 0xFFFFFFFF;
     /// <summary>Colour of lines, points, polygons and other drawing objects without their own colour; null keeps the layer colours.</summary>
     public uint? GeometryColor { get; set; }
+    /// <summary>Colour of section lines without their own colour on the screen; at first that of the first-movement arrows on the plan.</summary>
+    public uint SectionLineColor { get; set; } = DefaultSectionLine;
+    public const uint DefaultSectionLine = 0xFFEA580C;
 
     /// <summary>How surfaces are filled: <see cref="SurfaceByType"/> (palette below) or <see cref="SurfaceByElevation"/> (height ramp).</summary>
     public string SurfaceColoring { get; set; } = SurfaceByType;

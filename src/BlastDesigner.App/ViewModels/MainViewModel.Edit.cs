@@ -105,6 +105,44 @@ public sealed partial class MainViewModel
     public bool IsSelectable(Entity e) =>
         Project!.FindLayer(e.LayerId) is { Visible: true, Frozen: false } && !HiddenEntities.Contains(e.Id) && Rendering.PlanRenderer.EntityShown(Project.View, e);
 
+    /// <summary>More points than this in the selection and the lines show no grips: they would only cover the lines, and cost every frame.</summary>
+    private const int MaxGrips = 5000;
+
+    /// <summary>The selected lines whose vertices can be dragged.</summary>
+    public List<PolylineEntity> EditableLines()
+    {
+        var lines = new List<PolylineEntity>();
+        if (Doc is not { Selection.Count: > 0 } doc) return lines;
+        var points = 0;
+        foreach (var line in doc.Project.Entities.OfType<PolylineEntity>())
+        {
+            if (!doc.Selection.Contains(line.Id) || !IsSelectable(line) || doc.Project.FindLayer(line.LayerId) is { Locked: true }) continue;
+            points += line.Points.Count;
+            if (points > MaxGrips) return new List<PolylineEntity>();
+            lines.Add(line);
+        }
+        return lines;
+    }
+
+    public void MoveVertex(Guid line, int vertex, Vec3 to) => Change("Move vertex", p =>
+    {
+        if (p.FindEntity(line) is PolylineEntity l && vertex < l.Points.Count) l.Points[vertex] = to;
+    });
+
+    public void AddVertex(Guid line, int at, Vec3 point) => Change("Add vertex", p =>
+    {
+        if (p.FindEntity(line) is PolylineEntity l && at <= l.Points.Count) l.Points.Insert(at, point);
+    });
+
+    /// <summary>Takes a vertex out of a line; a line keeps two points and a polygon three.</summary>
+    public void DeleteVertex(Guid line, int vertex)
+    {
+        if (Project!.FindEntity(line) is not PolylineEntity shown || vertex >= shown.Points.Count) return;
+        var least = shown.Closed ? 3 : 2;
+        if (shown.Points.Count <= least) { SetStatus(Loc.F("At least {0} points are needed", least)); return; }
+        Change("Delete vertex", p => { if (p.FindEntity(line) is PolylineEntity l) l.Points.RemoveAt(vertex); });
+    }
+
     public void SelectAll() => Doc?.Select(Project!.Entities.Where(IsSelectable).Select(e => e.Id));
 
     /// <summary>Select like: same kind and layer (and hole type for holes) as the current selection.</summary>
@@ -287,6 +325,7 @@ public sealed partial class MainViewModel
         s.AccentColor = edited.AccentColor;
         s.BackgroundColor = edited.BackgroundColor;
         s.GeometryColor = edited.GeometryColor;
+        s.SectionLineColor = edited.SectionLineColor;
         s.SurfaceColoring = edited.SurfaceColoring;
         s.SurfaceWireframe = edited.SurfaceWireframe;
         // a copy: the window keeps editing its own after Apply, and Cancel must not leave those edits here

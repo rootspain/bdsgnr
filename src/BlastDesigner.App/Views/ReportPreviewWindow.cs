@@ -130,6 +130,12 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
     private StackPanel _rows = new();
     private CameraPad? _pad;
     private Control? _visibility;
+    private ContentControl _visibilityBody = new();
+    private TextBlock _visibilityDrawing = new();
+    /// <summary>The section the visibility acts on; null for the plan.</summary>
+    private SectionVisibility? _aimedSection;
+    /// <summary>The drawing the visibility was last built for.</summary>
+    private (bool Section, Guid? Line) _visibilityShown;
     private Control _settings;
     private Control _designer;
     private readonly Border _leftBorder;
@@ -159,6 +165,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         Design = ProjectJson.DeepClone(vm.Settings.ReportDesign);
         // the very first time the check boxes start as in the Visibility tab of the main window; then they are the design's own
         if (!Design.KindsChosen) Design.HiddenKinds = vm.Project!.Entities.GroupBy(e => e.KindName).Where(g => g.All(e => vm.HiddenEntities.Contains(e.Id))).Select(g => g.Key).ToList();
+        if (!Design.KindsChosen) Design.Section.HiddenKinds = Design.HiddenKinds.ToList();
         TranslateTitle();
 
         _settingsTab = FormKit.Tab(Loc.Ui("Report"), () => ShowTab(false));
@@ -495,7 +502,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
     /// <summary>A plan at a scale of its own has no zoom: the sheet says what the scale is.</summary>
     private void ShowPadZoom()
     {
-        if (_pad != null) _pad.CanZoom = _kind != ReportKind.Plan || _plan.Scale == null;
+        if (_pad != null) _pad.CanZoom = _aimedSection != null || _kind != ReportKind.Plan || _plan.Scale == null;
     }
 
     // ---------- the design ----------
@@ -551,7 +558,11 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         // the list shows its selected row, and that must not scroll the whole panel down to it
         var stampsHost = new ContentControl { Height = 500, Content = stamps };
         stampsHost.AddHandler(Control.RequestBringIntoViewEvent, (_, e) => e.Handled = true);
-        _visibility = Box(FormKit.Section(Loc.Ui("Visibility"), Visibility()));
+        _aimedSection = null;
+        _visibilityShown = (false, null);
+        _visibilityDrawing = new TextBlock { Text = Loc.Ui("Plan"), FontSize = 12, Foreground = Look.TextSoft, Name = "visibilityDrawing" };
+        _visibilityBody = new ContentControl { Content = Visibility() };
+        _visibility = Box(FormKit.Section(Loc.Ui("Visibility"), _visibilityBody, _visibilityDrawing));
         return new ScrollViewer
         {
             Content = new StackPanel
@@ -567,11 +578,36 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         };
     }
 
+    private List<string> AimedKinds => _aimedSection?.HiddenKinds ?? Design.HiddenKinds;
+    private DrawingView AimedView => _aimedSection?.View ?? Design.View;
+
+    /// <summary>The visibility of the drawing of the page, with its name; none on a page without a drawing.</summary>
+    private void ShowVisibility(ReportPage page)
+    {
+        _visibility!.IsVisible = page.HasPlan || page.HasSection;
+        if (!_visibility.IsVisible) return;
+        var shown = (page.HasSection, page.Section?.Line);
+        if (shown == _visibilityShown) return;
+        _visibilityShown = shown;
+        _aimedSection = page.Section is { } section ? OwnSection(section.Line) : null;
+        _visibilityDrawing.Text = page.Section is { } named ? $"{Loc.Ui("Section")} {named.Caption}".Trim() : Loc.Ui("Plan");
+        _visibilityBody.Content = Visibility();
+        ShowPadZoom();
+    }
+
+    /// <summary>What the section of a line shows, its own from the first time its sheet is on the screen.</summary>
+    private SectionVisibility OwnSection(Guid? line)
+    {
+        if (line is not Guid id) return Design.Section;
+        if (!Design.Sections.TryGetValue(id, out var own)) Design.Sections[id] = own = ProjectJson.DeepClone(Design.Section);
+        return own;
+    }
+
     /// <summary>The objects, and beside them the buttons that move the drawing.</summary>
     private Control Visibility()
     {
         var objects = Objects();
-        _pad = new CameraPad { Name = "cameraPad", Locked = Design.View.Locked, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top };
+        _pad = new CameraPad { Name = "cameraPad", Locked = AimedView.Locked, Margin = new Thickness(12, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top };
         _pad.Pressed += Aim;
         Grid.SetColumn(_pad, 1);
         return new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Children = { objects, _pad } };
@@ -579,7 +615,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
 
     private void Aim(CameraCommand command, bool fine)
     {
-        var view = Design.View;
+        var view = AimedView;
         var step = fine ? FinePanStep : PanStep;
         var zoom = fine ? FineZoomStep : ZoomStep;
         // an arrow moves the drawing on the sheet, so the view goes the other way
@@ -593,7 +629,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
             case CameraCommand.ZoomOut: view.ZoomBy(1 / zoom); break;
             case CameraCommand.Lock:
                 view.Locked = !view.Locked;
-                view.LockedHiddenKinds = view.Locked ? Design.HiddenKinds.ToList() : new();
+                view.LockedHiddenKinds = view.Locked ? AimedKinds.ToList() : new();
                 _pad!.Locked = view.Locked;
                 break;
         }
@@ -715,17 +751,22 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         }
         foreach (var kind in _vm.Project!.Entities.GroupBy(e => e.KindName).OrderBy(g => g.Key))
         {
-            var box = new CheckBox { Content = new TextBlock { Text = $"{Loc.T(kind.Key)} ({kind.Count()})", TextWrapping = TextWrapping.Wrap }, IsChecked = !Design.HiddenKinds.Contains(kind.Key), Tag = "kind:" + kind.Key, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Top };
+            var box = new CheckBox { Content = new TextBlock { Text = $"{Loc.T(kind.Key)} ({kind.Count()})", TextWrapping = TextWrapping.Wrap }, IsChecked = !AimedKinds.Contains(kind.Key), Tag = "kind:" + kind.Key, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Top };
             box.IsCheckedChanged += (_, _) =>
             {
-                if (box.IsChecked == true) Design.HiddenKinds.Remove(kind.Key);
-                else Design.HiddenKinds.Add(kind.Key);
+                if (box.IsChecked == true) AimedKinds.Remove(kind.Key);
+                else AimedKinds.Add(kind.Key);
                 Rebuild();
             };
             Add(box);
         }
-        var coordinates = new CheckBox { Content = new TextBlock { Text = Loc.Ui("Coord. grid"), TextWrapping = TextWrapping.Wrap }, IsChecked = Design.ShowGrid, Tag = "grid", Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Top };
-        coordinates.IsCheckedChanged += (_, _) => { Design.ShowGrid = coordinates.IsChecked == true; Rebuild(); };
+        var coordinates = new CheckBox { Content = new TextBlock { Text = Loc.Ui("Coord. grid"), TextWrapping = TextWrapping.Wrap }, IsChecked = _aimedSection?.ShowGrid ?? Design.ShowGrid, Tag = "grid", Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Top };
+        coordinates.IsCheckedChanged += (_, _) =>
+        {
+            if (_aimedSection != null) _aimedSection.ShowGrid = coordinates.IsChecked == true;
+            else Design.ShowGrid = coordinates.IsChecked == true;
+            Rebuild();
+        };
         Add(coordinates);
         return grid;
     }
@@ -1012,8 +1053,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         // what the visibility acts on has to be on the page in view
         if (_visibility != null && _document is { Pages.Count: > 0 } document)
         {
-            _visibility.IsEnabled = document.Pages[_page].HasPlan;
-            _visibility.Opacity = _visibility.IsEnabled ? 1 : 0.5;
+            ShowVisibility(document.Pages[_page]);
         }
         _pageText.Text = _document == null ? "" : $"{_page + 1} / {_document.Pages.Count}";
         _zoomText.Text = $"{_zoom * 100:0} %";

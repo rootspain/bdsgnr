@@ -688,6 +688,132 @@ Step("dropdown buttons open menus", () =>
     if (vm.ActiveTool?.Name != "Circle") throw new Exception("the drawing button / key W should start the circle again");
     vm.DrawingTools().First(e => e.Header == "Polyline").Action!(); vm.SelectTool(); Pump();
 });
+Step("vertices of a selected line are dragged by their grips", () =>
+{
+    vm.SelectTool(); Pump();
+    var cam = vm.View.Camera;
+    var snapping = vm.View.SnapEnabled;
+    vm.View.SnapEnabled = false;
+    PolylineEntity line = null!;
+    vm.Change("Line", p => line = p.Add(new PolylineEntity { Points = { cam.ToWorld(200, 200), cam.ToWorld(300, 200), cam.ToWorld(300, 300) } }));
+    var id = line.Id;
+    PolylineEntity Line() => vm.Project!.Entities.OfType<PolylineEntity>().Single(l => l.Id == id);
+    ToolPointer At(double x, double y, int clicks = 1) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = Line(), Left = true, ClickCount = clicks };
+    var grips = vm.View.Overlays.OfType<BlastDesigner.Rendering.VertexGripsOverlay>().SingleOrDefault() ?? throw new Exception("the select tool has no grips");
+    if (vm.EditableLines().Count != 0) throw new Exception("a line that is not selected should have no grips");
+    vm.Doc!.Select(new[] { id }); Pump();
+    if (vm.EditableLines().Single().Id != id) throw new Exception("the selected line has no grips");
+    vm.ActiveTool!.PointerMoved(At(301, 201));
+    if (grips.Hot?.Vertex != 1) throw new Exception("the grip under the cursor is not lit");
+    vm.View.Redraw(); Pump(); Shot("81_line_grips");
+    var before = Line().Points.ToList();
+    vm.ActiveTool.PointerPressed(At(301, 201));
+    vm.ActiveTool.PointerMoved(At(341, 241));
+    if (vm.View.Preview.Lines.Count != 1 || vm.View.Preview.Moving != null) throw new Exception("a dragged vertex should show the new line and leave the object where it is");
+    if (!Line().Points.SequenceEqual(before)) throw new Exception("the line changed before the release");
+    vm.View.Redraw(); Pump(); Shot("81_line_grip_drag");
+    vm.ActiveTool.PointerReleased(At(341, 241));
+    var moved = Line().Points;
+    if ((moved[1] - (before[1] + cam.ToWorld(341, 241) - cam.ToWorld(301, 201))).Length2D > 1e-6) throw new Exception("the vertex did not go to the cursor");
+    if (!moved[0].Equals(before[0]) || !moved[2].Equals(before[2])) throw new Exception("the other vertices moved");
+    if (vm.View.Preview.Lines.Count != 0) throw new Exception("the preview stayed after the release");
+    vm.Undo();
+    if (!Line().Points.SequenceEqual(before)) throw new Exception("undo did not bring the vertex back");
+    // Esc drops the drag; a press on the line between the vertices moves all of it; Shift selects
+    vm.ActiveTool.PointerPressed(At(300, 200));
+    vm.ActiveTool.PointerMoved(At(340, 240));
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+    vm.ActiveTool.PointerReleased(At(340, 240));
+    if (!Line().Points.SequenceEqual(before) || !vm.Doc.Selection.Contains(id)) throw new Exception("Esc did not drop the drag of the vertex");
+    vm.ActiveTool.PointerPressed(At(250, 200));
+    vm.ActiveTool.PointerMoved(At(290, 240));
+    if (vm.View.Preview.Moving == null) throw new Exception("a press between the vertices should move the line");
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+    var shift = At(300, 200);
+    vm.ActiveTool.PointerPressed(new ToolPointer { X = shift.X, Y = shift.Y, World = shift.World, Snapped = shift.Snapped, Hit = shift.Hit, Left = true, ClickCount = 1, Modifiers = Avalonia.Input.KeyModifiers.Shift });
+    vm.ActiveTool.PointerMoved(At(340, 240));
+    if (vm.View.Preview.Lines.Count != 0) throw new Exception("with Shift a press on a grip should not take it");
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+    // a locked layer keeps its lines, and another tool has no grips
+    var layer = vm.Project!.FindLayer(Line().LayerId)!;
+    layer.Locked = true;
+    if (vm.EditableLines().Count != 0) throw new Exception("a line of a locked layer should have no grips");
+    layer.Locked = false;
+    vm.DrawingTools().First(e => e.Header == "Polyline").Action!(); Pump();
+    if (vm.View.Overlays.OfType<BlastDesigner.Rendering.VertexGripsOverlay>().Any()) throw new Exception("the grips stayed with another tool");
+    vm.SelectTool(); Pump();
+    vm.View.SnapEnabled = snapping;
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id); i++) vm.Undo();
+    Pump();
+});
+Step("Shift adds a vertex to a selected line, Ctrl deletes one", () =>
+{
+    vm.SelectTool(); Pump();
+    var cam = vm.View.Camera;
+    var shift = Avalonia.Input.KeyModifiers.Shift;
+    var control = Avalonia.Input.KeyModifiers.Control;
+    PolylineEntity open = null!, polygon = null!, other = null!;
+    vm.Change("Lines", p =>
+    {
+        open = p.Add(new PolylineEntity { Points = { cam.ToWorld(200, 200).WithZ(10), cam.ToWorld(300, 200).WithZ(20), cam.ToWorld(300, 300).WithZ(20) } });
+        polygon = p.Add(new PolylineEntity { Closed = true, Points = { cam.ToWorld(400, 200), cam.ToWorld(500, 200), cam.ToWorld(500, 300) } });
+        other = p.Add(new PolylineEntity { Points = { cam.ToWorld(600, 200), cam.ToWorld(700, 200) } });
+    });
+    var (openId, polygonId, otherId) = (open.Id, polygon.Id, other.Id);
+    PolylineEntity Line(Guid id) => vm.Project!.Entities.OfType<PolylineEntity>().Single(l => l.Id == id);
+    ToolPointer At(Guid id, double x, double y, Avalonia.Input.KeyModifiers mods, int clicks = 1) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = Line(id), Left = true, ClickCount = clicks, Modifiers = mods };
+    void Click(Guid id, double x, double y, Avalonia.Input.KeyModifiers mods, int clicks = 1)
+    {
+        vm.ActiveTool!.PointerPressed(At(id, x, y, mods, clicks));
+        vm.ActiveTool.PointerReleased(At(id, x, y, mods, clicks));
+        Pump();
+    }
+    vm.Doc!.Select(new[] { openId, polygonId }); Pump();
+    // on the line, between its ends, with the elevation there; one undo step; the selection stays
+    Click(openId, 250, 202, shift);
+    var added = Line(openId).Points;
+    if (added.Count != 4) throw new Exception("Shift on a selected line did not add a vertex: " + added.Count);
+    if ((added[1] - Vec3.Lerp(added[0], added[2], 0.5)).Length2D > 1e-6 || Math.Abs(added[1].Z - 15) > 1e-6) throw new Exception("the vertex is not on the line: " + added[1]);
+    if (vm.Doc.Selection.Count != 2) throw new Exception("adding a vertex changed the selection");
+    vm.Undo();
+    if (Line(openId).Points.Count != 3) throw new Exception("undo did not take the vertex away");
+    // quick clicks are vertices too, and the closing side of a polygon takes one after the last
+    Click(openId, 220, 200, shift);
+    Click(openId, 240, 200, shift, 2);
+    if (Line(openId).Points.Count != 5 || vm.Doc.Selection.Count != 2) throw new Exception("a second quick click should add a vertex");
+    vm.Undo(); vm.Undo();
+    Click(polygonId, 450, 250, shift);
+    if (Line(polygonId).Points.Count != 4 || (Line(polygonId).Points[3] - cam.ToWorld(450, 250)).Length2D > 1e-6) throw new Exception("the closing side did not take the vertex");
+    vm.Undo();
+    // Shift on a grip adds nothing, a Shift drag is the box, Shift on a line not selected selects it
+    Click(openId, 300, 200, shift);
+    if (Line(openId).Points.Count != 3) throw new Exception("Shift on a grip added a vertex");
+    vm.ActiveTool!.PointerPressed(At(openId, 250, 200, shift));
+    vm.ActiveTool.PointerMoved(At(openId, 290, 240, shift));
+    if (vm.View.Preview.ScreenRect == null) throw new Exception("a Shift drag from a line should be the box");
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+    vm.ActiveTool.PointerReleased(At(openId, 290, 240, shift));
+    if (Line(openId).Points.Count != 3) throw new Exception("the drag added a vertex");
+    Click(otherId, 650, 200, shift);
+    if (Line(otherId).Points.Count != 2 || !vm.Doc.Selection.Contains(otherId)) throw new Exception("Shift on another line should select it");
+    vm.Doc.Select(new[] { openId, polygonId }); Pump();
+    // Ctrl on a grip deletes the vertex, with one undo step; between the grips it still toggles
+    Click(openId, 300, 200, control);
+    if (Line(openId).Points.Count != 2 || vm.Doc.Selection.Count != 2) throw new Exception("Ctrl on a grip did not delete the vertex");
+    Click(openId, 300, 300, control);
+    if (Line(openId).Points.Count != 2) throw new Exception("a line should keep two points");
+    if (!vm.Status.Contains('2')) throw new Exception("no word on the two points: " + vm.Status);
+    Click(polygonId, 500, 300, control);
+    if (Line(polygonId).Points.Count != 3) throw new Exception("a polygon should keep three points");
+    vm.Undo();
+    if (Line(openId).Points.Count != 3) throw new Exception("undo did not bring the vertex back");
+    Click(openId, 250, 200, control);
+    if (Line(openId).Points.Count != 3 || vm.Doc.Selection.Contains(openId)) throw new Exception("Ctrl between the grips should unselect the line");
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == openId); i++) vm.Undo();
+    Pump();
+});
 Step("analysis maps toggle and clear", () =>
 {
     vm.ClearOverlays();
@@ -1460,6 +1586,18 @@ Step("Ctrl+D clears the selection", () =>
 });
 Step("settings window", () => { _ = SettingsWindow.Show(vm.Settings); });
 WindowShot("41_settings");
+Step("section line colour in the settings", () =>
+{
+    if (vm.Settings.SectionLineColor != ProgramSettings.DefaultSectionLine || vm.BuildSceneOptions().SectionLineColor != new SkiaSharp.SKColor(0xFFEA580C)) throw new Exception("the section line should start in the colour of the arrows on the plan");
+    _ = SettingsWindow.Show(vm.Settings); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var boxes = dlg.GetLogicalDescendants().OfType<TextBox>().Select(b => b.Name).ToList();
+    int geometry = boxes.IndexOf("geometry"), section = boxes.IndexOf("sectionLine"), selection = boxes.IndexOf("selection");
+    if (geometry < 0 || section != geometry + 1 || selection != section + 1) throw new Exception($"the section line colour is not after the geometry colour: {geometry}, {section}, {selection}");
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Viewport"))).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    WindowShot("82_settings_section_line");
+    Pump();
+});
 Step("settings: a section opens from its heading", () =>
 {
     _ = SettingsWindow.Show(vm.Settings); Pump();
@@ -3417,15 +3555,15 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     // the visibility is alive only on a page with the plan
     Press(fromReports.Window, "tabDesign"); Pump();
     Wait(fromReports.Form);
-    bool VisibilityOn() => fromReports.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "grid").IsEffectivelyEnabled;
+    bool VisibilityOn() => fromReports.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "grid").IsEffectivelyVisible;
     var planPage = fromReports.Form.Document!.Pages.ToList().FindIndex(p => p.HasPlan);
-    var otherPage = fromReports.Form.Document.Pages.ToList().FindIndex(p => !p.HasPlan);
+    var otherPage = fromReports.Form.Document.Pages.ToList().FindIndex(p => !p.HasPlan && !p.HasSection);
     if (planPage < 0 || otherPage < 0) throw new Exception("the report should have pages with and without the plan");
     fromReports.Form.GoTo(planPage); Pump();
     if (!VisibilityOn()) throw new Exception("the visibility should be on with the plan on the screen");
     fromReports.Form.GoTo(otherPage); Pump();
     if (VisibilityOn()) throw new Exception("the visibility should be off on a page without the plan");
-    if (fromReports.Window.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.CameraPad>().Single().IsEffectivelyEnabled) throw new Exception("the buttons of the view should be off too");
+    if (fromReports.Window.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.CameraPad>().Single().IsEffectivelyVisible) throw new Exception("the buttons of the view should be off too");
     Shot(fromReports.Window, "80l_preview_visibility_off");
     fromReports.Form.GoTo(planPage); Pump();
     Press(fromReports.Window, "tabReport"); Pump();
@@ -3495,6 +3633,34 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     Press(sectionReport.Window, "kindCrossSection"); Pump();
     Wait(sectionReport.Form);
     if (sectionReport.Form.Document!.Pages.Count != 2) throw new Exception("the chip of the sections shows " + sectionReport.Form.Document.Pages.Count + " pages");
+    // on a sheet of a section the check boxes and the buttons act on that section: the plan and the other section stay as they are
+    Press(sectionReport.Window, "tabDesign"); Pump();
+    Wait(sectionReport.Form);
+    sectionReport.Form.GoTo(0); Pump();
+    var sectionDesign = sectionReport.Form.Design;
+    CheckBox SectionGridBox() => sectionReport.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "grid");
+    BlastDesigner.App.Controls.CameraPad SectionPad() => sectionReport.Window.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.CameraPad>().Single();
+    string? Drawing() => sectionReport.Window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "visibilityDrawing").Text;
+    var sectionWord = BlastDesigner.App.Services.Loc.Ui("Section");
+    if (!SectionGridBox().IsEffectivelyVisible || !SectionPad().IsEffectivelyEnabled) throw new Exception("the visibility should be there with a section on the screen");
+    if (Drawing() != sectionWord + " 1") throw new Exception("the visibility does not say whose it is: " + Drawing());
+    var firstId = sectionReport.Form.Document!.Pages[0].Section!.Line!.Value;
+    var secondId = sectionReport.Form.Document.Pages[1].Section!.Line!.Value;
+    var (planGrid, planPan, planLocked) = (sectionDesign.ShowGrid, sectionDesign.View.PanX, sectionDesign.View.Locked);
+    var otherGrid = SectionGridBox().IsChecked;
+    SectionGridBox().IsChecked = otherGrid != true; Pump();
+    SectionPad().Press(BlastDesigner.App.Controls.CameraCommand.Right); Pump();
+    SectionPad().Press(BlastDesigner.App.Controls.CameraCommand.Lock); Pump();
+    Wait(sectionReport.Form);
+    if (sectionDesign.Sections[firstId].View.PanX == 0 || !sectionDesign.Sections[firstId].View.Locked) throw new Exception("the buttons did not act on the section");
+    if (sectionDesign.ShowGrid != planGrid || sectionDesign.View.PanX != planPan || sectionDesign.View.Locked != planLocked) throw new Exception("the section changed the visibility of the plan");
+    sectionReport.Form.GoTo(1); Pump();
+    if (Drawing() != sectionWord + " 2" || SectionPad().Locked || SectionGridBox().IsChecked != otherGrid) throw new Exception("the second section should have its own visibility");
+    if (sectionDesign.Sections[secondId].View.PanX != 0) throw new Exception("the second section took the view of the first");
+    sectionReport.Form.GoTo(0); Pump();
+    if (!SectionPad().Locked || SectionGridBox().IsChecked == otherGrid) throw new Exception("the first section lost its visibility");
+    sectionDesign.Sections.Clear();
+    Shot(sectionReport.Window, "82_preview_visibility_section");
     sectionReport.Form.Closing!(); Pump();
     vm.Change("Smoke no section lines", p => p.Entities.RemoveAll(e => e is PolylineEntity { Kind: BlastDesigner.Domain.Model.LineKind.CrossSection })); Pump();
     var noSections = Open(vm.PrintReports);

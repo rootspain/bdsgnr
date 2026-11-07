@@ -51,6 +51,93 @@ public class RenderTests
         return bitmap.Bytes;
     }
 
+    /// <summary>A slope of two triangles, 100 m square and rising to the north, or the same corners and a row of points as a cloud.</summary>
+    private static BlastProject Slope(SurfaceKind kind = SurfaceKind.Topography)
+    {
+        var p = BlastProject.CreateNew("slope");
+        var s = new SurfaceEntity { Name = "Slope", Kind = kind, ShowWireframe = false, Vertices = { new Vec3(0, 0, 0), new Vec3(100, 0, 0), new Vec3(100, 100, 100), new Vec3(0, 100, 100) }, Triangles = { 0, 1, 2, 0, 2, 3 } };
+        for (int y = 2; y < 100; y += 4) s.Vertices.Add(new Vec3(50, y, y));
+        p.Add(s);
+        return p;
+    }
+
+    /// <summary>How many pixels the slope takes in a view across it, or from above, cut to a band.</summary>
+    private static int Ink(BlastProject p, double band, double pitch = 0, IReadOnlyDictionary<SurfaceKind, SKColor>? colors = null)
+    {
+        var cam = new Camera { Width = 400, Height = 300, Pitch = pitch, Yaw = 0, Scale = 2, Target = new Vec3(50, 50, 50) };
+        var options = new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false, SliceHalfWidth = band, SurfaceColors = colors };
+        var empty = BlastProject.CreateNew("empty");
+        var drawn = Pixels(c => PlanRenderer.Render(c, cam, p, options));
+        var blank = Pixels(c => PlanRenderer.Render(c, cam, empty, options));
+        return Enumerable.Range(0, drawn.Length / 4).Count(i => Enumerable.Range(0, 4).Any(k => drawn[4 * i + k] != blank[4 * i + k]));
+    }
+
+    [Fact]
+    public void AnOpenBandCutsASurfaceWithNoVertexInIt()
+    {
+        var narrow = Ink(Slope(), 5);
+        var wide = Ink(Slope(), 20);
+        Assert.True(narrow > 0, "the triangles cross the band");
+        Assert.InRange((double)wide / narrow, 3.5, 4.5);
+        Assert.True(Ink(Slope(), 500) > wide);
+    }
+
+    [Fact]
+    public void ABandFromAboveCutsASurfaceToo()
+    {
+        var narrow = Ink(Slope(), 5, 90);
+        Assert.True(narrow > 0);
+        Assert.InRange((double)Ink(Slope(), 20, 90) / narrow, 3.5, 4.5);
+    }
+
+    [Fact]
+    public void ABandLeavesThePointsOfACloudInIt()
+    {
+        var colors = new Dictionary<SurfaceKind, SKColor> { [SurfaceKind.PointCloud] = SKColors.Red };
+        var narrow = Ink(Slope(SurfaceKind.PointCloud), 5, 0, colors);
+        Assert.True(narrow > 0);
+        Assert.True(Ink(Slope(SurfaceKind.PointCloud), 20, 0, colors) > 2 * narrow);
+    }
+
+    [Fact]
+    public void ABandCutsTheWireframeOfASurface()
+    {
+        var p = Slope();
+        p.Entities.OfType<SurfaceEntity>().Single().ShowWireframe = true;
+        var mesh = Ink(Slope(), 5);
+        var wired = Ink(p, 5);
+        // the edges stay on the strip: outside it they would add far more than the fill has
+        Assert.InRange(wired, mesh, mesh * 1.2);
+    }
+
+    /// <summary>How many pixels of a line of a kind come out in a colour.</summary>
+    private static int LinePixels(LineKind kind, uint? own, SceneOptions options, SKColor colour)
+    {
+        var p = BlastProject.CreateNew("line");
+        p.Add(new PolylineEntity { Kind = kind, Color = own, Points = { new Vec3(0, 0, 0), new Vec3(40, 0, 0) } });
+        var cam = new Camera { Width = 400, Height = 300, Scale = 5, Target = new Vec3(20, 0.1, 0) };
+        using var bitmap = new SKBitmap(400, 300);
+        using var canvas = new SKCanvas(bitmap);
+        PlanRenderer.Render(canvas, cam, p, options);
+        return bitmap.Pixels.Count(c => c == colour);
+    }
+
+    [Fact]
+    public void ASectionLineHasItsColourOnTheScreen()
+    {
+        var section = new SKColor(0xFFEA580C);
+        var geometry = new SKColor(0xFF22B8C8);
+        var options = new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, SectionLineColor = section, GeometryColor = geometry };
+        Assert.True(LinePixels(LineKind.CrossSection, null, options, section) > 100);
+        Assert.Equal(0, LinePixels(LineKind.CrossSection, null, options, geometry));
+        // its own colour stays, another line takes that of the geometry
+        Assert.Equal(0, LinePixels(LineKind.CrossSection, 0xFF4ADE80, options, section));
+        Assert.Equal(0, LinePixels(LineKind.General, null, options, section));
+        Assert.True(LinePixels(LineKind.General, null, options, geometry) > 100);
+        // a drawing on paper has no such colour
+        Assert.Equal(0, LinePixels(LineKind.CrossSection, null, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false }, section));
+    }
+
     /// <summary>Two holes tied together with an initiation point, and with <paramref name="geometry"/> all that is not the blast.</summary>
     private static BlastProject Blast(bool geometry, bool tiesShown)
     {

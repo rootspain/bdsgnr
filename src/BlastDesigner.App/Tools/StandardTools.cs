@@ -6,6 +6,7 @@ using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
+using BlastDesigner.Rendering;
 using SkiaSharp;
 
 namespace BlastDesigner.App.Tools;
@@ -20,11 +21,33 @@ public sealed class SelectTool : Tool
     private HoleRow? _row;
     /// <summary>Offset of the last drag preview.</summary>
     private Vec3? _shown;
+    private readonly VertexGripsOverlay _grips;
+    /// <summary>Vertex whose grip was pressed: a drag moves it, a click selects as anywhere else.</summary>
+    private (PolylineEntity Line, int Vertex)? _grip;
+    /// <summary>Where the last drag preview put the vertex.</summary>
+    private Vec3? _gripTo;
+    /// <summary>Spot of a selected line pressed with Shift: a click adds a vertex there, a drag is the box as anywhere else.</summary>
+    private (PolylineEntity Line, int At, Vec3 Point)? _newVertex;
+    /// <summary>Grip pressed with Ctrl: a click deletes its vertex.</summary>
+    private (PolylineEntity Line, int Vertex)? _oldVertex;
 
-    public SelectTool(MainViewModel vm) : base(vm) { }
+    public SelectTool(MainViewModel vm) : base(vm) =>
+        _grips = new VertexGripsOverlay(() => Preview.Moving == null ? vm.EditableLines() : new List<PolylineEntity>(), () => new SKColor(vm.Settings.SelectionColor));
 
     public override string Name => "Select";
-    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it. Shift adds, Ctrl toggles.";
+    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it.";
+
+    public override void Activate()
+    {
+        base.Activate();
+        View.Overlays.Add(_grips);
+    }
+
+    public override void Deactivate()
+    {
+        base.Deactivate();
+        View.Overlays.Remove(_grips);
+    }
 
     public override void PointerPressed(ToolPointer p)
     {
@@ -36,6 +59,12 @@ public sealed class SelectTool : Tool
         // the line of a row, with nothing else under the cursor than a surface (picked by area) or a tie along the
         // row: a selected row is dragged by it, an unselected one is selected by a click on it (a tie keeps its click)
         var free = !p.Modifiers.HasFlag(KeyModifiers.Shift) && !p.Modifiers.HasFlag(KeyModifiers.Control);
+        _grip = free && p.ClickCount < 2 ? GripAt(p.X, p.Y) : null;
+        _gripTo = null;
+        var shift = p.Modifiers.HasFlag(KeyModifiers.Shift);
+        var control = p.Modifiers.HasFlag(KeyModifiers.Control);
+        _oldVertex = control && !shift ? GripAt(p.X, p.Y) : null;
+        _newVertex = shift && !control && GripAt(p.X, p.Y) == null ? SegmentAt(p.X, p.Y) : null;
         _row = p.Hit is null or SurfaceEntity || (p.Hit is TieEntity && !Vm.Doc!.Selection.Contains(p.Hit.Id)) ? RowAt(p.X, p.Y) : null;
         if (_row != null)
         {
@@ -43,7 +72,8 @@ public sealed class SelectTool : Tool
             if (selected && free) _moving = true;
             else if (p.Hit is TieEntity) _row = null;
         }
-        if (p.ClickCount >= 2 && p.Hit != null)
+        // quick clicks that edit a line go on editing it, they are no double click
+        if (p.ClickCount >= 2 && p.Hit != null && _newVertex == null && _oldVertex == null)
         {
             Vm.Doc!.Select(new[] { p.Hit.Id });
             ShowProperties();
@@ -57,12 +87,27 @@ public sealed class SelectTool : Tool
         Preview.Labels.Clear();
         if (_down == null)
         {
+            _grips.Hot = GripAt(p.X, p.Y);
             if (p.Hit != null) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m" : Loc.T(p.Hit.KindName)));
             return;
         }
         if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) _dragging = true;
         if (!_dragging) return;
-        if (_moving)
+        if (_grip is { } grip)
+        {
+            var from = grip.Line.Points[grip.Vertex];
+            var (to, snap) = VertexTarget(p, grip.Line, from);
+            _gripTo = to;
+            Preview.Snap = snap;
+            var points = grip.Line.Points.ToList();
+            points[grip.Vertex] = to;
+            Preview.Lines.Clear();
+            Preview.Points.Clear();
+            Preview.Lines.Add((points, grip.Line.Closed, PreviewColor));
+            Preview.Points.Add((to, PreviewColor));
+            Preview.Labels.Add((to, $"Δ {(to - from).Length2D:0.00} m"));
+        }
+        else if (_moving)
         {
             // The selection itself follows the cursor; the move is applied (with undo) on release.
             var (delta, handle, snap) = MoveDelta(p);
@@ -83,6 +128,28 @@ public sealed class SelectTool : Tool
         var down = _down;
         Preview.Clear();
         var mode = p.Modifiers.HasFlag(KeyModifiers.Control) ? SelectionMode.Toggle : p.Modifiers.HasFlag(KeyModifiers.Shift) ? SelectionMode.Add : SelectionMode.Replace;
+        if (!_dragging && _newVertex is { } added)
+        {
+            _down = null;
+            _newVertex = null;
+            Vm.AddVertex(added.Line.Id, added.At, added.Point);
+            return;
+        }
+        if (!_dragging && _oldVertex is { } deleted)
+        {
+            _down = null;
+            _oldVertex = null;
+            _grips.Hot = null;
+            Vm.DeleteVertex(deleted.Line.Id, deleted.Vertex);
+            return;
+        }
+        if (_dragging && _grip is { } grip)
+        {
+            _down = null;
+            _grip = null;
+            if (_gripTo is Vec3 to) Vm.MoveVertex(grip.Line.Id, grip.Vertex, to);
+            return;
+        }
         if (_dragging && _moving)
         {
             // Apply exactly what was on screen, not a fresh reading of the release point.
@@ -135,6 +202,52 @@ public sealed class SelectTool : Tool
             }
         }
         return best;
+    }
+
+    /// <summary>The grip of a selected line at a screen point; the nearest one.</summary>
+    private (PolylineEntity Line, int Vertex)? GripAt(double sx, double sy)
+    {
+        (PolylineEntity, int)? best = null;
+        var bestD = VertexGripsOverlay.Reach;
+        foreach (var line in Vm.EditableLines())
+            for (int i = 0; i < line.Points.Count; i++)
+            {
+                var (x, y) = View.Camera.ToScreen(line.Points[i]);
+                var d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
+                if (d < bestD) { bestD = d; best = (line, i); }
+            }
+        return best;
+    }
+
+    /// <summary>The nearest spot of a selected line to a screen point, within the pick radius, with the index a vertex there takes.</summary>
+    private (PolylineEntity Line, int At, Vec3 Point)? SegmentAt(double sx, double sy)
+    {
+        (PolylineEntity, int, Vec3)? best = null;
+        var bestD = View.TargetRadius;
+        foreach (var line in Vm.EditableLines())
+        {
+            int n = line.Points.Count;
+            for (int i = 0; i < (line.Closed ? n : n - 1); i++)
+            {
+                Vec3 a = line.Points[i], b = line.Points[(i + 1) % n];
+                var (ax, ay) = View.Camera.ToScreen(a);
+                var (bx, by) = View.Camera.ToScreen(b);
+                double dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+                var t = l2 > 0 ? Math.Clamp(((sx - ax) * dx + (sy - ay) * dy) / l2, 0, 1) : 0;
+                var d = Math.Sqrt(Math.Pow(ax + t * dx - sx, 2) + Math.Pow(ay + t * dy - sy, 2));
+                // the view is a parallel projection: the same share of the segment on the screen and in the world, elevation too
+                if (d < bestD) { bestD = d; best = (line, i + 1, Vec3.Lerp(a, b, t)); }
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Where a drag puts a vertex: as an object is moved, on another object under the cursor, else horizontally.</summary>
+    private (Vec3 To, Vec3? Snap) VertexTarget(ToolPointer p, PolylineEntity line, Vec3 from)
+    {
+        var cam = View.Camera;
+        var snap = View.SnapForDrag(p.X, p.Y, new[] { line.Id });
+        return (snap ?? from + (cam.ToWorld(p.X, p.Y, from.Z) - cam.ToWorld(_down!.X, _down.Y, from.Z)).WithZ(0), snap);
     }
 
     /// <summary>Selecting something on the plan shows its properties in the right panel.</summary>

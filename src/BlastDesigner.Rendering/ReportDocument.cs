@@ -5,7 +5,13 @@ using SkiaSharp;
 namespace BlastDesigner.Rendering;
 
 /// <summary>A recorded page, in points (1/72 inch).</summary>
-public sealed record ReportPage(SKPicture Picture, float Width, float Height, bool HasPlan = false);
+public sealed record ReportPage(SKPicture Picture, float Width, float Height, bool HasPlan = false, PageSection? Section = null)
+{
+    public bool HasSection => Section != null;
+}
+
+/// <summary>The section drawn on a page: its line, null for one only picked, and what tells it from the others.</summary>
+public sealed record PageSection(Guid? Line, string Caption);
 
 /// <summary>
 /// A report built once: the screen, the PDF file and the printer all take these pages, so they cannot differ. The pages

@@ -364,6 +364,6 @@ public sealed partial class MainViewModel
     private void SectionAlongSelection()
     {
         var line = Doc?.SelectedEntities.OfType<PolylineEntity>().FirstOrDefault(l => l.Points.Count >= 2);
-        if (line != null) AnalysisWindows.ShowSection(this, line.Points[0], line.Points[^1]);
+        if (line != null) AnalysisWindows.ShowSection(this, line.Points[0], line.Points[1]);
     }
 }

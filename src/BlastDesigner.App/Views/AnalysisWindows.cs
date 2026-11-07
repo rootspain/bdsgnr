@@ -890,7 +890,7 @@ public static class AnalysisWindows
         var number = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 44, TextAlignment = TextAlignment.Center, FontFamily = Look.Mono, Foreground = Look.Text, Name = "sectionNumber" };
         Button previous = null!, next = null!;
         // where the line of the window stands among those of the blast, -1 for one that was only picked
-        int Index(List<PolylineEntity> lines) => lines.FindIndex(l => l.Points[0].Equals(line.A) && l.Points[^1].Equals(line.B));
+        int Index(List<PolylineEntity> lines) => lines.FindIndex(l => l.Points[0].Equals(line.A) && l.Points[1].Equals(line.B));
         void ShowNumber()
         {
             if (vm.Project is not { } project) return;
@@ -930,7 +930,7 @@ public static class AnalysisWindows
             if (lines.Count == 0) return;
             var at = Index(lines);
             var target = lines[at < 0 ? (by > 0 ? 0 : lines.Count - 1) : (at + by + lines.Count) % lines.Count];
-            Aim(target.Points[0], target.Points[^1]);
+            Aim(target.Points[0], target.Points[1]);
             Fit();
         }
         previous = Ui.Flat(Look.Icon("left", 16, Look.TextSoft), Loc.T("Previous section line"), () => Step(-1), 32, 32);

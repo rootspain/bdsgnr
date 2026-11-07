@@ -249,7 +249,7 @@ public sealed class PropertiesPanel : DockPanel
         if (first is PolylineEntity { Kind: LineKind.CrossSection, Points.Count: >= 2 } section && sel.Count == 1)
         {
             var open = new Button { Content = Loc.T("Section along line"), Margin = new Thickness(6), Name = "sectionAlongLine" };
-            open.Click += (_, _) => AnalysisWindows.ShowSection(_vm, section.Points[0], section.Points[^1]);
+            open.Click += (_, _) => AnalysisWindows.ShowSection(_vm, section.Points[0], section.Points[1]);
             panel.Children.Add(open);
         }
         panel.Children.Add(grid);

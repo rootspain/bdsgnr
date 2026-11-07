@@ -165,7 +165,7 @@ Click to add holes using the design data.	Щёлкайте, чтобы доба�
 Click to place points.	Щёлкайте, чтобы ставить точки.
 Click to place the electronic opening point.	Щёлкните, чтобы поставить точку открытия электронной схемы.
 Click to place the initiation point, then use the Tie tool from it to the first hole.	Щёлкните, чтобы поставить точку инициирования, затем свяжите её с первой скважиной.
-Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it. Shift adds, Ctrl toggles.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить. Shift добавляет, Ctrl переключает.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, а круглую ручку выделенной линии, чтобы переместить её вершину. Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её.
 Click two holes to measure between them.	Щёлкните две скважины, чтобы измерить расстояние.
 Click two points of the section line.	Щёлкните две точки линии разреза.
 Click two points to dimension.	Щёлкните две точки для размера.
@@ -624,6 +624,9 @@ Move selection to this layer	Перенести выделенное в этот
 Move to layer	Перенести в слой
 Move to selected points	Переместить в выбранные точки
 Move to selected points…	Переместить в выбранные точки…
+Move vertex	Переместить вершину
+Add vertex	Добавить вершину
+Delete vertex	Удалить вершину
 Move x	Сдвиг X
 Move y	Сдвиг Y
 Move z	Сдвиг Z
@@ -2287,6 +2290,8 @@ ui:Background colour	Цвет фона
 ui:Layer colours	Цвета слоёв
 ui:Geometry colour	Цвет геометрии
 ui:Lines, points, polygons and text without their own colour	Линии, точки, полигоны и текст без собственного цвета
+ui:Section line	Линия разреза
+ui:Section lines without their own colour	Линии разреза без собственного цвета
 ui:Selected objects colour	Цвет выделенных объектов
 ui:Collar size	Размер устья
 ui:px	пкс
