@@ -275,3 +275,38 @@ public class ParameterTableParserTests
         Assert.False(ParameterTableParser.Parse("", "?").IsValid);
     }
 }
+
+public class CalcHoleSummaryTests
+{
+    [Fact]
+    public void Summarize_SameDifferentSumMeanAndRange()
+    {
+        var p = CalcParityTests.Generate(4);
+        var holes = p.Holes.Where(x => !x.IsDummy && x.Decks.Count > 0).Take(3).ToList();
+        holes[1].LoadingFactor = 1.3;
+        foreach (var h in holes) h.Length = 12;
+        var one = CalcService.Summarize(p, "hole.chargeMass", holes.Take(1).ToList());
+        Assert.False(one.Different);
+        Assert.Equal(CalcService.Format(p, "hole.chargeMass", holes[0]), one.Text);
+
+        var total = holes.Sum(h => Charging.ExplosiveMass(p, h));
+        var sum = CalcService.Summarize(p, "hole.chargeMass", holes);
+        Assert.True(sum.Different && sum.IsSum);
+        Assert.StartsWith(total.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture), sum.Aggregate);
+
+        var depths = new[] { 2.0, 3.0, 4.0 };
+        for (int i = 0; i < 3; i++) { holes[i].Decks.Clear(); holes[i].Decks.Add(new Deck { Top = depths[i], Bottom = 12, ProductId = p.Products.First(x => x.Name == "ANFO").Id }); }
+        var mean = CalcService.Summarize(p, "hole.topStemming", holes);
+        Assert.True(mean.Different && !mean.IsSum);
+        Assert.StartsWith(3.0.ToString("0.00", System.Globalization.CultureInfo.CurrentCulture), mean.Aggregate);
+
+        var same = CalcService.Summarize(p, "hole.isLoaded", holes);
+        Assert.False(same.Different);
+
+        var custom = CalcProfile.DeriveFrom(CalcService.BuiltIn, "диапазон");
+        custom.Properties.Add(new PropertyDef { Id = "hole.topStemming", NameRu = "Верхняя забойка", Unit = "m", Format = "0.00", Max = 3.5 });
+        CalcService.SetProfile(p, custom);
+        Assert.True(CalcService.Summarize(p, "hole.topStemming", holes).OutOfRange);
+        Assert.False(CalcService.Summarize(p, "hole.topStemming", holes.Take(1).ToList()).OutOfRange);
+    }
+}

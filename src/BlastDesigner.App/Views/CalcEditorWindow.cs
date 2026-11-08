@@ -1403,7 +1403,7 @@ public sealed class CalcEditorForm : DockPanel
         var number = 1;
         while (DraftModel.FindProperty(contexts[ci], "user" + number) != null) number++;
         var id = contexts[ci] + ".user" + number;
-        Draft.Properties.Add(new PropertyDef { Id = id, NameRu = name, Unit = "?", Kind = PropertyKind.Computed, Group = Loc.T("Mine") });
+        Draft.Properties.Add(new PropertyDef { Id = id, NameRu = name, Unit = "?", Kind = PropertyKind.Computed, Group = "Мои" });
         Draft.Formulas.Add(new FormulaDef { Property = id, Expression = "0" });
         Recompile();
         BuildTree();

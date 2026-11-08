@@ -7,6 +7,9 @@ using BlastDesigner.Domain.Model;
 
 namespace BlastDesigner.Engine;
 
+/// <summary>Сводка значения по скважинам: текст одного значения или «разные» с суммой либо средним, и выход за диапазон.</summary>
+public sealed record HoleValueSummary(string Text, bool Different, string? Aggregate, bool IsSum, bool OutOfRange);
+
 /// <summary>
 /// Движок вычислений для Engine и окон: встроенные алгоритмы (ячейки Вороного, сетка, МВЗ, время, расстояние до
 /// линии, прогноз сейсмики) регистрируются в <see cref="CalcRegistry.Default"/>, встроенный профиль «SHOTPlus 6»
@@ -257,7 +260,15 @@ public static class CalcService
     /// <summary>Значение свойства текстом по его формату (с единицей); ошибка — «#».</summary>
     public static string Format(BlastProject project, string propertyId, object entity, bool withUnit = true)
     {
-        var v = Value(project, propertyId, entity);
+        var dot = propertyId.IndexOf('.');
+        return Format(SessionFor(project, dot > 0 ? propertyId[..dot] : "", entity), propertyId, entity, withUnit);
+    }
+
+    /// <summary>То же в готовом сеансе: много значений одного расчёта (поля отчёта) считают ячейки и МВЗ один раз.</summary>
+    public static string Format(CalcSession session, string propertyId, object entity, bool withUnit = true)
+    {
+        var project = session.Project;
+        var v = session.Value(propertyId, entity);
         if (v.IsError) return "#";
         var d = ModelFor(project).FindProperty(propertyId);
         var text = v.Object switch
@@ -268,6 +279,28 @@ public static class CalcService
         };
         var unit = withUnit && v.Object == null ? UnitText(project, propertyId) : "";
         return unit.Length > 0 ? text + " " + unit : text;
+    }
+
+    /// <summary>
+    /// Значение свойства у выделенных скважин: одинаковое — текстом; разные — сумма (для кг, МДж, м³, т и стоимости) или
+    /// среднее. Скважины с ошибкой формулы в итог не входят; <paramref name="holes"/> — не пустой список.
+    /// </summary>
+    public static HoleValueSummary Summarize(BlastProject project, string propertyId, IReadOnlyList<Hole> holes)
+    {
+        var values = holes.Select(h => Value(project, propertyId, h)).ToList();
+        var range = holes.Any(h => IsOutOfRange(project, propertyId, h));
+        var good = values.Where(v => !v.IsError).ToList();
+        if (good.Count == 0) return new HoleValueSummary("#", false, null, false, range);
+        var first = holes[values.IndexOf(good[0])];
+        var same = values.Count == good.Count && good.All(v => Equals(v.Object, good[0].Object) && (v.Object != null || Math.Abs(v.Number - good[0].Number) <= 1e-9 * Math.Max(1, Math.Abs(good[0].Number))));
+        if (same) return new HoleValueSummary(Format(project, propertyId, first), false, null, false, range);
+        if (good[0].Object != null) return new HoleValueSummary("", true, null, false, range);
+        var d = ModelFor(project).FindProperty(propertyId);
+        var sum = d != null && (d.Unit is "kg" or "MJ" or "m3" or "t" || d.Group == "Стоимость");
+        var total = good.Sum(v => v.Number);
+        var number = (sum ? total : total / good.Count).ToString(d?.Format is { Length: > 0 } f ? f : "0.##", CultureInfo.CurrentCulture);
+        var unit = UnitText(project, propertyId);
+        return new HoleValueSummary("", true, unit.Length > 0 ? number + " " + unit : number, sum, range);
     }
 
     /// <summary>Вычисляемые свойства контекста профиля проекта (для выбора столбцов, подписей, итогов).</summary>

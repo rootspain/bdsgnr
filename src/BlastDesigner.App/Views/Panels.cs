@@ -229,7 +229,7 @@ public sealed class PropertiesPanel : DockPanel
             {
                 Spacing = 12,
                 Margin = new Thickness(14, 12, 14, 14),
-                Children = { HoleHead(hole, sel.Count), edit, sel.Count == 1 ? HoleCharge(doc.Project, hole) : HolesCharge(doc.Project, sel.OfType<Hole>().ToList()), LayerRow(doc, sel, stacked: true), grid }
+                Children = { HoleHead(hole, sel.Count), edit, sel.Count == 1 ? HoleCharge(doc.Project, hole) : HolesCharge(doc.Project, sel.OfType<Hole>().ToList()), LayerRow(doc, sel, stacked: true), grid, HoleCalculations(doc.Project, sel.OfType<Hole>().ToList()) }
             };
             return;
         }
@@ -311,6 +311,62 @@ public sealed class PropertiesPanel : DockPanel
             });
         head.Children.Add(new TextBlock { Text = count > 1 ? Loc.Ui("Holes") : Loc.T(hole.KindName), FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center });
         return head;
+    }
+
+    private static readonly string[] CalcGroups = { "Заряжание", "Объёмы", "Стоимость", "Разлёт" };
+    private static readonly IBrush OutOfRangeInk = new SolidColorBrush(Color.FromUInt32(0xFFF0C13A));
+
+    /// <summary>
+    /// Group «Calculations» of the hole: the calculated properties of the profile by group, read-only. Several holes: the
+    /// value they share, or «different» with the sum or the mean. Values outside the reasonable range are marked.
+    /// </summary>
+    private Control HoleCalculations(BlastProject p, List<Hole> holes)
+    {
+        const string key = "Calculations";
+        var body = new StackPanel { Spacing = 8, IsVisible = !_collapsed.Contains(key), Name = "holeCalculations" };
+        var chevron = new TextBlock { Text = body.IsVisible ? "▾" : "▸", Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
+        var head = new Button
+        {
+            Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Stretch, Name = "holeCalculationsHead",
+            Content = Ui.Row(6, chevron, new TextBlock { Text = Loc.T("Calculations (formulas)").ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue })
+        };
+        head.Click += (_, _) =>
+        {
+            body.IsVisible = !body.IsVisible;
+            chevron.Text = body.IsVisible ? "▾" : "▸";
+            if (body.IsVisible) _collapsed.Remove(key); else _collapsed.Add(key);
+        };
+        var props = CalcService.Calculated(p, "hole");
+        bool Mine(BlastDesigner.Calc.PropertyDef d) => !d.BuiltIn || !CalcGroups.Contains(d.Group);
+        foreach (var group in CalcGroups.Select(g => (Name: g, Items: props.Where(d => !Mine(d) && d.Group == g).ToList())).Append((Name: "My properties", Items: props.Where(Mine).ToList())))
+        {
+            if (group.Items.Count == 0) continue;
+            body.Children.Add(new TextBlock { Text = Loc.T(group.Name), FontSize = 11.5, FontWeight = FontWeight.SemiBold, Foreground = Look.Muted, Margin = new Thickness(0, 2, 0, 0) });
+            foreach (var d in group.Items) body.Children.Add(CalcRow(p, d.Id, holes));
+        }
+        return new StackPanel { Spacing = 8, Children = { head, body } };
+    }
+
+    private Control CalcRow(BlastProject p, string id, List<Hole> holes)
+    {
+        var s = CalcService.Summarize(p, id, holes);
+        var text = !s.Different ? s.Text : s.Aggregate == null ? Loc.T("different") : Loc.T("different") + " · " + (s.IsSum ? "Σ " : Loc.T("mean") + " ") + s.Aggregate;
+        var value = new TextBlock { Text = text, Name = "calc:" + id, FontFamily = Look.Mono, FontSize = 11.5, Foreground = s.OutOfRange ? OutOfRangeInk : s.Different ? Look.Muted : Look.Text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        if (s.OutOfRange) ToolTip.SetTip(value, Loc.T("Outside the reasonable range"));
+        var name = new TextBlock { Text = CalcService.Caption(p, id), FontSize = 12, Foreground = Look.TextSoft, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(name, name.Text);
+        var row = new DockPanel();
+        if (holes.Count == 1)
+        {
+            var explain = new Button { Content = "?", FontSize = 11, Padding = new Thickness(6, 0), Height = 20, MinWidth = 20, Margin = new Thickness(6, 0, 0, 0), Background = Brushes.Transparent, BorderBrush = Look.Line, BorderThickness = new Thickness(1), Name = "explain:" + id };
+            ToolTip.SetTip(explain, Loc.T("Explain value…"));
+            explain.Click += (_, _) => _ = CalcExplainWindow.Show(_vm, holes[0], id);
+            row.Children.Add(new ContentControl { [DockPanel.DockProperty] = Dock.Right, Content = explain });
+        }
+        value[DockPanel.DockProperty] = Dock.Right;
+        row.Children.Add(value);
+        row.Children.Add(name);
+        return row;
     }
 
     private static Border Tile(Control child, string? name = null) => new()
