@@ -49,8 +49,8 @@ public sealed class CalcEditorForm : DockPanel
 
     private readonly MainViewModel _vm;
     private readonly BlastProject _project;
-    private readonly CalcModel _published;
-    private readonly CalcSession _publishedSession;
+    private CalcModel _published;
+    private CalcSession _publishedSession;
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private readonly TreeView _tree = new() { Background = Brushes.Transparent };
     private readonly TextBox _search = FormKit.Text();
@@ -93,6 +93,7 @@ public sealed class CalcEditorForm : DockPanel
             Labeled(Loc.T("Profile"), _name), Labeled(Loc.T("Version"), _version), _draftBadge, codeNames,
             FormKit.Secondary(Loc.T("Check"), () => { Recompile(); ShowDiagnostics(); }),
             FormKit.Secondary(Loc.T("Compare"), () => _ = Compare()),
+            FormKit.Secondary(Loc.T("History…"), () => _ = ShowHistory()),
             FormKit.Primary(Loc.T("Publish"), () => _ = Publish()));
         var header = FormKit.Header(Loc.T("Calculations (formulas)"), Loc.T("Formulas of the calculated properties: changes stay in the draft until Publish."), tools);
         SetDock(header, Dock.Top);
@@ -337,6 +338,15 @@ public sealed class CalcEditorForm : DockPanel
             FormKit.Labeled(Loc.T("Group"), Bound(def.Group, v => { if (v != def.Group) Own(d => d.Group = v); })),
             FormKit.Labeled(Loc.T("Unit"), Bound(def.Unit, v => { if (v != def.Unit) Own(d => d.Unit = v); })),
             FormKit.Labeled(Loc.T("Format"), Bound(def.Format, v => { if (v != def.Format) Own(d => d.Format = v); })))));
+        if (p.Type == CalcType.Number)
+        {
+            static double? Parse(string v) => double.TryParse(v.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
+            var min = Bound(def.Min?.ToString(CultureInfo.CurrentCulture), v => { if (Parse(v) != def.Min) Own(d => { d.Min = Parse(v); def.Min = d.Min; }); });
+            var max = Bound(def.Max?.ToString(CultureInfo.CurrentCulture), v => { if (Parse(v) != def.Max) Own(d => { d.Max = Parse(v); def.Max = d.Max; }); });
+            min.Name = "rangeMin";
+            max.Name = "rangeMax";
+            _center.Children.Add(FormKit.Section(Loc.T("Reasonable range"), FormKit.Fields(2, FormKit.Labeled(Loc.T("from"), min), FormKit.Labeled(Loc.T("to"), max))));
+        }
 
         if (Shown(p) is { } shown) _center.Children.Add(FormKit.Section(Loc.T("Show"), shown));
 
@@ -932,7 +942,7 @@ public sealed class CalcEditorForm : DockPanel
             var (name, before, after) = rows[i];
             Cell(i + 1, 0, name, Look.TextSoft, false);
             Cell(i + 1, 1, Text(before), before.IsError ? Bad : Look.Muted);
-            Cell(i + 1, 2, Text(after), after.IsError ? Bad : Look.Text);
+            Cell(i + 1, 2, Text(after), after.IsError ? Bad : after.Object == null && p.OutOfRange(after.Number) ? Warn : Look.Text);
             var delta = !before.IsError && !after.IsError && before.Object == null && after.Object == null ? after.Number - before.Number : double.NaN;
             Cell(i + 1, 3, double.IsNaN(delta) ? "" : Math.Abs(delta) < 1e-12 ? "0" : delta.ToString("+0.###;-0.###", CultureInfo.CurrentCulture), Math.Abs(delta) > 1e-12 ? Look.Accent : Look.Faint);
         }
@@ -1033,8 +1043,23 @@ public sealed class CalcEditorForm : DockPanel
             passed = tests.Count(t => Evaluate(s, "blast", t.Expression, _project) is { IsError: false } v && Math.Abs(v.Number - t.Expected) <= t.Tolerance);
         }
         var first = DraftModel.Diagnostics.FirstOrDefault(d => !d.IsWarning);
-        _status.Text = Loc.F("Errors: {0} · warnings: {1} · test cases: {2} of {3}", errors, warnings, passed, tests.Count) + (first != null ? " — " + first : "");
-        _status.Foreground = errors > 0 ? Bad : passed < tests.Count ? Warn : Look.Muted;
+        OutOfRangeValues = CountOutOfRange();
+        _status.Text = Loc.F("Errors: {0} · warnings: {1} · test cases: {2} of {3}", errors, warnings, passed, tests.Count)
+            + (OutOfRangeValues > 0 ? " · " + Loc.F("{0} values outside the reasonable range", OutOfRangeValues) : "") + (first != null ? " — " + first : "");
+        _status.Foreground = errors > 0 ? Bad : passed < tests.Count || OutOfRangeValues > 0 ? Warn : Look.Muted;
+    }
+
+    /// <summary>Значений черновика за разумным диапазоном по всему проекту.</summary>
+    public int OutOfRangeValues { get; private set; }
+
+    private int CountOutOfRange()
+    {
+        var s = DraftSession();
+        int n = 0;
+        foreach (var node in DraftModel.Nodes.Where(x => x.Property.Min != null || x.Property.Max != null))
+            foreach (var e in node.Context.All(s.Scope))
+                if (s.Value(node, e) is { IsError: false, Object: null } v && node.Property.OutOfRange(v.Number)) n++;
+        return n;
     }
 
     private void ShowDiagnostics()
@@ -1043,41 +1068,104 @@ public sealed class CalcEditorForm : DockPanel
         _ = Dialogs.Info(list.Count == 0 ? Loc.T("The profile has no errors.") : string.Join("\n", list.Take(40)), Loc.T("Check"));
     }
 
+    /// <summary>Что изменит публикация: значения свойств затронутых скважин и итоги взрыва, было и стало.</summary>
+    public List<(string Entity, string Property, string Format, CalcValue Before, CalcValue After)> Changes()
+    {
+        var draft = DraftSession();
+        var rows = new List<(string, string, string, CalcValue, CalcValue)>();
+        void Row(CalcNode n, object e, string name)
+        {
+            if (!Differs(n.Id, e, draft)) return;
+            var before = _published.NodeOf(n.Id) != null ? _publishedSession.Value(n.Id, e) : CalcValue.Fail(Loc.T("new"));
+            rows.Add((name, n.Property.NameRu.Length > 0 ? n.Property.NameRu : n.Property.Name, n.Property.Format, before, draft.Value(n, e)));
+        }
+        foreach (var n in DraftModel.Nodes.Where(n => n.Context.Name == "blast").OrderBy(n => n.Order)) Row(n, _project, Loc.T("Blast"));
+        var holeNodes = DraftModel.Nodes.Where(n => n.Context.Name == "hole").OrderBy(n => n.Order).ToList();
+        foreach (var h in _project.Holes)
+            foreach (var n in holeNodes) Row(n, h, EntityName(h));
+        return rows;
+    }
+
+    /// <summary>Таблица «было / стало / Δ» по затронутым скважинам и итогам.</summary>
+    private Control ChangesView(List<(string Entity, string Property, string Format, CalcValue Before, CalcValue After)> rows)
+    {
+        if (rows.Count == 0) return new TextBlock { Text = Loc.T("The draft gives the same values as the published profile."), Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap };
+        var shown = rows.Take(300).ToList();
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("2*,3*,*,*,*"), RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("Auto", shown.Count + 1))) };
+        void Cell(int r, int c, string text, IBrush brush)
+        {
+            var t = new TextBlock { Text = text, Foreground = brush, FontSize = 12, Margin = new Thickness(0, 2, 10, 2), TextTrimming = TextTrimming.CharacterEllipsis, HorizontalAlignment = c < 2 ? HorizontalAlignment.Left : HorizontalAlignment.Right };
+            Grid.SetRow(t, r);
+            Grid.SetColumn(t, c);
+            grid.Children.Add(t);
+        }
+        Cell(0, 0, Loc.T("Entity"), Look.Faint);
+        Cell(0, 1, Loc.T("Property"), Look.Faint);
+        Cell(0, 2, Loc.T("Before"), Look.Faint);
+        Cell(0, 3, Loc.T("After"), Look.Faint);
+        Cell(0, 4, "Δ", Look.Faint);
+        for (int i = 0; i < shown.Count; i++)
+        {
+            var (entity, property, format, before, after) = shown[i];
+            var f = format.Length > 0 ? format : "0.###";
+            string Text(CalcValue v) => v.IsError ? "#" + v.Error : v.Object is bool b ? (b ? "✓" : "—") : v.Object is string s ? s : v.Number.ToString(f, CultureInfo.CurrentCulture);
+            Cell(i + 1, 0, entity, Look.TextSoft);
+            Cell(i + 1, 1, property, Look.TextSoft);
+            Cell(i + 1, 2, Text(before), before.IsError ? Bad : Look.Muted);
+            Cell(i + 1, 3, Text(after), after.IsError ? Bad : Look.Text);
+            if (!before.IsError && !after.IsError && before.Object == null && after.Object == null)
+                Cell(i + 1, 4, (after.Number - before.Number).ToString("+0.###;-0.###;0", CultureInfo.CurrentCulture), Look.Accent);
+        }
+        var panel = new StackPanel { Spacing = 6, Children = { grid } };
+        if (rows.Count > shown.Count) panel.Children.Add(new TextBlock { Text = Loc.F("And {0} more", rows.Count - shown.Count), Foreground = Look.Faint, FontSize = 12 });
+        return new ScrollViewer { Content = panel, MaxHeight = 460 };
+    }
+
     private async Task Compare()
     {
         Recompile();
-        var draft = DraftSession();
-        var lines = new List<string>();
-        foreach (var n in DraftModel.Nodes.Where(n => n.Context.Name == "blast").OrderBy(n => n.Order))
-        {
-            var a = _published.NodeOf(n.Id) != null ? _publishedSession.Value(n.Id, _project) : CalcValue.Fail(Loc.T("new"));
-            var b = draft.Value(n.Id, _project);
-            if (!Differs(n.Id, _project, draft)) continue;
-            lines.Add($"{n.Property.NameRu} ({n.Id}): {a} → {b}");
-        }
-        await Dialogs.Info(lines.Count == 0 ? Loc.T("The draft gives the same blast totals as the published profile.") : string.Join("\n", lines.Take(40)), Loc.T("Compare"));
+        await Dialogs.Custom(Loc.T("Compare"), ChangesView(Changes()), width: 860);
     }
 
-    /// <summary>Puts the draft in the project (one undo step) and saves it to the profiles folder.</summary>
-    public async Task<bool> Publish()
+    /// <summary>Почему нельзя опубликовать (после последней попытки).</summary>
+    public string? PublishError { get; private set; }
+
+    private string? CheckPublish()
     {
         Recompile();
-        if (DraftModel.HasErrors)
+        Draft.Name = Draft.Name.Trim();
+        return PublishError = CalcService.PublishProblem(_project, Draft);
+    }
+
+    /// <summary>Публикация из окна: проверка, таблица «было / стало» и обязательная причина изменения.</summary>
+    public async Task<bool> Publish()
+    {
+        if (CheckPublish() is { } problem)
         {
-            await Dialogs.Info(Loc.T("The profile has errors; fix them before publishing.") + "\n" + string.Join("\n", DraftModel.Diagnostics.Where(d => !d.IsWarning).Take(10)), Loc.T("Publish"));
+            await Dialogs.Info(problem, Loc.T("Publish"));
             return false;
         }
+        var reason = FormKit.Text();
+        reason.Name = "publishReason";
+        reason.Watermark = Loc.T("Why the formulas change (kept in the history)");
+        var content = new StackPanel { Spacing = 12, Children = { FormKit.Section(Loc.T("Look at what changes before publishing:"), ChangesView(Changes())), FormKit.Labeled(Loc.T("Reason for the change"), reason) } };
+        if (!await Dialogs.Custom(Loc.T("Publish"), content, () => !string.IsNullOrWhiteSpace(reason.Text), reason, 860)) return false;
+        return Publish(reason.Text!.Trim());
+    }
+
+    /// <summary>Записывает черновик в проект (один шаг отмены) с причиной и сохраняет файл профиля; при непройденной проверке — false.</summary>
+    public bool Publish(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason)) { PublishError = Loc.T("Reason for the change"); return false; }
+        if (CheckPublish() != null) return false;
         var profile = Draft.Clone();
         var pending = _pendingBlast.ToDictionary(x => x.Key, x => x.Value);
         var ok = _vm.Change("Publish calculation profile", p =>
         {
-            var unchanged = profile.Base == CalcService.BuiltInName && profile.Formulas.Count == 0 && profile.Parameters.Count == 0 && profile.Properties.Count == 0 && profile.Tests.Count == 0;
-            if (unchanged) CalcService.SetProfile(p, CalcService.BuiltIn);
-            else CalcService.SetProfile(p, profile);
+            CalcService.Publish(p, profile, reason, Environment.UserName, DateTime.Now);
             if (pending.Count > 0)
             {
-                p.Calc ??= new ProjectCalc { ProfileName = CalcService.BuiltInName };
-                p.Calc.Parameters ??= new();
+                p.Calc!.Parameters ??= new();
                 foreach (var (k, v) in pending)
                     if (v is { } value) p.Calc.Parameters[k] = value; else p.Calc.Parameters.Remove(k);
             }
@@ -1092,9 +1180,67 @@ public sealed class CalcEditorForm : DockPanel
             CalcService.Library.Add(profile);
         }
         catch (Exception) { /* the copy in the project is what counts; the file is a convenience */ }
+        Draft.Version = profile.Version;
+        _version.Text = profile.Version;
+        _published = CalcService.ModelFor(_project);
+        _publishedSession = CalcService.Session(_project, _published);
+        _pendingBlast.Clear();
         Dirty = false;
         _draftBadge.IsVisible = false;
+        AfterChange();
         return true;
+    }
+
+    /// <summary>Версии профиля проекта, новые первыми.</summary>
+    public IReadOnlyList<ProfileVersion> History => (_project.Calc?.History ?? new()).AsEnumerable().Reverse().ToList();
+
+    /// <summary>Откатывает проект к версии (один шаг отмены) и закрывает окно: черновик относился к другой версии.</summary>
+    public bool Rollback(ProfileVersion version)
+    {
+        if (!_vm.Change("Roll back the calculation profile", p => CalcService.Rollback(p, version, Environment.UserName, DateTime.Now))) return false;
+        Dirty = false;
+        CloseRequested?.Invoke();
+        return true;
+    }
+
+    private async Task ShowHistory()
+    {
+        var list = new StackPanel { Spacing = 8, Margin = new Thickness(16) };
+        var window = new Window { Title = Loc.T("Profile history"), Width = 720, Height = 480, Background = Look.Ground, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = new ScrollViewer { Content = list } };
+        if (History.Count == 0) list.Children.Add(new TextBlock { Text = Loc.T("No published versions yet."), Foreground = Look.Muted });
+        var current = _project.Calc?.ProfileHash;
+        foreach (var v in History)
+        {
+            var version = v;
+            var back = FormKit.Secondary(Loc.T("Roll back"), () =>
+            {
+                window.Close();
+                Rollback(version);
+            });
+            back.IsEnabled = v.ProfileHash != current;
+            list.Children.Add(new Border
+            {
+                BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(12, 8),
+                Child = new DockPanel
+                {
+                    Children =
+                    {
+                        Docked(back, Avalonia.Controls.Dock.Right),
+                        new StackPanel
+                        {
+                            Spacing = 2,
+                            Children =
+                            {
+                                new TextBlock { Text = $"{v.ProfileName} · {v.Version}", Foreground = Look.Text, FontWeight = FontWeight.SemiBold },
+                                new TextBlock { Text = $"{v.Published:g} · {v.Author}", Foreground = Look.Faint, FontSize = 11.5 },
+                                new TextBlock { Text = v.Reason, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        await Dialogs.ShowModal(window);
     }
 
     // ---- мелочи ---------------------------------------------------------

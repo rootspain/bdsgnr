@@ -124,3 +124,62 @@ public class CalcExplainTests
         Assert.StartsWith("{сумма([Интервалы] где [Продукт].[ВВ], [Масса]) = ", mass.Substituted);
     }
 }
+
+public class CalcPublishTests
+{
+    private static CalcProfile Doubled(string name = "Рудник")
+    {
+        var p = CalcProfile.DeriveFrom(CalcService.BuiltIn, name);
+        p.Formulas.Add(new FormulaDef { Property = "hole.chargeMass", Expression = "2 * (sum(decks where product.isExplosive, mass) + sum(primers, coalesce(booster.unitMass, 0)))" });
+        return p;
+    }
+
+    [Fact]
+    public void Publish_KeepsHistoryAndRollsBack()
+    {
+        var project = CalcParityTests.Generate(4);
+        var h = project.Holes.First(x => !x.IsDummy && x.Decks.Count > 0);
+        var before = Charging.ExplosiveMass(project, h);
+        CalcService.Publish(project, Doubled(), "коэффициент 2", "инженер", DateTime.Now);
+        Assert.Equal(2 * before, Charging.ExplosiveMass(project, h), 9);
+        Assert.Equal(new[] { "Исходное состояние", "коэффициент 2" }, project.Calc!.History!.Select(v => v.Reason));
+
+        CalcService.Publish(project, Doubled(), "ещё раз", "инженер", DateTime.Now);
+        Assert.Equal("2", project.Calc.ProfileVersion);
+
+        CalcService.Rollback(project, project.Calc.History![0], "инженер", DateTime.Now);
+        Assert.Equal(before, Charging.ExplosiveMass(project, h), 9);
+        Assert.Equal(CalcService.BuiltInName, project.Calc.ProfileName);
+        Assert.StartsWith("Откат к версии", project.Calc.History![^1].Reason);
+        Assert.Equal(4, project.Calc.History.Count);
+
+        var back = BlastDesigner.Domain.ProjectJson.Deserialize(BlastDesigner.Domain.ProjectJson.Serialize(project));
+        Assert.Equal(4, back.Calc!.History!.Count);
+    }
+
+    [Fact]
+    public void PublishProblem_RefusesBuiltInNameErrorsAndFailedTests()
+    {
+        var project = CalcParityTests.Generate(4);
+        Assert.Null(CalcService.PublishProblem(project, Doubled()));
+        Assert.Contains("только для чтения", CalcService.PublishProblem(project, Doubled(CalcService.BuiltInName)));
+        var broken = Doubled();
+        broken.Formulas[0].Expression = "нетТакого + 1";
+        Assert.Contains("Ошибка", CalcService.PublishProblem(project, broken));
+        var failing = Doubled();
+        failing.Tests.Add(new TestCaseDef { Name = "пример", Expression = "holeCount", Expected = -1, Tolerance = 0 });
+        Assert.Contains("пример", CalcService.PublishProblem(project, failing));
+    }
+
+    [Fact]
+    public void Range_FlagsValuesOutside()
+    {
+        var project = CalcParityTests.Generate(4);
+        var h = project.Holes.First(x => !x.IsDummy && x.Decks.Count > 0);
+        Assert.False(CalcService.IsOutOfRange(project, "hole.chargeMass", h));
+        var p = Doubled();
+        p.Properties.Add(new PropertyDef { Id = "hole.chargeMass", NameRu = "Масса ВВ", Unit = "kg", Min = 0, Max = 0.001 });
+        CalcService.SetProfile(project, p);
+        Assert.True(CalcService.IsOutOfRange(project, "hole.chargeMass", h));
+    }
+}

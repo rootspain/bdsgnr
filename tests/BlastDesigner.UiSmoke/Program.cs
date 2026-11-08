@@ -3709,8 +3709,10 @@ Step("calculations window: check while typing, preview on the selected holes, pu
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "90_calculations.png"));
     Console.WriteLine($"     screenshot {Path.Combine(outDir, "90_calculations.png")}");
-    var published = form.Publish(); Pump();
-    if (!published.IsCompleted || !published.Result) throw new Exception("publish failed");
+    if (form.Publish("")) throw new Exception("published without a reason");
+    if (!form.Publish("smoke: коэффициент 1,1")) throw new Exception("publish failed: " + form.PublishError);
+    Pump();
+    if (form.History.Count != 2 || form.History[0].Reason != "smoke: коэффициент 1,1") throw new Exception("the history did not record the publication");
     foreach (var id in ids)
     {
         var after = Charging.ExplosiveMass(vm.Project!, (Hole)vm.Project!.FindEntity(id)!);

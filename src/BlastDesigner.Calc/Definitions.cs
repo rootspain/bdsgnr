@@ -46,6 +46,9 @@ public sealed class PropertyDef
 
     [JsonIgnore] public bool IsRelation => Type is CalcType.Ref or CalcType.List;
 
+    /// <summary>Значение вне разумного диапазона свойства (<see cref="Min"/>…<see cref="Max"/>): считается, но с предупреждением.</summary>
+    public bool OutOfRange(double value) => !double.IsNaN(value) && ((Min is { } a && value < a) || (Max is { } b && value > b));
+
     public PropertyDef Clone() => (PropertyDef)MemberwiseClone();
     public override string ToString() => Id;
 }

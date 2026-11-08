@@ -465,6 +465,7 @@ public sealed partial class HoleRowVm : ObservableObject
     public string Row => _vm.Project!.Rows.FirstOrDefault(r => r.Id == Hole.RowId)?.Name ?? "";
     /// <summary>A calculated property of the hole (<c>hole.volume</c>), from the document's calculation session.</summary>
     public string Calc(string propertyId) => CalcService.Format(_vm.Project!, propertyId, Hole, false);
+    public bool OutOfRange(string propertyId) => CalcService.IsOutOfRange(_vm.Project!, propertyId, Hole);
 }
 
 /// <summary>Table view of holes (View ▸ Table view). Editable cells; selection is synchronised with the plan.</summary>
@@ -549,9 +550,15 @@ public sealed class HoleTable : DockPanel
             {
                 Header = CalcService.Caption(p, id) + (unit.Length > 0 ? ", " + unit : ""),
                 IsReadOnly = true,
-                CellTemplate = new FuncDataTemplate<HoleRowVm>((row, _) => new TextBlock
+                CellTemplate = new FuncDataTemplate<HoleRowVm>((row, _) =>
                 {
-                    Text = row?.Calc(property) ?? "", HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0)
+                    var cell = new TextBlock { Text = row?.Calc(property) ?? "", HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0) };
+                    if (row?.OutOfRange(property) == true)
+                    {
+                        cell.Foreground = new SolidColorBrush(Color.FromUInt32(0xFFF0C13A));
+                        ToolTip.SetTip(cell, Loc.T("Outside the reasonable range"));
+                    }
+                    return cell;
                 })
             });
         }

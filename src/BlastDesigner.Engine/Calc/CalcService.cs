@@ -122,6 +122,73 @@ public static class CalcService
         session.Scope.BuiltinArgs["cellArea.boundary"] = boundary ?? Quantities.DefaultBoundary(project, allReal);
     }
 
+    // ---- публикация и история -------------------------------------------
+
+    /// <summary>Контрольные примеры профиля, которые на этом проекте не сходятся (или не считаются).</summary>
+    public static List<TestCaseDef> FailedTests(CalcSession session)
+    {
+        var failed = new List<TestCaseDef>();
+        foreach (var t in session.Model.Profile.Tests)
+        {
+            CalcValue v;
+            try { v = session.Evaluate(session.Model.CompileExpression("blast", t.Expression), session.Project); }
+            catch (CalcSyntaxException e) { v = CalcValue.Fail(e.Message); }
+            if (v.IsError || Math.Abs(v.Number - t.Expected) > t.Tolerance) failed.Add(t);
+        }
+        return failed;
+    }
+
+    /// <summary>Почему профиль нельзя опубликовать (затирает встроенный, ошибки формул, несошедшиеся примеры); null — можно.</summary>
+    public static string? PublishProblem(BlastProject project, CalcProfile profile)
+    {
+        if (string.Equals(profile.Name, BuiltInName, StringComparison.OrdinalIgnoreCase) && !ReferenceEquals(profile, BuiltIn))
+            return $"Профиль «{BuiltInName}» только для чтения: опубликуйте изменения под другим именем.";
+        var model = new CalcModel(Registry, profile.Base != null ? profile.Flatten(Library.Find) : profile);
+        if (model.Diagnostics.FirstOrDefault(d => !d.IsWarning) is { } error) return "Ошибка в формуле: " + error;
+        var failed = FailedTests(Session(project, model));
+        return failed.Count > 0 ? "Не сходятся контрольные примеры: " + string.Join(", ", failed.Select(t => t.Name)) : null;
+    }
+
+    /// <summary>
+    /// Записывает профиль в проект и в его историю (с причиной). Первая публикация сначала заносит в историю прежнее
+    /// состояние, чтобы к нему можно было вернуться. Версия, совпавшая с последней, увеличивается.
+    /// Без отличий от встроенного записывается сам встроенный. Проверка — <see cref="PublishProblem"/>, она делается до правки.
+    /// </summary>
+    public static void Publish(BlastProject project, CalcProfile profile, string reason, string author, DateTime now)
+    {
+        var c = project.Calc ??= new ProjectCalc { ProfileName = BuiltInName, ProfileVersion = BuiltIn.Version, ProfileHash = BuiltIn.Hash() };
+        var history = c.History ??= new();
+        if (history.Count == 0) history.Add(Snapshot(c, "Исходное состояние", author, now));
+        if (history[^1].Version == profile.Version) profile.Version = NextVersion(profile.Version);
+        var unchanged = profile.Base == BuiltInName && profile.Formulas.Count == 0 && profile.Parameters.Count == 0 && profile.Properties.Count == 0 && profile.Tests.Count == 0;
+        SetProfile(project, unchanged ? BuiltIn : profile);
+        history.Add(Snapshot(c, reason, author, now));
+    }
+
+    /// <summary>Возвращает проект к версии из истории; сам откат тоже остаётся в истории.</summary>
+    public static void Rollback(BlastProject project, ProfileVersion version, string author, DateTime now)
+    {
+        var c = project.Calc ?? throw new InvalidOperationException("У проекта нет истории профиля");
+        c.ProfileName = version.ProfileName;
+        c.ProfileVersion = version.Version;
+        c.ProfileJson = version.ProfileJson;
+        c.ProfileHash = version.ProfileHash;
+        (c.History ??= new()).Add(Snapshot(c, $"Откат к версии {version.Version}", author, now));
+    }
+
+    private static ProfileVersion Snapshot(ProjectCalc c, string reason, string author, DateTime now) => new()
+    {
+        Version = c.ProfileVersion, Published = now, Author = author, Reason = reason, ProfileName = c.ProfileName, ProfileJson = c.ProfileJson, ProfileHash = c.ProfileHash
+    };
+
+    private static string NextVersion(string v) =>
+        int.TryParse(v, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? (n + 1).ToString(CultureInfo.InvariantCulture) : v + ".1";
+
+    /// <summary>Значение свойства сущности вышло за разумный диапазон свойства.</summary>
+    public static bool IsOutOfRange(BlastProject project, string propertyId, object entity) =>
+        ModelFor(project).FindProperty(propertyId) is { } d && (d.Min != null || d.Max != null)
+        && Value(project, propertyId, entity) is { IsError: false, Object: null } v && d.OutOfRange(v.Number);
+
     // ---- долгий сеанс документа -----------------------------------------
 
     private static readonly List<WeakReference<LiveCalc>> LiveSessions = new();

@@ -2893,3 +2893,17 @@ any holds (OR)	любое выполняется (ИЛИ)
 Explain value	Объяснить значение
 Explain value…	Объяснить значение…
 Property to explain	Какое значение объяснить
+And {0} more	И ещё {0}
+History…	История…
+Look at what changes before publishing:	Посмотрите, что изменится, прежде чем публиковать:
+No published versions yet.	Опубликованных версий пока нет.
+Outside the reasonable range	Вне разумного диапазона
+Profile history	История профиля
+Reason for the change	Причина изменения
+Reasonable range	Разумный диапазон
+Roll back	Откатить
+The draft gives the same values as the published profile.	Черновик даёт те же значения, что и опубликованный профиль.
+Why the formulas change (kept in the history)	Почему меняются формулы (остаётся в истории)
+from	от
+to	до
+{0} values outside the reasonable range	Значений вне разумного диапазона: {0}
