@@ -515,6 +515,10 @@ public sealed class HoleTable : DockPanel
             _syncing = false;
         };
         _filter.TextChanged += (_, _) => Refresh();
+        // как получилось вычисленное значение скважины — формула с числами по шагам
+        var explain = new MenuItem { Header = Loc.T("Explain value…") };
+        explain.Click += (_, _) => { if (_grid.SelectedItem is HoleRowVm r) _ = CalcExplainWindow.Show(_vm, r.Hole); };
+        _grid.ContextMenu = new ContextMenu { ItemsSource = new[] { explain } };
         var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4), Spacing = 8 };
         top.Children.Add(new TextBlock { Text = Loc.T("Holes"), Classes = { "caption" } });
         top.Children.Add(_filter);

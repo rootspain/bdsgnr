@@ -24,7 +24,14 @@ public static class FormulaText
         return new Writer(model, russian).Write(ast, context, 0);
     }
 
-    private sealed class Writer(CalcModel model, bool russian)
+    /// <summary>
+    /// Запись дерева разбора с подстановкой: <paramref name="substitute"/> может заменить узел своим текстом (значением);
+    /// null — узел пишется как обычно. Для «Объяснить значение».
+    /// </summary>
+    internal static string Render(CalcModel model, string context, Ast ast, bool russian, Func<Ast, string, string?> substitute) =>
+        new Writer(model, russian, substitute).Write(ast, context, 0);
+
+    private sealed class Writer(CalcModel model, bool russian, Func<Ast, string, string?>? substitute = null)
     {
         private static int Precedence(Ast a) => a switch
         {
@@ -41,6 +48,7 @@ public static class FormulaText
 
         public string Write(Ast a, string ctx, int parent)
         {
+            if (substitute?.Invoke(a, ctx) is { } value) return value;
             var text = a switch
             {
                 NumberAst n => n.Value.ToString("R", CultureInfo.InvariantCulture),
@@ -118,12 +126,7 @@ public static class FormulaText
         private static string Suffix(string t) => new(t.Reverse().TakeWhile(ch => char.IsDigit(ch) || ch is '²' or '³').Reverse().ToArray());
 
         /// <summary>Контекст, куда ведёт имя-список или ссылка (decks → deck); null — не связь.</summary>
-        private string? Target(Ast a, string ctx)
-        {
-            if (a is not NameAst n) return null;
-            var r = Name(n, ctx);
-            return r.Target;
-        }
+        private string? Target(Ast a, string ctx) => FormulaText.Target(model, a, ctx);
 
         private (string Text, string? Target) Name(NameAst n, string ctx)
         {
@@ -150,6 +153,29 @@ public static class FormulaText
         }
 
         private static string Bracket(string name) => "[" + name + "]";
+    }
+
+    /// <summary>Контекст, куда ведёт имя-список или ссылка (decks → deck); null — не связь.</summary>
+    internal static string? Target(CalcModel model, Ast a, string ctx)
+    {
+        if (a is not NameAst n) return null;
+        string? cur = ctx, target = null;
+        foreach (var seg in n.Path)
+        {
+            var p = cur == null ? null : model.Resolve(cur, seg);
+            if (p == null) return null;
+            target = p.Target;
+            cur = p.Type == CalcType.Ref ? p.Target : null;
+        }
+        return target;
+    }
+
+    /// <summary>Агрегат по списку: sum, avg, count, first, а min/max — когда первый аргумент список.</summary>
+    internal static bool IsAggregate(CalcModel model, CallAst c, string ctx)
+    {
+        var lower = Aliases.Function(c.Name).ToLowerInvariant();
+        return c.Args.Count > 0 && (lower is "sum" or "avg" or "count" or "first"
+            || (lower is "min" or "max" && c.Args.Count <= 2 && (c.Args[0] is WhereAst || Target(model, c.Args[0], ctx) != null)));
     }
 
     /// <summary>Отрезки текста формулы для подсветки: свойство, функция, число, строка, ключевое слово, прочее.</summary>

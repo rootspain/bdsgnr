@@ -100,3 +100,27 @@ public class CalcRussianTests
         Assert.Equal("param(site.vib.K)", FormulaText.ToCode(M, "monitor", "параметр([Сейсмика: K])"));
     }
 }
+
+public class CalcExplainTests
+{
+    [Fact]
+    public void Explain_ShowsFormulaWithValuesStepByStep()
+    {
+        var p = CalcParityTests.Generate(5);
+        var h = p.Holes.First(x => !x.IsDummy && x.Decks.Count > 0);
+        var s = CalcService.Session(p);
+        var steps = CalcExplain.Explain(s, "hole.tonnes", h);
+        var first = steps[0];
+        Assert.Equal("Масса породы", first.Caption);
+        Assert.Equal("[Объём] * [Плотность породы]", first.Formula);
+        var volume = s.Number("hole.volume", h);
+        Assert.Contains(volume.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture) + " м³", first.Substituted);
+        Assert.Contains("т/м³", first.Substituted);
+        Assert.EndsWith(" т", first.Result);
+        Assert.Contains(steps, x => x.Property == "hole.volume" && x.Depth == 1);
+        var area = steps.First(x => x.Property == "hole.area");
+        Assert.Contains("{площадь_ячейки() = ", area.Substituted);
+        var mass = CalcExplain.Explain(s, "hole.chargeMass", h)[0];
+        Assert.StartsWith("{сумма([Интервалы] где [Продукт].[ВВ], [Масса]) = ", mass.Substituted);
+    }
+}

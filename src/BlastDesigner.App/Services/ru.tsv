@@ -2890,3 +2890,6 @@ Show code names	Показать кодовые имена
 This condition is too complex for the builder; edit it as text.	Условие слишком сложное для конструктора; правьте его текстом.
 all hold (AND)	все выполняются (И)
 any holds (OR)	любое выполняется (ИЛИ)
+Explain value	Объяснить значение
+Explain value…	Объяснить значение…
+Property to explain	Какое значение объяснить
