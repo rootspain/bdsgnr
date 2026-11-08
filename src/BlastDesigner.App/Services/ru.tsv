@@ -2794,3 +2794,81 @@ ui:Own delay instead of a product	Своя задержка вместо про�
 ui:Restore the parent record first	Сначала восстановите родительскую запись
 ui:Also deleted: kinds {0}, families {1}, products {2}	Будут удалены также: видов {0}, семейств {1}, продуктов {2}
 ui:They keep it, but it is not offered for new records.	Там запись останется, но для новых она больше не предлагается.
+# Правка ▸ Вычисления (движок вычислений)
+A field of the model: it is entered, not calculated. Formulas read it by name.	Поле модели: его вводят, а не вычисляют. Формулы читают его по имени.
+A formula used when its condition holds; the first by priority wins	Формула, которая действует при выполнении условия; побеждает первая по приоритету
+Add a property of your own	Добавить своё свойство
+Add with the current value	Добавить с текущим значением
+After	Стало
+Available in	Доступна в
+Before	Было
+Built-in algorithm	Встроенный алгоритм
+Built-in algorithms	Встроенные алгоритмы
+Calculations (formulas)	Вычисления
+Calculations…	Вычисления…
+Check	Проверить
+Compare	Сравнить
+Condition	Условие
+Context	Контекст
+Delete the variant	Удалить вариант
+Dependency graph	Граф зависимостей
+Depends on	Зависит от
+Entity	Объект
+Error at {0}: {1}	Ошибка в позиции {0}: {1}
+Errors: {0} · warnings: {1} · test cases: {2} of {3}	Ошибок: {0} · предупреждений: {1} · контрольные примеры: {2} из {3}
+Format	Формат
+Formula	Формула
+Formulas of the calculated properties: changes stay in the draft until Publish.	Формулы вычисляемых свойств: изменения остаются в черновике до публикации.
+Inputs	Входы
+Looked up from the bottom: hole → hole type → blast → mine → profile.	Ищется снизу вверх: скважина → тип скважины → взрыв → рудник → профиль.
+Model field	Поле модели
+Model fields	Поля модели
+My property	Моё свойство
+Name (latin letters, no spaces)	Имя (латиницей, без пробелов)
+Names	Имена
+New test case on this blast	Новый контрольный пример на этом взрыве
+No test cases	Нет контрольных примеров
+Nothing to show: select holes on the plan	Нечего показать: выделите скважины на плане
+Now used	Сейчас действует
+OK · {0} · depends on {1}	Верно · {0} · зависимостей: {1}
+Outputs	Выходы
+Overrides	Переопределения
+Parameters	Параметры
+Preview: before / after / Δ	Предпросмотр: было / стало / Δ
+Profile	Профиль
+Project profile	Профиль проекта
+Property	Свойство
+Publish	Опубликовать
+Publish calculation profile	Опубликовать профиль расчёта
+Publishing will change	Затронет при публикации
+Revert to the base profile	Вернуть как в базовом профиле
+Rule sets: {0}	Наборы правил: {0}
+Scope	Область
+Search by name	Поиск по имени
+Set by hand for {0} entities	Задано вручную у объектов: {0}
+Settings	Настройки
+Show on the graph	Показать на графе
+Source	Источник
+Table	Таблица
+Test cases	Контрольные примеры
+The draft gives the same blast totals as the published profile.	Черновик даёт те же итоги взрыва, что и опубликованный профиль.
+The formula gives {0}, the property is in {1}	Формула даёт {0}, а свойство в {1}
+The profile has errors; fix them before publishing.	В профиле есть ошибки; исправьте их перед публикацией.
+The profile has no errors.	Ошибок в профиле нет.
+There is a property with that name already.	Свойство с таким именем уже есть.
+This blast	Этот взрыв
+Used by	Используют
+Value on error	Значение при ошибке
+Values by level	Значения по уровням
+Version	Версия
+always	всегда
+draft	черновик
+error	ошибка
+everywhere	везде
+from the model: {0}	из модели: {0}
+new	новое
+not set	не задано
+once for the blast	один раз на взрыв
+per entity	по объекту
+x; y on each line	x; y в каждой строке
+{0} holes, {1} blast totals	скважин: {0}, итогов взрыва: {1}

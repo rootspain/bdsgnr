@@ -3684,6 +3684,42 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     vm.ClearOverlays();
     vm.Settings.ReportDesign = saved;
 });
+Step("calculations window: check while typing, preview on the selected holes, publish and undo", () =>
+{
+    var calcFolder = Path.Combine(ProgramSettings.AppDataFolder, "calc");
+    var filesBefore = Directory.Exists(calcFolder) ? Directory.GetFiles(calcFolder).ToHashSet() : new HashSet<string>();
+    var task = vm.EditCalculations(); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var form = dlg.GetLogicalDescendants().OfType<CalcEditorForm>().First();
+    if (form.DraftModel.HasErrors) throw new Exception("built-in profile has errors: " + string.Join("; ", form.DraftModel.Diagnostics));
+    var ids = vm.Project!.Holes.Where(h => !h.IsDummy && h.Decks.Count > 0).Take(4).Select(h => h.Id).ToList();
+    vm.Doc!.Select(ids); Pump();
+    form.Select("hole.chargeMass"); Pump();
+    var before = ids.ToDictionary(id => id, id => Charging.ExplosiveMass(vm.Project, (Hole)vm.Project.FindEntity(id)!));
+    form.SetFormula("1.1 * (sum(decks where , mass)"); Pump();
+    if (!form.FormulaStatus.Contains(BlastDesigner.App.Services.Loc.T("Error at {0}: {1}").Split(' ')[0])) throw new Exception("a broken formula passed the check: " + form.FormulaStatus);
+    form.SetFormula("1.1 * (sum(decks where product.isExplosive, mass) + sum(primers, coalesce(booster.unitMass, 0)))"); Pump();
+    if (form.FormulaStatus.Contains(BlastDesigner.App.Services.Loc.T("Error at {0}: {1}").Split(' ')[0])) throw new Exception("the formula should pass: " + form.FormulaStatus);
+    if (form.Preview.Count != ids.Count) throw new Exception($"preview shows {form.Preview.Count} rows for {ids.Count} selected holes");
+    if (form.Preview.Any(r => r.After.IsError || Math.Abs(r.After.Number - 1.1 * r.Before.Number) > 1e-6)) throw new Exception("preview after ≠ 1.1 × before: " + string.Join("; ", form.Preview.Select(r => $"{r.Entity} {r.Before} → {r.After}")));
+    if (form.AffectedHoles == 0 || form.AffectedTotals == 0) throw new Exception("publishing should change holes and totals");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "90_calculations.png"));
+    Console.WriteLine($"     screenshot {Path.Combine(outDir, "90_calculations.png")}");
+    var published = form.Publish(); Pump();
+    if (!published.IsCompleted || !published.Result) throw new Exception("publish failed");
+    foreach (var id in ids)
+    {
+        var after = Charging.ExplosiveMass(vm.Project!, (Hole)vm.Project!.FindEntity(id)!);
+        if (Math.Abs(after - 1.1 * before[id]) > 1e-6) throw new Exception($"published profile not used: {after} vs {1.1 * before[id]}");
+    }
+    dlg.Close(); Pump();
+    vm.Undo(); Pump();
+    foreach (var id in ids)
+        if (Math.Abs(Charging.ExplosiveMass(vm.Project!, (Hole)vm.Project!.FindEntity(id)!) - before[id]) > 1e-9) throw new Exception("undo did not bring the built-in profile back");
+    if (Directory.Exists(calcFolder))
+        foreach (var f in Directory.GetFiles(calcFolder).Where(f => !filesBefore.Contains(f))) File.Delete(f);
+});
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>
 {

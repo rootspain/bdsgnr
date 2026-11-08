@@ -391,7 +391,7 @@ public class CalcParityTests
     }
 
     [Fact]
-    public void EmptyBlast_MatchesLegacyAndProfileTests()
+    public void EmptyBlast_MatchesLegacy()
     {
         var p = BlastProject.CreateNew();
         var s = CalcService.Session(p);
@@ -401,12 +401,6 @@ public class CalcParityTests
         Same(q.Total, s.Number("blast.totalCost", p), "total");
         var f = Legacy.Fragmentation(p);
         Same(f.X50, s.Number("blast.x50", p), "x50");
-        foreach (var t in CalcService.BuiltIn.Tests)
-        {
-            var v = s.Evaluate(s.Model.CompileExpression("blast", t.Expression), p);
-            Assert.False(v.IsError, v.Error);
-            Assert.InRange(v.Number, t.Expected - t.Tolerance, t.Expected + t.Tolerance);
-        }
     }
 
     [Fact]

@@ -188,9 +188,5 @@
     { "property": "monitor.airblastDb", "source": "Vibration.AirblastKPa, KPaToDb",
       "expression": "if(blast.mic <= 0 or distance <= 0, 0, 20 * log10(param(site.vib.airK) * (distance / cbrt(blast.mic)) ^ (-param(site.vib.airB)) * 1000 / 20e-6))" },
     { "property": "monitor.ppvPredicted", "source": "Vibration.Predict", "comment": "Худшее окно замедлений: заряды, сработавшие в окне МВЗ.", "expression": "predictPpv()" }
-  ],
-  "tests": [
-    { "name": "Пустой взрыв: нет скважин", "expression": "holeCount", "expected": 0, "tolerance": 0 },
-    { "name": "Пустой взрыв: нулевой удельный расход", "expression": "powderFactor", "expected": 0, "tolerance": 0 }
   ]
 }

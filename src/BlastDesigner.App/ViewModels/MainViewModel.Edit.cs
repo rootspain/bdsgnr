@@ -294,6 +294,7 @@ public sealed partial class MainViewModel
     public Task EditCostSchema() => ProjectPropertiesWindow.Show(this, "Resource cost schema");
     public async void EditElectronicSettings() => await ProjectPropertiesWindow.Show(this, "Electronic timing preferences");
     public Task EditVibrationModel() => ProjectPropertiesWindow.Show(this, "Vibration site constants");
+    public Task EditCalculations() => CalcEditorWindow.Show(this);
     public Task EditHoleTypes() => ProjectPropertiesWindow.Show(this, "Hole and material types");
 
     public async Task EditResources()
