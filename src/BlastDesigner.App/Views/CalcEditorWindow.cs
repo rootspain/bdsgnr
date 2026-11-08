@@ -89,8 +89,10 @@ public sealed class CalcEditorForm : DockPanel
 
         var codeNames = new CheckBox { Content = Loc.T("Show code names"), IsChecked = _codeNames, Name = "codeNames", VerticalAlignment = VerticalAlignment.Center };
         codeNames.IsCheckedChanged += (_, _) => CodeNames = codeNames.IsChecked == true;
+        var fullMode = new CheckBox { Content = Loc.T("Full mode"), IsChecked = _full, Name = "fullMode", VerticalAlignment = VerticalAlignment.Center };
+        fullMode.IsCheckedChanged += (_, _) => FullMode = fullMode.IsChecked == true;
         var tools = Ui.Row(8,
-            Labeled(Loc.T("Profile"), _name), Labeled(Loc.T("Version"), _version), _draftBadge, codeNames,
+            Labeled(Loc.T("Profile"), _name), Labeled(Loc.T("Version"), _version), _draftBadge, codeNames, fullMode,
             FormKit.Secondary(Loc.T("Check"), () => { Recompile(); ShowDiagnostics(); }),
             FormKit.Secondary(Loc.T("Compare"), () => _ = Compare()),
             FormKit.Secondary(Loc.T("History…"), () => _ = ShowHistory()),
@@ -214,10 +216,10 @@ public sealed class CalcEditorForm : DockPanel
         var items = new List<TreeViewItem>();
         foreach (var ctx in DraftModel.Contexts)
         {
-            var computed = DraftModel.PropertiesOf(ctx.Name).Where(p => p.Kind == PropertyKind.Computed && Match(p.Id, p.NameRu)).OrderBy(p => p.Name).ToList();
-            var inputs = ctx.Properties.Values.Where(p => !p.IsRelation && Match(p.Id, p.NameRu)).OrderBy(p => p.Name).ToList();
+            var computed = DraftModel.PropertiesOf(ctx.Name).Where(p => p.Kind == PropertyKind.Computed && Match(p.Id, p.NameRu)).OrderBy(p => Display(p.Name, p.NameRu)).ToList();
+            var inputs = ctx.Properties.Values.Where(p => !p.IsRelation && Match(p.Id, p.NameRu)).OrderBy(p => Display(p.Name, p.NameRu)).ToList();
             if (computed.Count == 0 && inputs.Count == 0) continue;
-            var node = new TreeViewItem { Header = Caption(ctx.NameRu.Length > 0 ? $"{ctx.NameRu} ({ctx.Name})" : ctx.Name, Look.Text, true), IsExpanded = filter.Length > 0 || ctx.Name is "hole" or "blast" };
+            var node = new TreeViewItem { Header = Caption(_codeNames ? ctx.Name : ctx.NameRu.Length > 0 ? ctx.NameRu : ctx.Name, Look.Text, true), IsExpanded = filter.Length > 0 || ctx.Name is "hole" or "blast" };
             var list = new List<TreeViewItem>();
             foreach (var p in computed) list.Add(PropertyItem(p, CalcService.BuiltIn.Properties.Any(b => b.Id == p.Id) ? "ƒ" : "+"));
             if (inputs.Count > 0)
@@ -237,13 +239,13 @@ public sealed class CalcEditorForm : DockPanel
                 ItemsSource = parameters.Select(p => Item("param:" + p.Def.Id, "#", p.Def.Id, p.Def.NameRu)).ToList()
             });
         var builtins = DraftModel.BuiltinNames.Select(n => CalcService.Registry.Builtins[n]).Where(b => Match(b.Name, b.NameRu)).ToList();
-        if (builtins.Count > 0)
+        if (_full && builtins.Count > 0)
             items.Add(new TreeViewItem
             {
                 Header = Caption(Loc.T("Built-in algorithms"), Look.Text, true), IsExpanded = filter.Length > 0,
                 ItemsSource = builtins.Select(b => Item("builtin:" + b.Name, "⚙", b.Name + "()", b.NameRu)).ToList()
             });
-        items.Add(new TreeViewItem { Header = Caption(Loc.F("Rule sets: {0}", Flat().Rules.Count), Look.Muted), Tag = "rules" });
+        if (_full) items.Add(new TreeViewItem { Header = Caption(Loc.F("Rule sets: {0}", Flat().Rules.Count), Look.Muted), Tag = "rules" });
         _tree.ItemsSource = items;
         BuildTreeMarks();
     }
@@ -256,13 +258,37 @@ public sealed class CalcEditorForm : DockPanel
         _treeMarks[id] = mark;
         var row = Ui.Row(6,
             new TextBlock { Text = sign, Width = 14, Foreground = sign == "←" ? Look.Faint : Look.Blue, FontFamily = Look.Mono },
-            new TextBlock { Text = name, Foreground = Look.TextSoft, FontFamily = Look.Mono, FontSize = 12 },
+            new TextBlock { Text = Display(name, ru), Foreground = Look.TextSoft, FontFamily = _codeNames ? Look.Mono : FontFamily.Default, FontSize = 12 },
             mark);
-        if (ru.Length > 0) ToolTip.SetTip(row, ru + (id.Contains('.') && !id.Contains(':') ? "\n" + Loc.T("Double-click: insert into the formula") : ""));
+        var tip = new[] { _codeNames ? ru : "", !id.Contains(':') ? Loc.T("Double-click: insert into the formula") : "" }.Where(t => t.Length > 0).ToList();
+        if (tip.Count > 0) ToolTip.SetTip(row, string.Join("\n", tip));
         var item = new TreeViewItem { Header = row, Tag = id };
         // двойной щелчок по свойству вставляет его в формулу, где стоит курсор
         if (!id.Contains(':')) item.DoubleTapped += (_, e) => { InsertProperty(id); e.Handled = true; };
         return item;
+    }
+
+    /// <summary>Имя для показа: русское, кодовое — при включённом переключателе или когда русского нет.</summary>
+    private static string Display(string code, string ru) => _codeNames || ru.Length == 0 ? code : ru;
+
+    /// <summary>Заголовок страницы свойства или параметра.</summary>
+    private static TextBlock PageTitle(string id, string ru) =>
+        new() { Text = _codeNames || ru.Length == 0 ? id : ru, FontFamily = _codeNames ? Look.Mono : FontFamily.Default, FontSize = 16, Foreground = Look.Text };
+
+    /// <summary>Название узла, источника зависимости или свойства по его id.</summary>
+    private string NameOf(string id)
+    {
+        if (_codeNames) return id;
+        if (id.StartsWith("param:", StringComparison.Ordinal)) return DraftModel.ParameterOf(id[6..]) is { } p && p.Def.NameRu.Length > 0 ? p.Def.NameRu : id[6..];
+        if (id.StartsWith("builtin:", StringComparison.Ordinal)) return CalcService.Registry.Builtins.TryGetValue(id[8..], out var b) && b.NameRu.Length > 0 ? b.NameRu : id[8..];
+        return DraftModel.FindProperty(id) is { NameRu.Length: > 0 } d ? d.NameRu : id;
+    }
+
+    /// <summary>Зависимость: по-русски путём связей («Интервалы → Масса»), кодом — как в графе.</summary>
+    private string DependencyText(Dependency d)
+    {
+        if (_codeNames) return d.Path.Count > 0 ? $"{d.Source}  ← {d.PathText}" : d.Source;
+        return string.Join(" → ", d.Path.Where(r => r.Name != "blast").Select(r => r.NameRu.Length > 0 ? r.NameRu : r.Name).Append(NameOf(d.Source)));
     }
 
     private static TextBlock Caption(string text, IBrush brush, bool strong = false) =>
@@ -311,7 +337,7 @@ public sealed class CalcEditorForm : DockPanel
         if (_testsOpen) { ShowTests(); return; }
         if (Selected == null) return;
         if (Selected.StartsWith("param:", StringComparison.Ordinal)) ShowParameter(Selected[6..]);
-        else if (Selected.StartsWith("builtin:", StringComparison.Ordinal)) ShowBuiltin(Selected[8..]);
+        else if (Selected.StartsWith("builtin:", StringComparison.Ordinal)) { if (_full) ShowBuiltin(Selected[8..]); }
         else if (DraftModel.FindProperty(Selected) is { Kind: PropertyKind.Computed } p) ShowFormula(p);
         else if (DraftModel.FindProperty(Selected) is { } input) ShowInput(input);
     }
@@ -332,12 +358,19 @@ public sealed class CalcEditorForm : DockPanel
             change(d);
             MarkDirty();
         }
-        _center.Children.Add(new TextBlock { Text = p.Id, FontFamily = Look.Mono, FontSize = 16, Foreground = Look.Text });
-        _center.Children.Add(FormKit.Section(Loc.T("Property"), FormKit.Fields(2,
+        _center.Children.Add(PageTitle(p.Id, p.NameRu));
+        var shownUnit = _codeNames ? def.Unit : Aliases.RussianUnit(def.Unit);
+        var cells = new List<Control>
+        {
             FormKit.Labeled(Loc.T("Name"), Bound(def.NameRu, v => { if (v != def.NameRu) Own(d => d.NameRu = v); })),
-            FormKit.Labeled(Loc.T("Group"), Bound(def.Group, v => { if (v != def.Group) Own(d => d.Group = v); })),
-            FormKit.Labeled(Loc.T("Unit"), Bound(def.Unit, v => { if (v != def.Unit) Own(d => d.Unit = v); })),
-            FormKit.Labeled(Loc.T("Format"), Bound(def.Format, v => { if (v != def.Format) Own(d => d.Format = v); })))));
+            FormKit.Labeled(Loc.T("Unit"), Bound(shownUnit, v => { if (v != shownUnit) Own(d => d.Unit = v); }))
+        };
+        if (_full)
+        {
+            cells.Add(FormKit.Labeled(Loc.T("Group"), Bound(def.Group, v => { if (v != def.Group) Own(d => d.Group = v); })));
+            cells.Add(FormKit.Labeled(Loc.T("Format"), Bound(def.Format, v => { if (v != def.Format) Own(d => d.Format = v); })));
+        }
+        _center.Children.Add(FormKit.Section(Loc.T("Property"), FormKit.Fields(2, cells.ToArray())));
         if (p.Type == CalcType.Number)
         {
             static double? Parse(string v) => double.TryParse(v.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : null;
@@ -485,15 +518,15 @@ public sealed class CalcEditorForm : DockPanel
             var remove = FormKit.Tool("trash", null, () => { formulas.RemoveAt(index); SetFormulas(p.Id, formulas); ShowCenter(); }, Loc.T("Delete the variant"));
             remove.IsEnabled = formulas.Count > 1;
             body.Children.Add(new DockPanel { Children = { Docked(remove, Avalonia.Controls.Dock.Right), FormKit.Labeled(Loc.T("Condition"), condition) } });
-            body.Children.Add(fields);
         }
-        else body.Children.Add(fields);
+        // приоритет и значение при ошибке — расширенные поля
+        if (_full) body.Children.Add(fields);
         body.Children.Add(text);
         body.Children.Add(highlight);
         body.Children.Add(status);
         body.Children.Add(hints);
-        if (f.Comment.Length > 0 || f.Source.Length > 0)
-            body.Children.Add(new TextBlock { Text = string.Join(" · ", new[] { f.Comment, f.Source.Length > 0 ? Loc.T("Source") + ": " + f.Source : "" }.Where(s => s.Length > 0)), FontSize = 11.5, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap });
+        if (f.Comment.Length > 0 || (_full && f.Source.Length > 0))
+            body.Children.Add(new TextBlock { Text = string.Join(" · ", new[] { f.Comment, _full && f.Source.Length > 0 ? Loc.T("Source") + ": " + f.Source : "" }.Where(s => s.Length > 0)), FontSize = 11.5, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap });
         return new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(12), Child = body };
     }
 
@@ -627,7 +660,23 @@ public sealed class CalcEditorForm : DockPanel
     public bool CodeNames
     {
         get => _codeNames;
-        set { _codeNames = value; ShowCenter(); }
+        set { _codeNames = value; BuildTree(); ShowCenter(); BuildRight(); }
+    }
+
+    private static bool _full;
+
+    /// <summary>Полный режим: встроенные алгоритмы, правила, граф и расширенные поля; по умолчанию окно простое.</summary>
+    public bool FullMode
+    {
+        get => _full;
+        set
+        {
+            _full = value;
+            BuildTree();
+            if (!_full && Selected?.StartsWith("builtin:", StringComparison.Ordinal) == true) Selected = "hole.chargeMass";
+            ShowCenter();
+            BuildRight();
+        }
     }
 
     private static readonly string[] Operators = { "=", "≠", "<", "≤", ">", "≥" };
@@ -781,11 +830,11 @@ public sealed class CalcEditorForm : DockPanel
 
     private void ShowInput(PropertyDef p)
     {
-        _center.Children.Add(new TextBlock { Text = p.Id, FontFamily = Look.Mono, FontSize = 16, Foreground = Look.Text });
+        _center.Children.Add(PageTitle(p.Id, p.NameRu));
         _center.Children.Add(new TextBlock { Text = Loc.T("A field of the model: it is entered, not calculated. Formulas read it by name."), Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap });
         _center.Children.Add(FormKit.Section(Loc.T("Property"), FormKit.Fields(2,
-            Info(Loc.T("Name"), p.NameRu.Length > 0 ? p.NameRu : p.NameEn), Info(Loc.T("Type"), p.Type.ToString()),
-            Info(Loc.T("Unit"), p.Unit), Info(Loc.T("Model field"), string.Join(", ", p.Fields)))));
+            Info(Loc.T("Name"), p.NameRu.Length > 0 ? p.NameRu : p.NameEn), Info(Loc.T("Unit"), _codeNames ? p.Unit : Aliases.RussianUnit(p.Unit)))));
+        if (_codeNames) _center.Children.Add(Info(Loc.T("Model field"), string.Join(", ", p.Fields)));
     }
 
     private void ShowBuiltin(string name)
@@ -811,8 +860,7 @@ public sealed class CalcEditorForm : DockPanel
             if (d == null) Draft.Parameters.Add(d = p.Clone());
             return d;
         }
-        _center.Children.Add(new TextBlock { Text = id, FontFamily = Look.Mono, FontSize = 16, Foreground = Look.Text });
-        if (p.NameRu.Length > 0) _center.Children.Add(new TextBlock { Text = p.NameRu, Foreground = Look.TextSoft });
+        _center.Children.Add(PageTitle(id, p.NameRu));
         var value = FormKit.Text(p.Value.ToString(CultureInfo.CurrentCulture));
         value.TextChanged += (_, _) => { if (double.TryParse(value.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var v) && v != p.Value) { Own().Value = v; MarkDirty(); } };
         var blastValue = _project.Calc?.Parameters?.GetValueOrDefault(id);
@@ -836,7 +884,7 @@ public sealed class CalcEditorForm : DockPanel
         _center.Children.Add(FormKit.Section(Loc.T("Values by level"), FormKit.Fields(2,
             FormKit.Labeled(Loc.T("Profile"), value),
             FormKit.Labeled(Loc.T("This blast"), blast),
-            Info(Loc.T("Unit"), p.Unit),
+            Info(Loc.T("Unit"), _codeNames ? p.Unit : Aliases.RussianUnit(p.Unit)),
             Info(Loc.T("Now used"), effective?.ToString("0.###", CultureInfo.CurrentCulture) ?? "—"))));
         _center.Children.Add(new TextBlock { Text = Loc.T("Looked up from the bottom: hole → hole type → blast → mine → profile."), FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap });
         _center.Children.Add(FormKit.Section(Loc.T("Table"), table));
@@ -962,14 +1010,14 @@ public sealed class CalcEditorForm : DockPanel
         IEnumerable<Dependency> list = node?.Dependencies ?? (Selected.StartsWith("builtin:", StringComparison.Ordinal)
             ? DraftModel.BuiltinDependencies[DraftModel.BuiltinIndex(Selected[8..])] : Array.Empty<Dependency>());
         foreach (var d in list.GroupBy(d => d.Source).Select(g => g.First()).OrderBy(d => d.Source))
-            deps.Children.Add(Mono(d.Path.Count > 0 ? $"{d.Source}  ← {d.PathText}" : d.Source));
+            deps.Children.Add(Mono(DependencyText(d)));
         if (deps.Children.Count == 0) deps.Children.Add(new TextBlock { Text = "—", Foreground = Look.Faint });
         _right.Children.Add(FormKit.Section(Loc.T("Depends on"), deps));
 
         var users = new StackPanel { Spacing = 2 };
-        foreach (var n in DraftModel.Downstream(source).Take(40)) users.Children.Add(Mono(n.Id));
+        foreach (var n in DraftModel.Downstream(source).Take(40)) users.Children.Add(Mono(NameOf(n.Id)));
         if (users.Children.Count == 0) users.Children.Add(new TextBlock { Text = "—", Foreground = Look.Faint });
-        _right.Children.Add(FormKit.Section(Loc.T("Used by"), users, FormKit.Tool("chart", null, () => _ = ShowGraph(), Loc.T("Show on the graph"))));
+        _right.Children.Add(FormKit.Section(_full ? Loc.T("Used by") : Loc.T("Affects"), users, _full ? FormKit.Tool("chart", null, () => _ = ShowGraph(), Loc.T("Show on the graph")) : null));
 
         var overrides = _project.Calc?.Overrides?.Count(o => o.Property == Selected) ?? 0;
         _right.Children.Add(FormKit.Section(Loc.T("Overrides"), new TextBlock { Text = overrides > 0 ? Loc.F("Set by hand for {0} entities", overrides) : Loc.T("None"), Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap }));
@@ -981,7 +1029,7 @@ public sealed class CalcEditorForm : DockPanel
         }));
     }
 
-    private static TextBlock Mono(string text) => new() { Text = text, FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.TextSoft, TextTrimming = TextTrimming.CharacterEllipsis };
+    private static TextBlock Mono(string text) => new() { Text = text, FontFamily = _codeNames ? Look.Mono : FontFamily.Default, FontSize = 11.5, Foreground = Look.TextSoft, TextTrimming = TextTrimming.CharacterEllipsis };
 
     /// <summary>Holes and blast totals whose values differ between the published profile and the draft.</summary>
     private void CountAffected()
@@ -1045,7 +1093,7 @@ public sealed class CalcEditorForm : DockPanel
         var first = DraftModel.Diagnostics.FirstOrDefault(d => !d.IsWarning);
         OutOfRangeValues = CountOutOfRange();
         _status.Text = Loc.F("Errors: {0} · warnings: {1} · test cases: {2} of {3}", errors, warnings, passed, tests.Count)
-            + (OutOfRangeValues > 0 ? " · " + Loc.F("{0} values outside the reasonable range", OutOfRangeValues) : "") + (first != null ? " — " + first : "");
+            + (OutOfRangeValues > 0 ? " · " + Loc.F("{0} values outside the reasonable range", OutOfRangeValues) : "") + (first != null ? " — " + DiagnosticText(first) : "");
         _status.Foreground = errors > 0 ? Bad : passed < tests.Count || OutOfRangeValues > 0 ? Warn : Look.Muted;
     }
 
@@ -1062,9 +1110,11 @@ public sealed class CalcEditorForm : DockPanel
         return n;
     }
 
+    private string DiagnosticText(CalcDiagnostic d) => $"{NameOf(d.Property)}: {d.Message}";
+
     private void ShowDiagnostics()
     {
-        var list = DraftModel.Diagnostics.Select(d => (d.IsWarning ? "⚠ " : "✗ ") + d).ToList();
+        var list = DraftModel.Diagnostics.Select(d => (d.IsWarning ? "⚠ " : "✗ ") + DiagnosticText(d)).ToList();
         _ = Dialogs.Info(list.Count == 0 ? Loc.T("The profile has no errors.") : string.Join("\n", list.Take(40)), Loc.T("Check"));
     }
 
@@ -1248,12 +1298,15 @@ public sealed class CalcEditorForm : DockPanel
     private async Task AddProperty()
     {
         var contexts = DraftModel.Contexts.Select(c => c.Name).ToList();
-        var ctx = await Dialogs.Choose(Loc.T("My property"), Loc.T("Context"), contexts, Math.Max(0, contexts.IndexOf("hole")));
+        var ctx = await Dialogs.Choose(Loc.T("My property"), Loc.T("Context"), DraftModel.Contexts.Select(c => _codeNames || c.NameRu.Length == 0 ? c.Name : c.NameRu).ToList(), Math.Max(0, contexts.IndexOf("hole")));
         if (ctx is not { } ci) return;
-        var name = await Dialogs.Prompt(Loc.T("My property"), Loc.T("Name (latin letters, no spaces)"), "myValue");
-        if (string.IsNullOrWhiteSpace(name) || !name.All(c => char.IsLetterOrDigit(c) || c == '_') || !char.IsLetter(name[0])) return;
-        var id = contexts[ci] + "." + name;
-        if (DraftModel.FindProperty(id) != null) { await Dialogs.Info(Loc.T("There is a property with that name already.")); return; }
+        var name = (await Dialogs.Prompt(Loc.T("My property"), Loc.T("Property name"), ""))?.Trim();
+        if (string.IsNullOrWhiteSpace(name) || name.Contains('[') || name.Contains(']')) return;
+        if (DraftModel.FindProperty(contexts[ci], name) != null || DraftModel.FindAlias(contexts[ci], name) != null) { await Dialogs.Info(Loc.T("There is a property with that name already.")); return; }
+        // имя в формулах — русское название, кодовое подбирается само
+        var number = 1;
+        while (DraftModel.FindProperty(contexts[ci], "user" + number) != null) number++;
+        var id = contexts[ci] + ".user" + number;
         Draft.Properties.Add(new PropertyDef { Id = id, NameRu = name, Unit = "?", Kind = PropertyKind.Computed, Group = Loc.T("Mine") });
         Draft.Formulas.Add(new FormulaDef { Property = id, Expression = "0" });
         Recompile();
