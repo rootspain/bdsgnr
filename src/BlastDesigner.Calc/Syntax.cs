@@ -12,10 +12,12 @@ public sealed class CalcSyntaxException(string message, int position, int length
 
 public enum TokenKind { Number, String, Identifier, Operator, LParen, RParen, Comma, Dot, End }
 
-public readonly record struct Token(TokenKind Kind, string Text, int Position, double Number = 0)
+public readonly record struct Token(TokenKind Kind, string Text, int Position, double Number = 0, bool Quoted = false)
 {
-    public bool Is(string op) => (Kind is TokenKind.Operator or TokenKind.Identifier) && string.Equals(Text, op, StringComparison.OrdinalIgnoreCase);
-    public int Length => Math.Max(1, Text.Length);
+    /// <summary>Оператор или ключевое слово по кодовому имени; русское слово (и, или, не, где) тоже подходит, имя в [скобках] — нет.</summary>
+    public bool Is(string op) => Kind == TokenKind.Operator ? Text == op
+        : Kind == TokenKind.Identifier && !Quoted && (string.Equals(Text, op, StringComparison.OrdinalIgnoreCase) || Aliases.Word(Text) == op);
+    public int Length => Math.Max(1, Text.Length + (Quoted ? 2 : 0));
 }
 
 /// <summary>Лексер языка формул: числа (1e-9), строки в одинарных кавычках, имена, операторы.</summary>
@@ -71,6 +73,17 @@ public static class Lexer
                 list.Add(new Token(TokenKind.String, sb.ToString(), start));
                 continue;
             }
+            if (c == '[')
+            {
+                // русское имя в скобках: [Масса ВВ], [Продукт]
+                var close = text.IndexOf(']', i + 1);
+                if (close < 0) throw new CalcSyntaxException("Нет закрывающей скобки «]» у имени", start, text.Length - start);
+                var name = text[(i + 1)..close].Trim();
+                if (name.Length == 0) throw new CalcSyntaxException("Пустое имя в скобках []", start, 2);
+                list.Add(new Token(TokenKind.Identifier, name, start, 0, true));
+                i = close + 1;
+                continue;
+            }
             if (char.IsLetter(c) || c == '_')
             {
                 while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_')) i++;
@@ -99,7 +112,7 @@ public abstract record Ast(int Position, int Length);
 public sealed record NumberAst(double Value, int Position, int Length) : Ast(Position, Length);
 public sealed record StringAst(string Value, int Position, int Length) : Ast(Position, Length);
 /// <summary>Имя или цепочка через точку: <c>length</c>, <c>product.density</c>, <c>hole.row.burden</c>.</summary>
-public sealed record NameAst(IReadOnlyList<string> Path, int Position, int Length) : Ast(Position, Length)
+public sealed record NameAst(IReadOnlyList<string> Path, int Position, int Length, bool Quoted = false) : Ast(Position, Length)
 {
     public string Text => string.Join(".", Path);
 }
@@ -227,7 +240,7 @@ public sealed class Parser
             }
             case TokenKind.Identifier:
             {
-                if (Peek.Kind == TokenKind.LParen)
+                if (Peek.Kind == TokenKind.LParen && !t.Quoted)
                 {
                     Next();
                     var args = new List<Ast>();
@@ -240,6 +253,7 @@ public sealed class Parser
                     return new CallAst(t.Text, args, t.Position, close.Position + 1 - t.Position);
                 }
                 var path = new List<string> { t.Text };
+                var quoted = t.Quoted;
                 var end = t.Position + t.Length;
                 while (Peek.Kind == TokenKind.Dot)
                 {
@@ -247,9 +261,10 @@ public sealed class Parser
                     var id = Next();
                     if (id.Kind != TokenKind.Identifier) throw new CalcSyntaxException("После точки ожидается имя свойства", id.Position, id.Length);
                     path.Add(id.Text);
+                    quoted |= id.Quoted;
                     end = id.Position + id.Length;
                 }
-                return new NameAst(path, t.Position, end - t.Position);
+                return new NameAst(path, t.Position, end - t.Position, quoted);
             }
             case TokenKind.End: throw new CalcSyntaxException("Формула оборвалась", t.Position);
             default: throw new CalcSyntaxException($"Неожиданное «{t.Text}»", t.Position, t.Length);

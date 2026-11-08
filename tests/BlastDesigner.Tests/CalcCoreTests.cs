@@ -94,8 +94,8 @@ public class CalcUnitTests
     public void Addition_RequiresSameDimensionAndScale()
     {
         Assert.Contains("Несовместимые", Assert.Throws<CalcSyntaxException>(() => Model.CompileExpression("deck", "length + product.density")).Message);
-        // метры и миллиметры — одна размерность, но без явного приведения складывать нельзя
-        Assert.Contains("to(", Assert.Throws<CalcSyntaxException>(() => Model.CompileExpression("hole", "length + diameter")).Message);
+        // метры и миллиметры — одна размерность: миллиметры переводятся в метры сами
+        Assert.Equal("m", Model.CompileExpression("hole", "length + diameter").Unit.Symbol);
         var ok = Model.CompileExpression("hole", "length + to(m, diameter)");
         Assert.Equal("m", ok.Unit.Symbol);
         Assert.Contains("размерность", Assert.Throws<CalcSyntaxException>(() => Model.CompileExpression("hole", "to(kg, length)")).Message);

@@ -3695,10 +3695,13 @@ Step("calculations window: check while typing, preview on the selected holes, pu
     var ids = vm.Project!.Holes.Where(h => !h.IsDummy && h.Decks.Count > 0).Take(4).Select(h => h.Id).ToList();
     vm.Doc!.Select(ids); Pump();
     form.Select("hole.chargeMass"); Pump();
+    var shown = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "formula").Text ?? "";
+    if (!shown.Contains("[Масса]") || !shown.StartsWith("сумма(")) throw new Exception("the formula is not shown in Russian: " + shown);
     var before = ids.ToDictionary(id => id, id => Charging.ExplosiveMass(vm.Project, (Hole)vm.Project.FindEntity(id)!));
     form.SetFormula("1.1 * (sum(decks where , mass)"); Pump();
     if (!form.FormulaStatus.Contains(BlastDesigner.App.Services.Loc.T("Error at {0}: {1}").Split(' ')[0])) throw new Exception("a broken formula passed the check: " + form.FormulaStatus);
-    form.SetFormula("1.1 * (sum(decks where product.isExplosive, mass) + sum(primers, coalesce(booster.unitMass, 0)))"); Pump();
+    form.SetFormula("1.1 * (сумма([Интервалы] где [Продукт].[ВВ], [Масса]) + сумма([Боевики], первое_из([Промежуточный детонатор].[Масса единицы], 0)))"); Pump();
+    if (!form.Draft.Formulas.Single(f => f.Property == "hole.chargeMass").Expression.StartsWith("1.1 * (sum(decks where product.isExplosive, mass)")) throw new Exception("the Russian formula is not stored with code names");
     if (form.FormulaStatus.Contains(BlastDesigner.App.Services.Loc.T("Error at {0}: {1}").Split(' ')[0])) throw new Exception("the formula should pass: " + form.FormulaStatus);
     if (form.Preview.Count != ids.Count) throw new Exception($"preview shows {form.Preview.Count} rows for {ids.Count} selected holes");
     if (form.Preview.Any(r => r.After.IsError || Math.Abs(r.After.Number - 1.1 * r.Before.Number) > 1e-6)) throw new Exception("preview after ≠ 1.1 × before: " + string.Join("; ", form.Preview.Select(r => $"{r.Entity} {r.Before} → {r.After}")));

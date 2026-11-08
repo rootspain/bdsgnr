@@ -296,6 +296,52 @@ public sealed class CalcModel
         foreach (var p in _computed.Values) if (p.Context == context) yield return p;
     }
 
+    // ---- русские имена ----------------------------------------------------
+
+    private readonly Dictionary<string, Dictionary<string, PropertyDef>> _aliases = new(StringComparer.Ordinal);
+
+    private static string Key(string alias) => alias.Trim().ToLowerInvariant().Replace('ё', 'е');
+
+    /// <summary>Свойства контекста по русскому названию; названия, которые носят два свойства, не годятся в имя.</summary>
+    private Dictionary<string, PropertyDef> AliasMap(string context)
+    {
+        lock (_aliases)
+        {
+            if (_aliases.TryGetValue(context, out var map)) return map;
+            map = new Dictionary<string, PropertyDef>(StringComparer.Ordinal);
+            var taken = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var p in PropertiesOf(context).GroupBy(p => p.Id).Select(g => g.Last()))
+            {
+                if (p.NameRu.Length == 0) continue;
+                var k = Key(p.NameRu);
+                if (!taken.Add(k)) { map.Remove(k); continue; }
+                map[k] = p;
+            }
+            _aliases[context] = map;
+            return map;
+        }
+    }
+
+    /// <summary>Свойство по русскому названию (<c>Масса ВВ</c>); null — нет такого или название не однозначно.</summary>
+    public PropertyDef? FindAlias(string context, string alias) => AliasMap(context).GetValueOrDefault(Key(alias));
+
+    /// <summary>Свойство по кодовому имени или русскому названию.</summary>
+    public PropertyDef? Resolve(string context, string name) => FindProperty(context, name) ?? FindAlias(context, name);
+
+    /// <summary>Русское имя свойства для формулы: его название, если оно однозначно в контексте, иначе кодовое имя.</summary>
+    public string AliasOf(PropertyDef p) => p.NameRu.Length > 0 && FindAlias(p.Context, p.NameRu) == p ? p.NameRu : p.Name;
+
+    /// <summary>Параметр по id или русскому названию.</summary>
+    public CompiledParameter? ParameterByName(string name)
+    {
+        if (ParameterOf(name) is { } p) return p;
+        var named = Parameters.Where(x => Key(x.Def.NameRu) == Key(name)).Take(2).ToList();
+        return named.Count == 1 ? named[0] : null;
+    }
+
+    /// <summary>Русское имя параметра для формулы: название, если однозначно, иначе id.</summary>
+    public string AliasOf(ParameterDef p) => p.NameRu.Length > 0 && ParameterByName(p.NameRu)?.Def == p ? p.NameRu : p.Id;
+
     /// <summary>Компилирует выражение по свойствам этой модели (предпросмотр, контрольные примеры, проверка при наборе).</summary>
     public CompiledExpression CompileExpression(string context, string text, CalcType? expected = null) => Compiler.Compile(this, context, text, expected);
 

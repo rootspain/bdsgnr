@@ -87,8 +87,10 @@ public sealed class CalcEditorForm : DockPanel
         };
         _timer.Tick += (_, _) => { _timer.Stop(); Recompile(); };
 
+        var codeNames = new CheckBox { Content = Loc.T("Show code names"), IsChecked = _codeNames, Name = "codeNames", VerticalAlignment = VerticalAlignment.Center };
+        codeNames.IsCheckedChanged += (_, _) => CodeNames = codeNames.IsChecked == true;
         var tools = Ui.Row(8,
-            Labeled(Loc.T("Profile"), _name), Labeled(Loc.T("Version"), _version), _draftBadge,
+            Labeled(Loc.T("Profile"), _name), Labeled(Loc.T("Version"), _version), _draftBadge, codeNames,
             FormKit.Secondary(Loc.T("Check"), () => { Recompile(); ShowDiagnostics(); }),
             FormKit.Secondary(Loc.T("Compare"), () => _ = Compare()),
             FormKit.Primary(Loc.T("Publish"), () => _ = Publish()));
@@ -255,8 +257,11 @@ public sealed class CalcEditorForm : DockPanel
             new TextBlock { Text = sign, Width = 14, Foreground = sign == "←" ? Look.Faint : Look.Blue, FontFamily = Look.Mono },
             new TextBlock { Text = name, Foreground = Look.TextSoft, FontFamily = Look.Mono, FontSize = 12 },
             mark);
-        if (ru.Length > 0) ToolTip.SetTip(row, ru);
-        return new TreeViewItem { Header = row, Tag = id };
+        if (ru.Length > 0) ToolTip.SetTip(row, ru + (id.Contains('.') && !id.Contains(':') ? "\n" + Loc.T("Double-click: insert into the formula") : ""));
+        var item = new TreeViewItem { Header = row, Tag = id };
+        // двойной щелчок по свойству вставляет его в формулу, где стоит курсор
+        if (!id.Contains(':')) item.DoubleTapped += (_, e) => { InsertProperty(id); e.Handled = true; };
+        return item;
     }
 
     private static TextBlock Caption(string text, IBrush brush, bool strong = false) =>
@@ -413,13 +418,12 @@ public sealed class CalcEditorForm : DockPanel
         var f = formulas[index];
         var text = new TextBox
         {
-            Text = f.Expression, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 76, FontFamily = Look.Mono, FontSize = 13,
+            Text = Shown(p.Context, f.Expression), AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 76, FontFamily = Look.Mono, FontSize = 13,
             Background = Look.Field, BorderBrush = Look.LineStrong, Padding = new Thickness(8, 6), Name = index == 0 ? "formula" : "formula" + index
         };
         var status = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
-        var hint = new TextBlock { FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap };
-        var condition = FormKit.Text(f.Condition);
-        condition.Watermark = Loc.T("always");
+        var highlight = new SelectableTextBlock { FontFamily = Look.Mono, FontSize = 12.5, TextWrapping = TextWrapping.Wrap, Name = index == 0 ? "highlight" : null };
+        var hints = new WrapPanel { Name = index == 0 ? "hints" : null };
         var priority = FormKit.Text(f.Priority.ToString(CultureInfo.InvariantCulture));
         var onError = FormKit.Text(f.OnError?.ToString(CultureInfo.CurrentCulture));
         onError.Watermark = Loc.T("error");
@@ -430,8 +434,8 @@ public sealed class CalcEditorForm : DockPanel
                 var c = DraftModel.CompileExpression(p.Context, text.Text ?? "", p.Type);
                 var want = Calc.Unit.TryParse(p.Unit, out var u) ? u : Calc.Unit.Unknown;
                 var unitOk = p.Type != CalcType.Number || want.SameDimension(c.Unit);
-                status.Text = unitOk ? Loc.F("OK · {0} · depends on {1}", c.Unit.IsUnknown ? "?" : c.Unit.Symbol, c.Dependencies.Count)
-                    : Loc.F("The formula gives {0}, the property is in {1}", c.Unit.DimensionText, want.DimensionText);
+                status.Text = unitOk ? Loc.F("OK · {0} · depends on {1}", c.Unit.IsUnknown ? "?" : Aliases.RussianUnit(c.Unit.Symbol), c.Dependencies.Count)
+                    : Loc.F("The formula gives {0}, the property is in {1}", Aliases.RussianUnit(c.Unit.Symbol), Aliases.RussianUnit(want.Symbol));
                 status.Foreground = unitOk ? Ok : Warn;
             }
             catch (CalcSyntaxException e)
@@ -440,72 +444,303 @@ public sealed class CalcEditorForm : DockPanel
                 status.Foreground = Bad;
             }
             if (index == 0) FormulaStatus = status.Text ?? "";
-            hint.Text = Suggestions(p.Context, text.Text ?? "", text.CaretIndex);
+            Paint(highlight, text.Text ?? "");
+            FillHints(hints, text, p.Context);
         }
         if (index == 0) _checkMain = Check;
+        text.GotFocus += (_, _) => { _activeFormula = text; _activeContext = p.Context; };
+        if (index == 0) { _activeFormula = text; _activeContext = p.Context; }
         text.TextChanged += (_, _) =>
         {
-            if (text.Text == f.Expression) return;
-            f.Expression = text.Text ?? "";
+            // в черновике формула хранится кодовыми именами, в поле — как удобно читать
+            var code = FormulaText.ToCode(DraftModel, p.Context, text.Text ?? "");
+            if (code == f.Expression) { Check(); return; }
+            f.Expression = code;
             SetFormulas(p.Id, formulas);
             Check();
         };
-        condition.TextChanged += (_, _) => { var v = string.IsNullOrWhiteSpace(condition.Text) ? null : condition.Text; if (v != f.Condition) { f.Condition = v; SetFormulas(p.Id, formulas); } };
         priority.TextChanged += (_, _) => { if (int.TryParse(priority.Text, out var v) && v != f.Priority) { f.Priority = v; SetFormulas(p.Id, formulas); } };
         onError.TextChanged += (_, _) =>
         {
             double? v = double.TryParse(onError.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var d) ? d : null;
             if (v != f.OnError) { f.OnError = v; SetFormulas(p.Id, formulas); }
         };
-        text.PropertyChanged += (_, e) => { if (e.Property == TextBox.CaretIndexProperty) hint.Text = Suggestions(p.Context, text.Text ?? "", text.CaretIndex); };
+        text.PropertyChanged += (_, e) => { if (e.Property == TextBox.CaretIndexProperty) FillHints(hints, text, p.Context); };
         Check();
+        var condition = ConditionEditor(p, f, () => SetFormulas(p.Id, formulas), index);
+        var fields = FormKit.Fields(2, FormKit.Labeled(Loc.T("Priority"), priority), FormKit.Labeled(Loc.T("Value on error"), onError));
         var body = new StackPanel { Spacing = 8 };
         if (formulas.Count > 1 || f.Condition != null)
         {
             var remove = FormKit.Tool("trash", null, () => { formulas.RemoveAt(index); SetFormulas(p.Id, formulas); ShowCenter(); }, Loc.T("Delete the variant"));
             remove.IsEnabled = formulas.Count > 1;
-            body.Children.Add(new DockPanel
-            {
-                Children =
-                {
-                    Docked(remove, Avalonia.Controls.Dock.Right),
-                    FormKit.Fields(3, FormKit.Labeled(Loc.T("Condition"), condition), FormKit.Labeled(Loc.T("Priority"), priority), FormKit.Labeled(Loc.T("Value on error"), onError))
-                }
-            });
+            body.Children.Add(new DockPanel { Children = { Docked(remove, Avalonia.Controls.Dock.Right), FormKit.Labeled(Loc.T("Condition"), condition) } });
+            body.Children.Add(fields);
         }
-        else body.Children.Add(FormKit.Fields(3, FormKit.Labeled(Loc.T("Condition"), condition), FormKit.Labeled(Loc.T("Priority"), priority), FormKit.Labeled(Loc.T("Value on error"), onError)));
+        else body.Children.Add(fields);
         body.Children.Add(text);
+        body.Children.Add(highlight);
         body.Children.Add(status);
-        body.Children.Add(hint);
+        body.Children.Add(hints);
         if (f.Comment.Length > 0 || f.Source.Length > 0)
             body.Children.Add(new TextBlock { Text = string.Join(" · ", new[] { f.Comment, f.Source.Length > 0 ? Loc.T("Source") + ": " + f.Source : "" }.Where(s => s.Length > 0)), FontSize = 11.5, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap });
         return new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(12), Child = body };
     }
 
-    /// <summary>Names of the context that start with the word at the caret: the autocompletion hint.</summary>
-    private string Suggestions(string context, string text, int caret)
+    /// <summary>Формула для поля: по-русски или кодовыми именами (переключатель «Показать кодовые имена»).</summary>
+    private string Shown(string context, string code) => _codeNames ? code : FormulaText.ToRussian(DraftModel, context, code);
+
+    private static readonly IBrush PropertyInk = new SolidColorBrush(Color.FromUInt32(0xFF7DB7FF));
+    private static readonly IBrush PropertyBack = new SolidColorBrush(Color.FromUInt32(0x264C9BFF));
+    private static readonly IBrush NumberInk = new SolidColorBrush(Color.FromUInt32(0xFFB5E08D));
+
+    /// <summary>Подсветка формулы под полем: свойства метками, функции, числа и слова цветом, ошибка красным.</summary>
+    private static void Paint(SelectableTextBlock block, string text)
     {
-        caret = Math.Clamp(caret, 0, text.Length);
-        int start = caret;
-        while (start > 0 && (char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_' || text[start - 1] == '.')) start--;
-        var word = text[start..caret];
-        var ctx = context;
-        var dot = word.LastIndexOf('.');
-        if (dot >= 0)
+        block.Inlines ??= new Avalonia.Controls.Documents.InlineCollection();
+        block.Inlines.Clear();
+        foreach (var (part, kind) in FormulaText.Highlight(text))
         {
-            // по связям: product.de → свойства продукта
-            foreach (var part in word[..dot].Split('.'))
-                if (DraftModel.FindProperty(ctx, part) is { Target: { } t }) ctx = t;
-                else return "";
-            word = word[(dot + 1)..];
+            var run = new Avalonia.Controls.Documents.Run(part);
+            switch (kind)
+            {
+                case FormulaText.Part.Property: run.Foreground = PropertyInk; run.Background = PropertyBack; break;
+                case FormulaText.Part.Function: run.Foreground = Look.Accent; break;
+                case FormulaText.Part.Number: run.Foreground = NumberInk; break;
+                case FormulaText.Part.String: run.Foreground = NumberInk; break;
+                case FormulaText.Part.Keyword: run.Foreground = Look.Blue; run.FontWeight = FontWeight.SemiBold; break;
+                case FormulaText.Part.Error: run.Foreground = Bad; run.TextDecorations = TextDecorations.Underline; break;
+                default: run.Foreground = Look.TextSoft; break;
+            }
+            block.Inlines.Add(run);
         }
-        if (word.Length == 0) return "";
-        var names = DraftModel.PropertiesOf(ctx).Select(p => p.Name)
-            .Concat(new[] { "sum", "avg", "min", "max", "count", "first", "if", "case", "coalesce", "exists", "param", "lookup", "to", "clamp", "round", "sqrt" })
-            .Concat(CalcService.Registry.Builtins.Keys)
-            .Where(n => n.StartsWith(word, StringComparison.OrdinalIgnoreCase) && !n.Equals(word, StringComparison.OrdinalIgnoreCase))
-            .Distinct().OrderBy(n => n.Length).Take(8).ToList();
-        return names.Count > 0 ? Loc.T("Names") + ": " + string.Join(", ", names) : "";
+    }
+
+    /// <summary>
+    /// Подсказки по слову у курсора: свойства объекта (с учётом связей: «[Продукт].[Пл» → свойства продукта) и функции;
+    /// щелчок заменяет слово выбранным именем.
+    /// </summary>
+    private void FillHints(WrapPanel panel, TextBox box, string context)
+    {
+        panel.Children.Clear();
+        var text = box.Text ?? "";
+        var caret = Math.Clamp(box.CaretIndex, 0, text.Length);
+        int start = caret;
+        bool bracket = false;
+        // слово у курсора: незакрытое [имя или буквы
+        for (int i = caret - 1; i >= 0; i--)
+        {
+            if (text[i] == ']') break;
+            if (text[i] == '[') { start = i; bracket = true; break; }
+        }
+        if (!bracket)
+            while (start > 0 && (char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_')) start--;
+        var word = text[start..caret].TrimStart('[');
+        // контекст по связи перед словом: [Продукт]. или product.
+        var ctx = context;
+        var before = text[..start];
+        if (before.EndsWith('.'))
+        {
+            var chain = new List<string>();
+            var j = before.Length - 1;
+            while (j > 0 && before[j] == '.')
+            {
+                var k = j - 1;
+                string seg;
+                if (before[k] == ']') { var open = before.LastIndexOf('[', k); if (open < 0) break; seg = before[(open + 1)..k]; j = open - 1; }
+                else { var s = k; while (s >= 0 && (char.IsLetterOrDigit(before[s]) || before[s] == '_')) s--; seg = before[(s + 1)..(k + 1)]; j = s; }
+                chain.Insert(0, seg);
+                if (j < 0 || before[j] != '.') break;
+            }
+            foreach (var seg in chain)
+                if (DraftModel.Resolve(ctx, seg) is { Target: { } t }) ctx = t;
+                else return;
+        }
+        if (word.Length == 0 && !bracket) return;
+        var names = new List<(string Label, string Insert)>();
+        foreach (var prop in DraftModel.PropertiesOf(ctx))
+        {
+            var alias = _codeNames ? prop.Name : DraftModel.AliasOf(prop);
+            if (alias.StartsWith(word, StringComparison.OrdinalIgnoreCase) || prop.Name.StartsWith(word, StringComparison.OrdinalIgnoreCase))
+                names.Add((alias, _codeNames ? prop.Name : "[" + alias + "]"));
+        }
+        if (!bracket && start == caret - word.Length && !before.EndsWith('.'))
+            foreach (var fn in Aliases.Functions)
+            {
+                var name = _codeNames ? fn.Key : fn.Value;
+                if (name.StartsWith(word, StringComparison.OrdinalIgnoreCase)) names.Add((name + "(…)", name + "("));
+            }
+        foreach (var (label, insert) in names.Where(n => !string.Equals(n.Insert.Trim('[', ']', '('), word, StringComparison.OrdinalIgnoreCase)).DistinctBy(n => n.Insert).OrderBy(n => n.Label.Length).Take(10))
+        {
+            var b = new Button { Content = label, FontSize = 11.5, Padding = new Thickness(8, 2), Margin = new Thickness(0, 0, 4, 4), Background = Look.Hover, CornerRadius = new CornerRadius(4) };
+            b.Click += (_, _) =>
+            {
+                box.Text = text[..start] + insert + text[caret..];
+                box.CaretIndex = start + insert.Length;
+                box.Focus();
+            };
+            panel.Children.Add(b);
+        }
+    }
+
+    /// <summary>Вставляет имя свойства в формулу, где стоит курсор (двойной щелчок по дереву); свойство другого объекта — путём по связи.</summary>
+    public void InsertProperty(string propertyId)
+    {
+        if (_activeFormula == null || _activeContext == null || DraftModel.FindProperty(propertyId) is not { } prop) return;
+        string Name(PropertyDef d) => _codeNames ? d.Name : "[" + DraftModel.AliasOf(d) + "]";
+        string? text = prop.Context == _activeContext ? Name(prop) : null;
+        if (text == null)
+            foreach (var rel in DraftModel.PropertiesOf(_activeContext).Where(r => r.Type == CalcType.Ref && r.Target == prop.Context))
+            {
+                text = Name(rel) + "." + Name(prop);
+                break;
+            }
+        if (text == null)
+        {
+            var list = DraftModel.PropertiesOf(_activeContext).FirstOrDefault(r => r.Type == CalcType.List && r.Target == prop.Context);
+            if (list == null) return;
+            var sum = _codeNames ? "sum" : "сумма";
+            text = $"{sum}({Name(list)}, {Name(prop)})";
+        }
+        var box = _activeFormula;
+        var current = box.Text ?? "";
+        var caret = Math.Clamp(box.CaretIndex, 0, current.Length);
+        box.Text = current[..caret] + text + current[caret..];
+        box.CaretIndex = caret + text.Length;
+    }
+
+    private TextBox? _activeFormula;
+    private string? _activeContext;
+    private static bool _codeNames;
+
+    /// <summary>Показ формул кодовыми именами (для тех, кто привык к ним), по умолчанию — по-русски.</summary>
+    public bool CodeNames
+    {
+        get => _codeNames;
+        set { _codeNames = value; ShowCenter(); }
+    }
+
+    private static readonly string[] Operators = { "=", "≠", "<", "≤", ">", "≥" };
+    private static string CodeOp(string op) => op switch { "≠" => "<>", "≤" => "<=", "≥" => ">=", _ => op };
+    private static string ShowOp(string op) => op switch { "<>" => "≠", "<=" => "≤", ">=" => "≥", _ => op };
+
+    /// <summary>
+    /// Условие варианта: конструктор «свойство · оператор · значение» с соединением И/ИЛИ или текст. Условие, которое
+    /// конструктор не может показать (скобки, функции), открывается текстом.
+    /// </summary>
+    private Control ConditionEditor(PropertyDef p, FormulaDef f, Action changed, int index)
+    {
+        var host = new StackPanel { Spacing = 6 };
+        var rows = TryRows(p.Context, f.Condition, out var join);
+        bool textMode = rows == null;
+        void Build()
+        {
+            host.Children.Clear();
+            var toggle = new Button { Content = textMode ? Loc.T("Builder") : Loc.T("Text"), FontSize = 11.5, Padding = new Thickness(8, 2), Name = index == 0 ? "conditionMode" : null };
+            toggle.Click += (_, _) =>
+            {
+                if (textMode)
+                {
+                    var r = TryRows(p.Context, f.Condition, out var j);
+                    if (r == null) { _ = Dialogs.Info(Loc.T("This condition is too complex for the builder; edit it as text.")); return; }
+                    rows = r; join = j;
+                }
+                textMode = !textMode;
+                Build();
+            };
+            if (textMode)
+            {
+                var box = FormKit.Text(f.Condition == null ? "" : Shown(p.Context, f.Condition));
+                box.Watermark = Loc.T("always");
+                box.TextChanged += (_, _) =>
+                {
+                    var v = string.IsNullOrWhiteSpace(box.Text) ? null : FormulaText.ToCode(DraftModel, p.Context, box.Text!);
+                    if (v != f.Condition) { f.Condition = v; changed(); }
+                };
+                host.Children.Add(new DockPanel { Children = { Docked(toggle, Avalonia.Controls.Dock.Right), box } });
+                return;
+            }
+            var props = DraftModel.PropertiesOf(p.Context).Where(x => !x.IsRelation && x.Id != p.Id).OrderBy(x => DraftModel.AliasOf(x)).ToList();
+            var joinBox = new ComboBox { ItemsSource = new[] { Loc.T("all hold (AND)"), Loc.T("any holds (OR)") }, SelectedIndex = join == "or" ? 1 : 0 };
+            joinBox.SelectionChanged += (_, _) => { join = joinBox.SelectedIndex == 1 ? "or" : "and"; Write(); };
+            void Write()
+            {
+                var parts = rows!.Where(r => r.Property != null && r.Value.Trim().Length > 0).Select(r =>
+                {
+                    var d = DraftModel.FindProperty(r.Property!)!;
+                    var v = r.Value.Trim();
+                    var number = double.TryParse(v.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var num);
+                    var literal = number ? num.ToString("R", CultureInfo.InvariantCulture)
+                        : v is "истина" or "true" ? "true" : v is "ложь" or "false" ? "false" : "'" + v.Trim('\'').Replace("'", "''") + "'";
+                    return $"{d.Name} {CodeOp(r.Op)} {literal}";
+                }).ToList();
+                var cond = parts.Count == 0 ? null : string.Join($" {join} ", parts);
+                if (cond != f.Condition) { f.Condition = cond; changed(); }
+            }
+            var grid = new StackPanel { Spacing = 4 };
+            foreach (var row in rows!)
+            {
+                var r = row;
+                var propBox = new ComboBox { ItemsSource = props.Select(x => DraftModel.AliasOf(x)).ToList(), SelectedIndex = props.FindIndex(x => x.Id == r.Property), MinWidth = 200 };
+                var opBox = new ComboBox { ItemsSource = Operators, SelectedIndex = Math.Max(0, Array.IndexOf(Operators, ShowOp(r.Op))), Width = 64 };
+                var value = FormKit.Text(r.Value);
+                value.Width = 120;
+                propBox.SelectionChanged += (_, _) => { if (propBox.SelectedIndex >= 0) { r.Property = props[propBox.SelectedIndex].Id; Write(); } };
+                opBox.SelectionChanged += (_, _) => { r.Op = CodeOp(Operators[Math.Max(0, opBox.SelectedIndex)]); Write(); };
+                value.TextChanged += (_, _) => { r.Value = value.Text ?? ""; Write(); };
+                var del = FormKit.Tool("minus", null, () => { rows!.Remove(r); Write(); Build(); }, Loc.T("Delete the condition"));
+                grid.Children.Add(Ui.Row(6, propBox, opBox, value, del));
+            }
+            var add = FormKit.Tool("plus", Loc.T("Condition"), () => { rows!.Add(new ConditionRow { Property = props.FirstOrDefault()?.Id, Op = ">", Value = "" }); Build(); }, Loc.T("Add a condition"));
+            host.Children.Add(new DockPanel { Children = { Docked(toggle, Avalonia.Controls.Dock.Right), Ui.Row(8, joinBox, add) } });
+            host.Children.Add(grid);
+            if (rows!.Count == 0) host.Children.Add(new TextBlock { Text = Loc.T("No conditions: the variant always applies."), FontSize = 11.5, Foreground = Look.Faint });
+        }
+        Build();
+        return host;
+    }
+
+    private sealed class ConditionRow
+    {
+        public string? Property { get; set; }
+        public string Op { get; set; } = "=";
+        public string Value { get; set; } = "";
+    }
+
+    /// <summary>Строки конструктора из условия: сравнения свойства с числом или строкой, соединённые одним словом И или ИЛИ; иначе null.</summary>
+    private List<ConditionRow>? TryRows(string context, string? condition, out string join)
+    {
+        join = "and";
+        if (string.IsNullOrWhiteSpace(condition)) return new List<ConditionRow>();
+        Ast ast;
+        try { ast = Parser.Parse(condition); } catch (CalcSyntaxException) { return null; }
+        if (ast is NameAst { Path.Count: 1 } always && Aliases.Word(always.Path[0]) == "true") return new List<ConditionRow>();
+        var leaves = new List<Ast>();
+        string? op = null;
+        void Flatten(Ast a)
+        {
+            if (a is BinaryAst { Op: "and" or "or" } b && (op == null || op == b.Op)) { op = b.Op; Flatten(b.Left); Flatten(b.Right); }
+            else leaves.Add(a);
+        }
+        Flatten(ast);
+        join = op ?? "and";
+        var rows = new List<ConditionRow>();
+        foreach (var leaf in leaves)
+        {
+            if (leaf is not BinaryAst { Op: "=" or "<>" or "<" or "<=" or ">" or ">=" } cmp || cmp.Left is not NameAst { Path.Count: 1 } name) return null;
+            var prop = DraftModel.Resolve(context, name.Path[0]);
+            if (prop == null || prop.IsRelation) return null;
+            var value = cmp.Right switch
+            {
+                NumberAst n => n.Value.ToString(CultureInfo.CurrentCulture),
+                StringAst s => s.Value,
+                NameAst { Path.Count: 1 } w when Aliases.Word(w.Path[0]) is "true" or "false" => Aliases.Word(w.Path[0]) == "true" ? "истина" : "ложь",
+                _ => null
+            };
+            if (value == null) return null;
+            rows.Add(new ConditionRow { Property = prop.Id, Op = cmp.Op, Value = value });
+        }
+        return rows;
     }
 
     /// <summary>Puts the formulas of a property in the draft (all its variants replace the base ones).</summary>
@@ -520,9 +755,10 @@ public sealed class CalcEditorForm : DockPanel
     /// <summary>Sets the main formula of the selected property and checks it at once (for the smoke test and scripts).</summary>
     public void SetFormula(string text)
     {
-        if (_formulas == null || Selected == null) return;
-        // TextChanged приходит позже (через диспетчер): черновик меняется сразу, поле только показывает текст
-        _formulas[0].Expression = text;
+        if (_formulas == null || Selected == null || DraftModel.FindProperty(Selected) is not { } p) return;
+        // TextChanged приходит позже (через диспетчер): черновик меняется сразу, поле только показывает текст;
+        // формула принимается и по-русски, и кодовыми именами, хранится кодовыми
+        _formulas[0].Expression = FormulaText.ToCode(DraftModel, p.Context, text);
         SetFormulas(Selected, _formulas);
         var box = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(_center).OfType<TextBox>().FirstOrDefault(t => t.Name == "formula");
         if (box != null) box.Text = text;

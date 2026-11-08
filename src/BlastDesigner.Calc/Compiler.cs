@@ -112,9 +112,9 @@ internal sealed class Compiler
 
     private Bound BindName(NameAst n, Frame f)
     {
-        if (n.Path.Count == 1)
+        if (n.Path.Count == 1 && !n.Quoted)
         {
-            switch (n.Path[0].ToLowerInvariant())
+            switch (Aliases.Word(n.Path[0]))
             {
                 case "pi": return new Bound(E.Constant(Math.PI), CalcType.Number, Unit.One, Const: Math.PI);
                 case "inf": return new Bound(E.Constant(double.PositiveInfinity), CalcType.Number, Unit.One, Const: double.PositiveInfinity);
@@ -140,8 +140,7 @@ internal sealed class Compiler
                 mayBeNull = true;
                 path.Add(LastRelation!);
             }
-            var prop = _model.FindProperty(ctx.Name, name)
-                       ?? throw Error($"Нет свойства «{name}» у «{ctx.Name}»{Suggest(ctx, name)}", n);
+            var prop = _model.Resolve(ctx.Name, name) ?? throw Error(NotFound(ctx, name), n);
             result = Access(prop, obj, mayBeNull, path);
             LastRelation = prop;
         }
@@ -150,11 +149,20 @@ internal sealed class Compiler
 
     private PropertyDef? LastRelation;
 
-    private string Suggest(ContextDef ctx, string name)
+    /// <summary>
+    /// «Нет свойства» с подсказкой: похожее имя этого объекта («возможно, вы имели в виду [Масса]») или то же имя у объекта
+    /// по связи («есть у [Скважина]: [Скважина].[Диаметр]»).
+    /// </summary>
+    private string NotFound(ContextDef ctx, string name)
     {
-        var all = _model.PropertiesOf(ctx.Name).Select(p => p.Name).ToList();
-        var best = all.Where(a => a.StartsWith(name, StringComparison.OrdinalIgnoreCase) || a.Contains(name, StringComparison.OrdinalIgnoreCase)).Take(3).ToList();
-        return best.Count > 0 ? $" (может быть: {string.Join(", ", best)})" : "";
+        var where = ctx.NameRu.Length > 0 ? ctx.NameRu.ToLowerInvariant() : ctx.Name;
+        var msg = $"Нет свойства [{name}] у объекта «{where}»";
+        foreach (var rel in _model.PropertiesOf(ctx.Name).Where(r => r.Type == CalcType.Ref && r.Target != null && r.Name != "blast").Append(_model.Registry.Property(ctx.Name + ".blast")).OfType<PropertyDef>())
+            if (_model.Resolve(rel.Target!, name) is { } there)
+                return msg + $". Оно есть у связи [{_model.AliasOf(rel)}]: напишите [{_model.AliasOf(rel)}].[{_model.AliasOf(there)}]";
+        var props = _model.PropertiesOf(ctx.Name).ToList();
+        var close = Aliases.Closest(name, props.Select(p => _model.AliasOf(p)).Concat(props.Select(p => p.Name)));
+        return close.Count > 0 ? msg + $". Возможно, вы имели в виду {string.Join(" или ", close.Select(c => "[" + c + "]"))}" : msg;
     }
 
     /// <summary>Чтение свойства объекта с учётом пустой ссылки; записывает зависимость.</summary>
@@ -242,6 +250,7 @@ internal sealed class Compiler
             case "+":
             case "-":
             {
+                (left, right) = Align(left, right);
                 var unit = Additive(left, right, b);
                 var e = b.Op == "+" ? E.Add(left.Expr, right.Expr) : E.Subtract(left.Expr, right.Expr);
                 return new Bound(e, CalcType.Number, unit, Const: left.Const is { } lc && right.Const is { } rc ? (b.Op == "+" ? lc + rc : lc - rc) : null);
@@ -251,6 +260,7 @@ internal sealed class Compiler
             case "/":
                 return new Bound(E.Divide(left.Expr, right.Expr), CalcType.Number, left.Unit.Divide(right.Unit), Const: left.Const / right.Const);
             case "%":
+                (left, right) = Align(left, right);
                 return new Bound(E.Modulo(left.Expr, right.Expr), CalcType.Number, Additive(left, right, b));
             case "^":
             {
@@ -269,6 +279,26 @@ internal sealed class Compiler
     /// <summary>x^2 как Math.Pow(x, 2): Pow(x, 2) в .NET точно равен x·x, вызов оставлен для единообразия.</summary>
     private static E Square(E x) => E.Call(typeof(Math).GetMethod(nameof(Math.Pow))!, x, E.Constant(2.0));
 
+    /// <summary>
+    /// Совместимые единицы с разным масштабом (мм и м, г/см³ и кг/м³) приводятся к единице левого операнда — инженер
+    /// пишет <c>[Длина] + [Диаметр]</c>, не думая о to(). Константы и неизвестные единицы не трогаются.
+    /// </summary>
+    private static (Bound, Bound) Align(Bound l, Bound r)
+    {
+        if (l.Const != null || r.Const != null || l.Unit.IsUnknown || r.Unit.IsUnknown || !l.Unit.SameDimension(r.Unit)) return (l, r);
+        if (Math.Abs(l.Unit.Scale - r.Unit.Scale) <= 1e-12 * Math.Abs(l.Unit.Scale)) return (l, r);
+        return (l, ToUnit(r, l.Unit));
+    }
+
+    /// <summary>Значение в другой единице той же размерности: деление на целое (мм → м как /1000) или умножение.</summary>
+    private static Bound ToUnit(Bound x, Unit target)
+    {
+        var factor = x.Unit.FactorTo(target);
+        var inverse = 1 / factor;
+        E e = factor < 1 && Math.Abs(inverse - Math.Round(inverse)) < 1e-9 * inverse ? E.Divide(x.Expr, E.Constant(Math.Round(inverse))) : E.Multiply(x.Expr, E.Constant(factor));
+        return new Bound(e, CalcType.Number, target, Const: x.Const * factor);
+    }
+
     /// <summary>Единица суммы: одинаковая размерность; константа подстраивается под другой операнд; разный масштаб — ошибка (нужен to()).</summary>
     private static Unit Additive(Bound l, Bound r, Ast at)
     {
@@ -277,7 +307,7 @@ internal sealed class Compiler
         if (l.Unit.IsUnknown) return r.Unit;
         if (r.Unit.IsUnknown) return l.Unit;
         if (!l.Unit.SameDimension(r.Unit))
-            throw new CalcSyntaxException($"Несовместимые единицы: {l.Unit} и {r.Unit}", at.Position, at.Length);
+            throw new CalcSyntaxException($"Несовместимые единицы: {Aliases.RussianUnit(l.Unit.Symbol)} и {Aliases.RussianUnit(r.Unit.Symbol)} — их нельзя складывать и сравнивать", at.Position, at.Length);
         if (Math.Abs(l.Unit.Scale - r.Unit.Scale) > 1e-12 * Math.Abs(l.Unit.Scale))
             throw new CalcSyntaxException($"Разные единицы {l.Unit} и {r.Unit}: приведите явно, например to({l.Unit.Symbol}, …)", at.Position, at.Length);
         return l.Unit;
@@ -297,6 +327,7 @@ internal sealed class Compiler
         if (l.Type == CalcType.Enum && r.Type == CalcType.Enum && equality) return new Bound(Op(l.Expr, r.Expr), CalcType.Bool, Unit.One);
         if (l.Type == CalcType.Number && r.Type == CalcType.Number)
         {
+            (l, r) = Align(l, r);
             Additive(l, r, b);
             return new Bound(Op(l.Expr, r.Expr), CalcType.Bool, Unit.One);
         }
@@ -340,7 +371,8 @@ internal sealed class Compiler
 
     private Bound BindCall(CallAst c, Frame f)
     {
-        var name = c.Name.ToLowerInvariant();
+        var canonical = Aliases.Function(c.Name);
+        var name = canonical.ToLowerInvariant();
         var args = c.Args;
         if (Aggregates.Contains(name) || ((name is "min" or "max") && args.Count is 1 or 2 && IsListArgument(args[0], f)))
             return BindAggregate(name, c, f);
@@ -407,6 +439,7 @@ internal sealed class Compiler
                 {
                     var x = Bind(args[i], f);
                     RequireNumber(x, args[i]);
+                    (acc, x) = Align(acc, x);
                     var unit = Additive(acc, x, c);
                     acc = new Bound(E.Call(typeof(Math).GetMethod(name == "min" ? nameof(Math.Min) : nameof(Math.Max), new[] { typeof(double), typeof(double) })!, acc.Expr, x.Expr),
                         CalcType.Number, unit, Const: acc.Const is { } a && x.Const is { } b ? (name == "min" ? Math.Min(a, b) : Math.Max(a, b)) : null);
@@ -419,6 +452,8 @@ internal sealed class Compiler
                 var x = Number(args[0], f);
                 var lo = Number(args[1], f);
                 var hi = Number(args[2], f);
+                (x, lo) = Align(x, lo);
+                (x, hi) = Align(x, hi);
                 var unit = Additive(x, lo, c);
                 Additive(x, hi, c);
                 return new Bound(E.Call(typeof(Math).GetMethod(nameof(Math.Clamp), new[] { typeof(double), typeof(double), typeof(double) })!, x.Expr, lo.Expr, hi.Expr), CalcType.Number, unit);
@@ -446,14 +481,16 @@ internal sealed class Compiler
             case "param": return BindParam(c, f, lookup: false);
             case "lookup": return BindParam(c, f, lookup: true);
         }
-        if (_model.Registry.Builtins.TryGetValue(c.Name, out var builtin)) return BindBuiltin(builtin, c, f);
-        if (_model.Registry.Functions.TryGetValue(c.Name, out var fn))
+        if (_model.Registry.Builtins.TryGetValue(canonical, out var builtin)) return BindBuiltin(builtin, c, f);
+        if (_model.Registry.Functions.TryGetValue(canonical, out var fn))
         {
             Arity(c, fn.ArgCount);
             var arr = E.NewArrayInit(typeof(double), args.Select(a => Number(a, f).Expr));
             return new Bound(E.Invoke(E.Constant(fn.Invoke), arr), CalcType.Number, Unit.TryParse(fn.Unit, out var u) ? u : Unit.Unknown);
         }
-        throw Error($"Неизвестная функция «{c.Name}»", c);
+        var known = Aliases.Functions.Keys.Concat(Aliases.Functions.Values).Concat(_model.Registry.Builtins.Keys).Concat(_model.Registry.Functions.Keys);
+        var close = Aliases.Closest(c.Name, known);
+        throw Error($"Неизвестная функция «{c.Name}»" + (close.Count > 0 ? $". Возможно, вы имели в виду {string.Join(" или ", close)}" : ""), c);
     }
 
     private static void Arity(CallAst c, int n)
@@ -489,7 +526,7 @@ internal sealed class Compiler
 
     private (Bound, Bound, Unit) Unify(Bound a, Bound b, Ast at)
     {
-        if (a.Type == CalcType.Number && b.Type == CalcType.Number) return (a, b, Additive(a, b, at));
+        if (a.Type == CalcType.Number && b.Type == CalcType.Number) { (a, b) = Align(a, b); return (a, b, Additive(a, b, at)); }
         if (a.Type == CalcType.Enum && b.Type == CalcType.String) a = EnumToString(a);
         if (b.Type == CalcType.Enum && a.Type == CalcType.String) b = EnumToString(b);
         if (a.Type == CalcType.Ref && b.IsNull) return (a, b with { Expr = E.Constant(null, a.Expr.Type) }, Unit.One);
@@ -538,7 +575,8 @@ internal sealed class Compiler
             StringAst s => s.Value,
             _ => throw Error("Имя параметра — через точку или в кавычках", c.Args[0])
         };
-        var p = _model.ParameterOf(id) ?? throw Error($"Нет параметра «{id}»", c.Args[0]);
+        var p = _model.ParameterByName(id) ?? throw Error($"Нет параметра «{id}»" +
+            (Aliases.Closest(id, _model.Parameters.Select(x => x.Def.Id).Concat(_model.Parameters.Select(x => x.Def.NameRu))) is { Count: > 0 } close ? $". Возможно, вы имели в виду {string.Join(" или ", close.Select(x => "[" + x + "]"))}" : ""), c.Args[0]);
         if (lookup && p.Def.Table is not { Count: > 0 }) throw Error($"У параметра «{id}» нет таблицы", c.Args[0]);
         if (!lookup && p.Def.Table is { Count: > 0 }) throw Error($"«{id}» — таблица, используйте lookup({id}, x)", c.Args[0]);
         _deps.Add(new Dependency("param:" + p.Def.Id, BlastPath()));

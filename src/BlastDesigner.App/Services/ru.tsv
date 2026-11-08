@@ -2881,3 +2881,12 @@ Label of the holes on the plan	Подпись скважин на плане
 Line of the summary panel and of the summary block on the plan	Строка сводной панели и сводного блока на плане
 Report field: {0}	Поле отчёта: {0}
 The values appear once the profile is published.	Значения появятся после публикации профиля.
+Add a condition	Добавить условие
+Builder	Конструктор
+Delete the condition	Удалить условие
+Double-click: insert into the formula	Двойной щелчок — вставить в формулу
+No conditions: the variant always applies.	Условий нет: вариант действует всегда.
+Show code names	Показать кодовые имена
+This condition is too complex for the builder; edit it as text.	Условие слишком сложное для конструктора; правьте его текстом.
+all hold (AND)	все выполняются (И)
+any holds (OR)	любое выполняется (ИЛИ)
