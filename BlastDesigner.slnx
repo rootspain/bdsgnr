@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/BlastDesigner.App/BlastDesigner.App.csproj" />
+    <Project Path="src/BlastDesigner.Calc/BlastDesigner.Calc.csproj" />
     <Project Path="src/BlastDesigner.Domain/BlastDesigner.Domain.csproj" />
     <Project Path="src/BlastDesigner.Engine/BlastDesigner.Engine.csproj" />
     <Project Path="src/BlastDesigner.IO/BlastDesigner.IO.csproj" />

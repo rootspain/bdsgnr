@@ -9,6 +9,7 @@
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
+    <ProjectReference Include="..\..\src\BlastDesigner.Calc\BlastDesigner.Calc.csproj" />
     <ProjectReference Include="..\..\src\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
     <ProjectReference Include="..\..\src\BlastDesigner.Engine\BlastDesigner.Engine.csproj" />
     <ProjectReference Include="..\..\src\BlastDesigner.IO\BlastDesigner.IO.csproj" />
