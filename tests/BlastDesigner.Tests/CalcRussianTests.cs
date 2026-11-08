@@ -183,3 +183,95 @@ public class CalcPublishTests
         Assert.True(CalcService.IsOutOfRange(project, "hole.chargeMass", h));
     }
 }
+
+public class CalcLibraryTests
+{
+    public static IEnumerable<object[]> All() => FormulaLibrary.Templates.Select(t => new object[] { t.Name });
+
+    [Theory]
+    [MemberData(nameof(All))]
+    public void Template_CompilesAndEvaluatesOnBuiltIn(string name)
+    {
+        var t = FormulaLibrary.Templates.Single(x => x.Name == name);
+        var draft = CalcProfile.DeriveFrom(CalcService.BuiltIn, "lib");
+        FormulaLibrary.AddParameters(draft, t, id => CalcService.BuiltInModel.ParameterOf(id) != null);
+        draft.Properties.Add(new PropertyDef { Id = t.Context + ".fromLibrary", NameRu = "Из библиотеки", Unit = "?" });
+        draft.Formulas.Add(new FormulaDef { Property = t.Context + ".fromLibrary", Expression = FormulaLibrary.Build(t) });
+        var model = CalcService.Compile(draft);
+        Assert.False(model.HasErrors, string.Join("; ", model.Diagnostics));
+        var p = CalcParityTests.Generate(6);
+        var s = CalcService.Session(p, model);
+        object entity = t.Context switch
+        {
+            "blast" => p,
+            "hole" => p.Holes.First(x => !x.IsDummy && s.Value("hole.hasExplosive", x).Object is true),
+            "deck" => p.Holes.SelectMany(x => x.Decks).First(d => p.FindProduct(d.ProductId)?.IsExplosive == true),
+            _ => p.Entities.OfType<PointEntity>().First(x => x.Kind == PointKind.Monitoring)
+        };
+        var v = s.Value(t.Context + ".fromLibrary", entity);
+        Assert.False(v.IsError, v.Error);
+    }
+
+    [Fact]
+    public void Build_SubstitutesRussianAndExpressions()
+    {
+        var t = FormulaLibrary.Templates.Single(x => x.Name == "Удельный расход скважины");
+        Assert.Equal("if(volume > 0, chargeMass / volume, 0)", FormulaLibrary.Build(t));
+        Assert.Equal("if([Объём] > 0, ([Масса ВВ] * 2) / [Объём], 0)", FormulaLibrary.Build(t, new Dictionary<string, string> { ["q"] = "[Масса ВВ] * 2", ["v"] = "[Объём]" }));
+    }
+
+    [Fact]
+    public void Templates_MatchTheBuiltInFormulas()
+    {
+        var p = CalcParityTests.Generate(5);
+        var s = CalcService.Session(p);
+        var kuz = FormulaLibrary.Templates.Single(x => x.Name.StartsWith("Кузнецов"));
+        Assert.Equal(s.Number("blast.x50", p), s.Evaluate(s.Model.CompileExpression("blast", FormulaLibrary.Build(kuz)), p).Number, 9);
+    }
+}
+
+public class ParameterTableParserTests
+{
+    [Fact]
+    public void Excel_TabsAndDecimalComma()
+    {
+        var t = ParameterTableParser.Parse("R\tK\r\n1,5\t10,25\r\n0,5\t3\r\n", "?");
+        Assert.True(t.IsValid);
+        Assert.Equal(new[] { new TablePoint(0.5, 3), new TablePoint(1.5, 10.25) }, t.Points);
+    }
+
+    [Theory]
+    [InlineData("1;2\n3;4")]
+    [InlineData("1,2\n3,4")]
+    [InlineData("1 2\n3 4")]
+    [InlineData("x,y\n1,2\n3,4\n")]
+    public void Csv_Separators(string text)
+    {
+        var t = ParameterTableParser.Parse(text, "?");
+        Assert.True(t.IsValid);
+        Assert.Equal(new[] { new TablePoint(1, 2), new TablePoint(3, 4) }, t.Points);
+    }
+
+    [Fact]
+    public void DotDecimals_WithCommaSeparator() =>
+        Assert.Equal(new TablePoint(1.5, 2.5), ParameterTableParser.Parse("1.5,2.5", "?").Points.Single());
+
+    [Fact]
+    public void Units_ConvertedOrRefused()
+    {
+        var mm = ParameterTableParser.Parse("x\tL, мм\n1\t2000\n", "m");
+        Assert.Equal(2, mm.Points.Single().Y, 9);
+        Assert.Contains(mm.Notes, n => n.Contains("пересчитаны"));
+        Assert.False(ParameterTableParser.Parse("x\tM, кг\n1\t2\n", "m").IsValid);
+    }
+
+    [Fact]
+    public void BadRows_AreReported()
+    {
+        var t = ParameterTableParser.Parse("1\t2\nабв\t3\n1\t5\n", "?");
+        Assert.False(t.IsValid);
+        Assert.Contains(t.Errors, e => e.Contains("Строка 2"));
+        Assert.Contains(t.Errors, e => e.Contains("Ключ 1"));
+        Assert.False(ParameterTableParser.Parse("", "?").IsValid);
+    }
+}

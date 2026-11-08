@@ -3753,6 +3753,25 @@ Step("calculated properties hidden again", () =>
     vm.ToggleView(v => { v.CalcColumns = null; v.CalcLabels = null; v.ColorBy = null; });
     vm.Project!.Summary.CalcTotals = null;
 });
+Step("calculations window: simple mode, library formula, table of a parameter", () =>
+{
+    var task = vm.EditCalculations(); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var form = dlg.GetLogicalDescendants().OfType<CalcEditorForm>().First();
+    bool HasText(string t) => dlg.GetLogicalDescendants().OfType<TextBlock>().Any(b => b.Text == t);
+    if (form.FullMode || form.CodeNames) throw new Exception("the window should open in the simple mode");
+    if (!HasText("Масса ВВ") || HasText("hole.chargeMass")) throw new Exception("code names in the simple mode");
+    if (HasText(BlastDesigner.App.Services.Loc.T("Built-in algorithms"))) throw new Exception("built-in algorithms in the simple mode");
+    form.FullMode = true; Pump();
+    if (!HasText(BlastDesigner.App.Services.Loc.T("Built-in algorithms"))) throw new Exception("no built-in algorithms in the full mode");
+    form.FullMode = false; Pump();
+    form.Select("hole.powderFactor"); Pump();
+    form.ApplyTemplate(BlastDesigner.Engine.FormulaLibrary.Templates.First(t => t.Name == "Удельный расход скважины")); Pump();
+    if (form.DraftModel.HasErrors) throw new Exception("library formula: " + string.Join("; ", form.DraftModel.Diagnostics));
+    form.SetTable("site.vib.K", BlastDesigner.Engine.ParameterTableParser.Parse("1\t100\n2\t200", "?").Points); Pump();
+    if (!form.Draft.Parameters.Any(p => p.Id == "site.vib.K" && p.Table?.Count == 2)) throw new Exception("the table did not reach the draft");
+    dlg.Close(); Pump();
+});
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>
 {

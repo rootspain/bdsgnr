@@ -394,6 +394,8 @@ public sealed class CalcEditorForm : DockPanel
             SetFormulas(p.Id, formulas);
             ShowCenter();
         }, Loc.T("A formula used when its condition holds; the first by priority wins"));
+        var library = FormKit.Tool("rules", Loc.T("Insert from the library…"), () => _ = InsertFromLibrary(p), Loc.T("Formula library"));
+        library.IsEnabled = FormulaLibrary.For(p.Context).Count > 0;
         var revert = FormKit.Secondary(Loc.T("Revert to the base profile"), () =>
         {
             var baseFormulas = CalcService.BuiltIn.Formulas.Where(f => f.Property == p.Id).Select(f => f.Clone()).ToList();
@@ -404,7 +406,7 @@ public sealed class CalcEditorForm : DockPanel
         });
         revert.IsEnabled = IsModified(p.Id);
         _afterCompile = () => revert.IsEnabled = IsModified(p.Id);
-        _center.Children.Add(FormKit.Section(Loc.T("Formula"), variants, Ui.Row(8, add, revert)));
+        _center.Children.Add(FormKit.Section(Loc.T("Formula"), variants, Ui.Row(8, library, add, revert)));
 
         var preview = new StackPanel { Spacing = 4 };
         _center.Children.Add(FormKit.Section(Loc.T("Preview: before / after / Δ"), preview));
@@ -887,7 +889,9 @@ public sealed class CalcEditorForm : DockPanel
             Info(Loc.T("Unit"), _codeNames ? p.Unit : Aliases.RussianUnit(p.Unit)),
             Info(Loc.T("Now used"), effective?.ToString("0.###", CultureInfo.CurrentCulture) ?? "—"))));
         _center.Children.Add(new TextBlock { Text = Loc.T("Looked up from the bottom: hole → hole type → blast → mine → profile."), FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap });
-        _center.Children.Add(FormKit.Section(Loc.T("Table"), table));
+        _center.Children.Add(FormKit.Section(Loc.T("Table"), table, Ui.Row(8,
+            FormKit.Tool("import", Loc.T("Paste from clipboard"), () => _ = PasteTable(id)),
+            FormKit.Tool("open", Loc.T("Import CSV…"), () => _ = ImportCsv(id)))));
     }
 
     private readonly Dictionary<string, double?> _pendingBlast = new();
@@ -1291,6 +1295,98 @@ public sealed class CalcEditorForm : DockPanel
             });
         }
         await Dialogs.ShowModal(window);
+    }
+
+    // ---- библиотека формул и таблицы параметров ---------------------------
+
+    /// <summary>Подставляет типовую формулу в свойство: новые параметры добавляются в черновик, формула заменяет основную.</summary>
+    public void ApplyTemplate(FormulaTemplate t, IReadOnlyDictionary<string, string>? values = null)
+    {
+        FormulaLibrary.AddParameters(Draft, t, id => DraftModel.ParameterOf(id) != null);
+        Recompile();
+        SetFormula(FormulaLibrary.Build(t, values));
+        if (Selected != null && DraftModel.FindProperty(Selected) is { } p)
+        {
+            var main = Draft.Formulas.First(f => f.Property == p.Id);
+            main.Source = t.Source;
+            main.Comment = t.Description;
+            ShowCenter();
+        }
+    }
+
+    private async Task InsertFromLibrary(PropertyDef p)
+    {
+        var templates = FormulaLibrary.For(p.Context);
+        var list = new ListBox { ItemsSource = templates.Select(t => $"{t.Category}: {t.Name}").ToList(), SelectedIndex = 0, Height = 360, Width = 300 };
+        var details = new StackPanel { Spacing = 8, Width = 480 };
+        var slots = new Dictionary<string, ComboBox>();
+        var properties = DraftModel.PropertiesOf(p.Context).Where(x => x.Type == CalcType.Number && x.Id != p.Id).OrderBy(x => DraftModel.AliasOf(x)).Select(x => "[" + DraftModel.AliasOf(x) + "]").ToList();
+        void Fill()
+        {
+            details.Children.Clear();
+            slots.Clear();
+            if (list.SelectedIndex < 0) return;
+            var t = templates[list.SelectedIndex];
+            details.Children.Add(new TextBlock { Text = t.Name, FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, TextWrapping = TextWrapping.Wrap });
+            details.Children.Add(new TextBlock { Text = t.Description, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap });
+            details.Children.Add(new TextBlock { Text = Loc.T("Unit") + ": " + t.Unit + " · " + Loc.T("Source") + ": " + t.Source, Foreground = Look.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            foreach (var s in t.Slots)
+            {
+                var shown = FormulaText.ToRussian(DraftModel, p.Context, s.Default);
+                var box = new ComboBox { ItemsSource = properties.Prepend(shown).Distinct().ToList(), SelectedIndex = 0, MinWidth = 320 };
+                slots[s.Key] = box;
+                details.Children.Add(FormKit.Labeled(s.Name, box));
+            }
+            if (t.Parameters.Count > 0)
+                details.Children.Add(FormKit.Labeled(Loc.T("Coefficients"), new TextBlock
+                {
+                    Text = string.Join("\n", t.Parameters.Select(x => $"{x.NameRu} = {x.Value.ToString(CultureInfo.CurrentCulture)} ({x.Description})")),
+                    Foreground = Look.TextSoft, FontSize = 12, TextWrapping = TextWrapping.Wrap
+                }));
+        }
+        list.SelectionChanged += (_, _) => Fill();
+        Fill();
+        var content = new DockPanel { Children = { Docked(list, Avalonia.Controls.Dock.Left), new ScrollViewer { Content = details, Margin = new Thickness(14, 0, 0, 0) } } };
+        if (!await Dialogs.Custom(Loc.T("Formula library"), content, width: 840) || list.SelectedIndex < 0) return;
+        ApplyTemplate(templates[list.SelectedIndex], slots.ToDictionary(x => x.Key, x => x.Value.SelectedItem as string ?? ""));
+    }
+
+    /// <summary>Таблица из текста: разбор, предпросмотр с ошибками и единицей, запись в параметр черновика.</summary>
+    private async Task ImportTable(string id, string text)
+    {
+        var p = Flat().Parameters.First(x => x.Id == id);
+        var table = ParameterTableParser.Parse(text, p.Unit);
+        var rows = new StackPanel { Spacing = 2 };
+        foreach (var e in table.Errors) rows.Children.Add(new TextBlock { Text = e, Foreground = Bad, TextWrapping = TextWrapping.Wrap });
+        foreach (var n in table.Notes.Distinct()) rows.Children.Add(new TextBlock { Text = n, Foreground = Warn, TextWrapping = TextWrapping.Wrap });
+        foreach (var t in table.Points.Take(200)) rows.Children.Add(new TextBlock { Text = $"{t.X.ToString("0.###", CultureInfo.CurrentCulture)}    →    {t.Y.ToString("0.###", CultureInfo.CurrentCulture)}", FontFamily = Look.Mono, FontSize = 12, Foreground = Look.TextSoft });
+        var ok = await Dialogs.Custom(Loc.T("Table"), new ScrollViewer { Content = rows, MaxHeight = 420 }, () => table.IsValid, width: 460, subtitle: Loc.F("Rows: {0}", table.Points.Count));
+        if (!ok || !table.IsValid) return;
+        SetTable(id, table.Points);
+    }
+
+    /// <summary>Записывает таблицу в параметр черновика.</summary>
+    public void SetTable(string id, List<TablePoint> points)
+    {
+        var d = Draft.Parameters.FirstOrDefault(x => x.Id == id);
+        if (d == null) Draft.Parameters.Add(d = Flat().Parameters.First(x => x.Id == id).Clone());
+        d.Table = points;
+        Recompile();
+        ShowCenter();
+    }
+
+    private async Task PasteTable(string id)
+    {
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        var text = clipboard == null ? null : await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(clipboard);
+        if (string.IsNullOrWhiteSpace(text)) { await Dialogs.Info(Loc.T("The clipboard has no table of two numbers per line.")); return; }
+        await ImportTable(id, text);
+    }
+
+    private async Task ImportCsv(string id)
+    {
+        var path = await Dialogs.OpenFile(Loc.T("Import CSV…"), Dialogs.Filter("CSV", "*.csv", "*.txt"));
+        if (path != null) await ImportTable(id, await File.ReadAllTextAsync(path));
     }
 
     // ---- мелочи ---------------------------------------------------------
