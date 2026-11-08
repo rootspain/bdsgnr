@@ -549,7 +549,8 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
             Children =
             {
                 _rows,
-                new TextBlock { Text = Loc.Ui("Fields:") + " " + string.Join(" ", ReportDesign.Fields), FontSize = 11, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap }
+                new TextBlock { Text = Loc.Ui("Fields:") + " " + string.Join(" ", ReportDesign.Fields), FontSize = 11, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap },
+                CalcFieldChoice(() => stamps.Selected)
             }
         }));
         ShowRows(stamps.Selected);
@@ -840,8 +841,48 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
     }
 
     /// <summary>The lines of the selected stamp, a caption and a text each.</summary>
+    private TextBox? _stampText;
+
+    /// <summary>The calculated blast totals of the profile, with the user's own: the choice puts the field in the stamp text.</summary>
+    private Control CalcFieldChoice(Func<ReportStamp?> stamp)
+    {
+        var project = _vm.Project!;
+        var totals = CalcService.Calculated(project, "blast").OrderBy(d => d.BuiltIn ? d.Group : "").ThenBy(d => CalcService.Caption(project, d.Id)).ToList();
+        var choice = new ComboBox
+        {
+            Name = "calcField", MinWidth = 320, PlaceholderText = Loc.Ui("Insert a calculated field…"),
+            ItemsSource = totals.Select(d => (d.Group.Length > 0 ? d.Group + ": " : "") + CalcService.Caption(project, d.Id)).ToList()
+        };
+        choice.SelectionChanged += (_, _) =>
+        {
+            if (choice.SelectedIndex < 0) return;
+            InsertCalcField(stamp(), totals[choice.SelectedIndex].Id);
+            choice.SelectedIndex = -1;
+        };
+        return choice;
+    }
+
+    /// <summary>Puts a calculated field where the stamp text was being edited; with no such place, on a new row captioned with its name.</summary>
+    public void InsertCalcField(ReportStamp? stamp, string propertyId)
+    {
+        var token = "{calc:" + propertyId + "}";
+        if (_stampText is { } box)
+        {
+            var text = box.Text ?? "";
+            var caret = Math.Clamp(box.CaretIndex, 0, text.Length);
+            box.Text = text[..caret] + token + text[caret..];
+            box.CaretIndex = caret + token.Length;
+            return;
+        }
+        if (stamp == null) return;
+        stamp.Rows.Add(new StampRow { Label = CalcService.Caption(_vm.Project!, propertyId), Text = token });
+        ShowRows(stamp);
+        Rebuild();
+    }
+
     private void ShowRows(ReportStamp? stamp)
     {
+        _stampText = null;
         _rows.Children.Clear();
         if (stamp == null) return;
         _rows.Children.Add(ColumnWidths(stamp));
@@ -851,6 +892,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
             var text = FormKit.Text(row.Text);
             label.TextChanged += (_, _) => { row.Label = label.Text ?? ""; Rebuild(); };
             text.TextChanged += (_, _) => { row.Text = text.Text ?? ""; Rebuild(); };
+            text.GotFocus += (_, _) => _stampText = text;
             var labelAlign = AlignButton("stampLabelAlign", Loc.Ui("Alignment of the caption: click for the next one"), row.LabelAlign, a => row.LabelAlign = a);
             var textAlign = AlignButton("stampTextAlign", Loc.Ui("Alignment of the text: click for the next one"), row.TextAlign, a => row.TextAlign = a);
             var delete = FormKit.Tool("trash", null, () => { stamp.Rows.Remove(row); ShowRows(stamp); Rebuild(); }, Loc.Ui("Delete"));

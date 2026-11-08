@@ -279,8 +279,10 @@ public sealed class ReportLayout
     public static Dictionary<string, string> Fields(BlastProject project, string title, DateTime now)
     {
         var fields = HeaderFields(project, title, now);
+        // один сеанс на все итоги: ячейки и МВЗ считаются один раз, а не на каждое поле
+        var session = CalcService.Live(project) ?? CalcService.Session(project);
         foreach (var d in CalcService.Calculated(project, "blast"))
-            fields["{calc:" + d.Id + "}"] = CalcService.Format(project, d.Id, project);
+            fields["{calc:" + d.Id + "}"] = CalcService.Format(session, d.Id, project);
         return fields;
     }
 
