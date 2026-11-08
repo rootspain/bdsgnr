@@ -229,7 +229,7 @@ public static class ExclusionZone
     public static Result Compute(BlastProject project)
     {
         Timing.Solve(project);
-        var s = CalcService.Session(project);
+        var s = CalcService.Live(project) ?? CalcService.Session(project);
         double V(string id) => Charging.Calculated(s, id, project, 0);
         return new Result(V("blast.micOrMaxCharge"), V("blast.vibrationRadius"), V("blast.airblastRadius"), V("blast.flyrockClearance"));
     }

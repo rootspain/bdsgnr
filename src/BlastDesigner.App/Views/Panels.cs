@@ -421,6 +421,9 @@ public sealed class PropertiesPanel : DockPanel
         };
         var timed = holes.Where(h => h.FiringTimeMs.HasValue).ToList();
         if (timed.Count > 0) text.Add(Loc.F("Firing: {0:0}–{1:0} ms ({2} timed)", timed.Min(h => h.FiringTimeMs), timed.Max(h => h.FiringTimeMs), timed.Count));
+        // the calculated blast totals chosen in Edit ▸ Calculations, from the document's calculation session
+        foreach (var id in p.Summary.CalcTotals ?? new())
+            text.Add($"{CalcService.Caption(p, id)}: {CalcService.Format(p, id, p)}");
         return new TextBlock { Text = string.Join("\n", text), Margin = new Thickness(6), TextWrapping = TextWrapping.Wrap };
     }
 }
@@ -460,6 +463,8 @@ public sealed partial class HoleRowVm : ObservableObject
     public string Time => Hole.FiringTimeMs?.ToString("0") ?? "";
     public string Sequence => Hole.FiringSequence?.ToString() ?? "";
     public string Row => _vm.Project!.Rows.FirstOrDefault(r => r.Id == Hole.RowId)?.Name ?? "";
+    /// <summary>A calculated property of the hole (<c>hole.volume</c>), from the document's calculation session.</summary>
+    public string Calc(string propertyId) => CalcService.Format(_vm.Project!, propertyId, Hole, false);
 }
 
 /// <summary>Table view of holes (View ▸ Table view). Editable cells; selection is synchronised with the plan.</summary>
@@ -501,6 +506,7 @@ public sealed class HoleTable : DockPanel
         Col("Time", nameof(HoleRowVm.Time), true);
         Col("Seq.", nameof(HoleRowVm.Sequence), true);
         Col("Row", nameof(HoleRowVm.Row), true);
+        _fixedColumns = _grid.Columns.Count;
         _grid.SelectionChanged += (_, _) =>
         {
             if (_syncing || _vm.Doc == null) return;
@@ -515,6 +521,9 @@ public sealed class HoleTable : DockPanel
         var zoom = new Button { Content = Loc.T("Zoom to selection") };
         zoom.Click += (_, _) => _vm.ZoomSelection();
         top.Children.Add(zoom);
+        var columns = new Button { Content = Loc.T("Calculated columns…"), Name = "calcColumns" };
+        columns.Click += (_, _) => _ = ChooseColumns();
+        top.Children.Add(columns);
         SetDock(top, Dock.Top);
         Children.Add(top);
         Children.Add(_grid);
@@ -522,10 +531,50 @@ public sealed class HoleTable : DockPanel
         vm.SelectionRefreshed += SyncSelection;
     }
 
+    private readonly int _fixedColumns;
+
+    /// <summary>The calculated properties chosen as columns, after the fixed ones; read-only, values from the calculation session.</summary>
+    private void CalcColumns(BlastProject p)
+    {
+        while (_grid.Columns.Count > _fixedColumns) _grid.Columns.RemoveAt(_grid.Columns.Count - 1);
+        foreach (var id in p.View.CalcColumns ?? new())
+        {
+            var unit = CalcService.UnitText(p, id);
+            var property = id;
+            _grid.Columns.Add(new DataGridTemplateColumn
+            {
+                Header = CalcService.Caption(p, id) + (unit.Length > 0 ? ", " + unit : ""),
+                IsReadOnly = true,
+                CellTemplate = new FuncDataTemplate<HoleRowVm>((row, _) => new TextBlock
+                {
+                    Text = row?.Calc(property) ?? "", HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0)
+                })
+            });
+        }
+    }
+
+    /// <summary>The columns of calculated hole properties (the same go to the CSV export of holes).</summary>
+    public async Task ChooseColumns()
+    {
+        var p = _vm.Project;
+        if (p == null) return;
+        var chosen = (p.View.CalcColumns ?? new()).ToHashSet();
+        var boxes = CalcService.Calculated(p, "hole").Where(d => d.Type != BlastDesigner.Calc.CalcType.Bool)
+            .Select(d => new CheckBox { Content = CalcService.Caption(p, d.Id) + "  (" + d.Id + ")", Tag = d.Id, IsChecked = chosen.Contains(d.Id) }).ToList();
+        var list = new StackPanel { Spacing = 2 };
+        foreach (var b in boxes) list.Children.Add(b);
+        if (!await Dialogs.Custom(Loc.T("Calculated columns"), new ScrollViewer { Content = list, MaxHeight = 520 }, width: 460,
+                subtitle: Loc.T("Columns of the hole table and of the CSV export of holes"))) return;
+        var ids = boxes.Where(b => b.IsChecked == true).Select(b => (string)b.Tag!).ToList();
+        _vm.ToggleView(v => v.CalcColumns = ids.Count > 0 ? ids : null);
+        Refresh();
+    }
+
     public void Refresh()
     {
         var p = _vm.Project;
         if (p == null) { _grid.ItemsSource = null; return; }
+        CalcColumns(p);
         var f = _filter.Text?.Trim();
         var rows = p.Holes.Where(h => string.IsNullOrEmpty(f) || h.Label.Contains(f, StringComparison.OrdinalIgnoreCase))
             .Select(h => new HoleRowVm(_vm, h)).ToList();

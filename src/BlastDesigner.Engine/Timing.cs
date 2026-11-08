@@ -35,6 +35,8 @@ public static class Timing
     /// </summary>
     public static void Solve(BlastProject project)
     {
+        // the solve sets the firing times past the document: the long calculation session looks at them again
+        CalcService.Touch(project);
         var holes = project.Holes.ToDictionary(h => h.Id);
         var ips = project.Entities.OfType<InitiationPoint>().ToDictionary(i => i.Id);
         var ties = project.Ties.ToList();
@@ -355,7 +357,7 @@ public static class Timing
     /// <summary>Holes and charge firing within a sliding window starting at each firing time (Time envelope).</summary>
     public static List<EnvelopePoint> TimeEnvelope(BlastProject project, double windowMs)
     {
-        var s = CalcService.Session(project);
+        var s = CalcService.Live(project) ?? CalcService.Session(project);
         return TimeEnvelope(project, windowMs, h => Charging.Calculated(s, "hole.chargeMass", h, 0));
     }
 

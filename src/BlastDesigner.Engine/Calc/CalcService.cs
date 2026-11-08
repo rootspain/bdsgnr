@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using BlastDesigner.Calc;
+using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 
@@ -119,6 +121,91 @@ public static class CalcService
         session.Scope.BuiltinArgs["cellArea.holes"] = allReal;
         session.Scope.BuiltinArgs["cellArea.boundary"] = boundary ?? Quantities.DefaultBoundary(project, allReal);
     }
+
+    // ---- долгий сеанс документа -----------------------------------------
+
+    private static readonly List<WeakReference<LiveCalc>> LiveSessions = new();
+
+    /// <summary>Заводит долгий сеанс открытого документа (один на документ; повторный вызов возвращает тот же).</summary>
+    public static LiveCalc Attach(Document doc)
+    {
+        lock (LiveSessions)
+        {
+            LiveSessions.RemoveAll(w => !w.TryGetTarget(out var l) || l.Document == null);
+            foreach (var w in LiveSessions)
+                if (w.TryGetTarget(out var l) && ReferenceEquals(l.Document, doc)) return l;
+            var live = new LiveCalc(doc);
+            LiveSessions.Add(new WeakReference<LiveCalc>(live));
+            return live;
+        }
+    }
+
+    /// <summary>Долгий сеанс документа с этим проектом, готовый отвечать; null — считать коротким сеансом.</summary>
+    public static CalcSession? Live(BlastProject project)
+    {
+        lock (LiveSessions)
+        {
+            for (int i = 0; i < LiveSessions.Count; i++)
+                if (LiveSessions[i].TryGetTarget(out var l) && l.SessionFor(project) is { } s) return s;
+        }
+        return null;
+    }
+
+    /// <summary>Модель проекта изменилась мимо документа (времена после Timing.Solve): долгие сеансы синхронизируются заново.</summary>
+    public static void Touch(BlastProject project)
+    {
+        lock (LiveSessions)
+            foreach (var w in LiveSessions)
+                if (w.TryGetTarget(out var l) && ReferenceEquals(l.Document?.Project, project)) l.Touch();
+    }
+
+    /// <summary>Сеанс для чтения значения сущности: долгий, если он знает сущность, иначе короткий.</summary>
+    public static CalcSession SessionFor(BlastProject project, string context, object entity) =>
+        Live(project) is { } s && s.Knows(context, entity) ? s : Session(project);
+
+    /// <summary>Значение свойства (<c>hole.volume</c>) сущности проекта.</summary>
+    public static CalcValue Value(BlastProject project, string propertyId, object entity)
+    {
+        var dot = propertyId.IndexOf('.');
+        var context = dot > 0 ? propertyId[..dot] : "";
+        return SessionFor(project, context, entity).Value(propertyId, entity);
+    }
+
+    /// <summary>Названия свойств по-русски (окна, подписи плана, отчёты); иначе по-английски. Задаёт приложение по языку.</summary>
+    public static bool RussianNames { get; set; } = true;
+
+    /// <summary>Название свойства для столбца, подписи или отчёта; без названия — имя свойства.</summary>
+    public static string Caption(BlastProject project, string propertyId)
+    {
+        var d = ModelFor(project).FindProperty(propertyId);
+        if (d == null) return propertyId;
+        var name = RussianNames ? (d.NameRu.Length > 0 ? d.NameRu : d.NameEn) : (d.NameEn.Length > 0 ? d.NameEn : d.NameRu);
+        return name.Length > 0 ? name : d.Name;
+    }
+
+    /// <summary>Единица свойства для вывода: пусто для безразмерных и неизвестных.</summary>
+    public static string UnitText(BlastProject project, string propertyId) =>
+        ModelFor(project).FindProperty(propertyId)?.Unit is { } u && u is not ("?" or "1" or "" or "-") ? u.Replace("m3", "m³").Replace("m2", "m²") : "";
+
+    /// <summary>Значение свойства текстом по его формату (с единицей); ошибка — «#».</summary>
+    public static string Format(BlastProject project, string propertyId, object entity, bool withUnit = true)
+    {
+        var v = Value(project, propertyId, entity);
+        if (v.IsError) return "#";
+        var d = ModelFor(project).FindProperty(propertyId);
+        var text = v.Object switch
+        {
+            bool b => b ? "✓" : "—",
+            string s => s,
+            _ => v.Number.ToString(d?.Format is { Length: > 0 } f ? f : "0.##", CultureInfo.CurrentCulture)
+        };
+        var unit = withUnit && v.Object == null ? UnitText(project, propertyId) : "";
+        return unit.Length > 0 ? text + " " + unit : text;
+    }
+
+    /// <summary>Вычисляемые свойства контекста профиля проекта (для выбора столбцов, подписей, итогов).</summary>
+    public static IReadOnlyList<PropertyDef> Calculated(BlastProject project, string context) =>
+        ModelFor(project).Nodes.Where(n => n.Context.Name == context).Select(n => n.Property).OrderBy(p => p.Group).ThenBy(p => p.Name).ToList();
 
     // ---- встроенные алгоритмы -------------------------------------------
 

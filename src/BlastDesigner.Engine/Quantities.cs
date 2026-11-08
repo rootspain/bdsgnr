@@ -216,7 +216,7 @@ public static class Vibration
         public Charges(BlastProject project)
         {
             _m = project.Vibration;
-            var calc = CalcService.Session(project);
+            var calc = CalcService.Live(project) ?? CalcService.Session(project);
             var holes = project.Holes.Where(h => !h.IsDummy).Select(h => (H: h, Q: Charging.Calculated(calc, "hole.chargeMass", h, 0))).Where(x => x.Q > 0).ToList();
             _holes = holes.Select(x => (x.H.Collar, x.Q)).ToList();
             var timed = holes.Where(x => x.H.FiringTimeMs.HasValue).OrderBy(x => x.H.FiringTimeMs).ToList();

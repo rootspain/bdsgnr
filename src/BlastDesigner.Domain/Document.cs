@@ -40,6 +40,12 @@ public sealed class Document
 
     public HashSet<Guid> Selection { get; } = new();
 
+    /// <summary>
+    /// A change of <see cref="Execute"/> is running: the model is half changed and <see cref="Changed"/> has not been
+    /// raised yet, so whatever keeps values worked out from it (the calculation session) must not answer from them.
+    /// </summary>
+    public bool IsChanging { get; private set; }
+
     /// <summary>Raised after any model change, undo or redo.</summary>
     public event EventHandler? Changed;
     /// <summary>Raised when the selection set changes.</summary>
@@ -58,6 +64,7 @@ public sealed class Document
         var before = TakeSnapshot();
         var selectionBefore = Selection.ToArray();
         var links = InitiationLinks.Capture(Project);
+        IsChanging = true;
         try
         {
             change(Project);
@@ -66,12 +73,14 @@ public sealed class Document
         }
         catch
         {
+            IsChanging = false;
             Restore(before);
             // the restored project is a new object without the solved times: the listeners work them out again
             PruneSelection();
             NotifyViewChanged();
             throw;
         }
+        IsChanging = false;
         Push(new UndoEntry(name, before, selectionBefore));
         _redo.Clear();
         RememberAttachmentData();

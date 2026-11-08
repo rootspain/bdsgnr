@@ -333,6 +333,8 @@ public sealed class CalcEditorForm : DockPanel
             FormKit.Labeled(Loc.T("Unit"), Bound(def.Unit, v => { if (v != def.Unit) Own(d => d.Unit = v); })),
             FormKit.Labeled(Loc.T("Format"), Bound(def.Format, v => { if (v != def.Format) Own(d => d.Format = v); })))));
 
+        if (Shown(p) is { } shown) _center.Children.Add(FormKit.Section(Loc.T("Show"), shown));
+
         var formulas = Flat().Formulas.Where(f => f.Property == p.Id).OrderBy(f => f.Priority).ToList();
         if (formulas.Count == 0) formulas.Add(new FormulaDef { Property = p.Id, Expression = "0" });
         _formulas = formulas;
@@ -361,6 +363,46 @@ public sealed class CalcEditorForm : DockPanel
         _previewPanel = preview;
         _previewProperty = p.Id;
         UpdatePreview();
+    }
+
+    /// <summary>
+    /// Where the property is shown: a column of the hole table and the CSV export, a label on the plan, the colour of the
+    /// collars (hole properties); a line of the summary panel and of the summary block (blast totals); its report field.
+    /// Applied at once, as view settings of the project.
+    /// </summary>
+    private Control? Shown(PropertyDef p)
+    {
+        var view = _project.View;
+        CheckBox Box(string text, string name, bool on, Action<bool> set)
+        {
+            var b = new CheckBox { Content = text, Name = name, IsChecked = on };
+            b.IsCheckedChanged += (_, _) => { var v = b.IsChecked == true; _vm.ToggleView(_ => set(v)); };
+            return b;
+        }
+        static List<string>? Toggle(List<string>? list, string id, bool on)
+        {
+            var l = (list ?? new()).Where(x => x != id).ToList();
+            if (on) l.Add(id);
+            return l.Count > 0 ? l : null;
+        }
+        var panel = new StackPanel { Spacing = 6 };
+        if (p.Context == "hole")
+        {
+            panel.Children.Add(Box(Loc.T("Column of the hole table and of the CSV export"), "showColumn", view.CalcColumns?.Contains(p.Id) == true, on => view.CalcColumns = Toggle(view.CalcColumns, p.Id, on)));
+            panel.Children.Add(Box(Loc.T("Label of the holes on the plan"), "showLabel", view.CalcLabels?.Contains(p.Id) == true, on => view.CalcLabels = Toggle(view.CalcLabels, p.Id, on)));
+            if (p.Type == CalcType.Number)
+                panel.Children.Add(Box(Loc.T("Colour the collars by it"), "showColour", view.ColorBy == p.Id, on => view.ColorBy = on ? p.Id : view.ColorBy == p.Id ? null : view.ColorBy));
+        }
+        else if (p.Context == "blast")
+        {
+            var summary = _project.Summary;
+            panel.Children.Add(Box(Loc.T("Line of the summary panel and of the summary block on the plan"), "showTotal", summary.CalcTotals?.Contains(p.Id) == true, on => summary.CalcTotals = Toggle(summary.CalcTotals, p.Id, on)));
+            panel.Children.Add(new TextBlock { Text = Loc.F("Report field: {0}", "{calc:" + p.Id + "}"), FontSize = 11.5, Foreground = Look.Muted });
+        }
+        else return null;
+        if (_published.NodeOf(p.Id) == null)
+            panel.Children.Add(new TextBlock { Text = Loc.T("The values appear once the profile is published."), FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap });
+        return panel;
     }
 
     private StackPanel? _previewPanel;

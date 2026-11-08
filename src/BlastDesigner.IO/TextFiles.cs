@@ -204,16 +204,29 @@ public static class TextFiles
     private static string F(double v) => v.ToString("0.###", CultureInfo.InvariantCulture);
     private static string Csv(string s) => s.Contains(',') || s.Contains('"') ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
 
+    /// <summary>A calculated value for a CSV cell: invariant number, the text of a string, empty for an error or a missing value.</summary>
+    private static string CalcValue(BlastProject project, string propertyId, Hole h) =>
+        CalcService.Value(project, propertyId, h) switch
+        {
+            { IsError: true } => "",
+            { Object: bool b } => b ? "1" : "0",
+            { Object: string s } => Csv(s),
+            var v => F(v.Number)
+        };
+
     /// <summary>Hole table export (File ▸ Export ▸ Text file).</summary>
     public static string ExportHoles(BlastProject project, IEnumerable<Hole> holes)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Label,CollarX,CollarY,CollarZ,ToeX,ToeY,ToeZ,Angle,Bearing,Length,Diameter,Subdrill,HoleType,State,ExplosiveKg,FiringTime");
+        // the calculated properties chosen as columns of the hole table follow the fixed columns, named by their ids
+        var calc = project.View.CalcColumns ?? new List<string>();
+        sb.AppendLine("Label,CollarX,CollarY,CollarZ,ToeX,ToeY,ToeZ,Angle,Bearing,Length,Diameter,Subdrill,HoleType,State,ExplosiveKg,FiringTime" + string.Concat(calc.Select(c => "," + Csv(c))));
         foreach (var h in holes)
         {
             var toe = h.Toe;
             sb.AppendLine(string.Join(",", Csv(h.Label), F(h.Collar.X), F(h.Collar.Y), F(h.Collar.Z), F(toe.X), F(toe.Y), F(toe.Z), F(h.Angle), F(h.Bearing),
-                F(h.EffectiveLength), F(h.Diameter), F(h.Subdrill), h.HoleType, h.State, F(Charging.ExplosiveMass(project, h)), h.FiringTimeMs is double t ? F(t) : ""));
+                F(h.EffectiveLength), F(h.Diameter), F(h.Subdrill), h.HoleType, h.State, F(Charging.ExplosiveMass(project, h)), h.FiringTimeMs is double t ? F(t) : "")
+                + string.Concat(calc.Select(c => "," + CalcValue(project, c, h))));
         }
         return sb.ToString();
     }

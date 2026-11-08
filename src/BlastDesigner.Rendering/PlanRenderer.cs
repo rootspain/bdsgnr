@@ -70,6 +70,33 @@ public static class PlanRenderer
     private static string F(string format, params object[] args) => string.Format(Translate(format), args);
 
     [ThreadStatic] private static bool _dark;
+    /// <summary>Collars coloured by a calculated property this frame: the property and the range of its values over the drawn holes.</summary>
+    [ThreadStatic] private static (string Id, double Min, double Max)? _colorBy;
+
+    private static (string, double, double)? ColorRange(BlastProject project, List<Hole> holes)
+    {
+        if (project.View.ColorBy is not { Length: > 0 } id) return null;
+        double min = double.MaxValue, max = double.MinValue;
+        foreach (var h in holes)
+            if (CalcService.Value(project, id, h) is { IsError: false, Object: null } v && !double.IsInfinity(v.Number))
+            {
+                min = Math.Min(min, v.Number);
+                max = Math.Max(max, v.Number);
+            }
+        return min <= max ? (id, min, max) : null;
+    }
+
+    /// <summary>The colour of a hole: by its type, or on the blue-to-red ramp of the calculated property chosen to colour by (grey without a value).</summary>
+    private static SKColor HoleColour(BlastProject project, Hole h)
+    {
+        if (_colorBy is { } c)
+        {
+            var v = CalcService.Value(project, c.Id, h);
+            if (v.IsError || v.Object != null || double.IsInfinity(v.Number)) return new SKColor(0xFF9CA3AF);
+            return ColorRamp.Heat(c.Max - c.Min < 1e-12 ? 0.5 : (v.Number - c.Min) / (c.Max - c.Min));
+        }
+        return Adapt(new SKColor(project.Design.HoleTypes.FirstOrDefault(t => t.Index == h.HoleType)?.Color ?? 0xFF1E3A8A));
+    }
     [ThreadStatic] private static float _topInset;
 
     /// <summary>Colour for text and outlines that contrasts with the current background (black on light, light grey on dark).</summary>
@@ -275,6 +302,7 @@ public static class PlanRenderer
             foreach (var h in holes) { var mc = BeginMove(h); DrawHoleTracks(canvas, cam, h, view); EndMove(mc); }
         // Depth lines and charge columns of all holes in one batch, under the collars: in 3D with the charge shown they
         // were three or four thick lines per hole, thousands of draws a frame. Dragged holes draw their own.
+        _colorBy = ColorRange(project, holes);
         var columns = new LineMesh();
         foreach (var h in holes)
             if (moved?.Contains(h.Id) != true) DrawHoleColumn(canvas, cam, project, h, opt, fill, columns);
@@ -967,7 +995,7 @@ public static class PlanRenderer
         var (tx, ty) = cam.ToScreen(h.Toe);
         if (Math.Abs(tx - x) + Math.Abs(ty - y) <= 1) return;
         var selected = opt.Selection.Contains(h.Id);
-        var typeColor = Adapt(new SKColor(project.Design.HoleTypes.FirstOrDefault(t => t.Index == h.HoleType)?.Color ?? 0xFF1E3A8A));
+        var typeColor = HoleColour(project, h);
         var color = selected ? opt.SelectionColor : typeColor;
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
         if (!view.CollarsOnly) lines.Line(color.WithAlpha(160), 1, x, y, tx, ty);
@@ -991,7 +1019,7 @@ public static class PlanRenderer
     {
         var view = project.View;
         var selected = opt.Selection.Contains(h.Id);
-        var typeColor = Adapt(new SKColor(project.Design.HoleTypes.FirstOrDefault(t => t.Index == h.HoleType)?.Color ?? 0xFF1E3A8A));
+        var typeColor = HoleColour(project, h);
         var color = selected ? opt.SelectionColor : typeColor;
         var (x, y) = cam.ToScreen(h.Collar);
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
@@ -1075,6 +1103,9 @@ public static class PlanRenderer
                 if (HoleLabelLayout.IsShown(view, l))
                     foreach (var t in LabelText(project, h, l))
                         lines.Add((t, l == HoleLabel.Number ? number : l is HoleLabel.SurfaceTime or HoleLabel.InholeDelay or HoleLabel.HoleTime ? timing : ink));
+            // the calculated properties chosen in Edit ▸ Calculations go under the labels of the right side
+            if (onRight && view.CalcLabels is { Count: > 0 } calc && !h.IsDummy)
+                foreach (var id in calc) lines.Add((CalcService.Format(project, id, h), ink));
             // 11 px a line; the first baseline puts the middle of the column at the collar centre
             var top = y - lines.Count * 11 / 2f + 8;
             for (int i = 0; i < lines.Count; i++)
@@ -1443,6 +1474,8 @@ public static class PlanRenderer
             lines.Add(F("Holes: {0}   Ø {1:0} mm   mean length {2:0.0} m", holes.Count, holes.Average(h => h.Diameter), holes.Average(h => h.EffectiveLength)));
         if (project.Summary.ShowQuantities && holes.Count > 0)
             lines.Add(F("Explosive: {0:0} kg", holes.Sum(h => Charging.ExplosiveMass(project, h))));
+        foreach (var id in project.Summary.CalcTotals ?? new())
+            lines.Add($"{CalcService.Caption(project, id)}: {CalcService.Format(project, id, project)}");
         if (lines.Count == 0) return;
         text.TextSize = 11;
         var w = lines.Max(l => text.MeasureText(l)) + 16;

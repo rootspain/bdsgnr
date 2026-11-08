@@ -3720,6 +3720,34 @@ Step("calculations window: check while typing, preview on the selected holes, pu
     if (Directory.Exists(calcFolder))
         foreach (var f in Directory.GetFiles(calcFolder).Where(f => !filesBefore.Contains(f))) File.Delete(f);
 });
+Step("calculated properties shown: table column, plan label, collar colours, summary line, CSV", () =>
+{
+    var task = vm.EditCalculations(); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var form = dlg.GetLogicalDescendants().OfType<CalcEditorForm>().First();
+    CheckBox Box(string name) => dlg.GetLogicalDescendants().OfType<CheckBox>().First(b => b.Name == name);
+    form.Select("hole.volume"); Pump();
+    Box("showColumn").IsChecked = true; Box("showLabel").IsChecked = true; Box("showColour").IsChecked = true; Pump();
+    form.Select("blast.powderFactor"); Pump();
+    Box("showTotal").IsChecked = true; Pump();
+    dlg.Close(); Pump();
+    var view = vm.Project!.View;
+    if (view.CalcColumns?.Contains("hole.volume") != true || view.CalcLabels?.Contains("hole.volume") != true || view.ColorBy != "hole.volume" || vm.Project.Summary.CalcTotals?.Contains("blast.powderFactor") != true)
+        throw new Exception("the show switches did not reach the project");
+    if (!TextFiles.ExportHoles(vm.Project, vm.Project.Holes).Split('\n')[0].Contains("hole.volume")) throw new Exception("CSV without the calculated column");
+    vm.PlanView(); vm.ZoomAll();
+    window.ToggleTable(); Pump();
+    var table = window.GetLogicalDescendants().OfType<HoleTable>().First();
+    var grid = table.GetLogicalDescendants().OfType<DataGrid>().First();
+    if (!grid.Columns.Any(c => (c.Header as string)?.StartsWith(BlastDesigner.Engine.CalcService.Caption(vm.Project, "hole.volume")) == true)) throw new Exception("no calculated column in the hole table");
+});
+Shot("91_calculated_properties");
+Step("calculated properties hidden again", () =>
+{
+    window.ToggleTable();
+    vm.ToggleView(v => { v.CalcColumns = null; v.CalcLabels = null; v.ColorBy = null; });
+    vm.Project!.Summary.CalcTotals = null;
+});
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>
 {

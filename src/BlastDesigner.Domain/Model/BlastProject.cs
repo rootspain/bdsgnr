@@ -263,6 +263,8 @@ public sealed class SummaryBlock
     public bool ShowQuantities { get; set; } = true;
     public bool ShowPattern { get; set; } = true;
     public string Corner { get; set; } = "TopRight";
+    /// <summary>Calculated blast totals listed in the summary panel and the summary block of the plan (ids such as <c>blast.powderFactor</c>).</summary>
+    public List<string>? CalcTotals { get; set; }
 }
 
 /// <summary>Saved camera and visibility for the main view.</summary>
@@ -303,6 +305,12 @@ public sealed class ViewState
     public bool ShowDipTrack { get; set; }
     /// <summary>Marker at the design grade (toe minus subdrill).</summary>
     public bool ShowGradePoint { get; set; }
+    /// <summary>Calculated properties of holes shown as columns of the hole table and of the CSV export (ids such as <c>hole.volume</c>).</summary>
+    public List<string>? CalcColumns { get; set; }
+    /// <summary>Calculated properties of holes written next to the collar, after the labels of <see cref="HoleLabel"/>.</summary>
+    public List<string>? CalcLabels { get; set; }
+    /// <summary>A calculated property of holes the collars are coloured by (blue lowest to red highest); null: by hole type.</summary>
+    public string? ColorBy { get; set; }
     /// <summary>Offset of the as-drilled collar and toe from the design, with its distance.</summary>
     public bool ShowDeviation { get; set; }
     /// <summary>Burden from front-row holes to the crest, drawn and labelled.</summary>

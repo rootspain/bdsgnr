@@ -2872,3 +2872,12 @@ once for the blast	один раз на взрыв
 per entity	по объекту
 x; y on each line	x; y в каждой строке
 {0} holes, {1} blast totals	скважин: {0}, итогов взрыва: {1}
+Calculated columns	Вычисляемые столбцы
+Calculated columns…	Вычисляемые столбцы…
+Colour the collars by it	Раскрашивать устья по значению
+Column of the hole table and of the CSV export	Столбец таблицы скважин и экспорта CSV
+Columns of the hole table and of the CSV export of holes	Столбцы таблицы скважин и экспорта скважин в CSV
+Label of the holes on the plan	Подпись скважин на плане
+Line of the summary panel and of the summary block on the plan	Строка сводной панели и сводного блока на плане
+Report field: {0}	Поле отчёта: {0}
+The values appear once the profile is published.	Значения появятся после публикации профиля.

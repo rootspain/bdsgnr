@@ -112,6 +112,9 @@ public sealed partial class MainViewModel : ObservableObject
             Doc.SelectionChanged -= OnSelectionChanged;
         }
         Doc = doc;
+        // one calculation session lives with the document: labels, the table and the panels read its cached values
+        CalcService.RussianNames = Loc.Language == "ru";
+        CalcService.Attach(doc);
         HiddenEntities.Clear();
         Highlight.Ids.Clear();
         AnalysisOverlays.Clear();

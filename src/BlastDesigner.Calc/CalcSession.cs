@@ -467,6 +467,18 @@ public sealed class CalcSession
     }
 
     private readonly Dictionary<string, PropertyDef[]> _inputs = new();
+    private Dictionary<string, int>? _contextIndex;
+
+    /// <summary>
+    /// The entity was in the project at the last <see cref="Sync"/> (a hole of the plan, not one of a preview): only such
+    /// entities may be answered from the cache of a long session.
+    /// </summary>
+    public bool Knows(string context, object entity)
+    {
+        if (_snapshot == null) return false;
+        _contextIndex ??= Model.Contexts.Select((c, i) => (c.Name, i)).ToDictionary(x => x.Name, x => x.i);
+        return _contextIndex.TryGetValue(context, out var i) && _snapshot[i].ContainsKey(entity);
+    }
 
     private PropertyDef[] Inputs(ContextDef c) =>
         _inputs.TryGetValue(c.Name, out var a) ? a : _inputs[c.Name] = c.Properties.Values.Where(p => p.Kind == PropertyKind.Input && p.Getter != null && p.Name != "blast").ToArray();

@@ -11,19 +11,22 @@ public static class Charging
     /// </summary>
     public static double DeckMass(BlastProject project, Hole hole, Deck deck)
     {
+        // the document's long session answers for a deck of the plan in its own hole; a deck of a preview gets a short one
+        if (CalcService.Live(project) is { } live && live.Knows("deck", deck) && ReferenceEquals(live.Scope.HoleOf(deck), hole))
+            return Calculated(live, "deck.mass", deck, 0);
         var s = CalcService.Session(project);
         s.Scope.NoteParent(deck, hole);
         return Calculated(s, "deck.mass", deck, 0);
     }
 
     /// <summary>Explosive mass of the hole with its boosters, kg (<c>hole.chargeMass</c>).</summary>
-    public static double ExplosiveMass(BlastProject project, Hole hole) => Calculated(CalcService.Session(project), "hole.chargeMass", hole, 0);
+    public static double ExplosiveMass(BlastProject project, Hole hole) => Calculated(CalcService.SessionFor(project, "hole", hole), "hole.chargeMass", hole, 0);
 
     /// <summary>Total length of the stemming decks, m (<c>hole.stemmingLength</c>).</summary>
-    public static double StemmingLength(BlastProject project, Hole hole) => Calculated(CalcService.Session(project), "hole.stemmingLength", hole, 0);
+    public static double StemmingLength(BlastProject project, Hole hole) => Calculated(CalcService.SessionFor(project, "hole", hole), "hole.stemmingLength", hole, 0);
 
     /// <summary>Length of the top stemming (collar to first non-stemming deck), <c>hole.topStemming</c>.</summary>
-    public static double TopStemming(BlastProject project, Hole hole) => Calculated(CalcService.Session(project), "hole.topStemming", hole, hole.EffectiveLength);
+    public static double TopStemming(BlastProject project, Hole hole) => Calculated(CalcService.SessionFor(project, "hole", hole), "hole.topStemming", hole, hole.EffectiveLength);
 
     /// <summary>A value of the calculation engine; a formula that failed gives <paramref name="fallback"/>, as a missing product did before.</summary>
     internal static double Calculated(BlastDesigner.Calc.CalcSession s, string property, object entity, double fallback) =>

@@ -1,5 +1,6 @@
 using System.Globalization;
 using BlastDesigner.Domain.Model;
+using BlastDesigner.Engine;
 using SkiaSharp;
 
 namespace BlastDesigner.Rendering;
@@ -271,7 +272,19 @@ public sealed class ReportLayout
         return used.Count > 0 && used.All(f => string.IsNullOrWhiteSpace(f.Value)) ? "" : Fill(text, fields);
     }
 
-    public static Dictionary<string, string> Fields(BlastProject project, string title, DateTime now) => new()
+    /// <summary>
+    /// The fields of a stamp or footer: the header of the blast, and every calculated blast total of the calculation profile
+    /// as <c>{calc:blast.powderFactor}</c> (with its unit).
+    /// </summary>
+    public static Dictionary<string, string> Fields(BlastProject project, string title, DateTime now)
+    {
+        var fields = HeaderFields(project, title, now);
+        foreach (var d in CalcService.Calculated(project, "blast"))
+            fields["{calc:" + d.Id + "}"] = CalcService.Format(project, d.Id, project);
+        return fields;
+    }
+
+    private static Dictionary<string, string> HeaderFields(BlastProject project, string title, DateTime now) => new()
     {
         ["{title}"] = title,
         ["{name}"] = project.Header.Name,
