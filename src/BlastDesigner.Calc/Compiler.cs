@@ -503,12 +503,7 @@ internal sealed class Compiler
     private Bound BindTo(CallAst c, Frame f)
     {
         Arity(c, 2);
-        var unitText = c.Args[0] switch
-        {
-            NameAst n => n.Text,
-            StringAst s => s.Value,
-            _ => throw Error("to(единица, выражение): единица — имя или строка, например to(m, diameter)", c.Args[0])
-        };
+        var unitText = UnitText(c.Args[0]) ?? throw Error("to(единица, выражение): единица — имя или строка, например to(m, diameter), to(kg/m3, density)", c.Args[0]);
         if (!Unit.TryParse(unitText, out var target) || target.IsUnknown) throw Error($"Неизвестная единица «{unitText}»", c.Args[0]);
         var x = Number(c.Args[1], f);
         if (x.Unit.IsUnknown) throw Error("to(): у выражения неизвестная единица, переводить не из чего", c.Args[1]);
@@ -523,6 +518,16 @@ internal sealed class Compiler
         }
         return new Bound(e, CalcType.Number, target, Const: x.Const * factor);
     }
+
+    /// <summary>Запись единицы в аргументе to(): имя, строка или произведение и частное имён (<c>kg/m3</c>).</summary>
+    private static string? UnitText(Ast a) => a switch
+    {
+        NameAst n => n.Text,
+        StringAst s => s.Value,
+        NumberAst { Value: 1 } => "1",
+        BinaryAst { Op: "/" or "*" } b when UnitText(b.Left) is { } l && UnitText(b.Right) is { } r => l + b.Op + r,
+        _ => null
+    };
 
     private Bound BindParam(CallAst c, Frame f, bool lookup)
     {

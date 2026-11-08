@@ -34,7 +34,7 @@ public sealed class CalcSession
         public string? Error;
     }
 
-    private readonly Dictionary<object, Slot[]>[] _cache;
+    private readonly Dictionary<object, Slot[]>?[] _cache;
     private readonly object?[] _prepared;
     private readonly byte[] _preparedState;
     private readonly string?[] _preparedError;
@@ -50,7 +50,7 @@ public sealed class CalcSession
     {
         Model = model;
         Scope = scope;
-        _cache = model.Contexts.Select(_ => new Dictionary<object, Slot[]>(ReferenceEqualityComparer.Instance)).ToArray();
+        _cache = new Dictionary<object, Slot[]>?[model.Contexts.Count];
         _prepared = new object?[model.BuiltinNames.Count];
         _preparedState = new byte[model.BuiltinNames.Count];
         _preparedError = new string?[model.BuiltinNames.Count];
@@ -177,6 +177,10 @@ public sealed class CalcSession
         return p.Def.Value;
     }
 
+    /// <summary>Значение параметра по имени (для встроенных алгоритмов и окна); null — нет такого параметра.</summary>
+    public double? ParameterValue(string id, object? entity = null) =>
+        Model.ParameterOf(id) is { } p ? Param(p.Index, entity ?? Project) : null;
+
     public double Lookup(int index, double x, object entity)
     {
         var t = Model.Parameters[index].Def.Table!;
@@ -231,7 +235,7 @@ public sealed class CalcSession
 
     private Slot[] SlotsFor(CalcNode node, object entity)
     {
-        var dict = _cache[node.ContextIndex];
+        var dict = _cache[node.ContextIndex] ??= new Dictionary<object, Slot[]>(ReferenceEqualityComparer.Instance);
         if (!dict.TryGetValue(entity, out var slots)) dict[entity] = slots = new Slot[Model.LocalCounts[node.ContextIndex]];
         return slots;
     }
@@ -312,7 +316,7 @@ public sealed class CalcSession
     public IEnumerable<CalcIssue> Issues()
     {
         foreach (var node in Model.Nodes)
-            foreach (var (entity, slots) in _cache[node.ContextIndex])
+            foreach (var (entity, slots) in _cache[node.ContextIndex] ?? new())
                 if (slots[node.Local].State == Failed) yield return new CalcIssue(node.Id, entity, slots[node.Local].Error!);
     }
 
@@ -320,7 +324,7 @@ public sealed class CalcSession
     public bool IsCached(string propertyId, object entity)
     {
         var node = Model.NodeOf(propertyId);
-        return node != null && _cache[node.ContextIndex].TryGetValue(entity, out var slots) && slots[node.Local].State is Valid or Failed;
+        return node != null && _cache[node.ContextIndex] is { } d && d.TryGetValue(entity, out var slots) && slots[node.Local].State is Valid or Failed;
     }
 
     // ---- инвалидация ----------------------------------------------------
@@ -328,7 +332,7 @@ public sealed class CalcSession
     /// <summary>Сбрасывает весь кэш и индексы (изменился состав объектов или связи).</summary>
     public void Reset()
     {
-        foreach (var d in _cache) d.Clear();
+        Array.Clear(_cache);
         Array.Clear(_preparedState);
         Array.Clear(_prepared);
         _inverse.Clear();
@@ -371,7 +375,7 @@ public sealed class CalcSession
             foreach (var target in Targets(node.Context, dep, entity))
             {
                 if (!seen.Add((n, target))) continue;
-                if (!_cache[node.ContextIndex].TryGetValue(target, out var slots) || slots[node.Local].State == None) continue;
+                if (_cache[node.ContextIndex] is not { } dict || !dict.TryGetValue(target, out var slots) || slots[node.Local].State == None) continue;
                 slots[node.Local] = default;
                 MarkStale(node.Id, target, seen);
             }

@@ -5,30 +5,29 @@ namespace BlastDesigner.Engine;
 /// <summary>Charge column calculations and automatic loading.</summary>
 public static class Charging
 {
-    /// <summary>Mass of a deck in kg (bulk: column volume × density; packaged: whole cartridges).</summary>
+    /// <summary>
+    /// Mass of a deck in kg (bulk: column volume × density; packaged: whole cartridges): the property <c>deck.mass</c>
+    /// of the project's calculation profile (built-in «SHOTPlus 6» unless the project has its own).
+    /// </summary>
     public static double DeckMass(BlastProject project, Hole hole, Deck deck)
     {
-        var p = project.FindProduct(deck.ProductId);
-        if (p == null || p.Kind == ProductKind.GasBag) return 0;
-        if (p.Kind == ProductKind.PackagedExplosive && p.UnitLength > 0 && p.UnitMass > 0)
-            return Math.Floor(deck.Length / p.UnitLength + 1e-9) * p.UnitMass;
-        var factor = p.IsExplosive ? hole.LoadingFactor : 1;
-        return hole.VolumeBetween(deck.Top, deck.Bottom) * p.Density * 1000 * factor;
+        var s = CalcService.Session(project);
+        s.Scope.NoteParent(deck, hole);
+        return Calculated(s, "deck.mass", deck, 0);
     }
 
-    public static double ExplosiveMass(BlastProject project, Hole hole) =>
-        hole.Decks.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).Sum(d => DeckMass(project, hole, d))
-        + hole.Decks.SelectMany(d => d.Primers).Sum(pr => project.FindProduct(pr.BoosterId)?.UnitMass ?? 0);
+    /// <summary>Explosive mass of the hole with its boosters, kg (<c>hole.chargeMass</c>).</summary>
+    public static double ExplosiveMass(BlastProject project, Hole hole) => Calculated(CalcService.Session(project), "hole.chargeMass", hole, 0);
 
-    public static double StemmingLength(BlastProject project, Hole hole) =>
-        hole.Decks.Where(d => project.FindProduct(d.ProductId)?.Kind == ProductKind.Stemming).Sum(d => d.Length);
+    /// <summary>Total length of the stemming decks, m (<c>hole.stemmingLength</c>).</summary>
+    public static double StemmingLength(BlastProject project, Hole hole) => Calculated(CalcService.Session(project), "hole.stemmingLength", hole, 0);
 
-    /// <summary>Length of the top stemming (collar to first non-stemming deck).</summary>
-    public static double TopStemming(BlastProject project, Hole hole)
-    {
-        var first = hole.Decks.OrderBy(d => d.Top).FirstOrDefault(d => project.FindProduct(d.ProductId)?.Kind != ProductKind.Stemming);
-        return first?.Top ?? hole.EffectiveLength;
-    }
+    /// <summary>Length of the top stemming (collar to first non-stemming deck), <c>hole.topStemming</c>.</summary>
+    public static double TopStemming(BlastProject project, Hole hole) => Calculated(CalcService.Session(project), "hole.topStemming", hole, hole.EffectiveLength);
+
+    /// <summary>A value of the calculation engine; a formula that failed gives <paramref name="fallback"/>, as a missing product did before.</summary>
+    internal static double Calculated(BlastDesigner.Calc.CalcSession s, string property, object entity, double fallback) =>
+        s.Value(property, entity) is { IsError: false } v ? v.Number : fallback;
 
     public static IEnumerable<(Primer Primer, Deck Deck)> Primers(Hole hole) =>
         hole.Decks.SelectMany(d => d.Primers.Select(p => (p, d)));

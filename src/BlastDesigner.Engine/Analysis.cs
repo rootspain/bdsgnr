@@ -95,7 +95,8 @@ public static class Analysis
     public static List<ChargeTimePoint> ChargeVsTime(BlastProject project, double binMs)
     {
         Timing.Solve(project);
-        var timed = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy).Select(h => (T: h.FiringTimeMs!.Value, Kg: Charging.ExplosiveMass(project, h))).ToList();
+        var calc = CalcService.Session(project);
+        var timed = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy).Select(h => (T: h.FiringTimeMs!.Value, Kg: Charging.Calculated(calc, "hole.chargeMass", h, 0))).ToList();
         if (timed.Count == 0 || binMs <= 0) return new();
         var t0 = Math.Floor(timed.Min(x => x.T) / binMs) * binMs;
         var bins = timed.GroupBy(x => (int)Math.Floor((x.T - t0) / binMs)).OrderBy(g => g.Key).ToList();

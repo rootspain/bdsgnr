@@ -166,12 +166,3 @@ public sealed class TestCaseDef
     public double Expected { get; set; }
     public double Tolerance { get; set; } = 1e-6;
 }
-
-/// <summary>Ручное значение вычисляемого свойства для одной сущности (обобщение ManualLoading, ElectronicTimeManual).</summary>
-public sealed class ValueOverride
-{
-    /// <summary>Ключ сущности (<see cref="CalcScope.KeyOf"/>): Guid сущности или «guid#n» для интервала.</summary>
-    public string Entity { get; set; } = "";
-    public string Property { get; set; } = "";
-    public double Value { get; set; }
-}

@@ -34,80 +34,65 @@ public sealed class QuantityReport
 
 public static class Quantities
 {
-    /// <summary>Computes quantities for the given holes (all holes when null). Hole areas come from Voronoi cells clipped to the boundary.</summary>
+    /// <summary>
+    /// Computes quantities for the given holes (all holes when null). Hole areas come from Voronoi cells clipped to the boundary.
+    /// The values are the properties of the project's calculation profile (<c>hole.volume</c>, <c>blast.powderFactor</c>…),
+    /// worked out over the subset: <c>blast.holes</c> sees only these holes.
+    /// </summary>
     public static QuantityReport Compute(BlastProject project, IEnumerable<Hole>? subset = null, IReadOnlyList<Vec3>? boundary = null)
     {
         var holes = (subset ?? project.Holes).ToList();
         var real = holes.Where(h => !h.IsDummy).ToList();
+        var s = CalcService.Session(project);
+        s.Scope.Subset = holes;
         // Cells always come from every hole of the blast, so a subset keeps the areas it has inside the whole pattern
         // instead of spreading over the empty boundary.
-        var allReal = project.Holes.Where(h => !h.IsDummy).ToList();
-        if (allReal.Count == 0 || real.Any(h => !allReal.Contains(h))) allReal = real;
-        boundary ??= DefaultBoundary(project, allReal);
-        var cells = VoronoiAreas(allReal, boundary);
+        CalcService.ConfigureCells(s, holes, boundary);
+        double V(string id, object o) => Charging.Calculated(s, id, o, 0);
 
-        var perHole = new List<HoleQuantity>();
-        double vol = 0, tonnes = 0, kg = 0, energy = 0;
-        foreach (var h in real)
-        {
-            var area = cells.TryGetValue(h.Id, out var a) ? a : project.Design.Burden * project.Design.Spacing;
-            var bench = Math.Max(0, (h.Length - h.Subdrill) * Math.Max(0.05, -h.Direction.Z));
-            var v = area * bench;
-            var density = project.Design.MaterialTypes.FirstOrDefault(m => m.Index == h.MaterialType)?.Density ?? project.Design.RockDensity;
-            var t = v * density;
-            var q = Charging.ExplosiveMass(project, h);
-            var stem = Charging.StemmingLength(project, h);
-            perHole.Add(new HoleQuantity(h, area, v, t, q, stem));
-            vol += v; tonnes += t; kg += q;
-            foreach (var d in h.Decks)
-                if (project.FindProduct(d.ProductId) is { IsExplosive: true } p)
-                    energy += Charging.DeckMass(project, h, d) * p.Energy;
-        }
+        var perHole = real.Select(h => new HoleQuantity(h, V("hole.area", h), V("hole.volume", h), V("hole.tonnes", h),
+            V("hole.chargeMass", h), V("hole.stemmingLength", h))).ToList();
 
         var amounts = new Dictionary<string, double>();
         void Add(string? id, double amount) { if (id != null) amounts[id] = amounts.GetValueOrDefault(id) + amount; }
         foreach (var h in real)
             foreach (var d in h.Decks)
             {
-                var p = project.FindProduct(d.ProductId);
+                var p = s.Scope.FindProduct(d.ProductId);
                 if (p == null) continue;
-                Add(p.Id, p.Kind == ProductKind.GasBag ? 1 : Charging.DeckMass(project, h, d));
+                s.Scope.NoteParent(d, h);
+                Add(p.Id, p.Kind == ProductKind.GasBag ? 1 : V("deck.mass", d));
                 foreach (var pr in d.Primers) { Add(pr.BoosterId, 1); Add(pr.DetonatorId, 1); }
             }
         foreach (var t in project.Ties) Add(t.ProductId, 1);
 
         var products = new List<ProductQuantity>();
-        double productCost = 0;
         foreach (var (id, amount) in amounts)
         {
-            var p = project.FindProduct(id);
+            var p = s.Scope.FindProduct(id);
             if (p == null) continue;
             var byMass = p.Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive or ProductKind.Stemming;
-            var cost = amount * p.Cost;
-            productCost += cost;
-            products.Add(new ProductQuantity(p, amount, byMass ? "kg" : "ea", cost));
+            products.Add(new ProductQuantity(p, amount, byMass ? "kg" : "ea", amount * p.Cost));
         }
 
-        var drilled = real.Sum(h => h.EffectiveLength);
-        var (b, s) = PatternEstimate(project);
         return new QuantityReport
         {
             HoleCount = real.Count,
             DummyCount = holes.Count - real.Count,
-            DrilledMetres = drilled,
-            Volume = vol,
-            Tonnes = tonnes,
-            ExplosiveKg = kg,
-            EnergyFactorMJt = tonnes > 0 ? energy / tonnes : 0,
-            ProductCost = productCost,
-            DrillingCost = drilled * project.Costs.DrillingPerMetre,
-            LoadingCost = real.Count(h => h.Decks.Count > 0) * project.Costs.LoadingPerHole,
-            FixedCost = project.Costs.LabourPerBlast + project.Costs.OtherFixed,
+            DrilledMetres = V("blast.drilledMetres", project),
+            Volume = V("blast.volume", project),
+            Tonnes = V("blast.tonnes", project),
+            ExplosiveKg = V("blast.explosiveKg", project),
+            EnergyFactorMJt = V("blast.energyFactor", project),
+            ProductCost = V("blast.productCost", project),
+            DrillingCost = V("blast.drillingCost", project),
+            LoadingCost = V("blast.loadingCost", project),
+            FixedCost = V("blast.fixedCost", project),
             Products = products.OrderBy(p => p.Product.Kind).ThenBy(p => p.Product.Name).ToList(),
             PerHole = perHole,
-            AverageBurden = b,
-            AverageSpacing = s,
-            MaxInstantaneousCharge = Timing.MaxInstantaneousCharge(project, project.Vibration.WindowMs)
+            AverageBurden = V("blast.avgBurden", project),
+            AverageSpacing = V("blast.avgSpacing", project),
+            MaxInstantaneousCharge = V("blast.mic", project)
         };
     }
 
@@ -231,7 +216,8 @@ public static class Vibration
         public Charges(BlastProject project)
         {
             _m = project.Vibration;
-            var holes = project.Holes.Where(h => !h.IsDummy).Select(h => (H: h, Q: Charging.ExplosiveMass(project, h))).Where(x => x.Q > 0).ToList();
+            var calc = CalcService.Session(project);
+            var holes = project.Holes.Where(h => !h.IsDummy).Select(h => (H: h, Q: Charging.Calculated(calc, "hole.chargeMass", h, 0))).Where(x => x.Q > 0).ToList();
             _holes = holes.Select(x => (x.H.Collar, x.Q)).ToList();
             var timed = holes.Where(x => x.H.FiringTimeMs.HasValue).OrderBy(x => x.H.FiringTimeMs).ToList();
             _windows = new (Vec3, double, double, int)[timed.Count];

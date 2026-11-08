@@ -39,6 +39,8 @@ public sealed class BlastProject
     public double? MinStemmingDiameters { get; set; }
     public List<VibrationRecord> VibrationRecords { get; set; } = new();
     public SiteCoordinateSystem Coordinates { get; set; } = new();
+    /// <summary>Профиль расчёта проекта; null — встроенный «SHOTPlus 6» (так открываются файлы до движка вычислений).</summary>
+    public ProjectCalc? Calc { get; set; }
 
     [JsonIgnore] public IEnumerable<Hole> Holes => Entities.OfType<Hole>();
     [JsonIgnore] public IEnumerable<TieEntity> Ties => Entities.OfType<TieEntity>();

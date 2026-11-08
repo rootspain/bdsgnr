@@ -355,8 +355,15 @@ public static class Timing
     /// <summary>Holes and charge firing within a sliding window starting at each firing time (Time envelope).</summary>
     public static List<EnvelopePoint> TimeEnvelope(BlastProject project, double windowMs)
     {
+        var s = CalcService.Session(project);
+        return TimeEnvelope(project, windowMs, h => Charging.Calculated(s, "hole.chargeMass", h, 0));
+    }
+
+    /// <summary>Time envelope with the charge of each hole given (the calculation engine passes its cached masses).</summary>
+    public static List<EnvelopePoint> TimeEnvelope(BlastProject project, double windowMs, Func<Hole, double> charge)
+    {
         var events = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy)
-            .Select(h => (T: h.FiringTimeMs!.Value, Q: Charging.ExplosiveMass(project, h)))
+            .Select(h => (T: h.FiringTimeMs!.Value, Q: charge(h)))
             .OrderBy(e => e.T).ToList();
         var result = new List<EnvelopePoint>();
         int j = 0;

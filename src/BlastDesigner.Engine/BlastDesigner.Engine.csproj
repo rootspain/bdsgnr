@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <ProjectReference Include="..\BlastDesigner.Calc\BlastDesigner.Calc.csproj" />
     <ProjectReference Include="..\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Calc\ShotPlus6.bdcalc" LogicalName="ShotPlus6.bdcalc" />
   </ItemGroup>
 </Project>

@@ -50,6 +50,13 @@ public sealed class CalcScope
     public Product? FindProduct(string? id)
     {
         if (id is null) return null;
+        var list = Project.Products;
+        if (list.Count <= 64 && _products == null)
+        {
+            // короткий список быстрее пройти, чем строить словарь для одного обращения
+            foreach (var p in list) if (p.Id == id) return p;
+            return null;
+        }
         if (_products == null)
         {
             // первый с таким id, как BlastProject.FindProduct
@@ -131,8 +138,8 @@ public sealed class CalcScope
         var list = h.Decks;
         bool sorted = true;
         for (int i = 1; i < list.Count && sorted; i++) sorted = list[i - 1].Top <= list[i].Top;
-        var result = sorted ? list.Cast<object>().ToList() : list.OrderBy(d => d.Top).Cast<object>().ToList();
-        foreach (Deck d in result) NoteParent(d, h);
+        IReadOnlyList<object> result = sorted ? list : list.OrderBy(d => d.Top).Cast<object>().ToList();
+        foreach (var d in list) NoteParent(d, h);
         return result;
     }
 

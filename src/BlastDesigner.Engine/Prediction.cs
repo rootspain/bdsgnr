@@ -30,27 +30,25 @@ public static class Flyrock
         return Cratering(k, chargePerMetre, stemming) * Math.Abs(Math.Sin(2 * launch));
     }
 
-    /// <summary>Burden used for face burst: distance to the crest line when one exists, otherwise the design burden.</summary>
+    /// <summary>
+    /// Burden used for face burst: distance to the crest line when one exists, otherwise the design burden. The throws are
+    /// the properties <c>hole.faceBurst</c>, <c>hole.cratering</c>, <c>hole.rifling</c> of the calculation profile.
+    /// </summary>
     public static Report Compute(BlastProject project, IEnumerable<Hole>? holes = null)
     {
-        var m = project.Flyrock;
-        var crest = project.Entities.OfType<PolylineEntity>().FirstOrDefault(l => l.Kind == LineKind.Crest);
+        var subset = (holes ?? project.Holes).ToList();
+        var s = CalcService.Session(project);
+        s.Scope.Subset = subset;
+        double V(string id, object o) => Charging.Calculated(s, id, o, 0);
         var list = new List<HoleResult>();
-        foreach (var h in (holes ?? project.Holes).Where(h => !h.IsDummy && h.Decks.Count > 0))
+        foreach (var h in subset.Where(h => !h.IsDummy && h.Decks.Count > 0))
         {
-            var explosive = h.Decks.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).ToList();
-            if (explosive.Count == 0) continue;
-            var top = explosive.Min(d => d.Top);
-            var kgPerM = explosive.Max(d => d.Length > 0 ? Charging.DeckMass(project, h, d) / d.Length : 0);
-            var burden = crest != null ? GeoMath.DistanceToPolyline2D(crest.Points, h.Collar, crest.Closed) : project.Design.Burden;
-            list.Add(new HoleResult(h, kgPerM, burden, top,
-                crest != null ? FaceBurst(m.SiteK, kgPerM, burden) : 0,
-                Cratering(m.SiteK, kgPerM, top),
-                Rifling(m.SiteK, kgPerM, top, h.Angle)));
+            if (s.Value("hole.hasExplosive", h).Object is not true) continue;
+            list.Add(new HoleResult(h, V("hole.kgPerMetre", h), V("hole.flyrockBurden", h), V("hole.explosiveTop", h),
+                V("hole.faceBurst", h), V("hole.cratering", h), V("hole.rifling", h)));
         }
         var critical = list.OrderByDescending(r => r.Max).FirstOrDefault();
-        var max = critical?.Max ?? 0;
-        return new Report(list, max, Math.Max(m.MinimumClearance, max * m.SafetyFactor), critical?.Hole);
+        return new Report(list, critical?.Max ?? 0, V("blast.flyrockClearance", project), critical?.Hole);
     }
 
     /// <summary>Clearance zone polygon: hull of a circle of the per-hole clearance around every hole.</summary>
@@ -129,26 +127,26 @@ public static class Fragmentation
 
     public static double SizeAt(double passing, double x50, double n) => x50 * Math.Pow(Math.Log(1 / (1 - passing)) / 0.693, 1 / n);
 
+    /// <summary>
+    /// Kuz-Ram prediction for the holes (all when null): the scalars are the properties <c>blast.x50</c>,
+    /// <c>blast.uniformity</c>… of the calculation profile over the holes, the curves are drawn from them.
+    /// </summary>
     public static Result Compute(BlastProject project, IEnumerable<Hole>? holes = null)
     {
         var list = (holes ?? project.Holes).Where(h => !h.IsDummy).ToList();
-        var q = Quantities.Compute(project, list);
-        var loaded = list.Where(h => h.Decks.Count > 0).ToList();
-        var charge = loaded.Count > 0 ? loaded.Average(h => Charging.ExplosiveMass(project, h)) : 0;
-        var explosiveDecks = loaded.SelectMany(h => h.Decks.Select(d => (h, d, p: project.FindProduct(d.ProductId)))).Where(x => x.p?.IsExplosive == true).ToList();
-        var rws = explosiveDecks.Count > 0 ? explosiveDecks.Sum(x => x.p!.RelativeWeightStrength * x.d.Length) / Math.Max(1e-9, explosiveDecks.Sum(x => x.d.Length)) : 100;
-        var chargeLength = loaded.Count > 0 ? loaded.Average(h => h.Decks.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).Sum(d => d.Length)) : 0;
-        var bench = list.Count > 0 ? list.Average(h => Math.Max(0.1, h.Length - h.Subdrill) * Math.Cos(h.Angle * GeoMath.Deg)) : project.Design.BenchHeight;
-        var diameter = list.Count > 0 ? list.Average(h => h.Diameter) : project.Design.Diameter;
-        var burden = q.AverageBurden > 0 ? q.AverageBurden : project.Design.Burden;
-        var spacing = q.AverageSpacing > 0 ? q.AverageSpacing : project.Design.Spacing;
+        var s = CalcService.Session(project);
+        s.Scope.Subset = list;
+        CalcService.ConfigureCells(s, list, null);
+        double V(string id) => Charging.Calculated(s, id, project, 0);
         var m = project.Fragmentation;
-        var a = RockFactor(m, project.Design.RockDensity);
-        var pf = q.PowderFactorKgM3;
+        var a = V("blast.rockFactor");
+        var pf = V("blast.powderFactor");
+        var charge = V("blast.avgCharge");
+        var rws = V("blast.avgRws");
         if (pf <= 0 || charge <= 0)
             return new Result(a, pf, charge, rws, 0, 0, 0, 0, 0, 0, new(), new());
-        var x50 = X50(a, pf, charge, rws);
-        var n = Uniformity(burden, spacing, diameter, m.DrillDeviation, chargeLength, bench);
+        var x50 = V("blast.x50");
+        var n = V("blast.uniformity");
         var curve = new List<(double, double)>();
         var swe = new List<(double, double)>();
         var xmax = Math.Max(m.MaxBlockCm, x50 * 1.5);
@@ -158,8 +156,7 @@ public static class Fragmentation
             curve.Add((x, 100 * RosinRammler(x, x50, n)));
             swe.Add((x, 100 * SwebrecPassing(x, x50, xmax, n)));
         }
-        return new Result(a, pf, charge, rws, x50, n, SizeAt(0.2, x50, n), SizeAt(0.8, x50, n),
-            100 * (1 - RosinRammler(m.OversizeCm, x50, n)), 100 * RosinRammler(m.FinesCm, x50, n), curve, swe);
+        return new Result(a, pf, charge, rws, x50, n, V("blast.x20"), V("blast.x80"), V("blast.oversizePct"), V("blast.finesPct"), curve, swe);
     }
 }
 
@@ -228,16 +225,13 @@ public static class ExclusionZone
         public double Radius => Math.Max(VibrationRadius, Math.Max(AirblastRadius, FlyrockRadius));
     }
 
+    /// <summary>Solves the timing, then the radii are the properties <c>blast.vibrationRadius</c>, <c>blast.airblastRadius</c>, <c>blast.flyrockClearance</c>.</summary>
     public static Result Compute(BlastProject project)
     {
         Timing.Solve(project);
-        var mic = Timing.MaxInstantaneousCharge(project, project.Vibration.WindowMs);
-        if (mic <= 0) mic = project.Holes.Select(h => Charging.ExplosiveMass(project, h)).DefaultIfEmpty(0).Max();
-        var v = project.Vibration;
-        return new Result(mic,
-            SiteLaw.DistanceForPpv(v.SiteK, v.SiteB, mic, v.PpvLimit),
-            SiteLaw.DistanceForAirblast(v, mic, v.AirblastLimitDb),
-            Flyrock.Compute(project).Clearance);
+        var s = CalcService.Session(project);
+        double V(string id) => Charging.Calculated(s, id, project, 0);
+        return new Result(V("blast.micOrMaxCharge"), V("blast.vibrationRadius"), V("blast.airblastRadius"), V("blast.flyrockClearance"));
     }
 }
 
