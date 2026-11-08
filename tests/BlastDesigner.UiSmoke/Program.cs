@@ -3221,6 +3221,11 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     Press(report.Window, "addStampRow");
     Wait(report.Form);
     if (report.Form.Design.Stamps[0].Rows.Count != rows + 1) throw new Exception("the row was not added");
+    var calcField = report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "calcField");
+    if (calcField.ItemCount < 30) throw new Exception($"only {calcField.ItemCount} calculated fields offered");
+    calcField.SelectedIndex = 0;
+    Wait(report.Form);
+    if (calcField.SelectedIndex != -1 || !report.Form.Design.Stamps[0].Rows[^1].Text.StartsWith("{calc:blast.")) throw new Exception("the calculated field did not reach the stamp");
     // the name takes its row, the place and the way the stamp adjoins share the next one
     var nameBox = report.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propName" && b.IsEffectivelyVisible);
     var placeBox = report.Window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propPlace");
@@ -3771,6 +3776,20 @@ Step("calculations window: simple mode, library formula, table of a parameter", 
     form.SetTable("site.vib.K", BlastDesigner.Engine.ParameterTableParser.Parse("1\t100\n2\t200", "?").Points); Pump();
     if (!form.Draft.Parameters.Any(p => p.Id == "site.vib.K" && p.Table?.Count == 2)) throw new Exception("the table did not reach the draft");
     dlg.Close(); Pump();
+});
+Step("hole properties: the group of calculations, one hole and several", () =>
+{
+    var loaded = vm.Project!.Holes.Where(h => !h.IsDummy && h.Decks.Count > 0).Select(h => h.Id).ToList();
+    vm.Doc!.Select(loaded.Take(1)); Pump();
+    var panel = window.GetLogicalDescendants().OfType<PropertiesPanel>().First();
+    panel.Refresh(); Pump();
+    TextBlock Value(string id) => panel.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "calc:" + id);
+    var hole = (Hole)vm.Project.FindEntity(loaded[0])!;
+    if (Value("hole.chargeMass").Text != BlastDesigner.Engine.CalcService.Format(vm.Project, "hole.chargeMass", hole)) throw new Exception("wrong value: " + Value("hole.chargeMass").Text);
+    if (!panel.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "explain:hole.chargeMass")) throw new Exception("no explain button");
+    vm.Doc.Select(loaded); Pump();
+    panel.Refresh(); Pump();
+    if (loaded.Count > 1 && panel.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "explain:hole.chargeMass")) throw new Exception("explain is for one hole");
 });
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>

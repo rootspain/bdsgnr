@@ -92,7 +92,7 @@ public sealed class CalcEditorForm : DockPanel
         var fullMode = new CheckBox { Content = Loc.T("Full mode"), IsChecked = _full, Name = "fullMode", VerticalAlignment = VerticalAlignment.Center };
         fullMode.IsCheckedChanged += (_, _) => FullMode = fullMode.IsChecked == true;
         var tools = Ui.Row(8,
-            Labeled(Loc.T("Profile"), _name), Labeled(Loc.T("Version"), _version), _draftBadge, codeNames, fullMode,
+            Labeled(Loc.T("Profile"), _name), Labeled(Loc.T("Version"), _version), _draftBadge,
             FormKit.Secondary(Loc.T("Check"), () => { Recompile(); ShowDiagnostics(); }),
             FormKit.Secondary(Loc.T("Compare"), () => _ = Compare()),
             FormKit.Secondary(Loc.T("History…"), () => _ = ShowHistory()),
@@ -126,7 +126,7 @@ public sealed class CalcEditorForm : DockPanel
         // в центре: вкладки
         _formulaTab = FormKit.Tab(Loc.T("Formula"), () => { _testsOpen = false; ShowCenter(); });
         _testsTab = FormKit.Tab(Loc.T("Test cases"), () => { _testsOpen = true; ShowCenter(); });
-        var tabs = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(12, 0), Child = Ui.Row(0, _formulaTab, _testsTab) };
+        var tabs = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(12, 0), Child = new DockPanel { Children = { Docked(Ui.Row(14, codeNames, fullMode), Avalonia.Controls.Dock.Right), Ui.Row(0, _formulaTab, _testsTab) } } };
         var center = new DockPanel();
         SetDock(tabs, Avalonia.Controls.Dock.Top);
         center.Children.Add(tabs);
