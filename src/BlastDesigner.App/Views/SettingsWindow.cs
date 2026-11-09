@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using BlastDesigner.App.Services;
 using BlastDesigner.Domain;
 using BlastDesigner.IO;
@@ -20,10 +21,13 @@ public static class SettingsWindow
     /// <summary>
     /// Calls <paramref name="apply"/> with the edited copy on Apply and on OK; returns that copy on OK, null on Cancel.
     /// <paramref name="preview"/> gets the edited copy on every theme preview and null when the window closes.
+    /// With <paramref name="newLanguage"/>, Apply with a new language closes the window as OK does and calls it with
+    /// how far the window was scrolled, to open it again in that language at the same place (<paramref name="scroll"/>).
     /// </summary>
-    public static async Task<ProgramSettings?> Show(ProgramSettings settings, Action<ProgramSettings>? apply = null, Action<ProgramSettings?>? preview = null)
+    public static async Task<ProgramSettings?> Show(ProgramSettings settings, Action<ProgramSettings>? apply = null, Action<ProgramSettings?>? preview = null,
+        double scroll = 0, Action<double>? newLanguage = null)
     {
-        var form = new SettingsForm(settings) { ApplyTo = apply, PreviewTo = preview };
+        var form = new SettingsForm(settings) { ApplyTo = apply, PreviewTo = preview, NewLanguage = newLanguage };
         var w = new Window
         {
             Title = Loc.T("Program settings"),
@@ -36,6 +40,7 @@ public static class SettingsWindow
             Content = form
         };
         form.Closing = ok => { form.Applied = ok; w.Close(); };
+        if (scroll > 0) w.Opened += (_, _) => Dispatcher.UIThread.Post(() => form.ScrollTo(scroll), DispatcherPriority.Loaded);
         w.Closed += (_, _) =>
         {
             preview?.Invoke(null);
@@ -88,12 +93,30 @@ public sealed class SettingsForm : DockPanel
     /// <summary>Shows the edited copy in the program before it is applied (the plan background of a previewed theme).</summary>
     public Action<ProgramSettings>? PreviewTo { get; set; }
 
-    /// <summary>Apply: the program takes the settings, the window stays open for more changes.</summary>
+    /// <summary>Gets how far the window is scrolled when Apply has set a new language, which closes the window.</summary>
+    public Action<double>? NewLanguage { get; set; }
+
+    /// <summary>Applies and saves the edited copy (Apply and OK).</summary>
     public void Apply()
     {
         CommitFocused();
         ApplyTo?.Invoke(Edited);
     }
+
+    /// <summary>
+    /// Apply: the program takes the settings, the window stays open for more changes. A new language closes it: the
+    /// main window is built again in it, and this window, which belongs to the main window, opens again after it.
+    /// </summary>
+    public void ApplyAndStay()
+    {
+        Apply();
+        if (NewLanguage == null || Edited.Language == Loc.Language) return;
+        NewLanguage(_scroll.Offset.Y);
+        Closing?.Invoke(true);
+    }
+
+    /// <summary>Scrolls the window down to where it was before it was opened again.</summary>
+    public void ScrollTo(double y) => _scroll.Offset = new Vector(0, y);
 
     private static string L(string english) => Loc.Ui(english);
     private static string N(double v, string format = "0.##") => v.ToString(format, CultureInfo.CurrentCulture);
@@ -530,7 +553,7 @@ public sealed class SettingsForm : DockPanel
             Tag = "apply"
         };
         ToolTip.SetTip(apply, L("Apply and save; the window stays open"));
-        apply.Click += (_, _) => Apply();
+        apply.Click += (_, _) => ApplyAndStay();
         var ok = new Button
         {
             Content = Loc.T("OK"),

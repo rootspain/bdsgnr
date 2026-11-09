@@ -357,6 +357,62 @@ public class ReportTests
         finally { File.Delete(path); }
     }
 
+    static ReportDesign Framed(Guid line)
+    {
+        var d = new ReportDesign { Frame = { Visible = true }, View = { Zoom = 3, PanX = 0.2, PanY = -0.1, Locked = true }, Section = { ShowGrid = true, View = { Zoom = 2, PanX = 0.5 } } };
+        d.Sections[line] = new SectionVisibility { ShowGrid = true, View = { PanY = 0.3 } };
+        return d;
+    }
+
+    [Fact]
+    public void TheDesignFileLeavesTheFramingOfTheBlastOut()
+    {
+        var line = Guid.NewGuid();
+        var design = Framed(line);
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + BlastDesigner.IO.ReportDesignFile.Extension);
+        try
+        {
+            BlastDesigner.IO.ReportDesignFile.Save(path, design);
+            Assert.DoesNotContain(line.ToString(), File.ReadAllText(path));
+            var back = BlastDesigner.IO.ReportDesignFile.Load(path);
+            Assert.True(back.Frame.Visible);
+            Assert.True(back.Section.ShowGrid);
+            Assert.Equal((1.0, 0.0, 0.0, false), (back.View.Zoom, back.View.PanX, back.View.PanY, back.View.Locked));
+            Assert.Equal((1.0, 0.0), (back.Section.View.Zoom, back.Section.View.PanX));
+            Assert.Empty(back.Sections);
+            // the design in the window is left as it was
+            Assert.Equal(3, design.View.Zoom);
+            Assert.Single(design.Sections);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void ADesignPutOnABlastKeepsTheFramingOfTheBlast()
+    {
+        var line = Guid.NewGuid();
+        var blast = Framed(line);
+        var other = new ReportDesign { Frame = { MarginMm = 7 } };
+        other.KeepFramingOf(blast);
+        Assert.Equal(7, other.Frame.MarginMm);
+        Assert.Equal(3, other.View.Zoom);
+        Assert.Equal(0.5, other.Section.View.PanX);
+        Assert.Equal(0.3, other.SectionOf(line).View.PanY);
+    }
+
+    [Fact]
+    public void TheBlastKeepsItsDesignWithTheFraming()
+    {
+        var p = BlastProject.CreateNew();
+        Assert.Null(ProjectJson.Deserialize(ProjectJson.Serialize(p)).ReportDesign);
+        var line = Guid.NewGuid();
+        p.ReportDesign = Framed(line);
+        var back = ProjectJson.Deserialize(ProjectJson.Serialize(p)).ReportDesign!;
+        Assert.Equal((3.0, 0.2, true), (back.View.Zoom, back.View.PanX, back.View.Locked));
+        Assert.Equal(2, back.Section.View.Zoom);
+        Assert.Equal(0.3, back.SectionOf(line).View.PanY);
+    }
+
     [Fact]
     public void APageKnowsItHasThePlan()
     {
@@ -890,39 +946,6 @@ public class ReportTests
         var fitted = new ReportDesign { Section = { HiddenKinds = { hole }, View = { Locked = true, LockedHiddenKinds = { hole } } } };
         Assert.NotEqual(SectionPixels(p, open), SectionPixels(p, held));
         Assert.Equal(SectionPixels(p, open), SectionPixels(p, fitted));
-    }
-
-    [Fact]
-    public void TheVisibilityOfTheSectionsGoesWithTheDesignFile()
-    {
-        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + BlastDesigner.IO.ReportDesignFile.Extension);
-        try
-        {
-            var line = Guid.NewGuid();
-            BlastDesigner.IO.ReportDesignFile.Save(path, new ReportDesign { Sections = { [line] = new SectionVisibility { HiddenKinds = { "Text" }, ShowGrid = true, View = { Locked = true, Zoom = 1.44, PanX = 0.2 } } } });
-            var section = BlastDesigner.IO.ReportDesignFile.Load(path).Sections[line];
-            Assert.Equal(new[] { "Text" }, section.HiddenKinds);
-            Assert.True(section.ShowGrid);
-            Assert.Equal((true, 1.44, 0.2), (section.View.Locked, section.View.Zoom, section.View.PanX));
-        }
-        finally { File.Delete(path); }
-    }
-
-    [Fact]
-    public void TheViewGoesWithTheDesignFile()
-    {
-        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + BlastDesigner.IO.ReportDesignFile.Extension);
-        try
-        {
-            BlastDesigner.IO.ReportDesignFile.Save(path, new ReportDesign { View = new DrawingView { Locked = true, LockedHiddenKinds = { "Text" }, Zoom = 1.44, PanX = 0.2, PanY = -0.1 } });
-            var view = BlastDesigner.IO.ReportDesignFile.Load(path).View;
-            Assert.True(view.Locked);
-            Assert.Equal(new[] { "Text" }, view.LockedHiddenKinds);
-            Assert.Equal(1.44, view.Zoom);
-            Assert.Equal(0.2, view.PanX);
-            Assert.Equal(-0.1, view.PanY);
-        }
-        finally { File.Delete(path); }
     }
 
     [Fact]

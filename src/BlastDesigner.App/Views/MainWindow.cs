@@ -63,7 +63,10 @@ public sealed class MainWindow : Window
     private bool _refreshingLayerCombo;
     private WindowState _preFullScreen = WindowState.Normal;
 
-    public MainWindow(ProgramSettings settings)
+    private readonly DispatcherTimer _activity = new() { Interval = TimeSpan.FromSeconds(1) };
+
+    /// <param name="before">The window this one is built in place of (<see cref="Rebuild"/>): its blast goes on here.</param>
+    public MainWindow(ProgramSettings settings, MainWindow? before = null)
     {
         _settings = settings;
         Dialogs.Owner = this;
@@ -105,21 +108,47 @@ public sealed class MainWindow : Window
         Opened += async (_, _) =>
         {
             if (startFull) WindowState = WindowState.FullScreen;
+            if (before != null)
+            {
+                _vm.Continue(before._vm);
+                var (from, to) = (before._viewport.Camera, _viewport.Camera);
+                (to.Target, to.Yaw, to.Pitch, to.Scale) = (from.Target, from.Yaw, from.Pitch, from.Scale);
+                _vm.View.Redraw();
+                return;
+            }
             await OnOpened();
             // after the recovery question and the startup assistant
             if (!_forceClose) WhatsNewWindow.ShowIfUpdated(_settings);
         };
         // the usage statistics leave out the time while no window of the program is active
         var active = true;
-        var activity = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        activity.Tick += (_, _) =>
+        _activity.Tick += (_, _) =>
         {
             var now = (Avalonia.Application.Current?.ApplicationLifetime as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.Windows.Any(w => w.IsActive) ?? IsActive;
             if (now == active) return;
             active = now;
             UsageLog.Track(UsageLog.App, now ? "active" : "inactive");
         };
-        activity.Start();
+        _activity.Start();
+    }
+
+    /// <summary>
+    /// Builds the window again in the language of the settings, as every label is taken when its control is made. The
+    /// open blast goes on in the new window with its undo history; the view and the size and place of the window stay.
+    /// </summary>
+    /// <returns>The new window.</returns>
+    public MainWindow Rebuild()
+    {
+        Loc.Language = _settings.Language;
+        var next = new MainWindow(_settings, this) { Width = Width, Height = Height, WindowStartupLocation = WindowStartupLocation.Manual, Position = Position };
+        // full screen is taken from the settings by the new window itself
+        if (WindowState == WindowState.Maximized) next.WindowState = WindowState.Maximized;
+        if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop) desktop.MainWindow = next;
+        next.Show();
+        _vm.Release();
+        _activity.Stop();
+        ForceClose();
+        return next;
     }
 
     /// <summary>Alt+Enter: full screen and back to the state before it; remembered for the next start.</summary>

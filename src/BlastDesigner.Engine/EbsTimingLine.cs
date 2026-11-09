@@ -25,8 +25,7 @@ public sealed class TimingLineOptions
 public sealed record TimingLineResult(int Timed, int SkippedManual, int OutOfReach, List<Hole> MaxTimeExceeded);
 
 /// <summary>
-/// Electronic timing line ("EBS timing line tool"): a polyline of up to four points (three segments)
-/// that programs hole times. Port of SPEBSTimingLine.ProgramBlast / AdvCalculateTiming.
+/// Electronic timing line: the points picked in plan, the timing values of each segment, and the options for how to apply them.
 /// </summary>
 public static class EbsTimingLine
 {

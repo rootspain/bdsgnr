@@ -4,7 +4,11 @@ using BlastDesigner.Domain.Model;
 
 namespace BlastDesigner.IO;
 
-/// <summary>The design of a report saved on its own (*.bdreport, JSON): the choices of the report and the plan, the frame, the stamps and the visibility.</summary>
+/// <summary>
+/// The design of a report saved on its own (*.bdreport, JSON): the choices of the report and the plan, the frame, the
+/// stamps and the visibility. The framing of the drawings stays with the blast (<see cref="ReportDesign.Portable"/>):
+/// it is not written, and is passed over in files written before.
+/// </summary>
 public static class ReportDesignFile
 {
     public const string Extension = ".bdreport";
@@ -18,7 +22,7 @@ public static class ReportDesignFile
     }
 
     public static void Save(string path, ReportDesign design) =>
-        SafeFile.WriteAllText(path, JsonSerializer.Serialize(new File { Format = Format, Design = design }, ProjectJson.Indented));
+        SafeFile.WriteAllText(path, JsonSerializer.Serialize(new File { Format = Format, Design = design.Portable() }, ProjectJson.Indented));
 
     /// <summary>The design of a file; throws <see cref="InvalidDataException"/> for a file that is not one.</summary>
     public static ReportDesign Load(string path)
@@ -27,6 +31,6 @@ public static class ReportDesignFile
         try { f = JsonSerializer.Deserialize<File>(System.IO.File.ReadAllBytes(path), ProjectJson.Options); }
         catch (JsonException e) { throw new InvalidDataException("Not a report design file.", e); }
         if (f?.Format != Format) throw new InvalidDataException("Not a report design file.");
-        return f.Design;
+        return f.Design.Portable();
     }
 }

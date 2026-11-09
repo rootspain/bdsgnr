@@ -82,6 +82,7 @@ Automatic tie-up	Автоматическая связка
 Automatic tie-up…	Автоматическая связка…
 Autosave minutes	Автосохранение, мин
 Available resources	Доступные ресурсы
+Report design	Дизайн отчёта
 Available resources…	Доступные ресурсы…
 Average burden	Средняя ЛНС
 Average burden × spacing: {0:0.00} × {1:0.00} m	Средние ЛНС × расстояние: {0:0.00} × {1:0.00} м
@@ -1634,7 +1635,7 @@ Maximum instantaneous charge	Максимальный мгновенный за�
 ui:File	Файл
 ui:Survey	Съёмка
 ui:Layout	Расстановка
-ui:Loading	Заряжание
+ui:Loading	Зарядка
 ui:Initiation	Инициирование
 ui:Analysis	Анализ
 ui:Output	Выдача
@@ -1778,7 +1779,7 @@ ui:Between horizons	Между горизонтами
 ui:Re-apply	Пересчитать
 ui:Deprogram	Сбросить программу
 ui:Conversion	Преобразование
-ui:Pyrotechnic → electronic	Пиротехника → ЭСИ
+ui:Pyrotechnic → electronic	НСИ → ЭСИ
 ui:Clear exceptions	Очистить исключения
 ui:Electronic settings	Настройки ЭСИ
 ui:Check	Проверка

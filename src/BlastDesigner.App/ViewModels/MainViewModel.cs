@@ -143,6 +143,35 @@ public sealed partial class MainViewModel : ObservableObject
         RefreshAll();
     }
 
+    /// <summary>
+    /// Goes on with the document of the window built before this one (<see cref="MainWindow.Rebuild"/>): the catalogue
+    /// and the calculations are not set up again, and the undo history, the selection and the hidden objects stay.
+    /// </summary>
+    public void Continue(MainViewModel before)
+    {
+        Doc = before.Doc;
+        CalcService.RussianNames = Loc.Language == "ru";
+        HiddenEntities.UnionWith(before.HiddenEntities);
+        ActiveConnector = before.ActiveConnector;
+        if (Doc != null)
+        {
+            Doc.Changed += OnDocChanged;
+            Doc.SelectionChanged += OnSelectionChanged;
+        }
+        SelectTool();
+        RefreshAll();
+    }
+
+    /// <summary>Lets the document go to the window built in place of this one and stops the autosave of this one.</summary>
+    public void Release()
+    {
+        _autosave.Stop();
+        _tool?.Deactivate();
+        if (Doc == null) return;
+        Doc.Changed -= OnDocChanged;
+        Doc.SelectionChanged -= OnSelectionChanged;
+    }
+
     private void OnDocChanged(object? sender, EventArgs e)
     {
         if (Doc == null) return;

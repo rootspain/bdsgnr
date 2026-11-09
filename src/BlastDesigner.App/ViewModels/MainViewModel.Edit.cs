@@ -315,7 +315,18 @@ public sealed partial class MainViewModel
         mine.Save();
     }
 
-    public Task EditProgramSettings() => SettingsWindow.Show(Settings, ApplyProgramSettings, s => PreviewBackground = s?.BackgroundColor);
+    public Task EditProgramSettings() => EditProgramSettings(0);
+
+    private async Task EditProgramSettings(double scroll)
+    {
+        double? reopenAt = null;
+        await SettingsWindow.Show(Settings, ApplyProgramSettings, s => PreviewBackground = s?.BackgroundColor, scroll, y => reopenAt = y);
+        // every label is taken when its control is made: a new language needs the window built again, once the settings
+        // are closed; on Apply they open again over the new window, where they were
+        if (Settings.Language == Loc.Language) return;
+        var next = Window.Rebuild();
+        if (reopenAt is double y) await next.ViewModel.EditProgramSettings(y);
+    }
 
     /// <summary>Takes the settings edited in the settings window (Apply and OK) and saves them.</summary>
     private void ApplyProgramSettings(ProgramSettings edited)

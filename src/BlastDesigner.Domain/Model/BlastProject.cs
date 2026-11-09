@@ -41,6 +41,11 @@ public sealed class BlastProject
     public SiteCoordinateSystem Coordinates { get; set; } = new();
     /// <summary>Профиль расчёта проекта; null — встроенный «SHOTPlus 6» (так открываются файлы до движка вычислений).</summary>
     public ProjectCalc? Calc { get; set; }
+    /// <summary>
+    /// The design of the reports of this blast, with the framing of its drawings; null until a report of it is first
+    /// previewed (and in files from before): the program settings give it then.
+    /// </summary>
+    public ReportDesign? ReportDesign { get; set; }
 
     [JsonIgnore] public IEnumerable<Hole> Holes => Entities.OfType<Hole>();
     [JsonIgnore] public IEnumerable<TieEntity> Ties => Entities.OfType<TieEntity>();

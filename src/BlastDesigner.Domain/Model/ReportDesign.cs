@@ -203,4 +203,26 @@ public sealed class ReportDesign
 
     /// <summary>What the section of a line shows; null for a line only picked.</summary>
     public SectionVisibility SectionOf(Guid? line) => line is Guid id && Sections.TryGetValue(id, out var own) ? own : Section;
+
+    /// <summary>
+    /// A copy without what belongs to the drawings of one blast: the zoom and the shift of the plan and of the section,
+    /// and what the section lines of the blast have made their own. That is what goes to a design file and to the
+    /// program settings, to be put on other blasts.
+    /// </summary>
+    public ReportDesign Portable()
+    {
+        var d = ProjectJson.DeepClone(this);
+        d.View = new();
+        d.Section.View = new();
+        d.Sections = new();
+        return d;
+    }
+
+    /// <summary>Takes the framing of the drawings and the sections of the lines from the design of a blast, which a design put on it keeps.</summary>
+    public void KeepFramingOf(ReportDesign blast)
+    {
+        View = blast.View;
+        Section.View = blast.Section.View;
+        Sections = blast.Sections;
+    }
 }

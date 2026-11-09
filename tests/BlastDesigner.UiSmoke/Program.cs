@@ -481,29 +481,29 @@ Step("v6 setup", () => vm.Change("Smoke v6 data", p =>
     p.Coordinates = new SiteCoordinateSystem { UtmZone = 50, SouthernHemisphere = true, OffsetEasting = 390000, OffsetNorthing = 6460000 };
 }));
 Step("initiation rules", () => { if (Initiation.ApplyRules(vm.Project!, vm.Project!.Holes) == 0) throw new Exception("no holes initiated"); });
-Step("dashboard", () => Version6Windows.Dashboard(vm));
+Step("dashboard", () => AnalisysWindows.Dashboard(vm));
 WindowShot("10_dashboard");
-Step("burden check", () => Version6Windows.BurdenCheck(vm));
+Step("burden check", () => AnalisysWindows.BurdenCheck(vm));
 WindowShot("11_burden_check");
-Step("front row profile", () => Version6Windows.FrontRowProfile(vm));
+Step("front row profile", () => AnalisysWindows.FrontRowProfile(vm));
 WindowShot("12_front_row_profile");
-Step("charge vs time", () => Version6Windows.ChargeVsTime(vm));
+Step("charge vs time", () => AnalisysWindows.ChargeVsTime(vm));
 WindowShot("13_charge_vs_time");
-Step("timing overlap", () => Version6Windows.TimingOverlap(vm));
+Step("timing overlap", () => AnalisysWindows.TimingOverlap(vm));
 WindowShot("14_timing_overlap");
-Step("volume overview", () => Version6Windows.VolumeOverview(vm));
+Step("volume overview", () => AnalisysWindows.VolumeOverview(vm));
 WindowShot("15_volume_overview");
-Step("flyrock", () => Version6Windows.Flyrock(vm));
+Step("flyrock", () => AnalisysWindows.Flyrock(vm));
 WindowShot("16_flyrock");
-Step("fragmentation", () => Version6Windows.Fragmentation(vm));
+Step("fragmentation", () => AnalisysWindows.Fragmentation(vm));
 WindowShot("17_fragmentation");
-Step("site law", () => Version6Windows.SiteLaw(vm));
+Step("site law", () => AnalisysWindows.SiteLaw(vm));
 WindowShot("18_site_law");
-Step("exclusion zone", () => Version6Windows.ExclusionZone(vm));
+Step("exclusion zone", () => AnalisysWindows.ExclusionZone(vm));
 WindowShot("19_exclusion_zone");
-Step("tolerances", () => Version6Windows.Tolerances(vm));
+Step("tolerances", () => AnalisysWindows.Tolerances(vm));
 WindowShot("20_tolerances");
-Step("strata intercepts", () => Version6Windows.StrataIntercepts(vm));
+Step("strata intercepts", () => AnalisysWindows.StrataIntercepts(vm));
 WindowShot("21_strata");
 Step("v6 exports", () =>
 {
@@ -2127,8 +2127,8 @@ Step("tool windows open once", () =>
     vm.VisualizeTiming();
     Pump();
     if (BlastDesigner.App.Services.Dialogs.LastShown != first) throw new Exception("second timing window created");
-    Version6Windows.Dashboard(vm); var d1 = BlastDesigner.App.Services.Dialogs.LastShown;
-    Version6Windows.Dashboard(vm); if (BlastDesigner.App.Services.Dialogs.LastShown != d1) throw new Exception("second dashboard created");
+    AnalisysWindows.Dashboard(vm); var d1 = BlastDesigner.App.Services.Dialogs.LastShown;
+    AnalisysWindows.Dashboard(vm); if (BlastDesigner.App.Services.Dialogs.LastShown != d1) throw new Exception("second dashboard created");
     d1?.Close(); first?.Close(); vm.ClearOverlays();
     Pump();
     vm.VisualizeTiming(); Pump();
@@ -2766,7 +2766,7 @@ Step("A selection touches no model views, the fragmentation window follows it; t
     Pump();
     var hole = vm.Project!.Holes.First(h => h.Label == "selection-only");
     vm.Doc!.ClearSelection(); Pump();
-    Version6Windows.Fragmentation(vm); Pump();
+    AnalisysWindows.Fragmentation(vm); Pump();
     var window = BlastDesigner.App.Services.Dialogs.LastShown!;
     string Report() => string.Join(" ", window.GetLogicalDescendants().OfType<SelectableTextBlock>().Select(t => t.Text));
     var all = Report();
@@ -2839,11 +2839,11 @@ Step("Open windows read the project of the moment: after an undo, and with no pr
             vm.Undo(); Shown();
             if (Text(w) != before) throw new Exception(w.Title + " after an undo: " + Text(w));
         }
-        Follows(() => Version6Windows.Flyrock(vm), p => p.Flyrock.SafetyFactor += 1);
-        Follows(() => Version6Windows.Fragmentation(vm), p => p.Fragmentation.OversizeCm += 10);
-        Follows(() => Version6Windows.Tolerances(vm), p => p.Tolerances.CollarXY += 1);
-        Follows(() => Version6Windows.ExclusionZone(vm), p => p.Vibration.PpvLimit += 1, recalculate: true);
-        Version6Windows.Dashboard(vm); Pump();
+        Follows(() => AnalisysWindows.Flyrock(vm), p => p.Flyrock.SafetyFactor += 1);
+        Follows(() => AnalisysWindows.Fragmentation(vm), p => p.Fragmentation.OversizeCm += 10);
+        Follows(() => AnalisysWindows.Tolerances(vm), p => p.Tolerances.CollarXY += 1);
+        Follows(() => AnalisysWindows.ExclusionZone(vm), p => p.Vibration.PpvLimit += 1, recalculate: true);
+        AnalisysWindows.Dashboard(vm); Pump();
         windows.Add(BlastDesigner.App.Services.Dialogs.LastShown!);
         // opening another project goes through no project at all, with these windows still open
         vm.Detach(); Pump();
@@ -3427,7 +3427,9 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     report.Window.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null); Pump();
     if (!report.Task.IsCompleted) throw new Exception("Esc did not close the preview");
     if (!vm.Settings.ReportDesign.Frame.Visible || vm.Settings.ReportDesign.Stamps.Count != 1) throw new Exception("the design was not kept");
-    if (vm.Doc.UndoNames.Count != steps) throw new Exception("the preview changed the blast");
+    // the blast keeps the design as one undo step, and nothing else of it changes
+    if (vm.Project!.ReportDesign is not { Frame.Visible: true, Stamps.Count: 1 }) throw new Exception("the blast did not keep the design");
+    if (vm.Doc.UndoNames.Count != steps + 1 || vm.Doc.UndoNames[0] != BlastDesigner.App.Services.Loc.T("Report design")) throw new Exception("the design should be one undo step: " + string.Join(" | ", vm.Doc.UndoNames.Take(vm.Doc.UndoNames.Count - steps)));
 
     // the design command opens on its tab, the next report has the frame
     var design = Open(vm.EditReportDesign);
@@ -3438,6 +3440,7 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     var holeKind = "kind:" + new Hole().KindName;
     vm.Settings.ReportDesign.KindsChosen = false;
     vm.Settings.ReportDesign.HiddenKinds.Clear();
+    vm.Project!.ReportDesign = null;
     foreach (var h in vm.Project!.Holes) vm.HiddenEntities.Add(h.Id);
     var hiddenHoles = Open(vm.EditReportDesign);
     var holeBox = hiddenHoles.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == holeKind);
@@ -3688,6 +3691,7 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     }
     vm.ClearOverlays();
     vm.Settings.ReportDesign = saved;
+    while (vm.Doc!.UndoNames.Count > steps) vm.Undo();
 });
 Step("calculations window: check while typing, preview on the selected holes, publish and undo", () =>
 {
@@ -3790,6 +3794,41 @@ Step("hole properties: the group of calculations, one hole and several", () =>
     vm.Doc.Select(loaded); Pump();
     panel.Refresh(); Pump();
     if (loaded.Count > 1 && panel.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "explain:hole.chargeMass")) throw new Exception("explain is for one hole");
+});
+Step("a new language builds the window again on Apply and on OK, and the blast goes on in it", () =>
+{
+    var (language, doc, undo) = (vm.Settings.Language, vm.Doc, vm.Doc!.UndoNames.Count);
+    var stages = vm.BuildStages().Select(s => s.Name).ToList();
+    // the ribbon only: names in the blast itself (layers, groups) stay in the language they were made in
+    string[] Texts() => window.Ribbon.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
+    void Press(Window w, Func<Button, bool> which) => w.GetLogicalDescendants().OfType<Button>().First(which).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    foreach (var (lang, button) in new[] { (language == "ru" ? "en" : "ru", "apply"), (language, "ok") })
+    {
+        var before = stages.Select(BlastDesigner.App.Services.Loc.Ui).ToList();
+        var task = vm.EditProgramSettings(); Pump();
+        var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+        dlg.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "language").SelectedIndex = BlastDesigner.App.Services.Loc.Languages.ToList().FindIndex(l => l.Code == lang); Pump();
+        Press(dlg, b => b.Tag as string == button); Pump();
+        if (dlg.IsVisible) throw new Exception($"{button} with a new language left the old settings window open");
+        if (button == "apply")
+        {
+            // the settings open again over the new window, in the new language
+            var again = BlastDesigner.App.Services.Dialogs.LastShown!;
+            if (again == dlg || !again.IsVisible || again.Content is not SettingsForm) throw new Exception("the settings did not open again after Apply");
+            if (again.Title != BlastDesigner.App.Services.Loc.T("Program settings") || again.Title == dlg.Title) throw new Exception("the settings opened again in the old language: " + again.Title);
+            Press(again, b => b.IsCancel); Pump();
+        }
+        for (int i = 0; i < 40 && !task.IsCompleted; i++) Pump();
+        if (!task.IsCompleted) throw new Exception($"the settings command did not finish after {button}");
+        var next = (MainWindow)BlastDesigner.App.Services.Dialogs.Owner!;
+        if (next == window || window.IsVisible) throw new Exception("the old window is still the one shown");
+        (window, vm) = (next, next.ViewModel);
+        if (vm.Doc != doc || vm.Doc!.UndoNames.Count != undo) throw new Exception("the blast did not go on in the new window");
+        var shown = Texts();
+        var now = stages.Select(BlastDesigner.App.Services.Loc.Ui).ToList();
+        if (now.SequenceEqual(before)) throw new Exception("the stage names do not change with the language");
+        if (now.Any(n => !shown.Contains(n)) || before.Except(now).Any(shown.Contains)) throw new Exception($"the stages are not in {lang}: " + string.Join(", ", stages.Select((s, i) => shown.Contains(now[i]) ? now[i] : before[i])));
+    }
 });
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>

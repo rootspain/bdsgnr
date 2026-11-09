@@ -51,7 +51,12 @@ public static class ReportPreviewWindow
         w.AddHandler(InputElement.KeyDownEvent, form.PageKeys, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         await Dialogs.ShowModal(w);
         form.Design.KindsChosen = true;
-        vm.Settings.ReportDesign = form.Design;
+        // the blast keeps the design with the framing of its drawings, as one step of the undo when it has changed;
+        // the settings keep it for other blasts, without the framing
+        var kept = ProjectJson.DeepClone(form.Design);
+        if (vm.Project is { } p && System.Text.Json.JsonSerializer.Serialize(p.ReportDesign, ProjectJson.Options) != System.Text.Json.JsonSerializer.Serialize(kept, ProjectJson.Options))
+            vm.Change("Report design", q => q.ReportDesign = kept);
+        vm.Settings.ReportDesign = form.Design.Portable();
         vm.Settings.ReportPanelWidth = form.ReportPanelWidth;
         vm.Settings.ReportDesignPanelWidth = form.DesignPanelWidth;
         vm.Settings.Save();
@@ -162,7 +167,8 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         _kind = kind;
         ReportPanelWidth = vm.Settings.ReportPanelWidth;
         DesignPanelWidth = vm.Settings.ReportDesignPanelWidth;
-        Design = ProjectJson.DeepClone(vm.Settings.ReportDesign);
+        // the blast's own design, or for a blast that has none that of the settings, framed afresh
+        Design = vm.Project!.ReportDesign is { } own ? ProjectJson.DeepClone(own) : vm.Settings.ReportDesign.Portable();
         // the very first time the check boxes start as in the Visibility tab of the main window; then they are the design's own
         if (!Design.KindsChosen) Design.HiddenKinds = vm.Project!.Entities.GroupBy(e => e.KindName).Where(g => g.All(e => vm.HiddenEntities.Contains(e.Id))).Select(g => g.Key).ToList();
         if (!Design.KindsChosen) Design.Section.HiddenKinds = Design.HiddenKinds.ToList();
@@ -992,11 +998,12 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
     /// <summary>Writes the design as it is in the window to a file.</summary>
     public void SaveDesign(string path) => ReportDesignFile.Save(path, Design);
 
-    /// <summary>Puts the design of a file in place of the one in the window, with its visibility.</summary>
+    /// <summary>Puts the design of a file in place of the one in the window, with its visibility; the drawings keep the framing of this blast.</summary>
     public void LoadDesign(string path)
     {
         var loaded = ReportDesignFile.Load(path);
         loaded.KindsChosen = true;
+        loaded.KeepFramingOf(Design);
         var open = _left.Content == _designer;
         Design = loaded;
         TranslateTitle();
