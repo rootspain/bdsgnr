@@ -111,8 +111,8 @@ public static class Chart
     private static string Fmt(double v) => Math.Abs(v) >= 1000 ? v.ToString("0", CultureInfo.CurrentCulture) : Math.Abs(v) >= 10 ? v.ToString("0.#", CultureInfo.CurrentCulture) : v.ToString("0.##", CultureInfo.CurrentCulture);
 }
 
-/// <summary>Windows for the version 6 analysis and prediction features.</summary>
-public static class Version6Windows
+/// <summary>Windows for the analysis and prediction features.</summary>
+public static class AnalisysWindows
 {
     private static Control Stack(Control top, Control fill, Control? bottom = null)
     {

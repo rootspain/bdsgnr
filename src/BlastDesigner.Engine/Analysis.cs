@@ -3,7 +3,7 @@ using BlastDesigner.Domain.Model;
 
 namespace BlastDesigner.Engine;
 
-/// <summary>Design checks and overview figures added in version 6: burden check, face burden, charge-time and volume overviews, dashboard.</summary>
+/// <summary>Design checks and overview: burden check, face burden, charge-time and volume overviews, dashboard.</summary>
 public static class Analysis
 {
     // ---- burden check -------------------------------------------------------------------

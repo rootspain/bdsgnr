@@ -9,7 +9,7 @@ using BlastDesigner.Engine;
 
 namespace BlastDesigner.IO;
 
-/// <summary>Exchange formats added in version 6: KML/KMZ, LAS point clouds, IREDES drill plans, MWD logs and CSV reports.</summary>
+/// <summary>Exchange formats: KML/KMZ, LAS point clouds, IREDES drill plans, MWD logs and CSV reports.</summary>
 public static class Interchange
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;

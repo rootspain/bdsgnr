@@ -10,11 +10,11 @@ using static BlastDesigner.App.Tools.MenuEntry;
 
 namespace BlastDesigner.App.ViewModels;
 
-/// <summary>Commands for the features added in version 6, and where they appear in the menus.</summary>
+/// <summary>Commands for the new features, and where they appear in the menus.</summary>
 public sealed partial class MainViewModel
 {
-    /// <summary>Adds the version 6 commands to the menus built by <see cref="BuildMenu"/>.</summary>
-    private List<MenuEntry> AddVersion6Menus(List<MenuEntry> menu)
+    /// <summary>Adds the new commands to the menus built by <see cref="BuildMenu"/>.</summary>
+    private List<MenuEntry> AddNewFeaturesMenus(List<MenuEntry> menu)
     {
         List<MenuEntry> SubOf(params string[] path)
         {
@@ -51,25 +51,25 @@ public sealed partial class MainViewModel
             Item("Site coordinate system…", Run(EditCoordinates), P)
         });
         var view = SubOf("View");
-        view.Insert(view.FindIndex(e => e.Header == "Markout") + 1, Item("Burden check view", () => Version6Windows.BurdenCheck(this), P));
-        view.Insert(view.FindIndex(e => e.Header == "Burden check view") + 1, Item("Front row burden profile", () => Version6Windows.FrontRowProfile(this), P));
-        view.Insert(view.FindIndex(e => e.Header == "Overview"), Item("Dashboard", () => Version6Windows.Dashboard(this), P));
+        view.Insert(view.FindIndex(e => e.Header == "Markout") + 1, Item("Burden check view", () => AnalisysWindows.BurdenCheck(this), P));
+        view.Insert(view.FindIndex(e => e.Header == "Burden check view") + 1, Item("Front row burden profile", () => AnalisysWindows.FrontRowProfile(this), P));
+        view.Insert(view.FindIndex(e => e.Header == "Overview"), Item("Dashboard", () => AnalisysWindows.Dashboard(this), P));
         var calc = SubOf("Calculations");
         calc.InsertRange(calc.FindIndex(e => e.Header == "Quantities"), new[]
         {
-            Item("Time envelope overview", () => Version6Windows.ChargeVsTime(this), P),
-            Item("Timing overlap", () => Version6Windows.TimingOverlap(this), P),
-            Item("Volume overview", () => Version6Windows.VolumeOverview(this), P)
+            Item("Time envelope overview", () => AnalisysWindows.ChargeVsTime(this), P),
+            Item("Timing overlap", () => AnalisysWindows.TimingOverlap(this), P),
+            Item("Volume overview", () => AnalisysWindows.VolumeOverview(this), P)
         });
         calc.AddRange(new[]
         {
             Sub("Environmental prediction",
-                Item("Flyrock prediction", () => Version6Windows.Flyrock(this), P),
-                Item("Fragmentation prediction", () => Version6Windows.Fragmentation(this), P),
-                Item("Scale law calculator", () => Version6Windows.SiteLaw(this), P),
-                Item("Exclusion zone calculator", () => Version6Windows.ExclusionZone(this), P)),
-            Item("Design tolerance check", () => Version6Windows.Tolerances(this), P),
-            Item("Strata intercepts", () => Version6Windows.StrataIntercepts(this), P)
+                Item("Flyrock prediction", () => AnalisysWindows.Flyrock(this), P),
+                Item("Fragmentation prediction", () => AnalisysWindows.Fragmentation(this), P),
+                Item("Scale law calculator", () => AnalisysWindows.SiteLaw(this), P),
+                Item("Exclusion zone calculator", () => AnalisysWindows.ExclusionZone(this), P)),
+            Item("Design tolerance check", () => AnalisysWindows.Tolerances(this), P),
+            Item("Strata intercepts", () => AnalisysWindows.StrataIntercepts(this), P)
         });
         var holes = SubOf("Tools", "Holes");
         holes.InsertRange(holes.FindIndex(e => e.Header == "Empty"), new[]

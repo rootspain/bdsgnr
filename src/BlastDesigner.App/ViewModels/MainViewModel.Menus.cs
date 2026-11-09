@@ -21,7 +21,7 @@ public sealed partial class MainViewModel
         catch (Exception ex) { Dialogs.ShowError(ex); }
     }
 
-    public List<MenuEntry> BuildMenu() => AddVersion6Menus(BuildBaseMenu());
+    public List<MenuEntry> BuildMenu() => AddNewFeaturesMenus(BuildBaseMenu());
 
     /// <summary>
     /// The recent files for a menu: the name of each over its folder, when it was opened, and in the tip its size or that it is

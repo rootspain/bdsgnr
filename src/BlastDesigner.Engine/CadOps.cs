@@ -3,7 +3,7 @@ using BlastDesigner.Domain.Model;
 
 namespace BlastDesigner.Engine;
 
-/// <summary>Drawing and layout operations added in version 6: offsets, curved layouts, extensions, surface envelopes.</summary>
+/// <summary>Drawing and layout operations: offsets, curved layouts, extensions, surface envelopes.</summary>
 public static class CadOps
 {
     /// <summary>Offsets an open polyline sideways in plan; positive distance is to the left of the direction of travel. Joints are mitred (limited to 4×).</summary>
