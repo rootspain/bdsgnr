@@ -36,6 +36,8 @@ public static class TimingLineWindow
             Style = source.Style, StartOffsetMs = source.StartOffsetMs, UseProgressive = source.UseProgressive, ProgressRate = source.ProgressRate,
             ReverseOrder = source.ReverseOrder, BurdenReliefMsPerM = source.BurdenReliefMsPerM, Angle1Deg = source.Angle1Deg, Angle2Deg = source.Angle2Deg
         };
+        // A new two-segment front: the times grow along its ray, from the vertex outwards.
+        if (existing == null && points.Count == 3) options.ReverseOrder = false;
         var count = Math.Max(1, points.Count - 1);
         var segments = existing != null && existing.Segments.Count >= count
             ? existing.Segments.Take(count).ToList()

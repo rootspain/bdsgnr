@@ -862,6 +862,7 @@ Step("visualization window: the scrub bar shrinks with the window, no x3, fixed 
     if (w.MinHeight != w.Height || w.MaxHeight != w.Height || w.MinWidth >= w.Width) throw new Exception($"size limits {w.MinWidth}x{w.MinHeight}-{w.MaxHeight} for {w.Width}x{w.Height}");
     if (w.GetLogicalDescendants().OfType<RadioButton>().Any(r => (r.Content as string) == "x3")) throw new Exception("x3 still offered");
     var slider = w.GetLogicalDescendants().OfType<Slider>().First();
+    if (slider.Value != slider.Minimum) throw new Exception($"the scrub bar opens at {slider.Value}, not at the start {slider.Minimum}");
     w.Width = 920; Pump();
     var wide = slider.Bounds.Width;
     w.Width = 600; Pump();
@@ -2815,7 +2816,7 @@ Step("Open windows read the project of the moment: after an undo, and with no pr
         var timing = BlastDesigner.App.Services.Dialogs.LastShown!;
         var slider = timing.GetLogicalDescendants().OfType<Slider>().First();
         vm.Undo(); Pump();
-        slider.Value = slider.Minimum; Pump();
+        slider.Value = slider.Maximum; Pump(); slider.Value = slider.Minimum; Pump();
         if (!Text(timing).Contains($"/{timed - 1} ")) throw new Exception($"timing window after an undo, {timed - 1} timed: {Text(timing)}");
         BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); vm.ClearOverlays(); Pump();
         vm.Redo(); Pump();
@@ -3055,6 +3056,21 @@ Step("Project properties: the commands open their page, one undo step for severa
     if (vm.Project!.Design.HoleTypes[0].Name != "Smoke type" || vm.Project.Design.Burden != 7) throw new Exception($"{vm.Project.Design.HoleTypes[0].Name}, {vm.Project.Design.Burden}");
     vm.Undo(); Pump();
     if (vm.Project!.Design.HoleTypes[0].Name != typeName) throw new Exception("the type was not undone");
+
+    // the UTM zone typed and applied stays with the project, and in its file
+    var zone = vm.Project.Coordinates.UtmZone;
+    var site = Open(vm.EditCoordinates);
+    var zoneBox = site.Window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "propUtmZone");
+    zoneBox.Focus(); Pump();
+    zoneBox.Text = (zone % 60 + 1).ToString();
+    var okButton = site.Window.GetLogicalDescendants().OfType<Button>().First(b => b.Classes.Contains("primary"));
+    if (okButton.Content as string != BlastDesigner.App.Services.Loc.T("OK")) throw new Exception($"the button of the window is {okButton.Content}, not OK");
+    Press(site.Window, b => b.Classes.Contains("primary"));
+    if (vm.Project!.Coordinates.UtmZone != zone % 60 + 1) throw new Exception($"the UTM zone was not applied: {vm.Project.Coordinates.UtmZone}");
+    var zoneFile = Path.Combine(outDir, "utm.bdp");
+    BlastDesigner.IO.ProjectFile.Save(vm.Project, zoneFile);
+    if (BlastDesigner.IO.ProjectFile.Load(zoneFile).Coordinates.UtmZone != zone % 60 + 1) throw new Exception("the UTM zone was not saved to the file");
+    vm.Undo(); Pump();
 });
 Step("Esc cancels a form from any of its fields", () =>
 {

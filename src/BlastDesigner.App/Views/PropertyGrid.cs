@@ -346,7 +346,8 @@ public sealed class PropertyGrid : Grid
                 taken = tb.Text;
                 if (text.Length == 0 && under != null) { Set(p, null); return true; }
                 if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) { taken = null; tb.Text = Format(p.GetValue(target)); return false; }
-                object v = isInt ? (int)Math.Round(d) : d;
+                // boxed apart: one ?: of int and double is a double, and an int property does not take it
+                object v = isInt ? (int)Math.Round(d) : (object)d;
                 if (Equals(p.GetValue(target), v) && !mixed) return false;
                 Set(p, v);
                 return true;

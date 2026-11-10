@@ -125,6 +125,56 @@ public sealed class VertexGripsOverlay : IOverlay
     }
 }
 
+/// <summary>
+/// Circles of the selected two-segment fronts (<see cref="TimingLineEntity.HasHandles"/>): the vertex in the accent colour
+/// (drag to turn the front), the two ends of the base in the colour of the line (drag to change the angle and the length).
+/// While one is dragged the front is drawn as it will be, with the ray from its vertex when it is turned.
+/// </summary>
+public sealed class FrontLineHandlesOverlay : IOverlay
+{
+    private readonly Func<IReadOnlyList<TimingLineEntity>> _lines;
+    private readonly Func<SKColor> _accent;
+
+    public FrontLineHandlesOverlay(Func<IReadOnlyList<TimingLineEntity>> lines, Func<SKColor> accent)
+    {
+        _lines = lines;
+        _accent = accent;
+    }
+
+    /// <summary>The circle under the cursor (0, 2 = ends of the base, 1 = vertex), drawn larger.</summary>
+    public (Guid Line, int Handle)? Hot { get; set; }
+
+    /// <summary>The front being dragged, with the points it has on the screen; <c>Ray</c> while it is turned.</summary>
+    public (TimingLineEntity Line, IReadOnlyList<Vec3> Points, bool Ray)? Dragged { get; set; }
+
+    public void Draw(SKCanvas c, Camera cam, BlastProject project)
+    {
+        using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = PlanRenderer.Ink };
+        if (Dragged is { } dragged)
+        {
+            var (line, pts, ray) = dragged;
+            var shown = line.WithPoints(pts);
+            PlanRenderer.DrawTimingLine(c, cam, shown, null, text);
+            if (ray) PlanRenderer.DrawChevronRay(c, cam, pts, _accent());
+        }
+        using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
+        using var edge = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.2f, Color = PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White };
+        foreach (var l in _lines())
+        {
+            var points = Dragged is { } d && d.Line.Id == l.Id ? d.Points : l.Points;
+            if (points.Count != 3) continue;
+            for (int i = 0; i < 3; i++)
+            {
+                var (x, y) = cam.ToScreen(points[i]);
+                var r = (Hot is { } hot && hot.Line == l.Id && hot.Handle == i ? VertexGripsOverlay.Radius + 2 : VertexGripsOverlay.Radius) + 1;
+                fill.Color = i == 1 ? _accent() : PlanRenderer.TimingLineColor(l);
+                c.DrawCircle(x, y, r, fill);
+                c.DrawCircle(x, y, r, edge);
+            }
+        }
+    }
+}
+
 /// <summary>Isochrones (firing-time contours) and colour-by-time of holes (Visualize timing).</summary>
 public sealed class TimingContourOverlay : IOverlay
 {

@@ -112,4 +112,81 @@ public class EbsTimingLineTests
         Assert.Equal(0, e1.X, 6); Assert.Equal(20, e1.Y, 6); Assert.Equal(100, e1.Z, 6);
         Assert.Equal(-20 / Math.Sqrt(2), e2.X, 6); Assert.Equal(-20 / Math.Sqrt(2), e2.Y, 6);
     }
+
+    [Fact]
+    public void ChevronIsSymmetricAboutItsRayAtItsAngle()
+    {
+        var apex = new Vec3(5, 5, 100);
+        var pts = Chevron.Build(apex, new Vec3(0, 1, 0), 30, 10);
+        Assert.Equal(apex, pts[1]);
+        Assert.Equal(30, Chevron.AngleDeg(pts), 6);
+        Assert.Equal(10, Vec3.Distance2D(pts[0], apex), 6);
+        Assert.Equal(10, Vec3.Distance2D(pts[2], apex), 6);
+        // left end on the left looking along the ray (north), both ends behind the vertex
+        Assert.True(pts[0].X < apex.X && pts[2].X > apex.X);
+        Assert.True(pts[0].Y < apex.Y && pts[2].Y < apex.Y);
+        Assert.Equal(100, pts[0].Z, 6);
+        var ray = Chevron.RayDir(pts);
+        Assert.Equal(0, ray.X, 6); Assert.Equal(1, ray.Y, 6);
+    }
+
+    [Fact]
+    public void ChevronTurnsAboutItsCentreKeepingItsShape()
+    {
+        var pts = Chevron.Build(new Vec3(0, 0, 100), new Vec3(1, 0, 0), 30, 12);
+        var center = Chevron.Center(pts);
+        var turned = Chevron.Rotate(pts, center, Math.PI / 2);
+        Assert.Equal(center.X, Chevron.Center(turned).X, 6);
+        Assert.Equal(center.Y, Chevron.Center(turned).Y, 6);
+        Assert.Equal(30, Chevron.AngleDeg(turned), 6);
+        Assert.Equal(12, Chevron.Length(turned), 6);
+        var ray = Chevron.RayDir(turned);
+        Assert.Equal(0, ray.X, 6); Assert.Equal(1, ray.Y, 6);
+    }
+
+    [Fact]
+    public void ChevronReshapeKeepsVertexAndRayAndMirrorsTheOtherEnd()
+    {
+        var pts = Chevron.Build(new Vec3(0, 0, 100), new Vec3(0, 1, 0), 30, 10);
+        // drag the left end to 45° off the axis, 20 m from the vertex
+        var target = new Vec3(-20 * Math.Sin(Math.PI / 4), -20 * Math.Cos(Math.PI / 4), 100);
+        var shaped = Chevron.Reshape(pts, target);
+        Assert.Equal(pts[1], shaped[1]);
+        Assert.Equal(90, Chevron.AngleDeg(shaped), 6);
+        Assert.Equal(20, Chevron.Length(shaped), 6);
+        Assert.Equal(target.X, shaped[0].X, 6); Assert.Equal(target.Y, shaped[0].Y, 6);
+        Assert.Equal(-target.X, shaped[2].X, 6); Assert.Equal(target.Y, shaped[2].Y, 6);
+        var ray = Chevron.RayDir(shaped);
+        Assert.Equal(0, ray.X, 6); Assert.Equal(1, ray.Y, 6);
+        // dragged past the vertex the angle stops at its largest
+        Assert.Equal(Chevron.MaxAngleDeg, Chevron.AngleDeg(Chevron.Reshape(pts, new Vec3(-5, 5, 100))), 6);
+    }
+
+    [Fact]
+    public void ChevronTimesGrowAlongTheRay()
+    {
+        // ray to the north: holes ahead of the tip fire later, holes inside the angle earlier, mirror holes at the same time
+        var pts = Chevron.Build(new Vec3(0, 0, 100), new Vec3(0, 1, 0), 30, 10);
+        var holes = new List<Hole> { H(0, -8), H(0, 0), H(0, 8), H(-3, 2), H(3, 2) };
+        EbsTimingLine.Apply(Project, holes, pts, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) },
+            new TimingLineOptions { Style = TimingLineStyle.TimeLine }, 20000, 0);
+        var t = holes.Select(h => h.ElectronicTimeMs!.Value).ToList();
+        Assert.True(t[0] < t[1] && t[1] < t[2]);
+        Assert.Equal(t[3], t[4], 6);
+    }
+
+    [Fact]
+    public void ChevronFlagSurvivesProjectFileAndOldLinesReadWithout()
+    {
+        var line = EbsTimingLine.CreateEntity(Chevron.Build(new Vec3(0, 0, 100), new Vec3(0, 1, 0), 30, 10), new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) }, new TimingLineOptions());
+        line.IsChevron = true;
+        var copy = (TimingLineEntity)ProjectJson.DeserializeEntities(ProjectJson.SerializeEntities(new Entity[] { line }))[0];
+        Assert.True(copy.IsChevron);
+        Assert.True(copy.HasHandles);
+        var old = EbsTimingLine.CreateEntity(Line((0, 0), (10, 0), (10, 10), (0, 10)), Enumerable.Repeat(new TimingLineSegment(0, 8, 0), 3).ToList(), new TimingLineOptions());
+        var oldCopy = (TimingLineEntity)ProjectJson.DeserializeEntities(ProjectJson.SerializeEntities(new Entity[] { old }))[0];
+        Assert.False(oldCopy.IsChevron);
+        Assert.False(oldCopy.HasHandles);
+        Assert.Equal(4, oldCopy.Points.Count);
+    }
 }

@@ -505,6 +505,23 @@ public static class PlanRenderer
         c.DrawText($"{d.Distance:0.00} m", x + 3, y - 3, text);
     }
 
+    /// <summary>Own colour of a timing line, as drawn when not selected: its colour override, else the colour of its style.</summary>
+    public static SKColor TimingLineColor(TimingLineEntity tl) =>
+        Adapt(tl.Color is uint own ? new SKColor(own) : tl.Style == TimingLineStyle.BurnLine ? new SKColor(0xFF808000) : new SKColor(0xFF008000));
+
+    /// <summary>
+    /// Ray of a two-segment front (<see cref="Chevron"/>): dashed, from the vertex outwards along the axis, as long as the
+    /// view is wide. Drawn only while the front is created or turned, never with the plan.
+    /// </summary>
+    public static void DrawChevronRay(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color)
+    {
+        if (points.Count != 3) return;
+        var apex = points[1];
+        var length = cam.Width / Math.Max(cam.Scale, 1e-9);
+        using var dashed = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, Color = color, PathEffect = SKPathEffect.CreateDash(new[] { 8f, 5f }, 0) };
+        DrawPolyline(c, cam, new[] { apex, apex + Chevron.RayDir(points) * length }, false, dashed);
+    }
+
     /// <summary>
     /// Electronic timing line as drawn on the plan: a 3 px line through the picked points at their
     /// own elevations; at the middle of every segment a bracket with the segment relief (ms/m) on the side times grow to,
@@ -514,7 +531,7 @@ public static class PlanRenderer
     public static void DrawTimingLine(SKCanvas c, Camera cam, TimingLineEntity tl, SKColor? colorOverride, SKPaint text)
     {
         if (tl.Points.Count == 0) return;
-        var color = colorOverride ?? Adapt(tl.Style == TimingLineStyle.BurnLine ? new SKColor(0xFF808000) : new SKColor(0xFF008000));
+        var color = colorOverride ?? TimingLineColor(tl);
         using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3, Color = color };
         using var thin = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = color };
         var oldColor = text.Color;

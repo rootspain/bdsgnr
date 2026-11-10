@@ -680,29 +680,61 @@ public sealed partial class MainViewModel
     public void RowSetTool() => SetTool(new TimeSetTool(this, true));
     public void SetTimeTool() => SetTool(new TimeSetTool(this, false));
 
+    /// <summary>
+    /// The timing front tool: two segments meeting at a vertex (<see cref="FrontLineTool"/>). When the front is drawn the
+    /// timing line window opens; applied, the front stays in the project, programs the selected holes (or all) and is
+    /// selected, so that it can be turned and reshaped at once.
+    /// </summary>
     public void TimingLineTool()
     {
         PreferHoleOrderLabel();
-        SetTool(new PickPointsTool(this, "Timing line", "Click up to four points of the timing line (double-click or Enter to finish); selected holes (or all) are programmed from it.", 2, EbsTimingLine.MaxPoints, false, async pts =>
+        SetTool(new FrontLineTool(this, CreateTimingLine));
+    }
+
+    private async void CreateTimingLine(List<Vec3> pts)
+    {
+        try
         {
             var holes = SelectedOrAllHoles().Where(h => !h.IsDummy).ToList();
             if (await TimingLineWindow.Show(this, pts, holes) is not { } setup) return;
             var ids = holes.Select(h => h.Id).ToHashSet();
             TimingLineResult? r = null;
+            Guid? lineId = null;
             // The line stays in the project as an object; its points keep the elevation they were picked at.
             // It remembers its holes, so editing it later reprograms exactly those.
             Change("Timing line", p =>
             {
                 var line = EbsTimingLine.CreateEntity(pts, setup.Segments, setup.Options);
+                line.IsChevron = true;
                 line.HoleIds = ids.ToList();
                 p.Add(line, p.GetOrCreateLayer(StandardLayers.TimingLines, 0xFF008000, "Design"));
+                lineId = line.Id;
                 r = EbsTimingLine.Apply(p, HolesById(p, ids), line);
             });
             if (r == null) return;
+            // selected without an undo step of its own: one Undo takes the line back
+            if (lineId is Guid id) Doc!.Select(new[] { id }, record: false);
+            View.Redraw();
             SetStatus(Loc.F("{0} holes timed, {1} with manual time kept", r.Timed, r.SkippedManual));
             if (r.MaxTimeExceeded.Count > 0)
                 await Dialogs.Info(Loc.F("Maximum delay {0} ms exceeded, holes not timed: {1}", Project!.Electronic.MaxTimeMs, string.Join(", ", r.MaxTimeExceeded.Select(h => h.Label))));
-        }) { Repeat = false });
+        }
+        catch (Exception ex) { Dialogs.ShowError(ex); }
+    }
+
+    /// <summary>
+    /// New points of a timing line (a front turned or reshaped by its circles): the line and the times of its holes change
+    /// in one undo step, as when it is moved.
+    /// </summary>
+    public void SetTimingLinePoints(Guid lineId, IReadOnlyList<Vec3> points, string undoName)
+    {
+        var timed = 0;
+        var list = points.ToList();
+        Change(undoName, p => timed = ReprogramTimingLines(p, new HashSet<Guid> { lineId }, () =>
+        {
+            if (p.FindEntity(lineId) is TimingLineEntity l) l.Points = list.ToList();
+        }));
+        if (timed > 0) SetStatus(Loc.F("Timing line changed: {0} holes reprogrammed", timed));
     }
 
     /// <summary>

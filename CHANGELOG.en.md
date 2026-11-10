@@ -38,6 +38,11 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The preview has a Section chip and sheet, one sheet per line, and the report a Cross section section after the Plan.
 
 ### Changed
+- **The timing line is drawn as two segments.** A press places the vertex, where two segments meet at 30°;
+  drag with the button held to set the direction and length, a click gives segments 60 px long. While the front is drawn or turned
+  a ray leaves the vertex: the times of the holes grow that way. On a selected front, in the tool and in Select (V), the accent circle
+  at the vertex turns it about its centre, the circles at the base change its angle and length, and dragging the line moves it. After
+  every change the holes of the front are reprogrammed, in one undo step. Timing lines from earlier files open and time as before.
 - The timing line keeps its English name; in Russian it is now «Фронт отбойки ЭСИ» throughout the program.
 - First movement window: the Show on plan switch is off by default.
 - The report preview always has the First movement chip, also when opened from the Reports command.

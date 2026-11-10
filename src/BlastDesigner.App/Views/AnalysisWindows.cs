@@ -139,7 +139,7 @@ public static class AnalysisWindows
         var max = timed.Max(h => h.FiringTimeMs!.Value);
         var min = timed.Min(h => h.FiringTimeMs!.Value);
         var playbackEnd = max > min ? max : max + 1;
-        var slider = new Slider { Minimum = min, Maximum = playbackEnd, Value = playbackEnd, MinWidth = 60, Height = 36, MinHeight = 0, VerticalAlignment = VerticalAlignment.Center };
+        var slider = new Slider { Minimum = min, Maximum = playbackEnd, Value = min, MinWidth = 60, Height = 36, MinHeight = 0, VerticalAlignment = VerticalAlignment.Center };
         // the text of the window is the size of its chips, to keep it small on the plan
         const double textSize = 12;
         var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 130, FontSize = textSize };

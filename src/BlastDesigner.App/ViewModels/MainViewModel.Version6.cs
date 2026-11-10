@@ -37,6 +37,7 @@ public sealed partial class MainViewModel
             Item("KML file…", Run(() => ExportKml(false)), P),
             Item("KMZ file…", Run(() => ExportKml(true)), P),
             Item("IREDES Plan file…", Run(ExportIredes), P),
+            Item("BPD file…", Run(ExportBpd), P),
             Item("Extended firing data with cosines…", Run(ExportExtendedFiring), P),
             Item("Strata intercepts…", Run(ExportStrataIntercepts), P),
             Item("Profile logs…", Run(ExportProfileLogs), P)
@@ -388,6 +389,23 @@ public sealed partial class MainViewModel
     }
 
     public Task ExportIredes() => ExportText("Export IREDES plan", BaseName + "_iredes", ".xml", Interchange.ExportIredes(Project!, ExportHolesSet()), "XML");
+    /// <summary>DaveyTronic blast plan (PU_AUTO_BLASTPLAN.BPD): one line per tie type, with its programming unit.</summary>
+    public async Task ExportBpd()
+    {
+        var choice = await BpdExportWindow.Show(Project!);
+        if (choice == null) return;
+        var version = typeof(MainViewModel).Assembly.GetName().Version;
+        var source = "Blast Designer " + (version == null ? "6" : $"{version.Major}.{version.Minor}.{version.Build}");
+        var r = DeviTronic.Build(Project!, ExportHolesSet(), choice.Paths, choice.Unit, source, levels: choice.Levels);
+        string Text(IEnumerable<BpdMessage> list) => string.Join("\n", list.Take(12).Select(m => "• " + Loc.F(m.Format, m.Args)));
+        if (r.Errors.Count > 0) { await Dialogs.Info(Loc.T("The BPD file was not written:") + "\n" + Text(r.Errors), Loc.T("DaveyTronic (.BPD)")); return; }
+        if (r.Warnings.Count > 0 && !await Dialogs.Confirm(Text(r.Warnings) + "\n\n" + Loc.T("Write the file?"), Loc.T("DaveyTronic (.BPD)"))) return;
+        var path = await Dialogs.SaveFile("DaveyTronic (.BPD)", DeviTronic.DefaultFileName, ".BPD", ("BPD", new[] { "*.BPD", "*.bpd" }));
+        if (path == null) return;
+        DeviTronic.Save(path, r.Plan);
+        SetStatus(Loc.F("Exported to {0}", path) + " · " + Loc.F("{0} lines, {1} detonators", r.Plan.Paths.Count, r.Plan.Paths.Sum(x => x.DetonatorCount)));
+    }
+
     public Task ExportExtendedFiring() => ExportText("Export firing data", BaseName + "_firing_ext", ".csv", Interchange.ExportExtendedFiringData(Project!, ExportHolesSet()), "CSV");
     public Task ExportProfileLogs() => ExportText("Export profile logs", BaseName + "_profiles", ".csv", Interchange.ExportProfileLogs(ExportHolesSet()), "CSV");
 

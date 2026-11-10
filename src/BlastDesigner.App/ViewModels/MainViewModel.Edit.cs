@@ -124,6 +124,15 @@ public sealed partial class MainViewModel
         return lines;
     }
 
+    /// <summary>The selected two-segment fronts whose circles can be dragged (turned, reshaped).</summary>
+    public List<TimingLineEntity> EditableFrontLines()
+    {
+        if (Doc is not { Selection.Count: > 0 } doc) return new List<TimingLineEntity>();
+        return doc.Project.Entities.OfType<TimingLineEntity>()
+            .Where(l => l.HasHandles && doc.Selection.Contains(l.Id) && IsSelectable(l) && doc.Project.FindLayer(l.LayerId) is not { Locked: true })
+            .ToList();
+    }
+
     public void MoveVertex(Guid line, int vertex, Vec3 to) => Change("Move vertex", p =>
     {
         if (p.FindEntity(line) is PolylineEntity l && vertex < l.Points.Count) l.Points[vertex] = to;

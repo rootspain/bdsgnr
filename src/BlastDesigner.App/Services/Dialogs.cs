@@ -174,13 +174,13 @@ public static class Dialogs
             ok = true;
             w.Close();
         }
-        var apply = FormKit.Primary(form ? Loc.Ui("Apply") : Loc.T("OK"), Apply);
+        var apply = FormKit.Primary(Loc.T("OK"), Apply);
         apply.IsDefault = !form;
         ToolTip.SetTip(apply, apply.Content + " (Ctrl+Enter)");
         var cancel = FormKit.Secondary(Loc.T("Cancel"), w.Close);
         cancel.IsCancel = true;
         var header = FormKit.Header(Loc.T(title), subtitle, aside);
-        var footer = FormKit.Footer(form ? Loc.Ui("Enter — confirm the field, Ctrl+Enter — apply, Esc — cancel") : null, cancel, apply);
+        var footer = FormKit.Footer(form ? Loc.Ui("Enter — confirm the field, Ctrl+Enter — OK, Esc — cancel") : null, cancel, apply);
         DockPanel.SetDock(header, Dock.Top);
         DockPanel.SetDock(footer, Dock.Bottom);
         w.Content = new DockPanel { Children = { header, footer, bare ? content : new Border { Padding = new Thickness(16, 14), Child = content } } };

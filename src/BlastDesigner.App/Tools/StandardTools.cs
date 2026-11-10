@@ -22,6 +22,8 @@ public sealed class SelectTool : Tool
     /// <summary>Offset of the last drag preview.</summary>
     private Vec3? _shown;
     private readonly VertexGripsOverlay _grips;
+    /// <summary>Circles of the selected two-segment fronts: turn and reshape.</summary>
+    private readonly FrontLineHandles _front;
     /// <summary>Vertex whose grip was pressed: a drag moves it, a click selects as anywhere else.</summary>
     private (PolylineEntity Line, int Vertex)? _grip;
     /// <summary>Where the last drag preview put the vertex.</summary>
@@ -31,27 +33,35 @@ public sealed class SelectTool : Tool
     /// <summary>Grip pressed with Ctrl: a click deletes its vertex.</summary>
     private (PolylineEntity Line, int Vertex)? _oldVertex;
 
-    public SelectTool(MainViewModel vm) : base(vm) =>
+    public SelectTool(MainViewModel vm) : base(vm)
+    {
         _grips = new VertexGripsOverlay(() => Preview.Moving == null ? vm.EditableLines() : new List<PolylineEntity>(), () => new SKColor(vm.Settings.SelectionColor));
+        _front = new FrontLineHandles(vm, () => Preview.Moving == null);
+    }
 
     public override string Name => "Select";
-    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it.";
+    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.";
 
     public override void Activate()
     {
         base.Activate();
         View.Overlays.Add(_grips);
+        View.Overlays.Add(_front.Overlay);
     }
 
     public override void Deactivate()
     {
         base.Deactivate();
+        _front.Cancel();
         View.Overlays.Remove(_grips);
+        View.Overlays.Remove(_front.Overlay);
     }
 
     public override void PointerPressed(ToolPointer p)
     {
         if (!p.Left) return;
+        // a circle of a selected front: turned or reshaped, nothing else happens with this press
+        if (!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.Press(p)) { _down = null; return; }
         _down = p;
         _shown = null;
         _dragging = false;
@@ -84,10 +94,12 @@ public sealed class SelectTool : Tool
 
     public override void PointerMoved(ToolPointer p)
     {
+        if (_front.Active) { _front.Drag(p, Preview); return; }
         Preview.Labels.Clear();
         if (_down == null)
         {
             _grips.Hot = GripAt(p.X, p.Y);
+            _front.Hover(p);
             if (p.Hit != null) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m" : Loc.T(p.Hit.KindName)));
             return;
         }
@@ -124,6 +136,7 @@ public sealed class SelectTool : Tool
 
     public override void PointerReleased(ToolPointer p)
     {
+        if (_front.Active) { _front.Release(); Preview.Clear(); return; }
         if (_down == null) return;
         var down = _down;
         Preview.Clear();
@@ -285,6 +298,12 @@ public sealed class SelectTool : Tool
     public override bool KeyDown(Key key, KeyModifiers mods)
     {
         // Esc during a drag cancels it at once: the objects snap back and the release does nothing.
+        if (key == Key.Escape && _front.Active)
+        {
+            _front.Cancel();
+            Preview.Clear();
+            return true;
+        }
         if (key == Key.Escape && _down != null)
         {
             _down = null;

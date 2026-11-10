@@ -20,6 +20,7 @@ public sealed record TimingLineSegment(double BurnRateMsPerM, double ReliefMsPer
 /// <summary>
 /// Electronic timing line kept in the project: up to four points, the timing
 /// values of each segment and the options it programmed the holes with. Points keep the elevation they were picked at.
+/// A line drawn by the front tool (<see cref="IsChevron"/>) has three: <c>[left end, vertex, right end]</c>, see <see cref="Chevron"/>.
 /// </summary>
 public sealed class TimingLineEntity : Entity
 {
@@ -38,6 +39,21 @@ public sealed class TimingLineEntity : Entity
     public double Angle2Deg { get; set; }
     /// <summary>Holes the line programmed, so that editing it reprograms exactly those; empty in files written before.</summary>
     public List<Guid> HoleIds { get; set; } = new();
+    /// <summary>Two segments meeting at a vertex (the front tool): turned and reshaped by its circles. False in files written before.</summary>
+    public bool IsChevron { get; set; }
+
+    /// <summary>The shape can be turned and reshaped by its circles: a front of three points.</summary>
+    [JsonIgnore] public bool HasHandles => IsChevron && Points.Count == 3;
+
+    /// <summary>A copy for drawing with other points (same values, same id); nothing in the project refers to it.</summary>
+    public TimingLineEntity WithPoints(IEnumerable<Vec3> points) => new()
+    {
+        Id = Id, LayerId = LayerId, GroupId = GroupId, Color = Color,
+        Points = points.ToList(), Style = Style, Segments = Segments.ToList(), StartOffsetMs = StartOffsetMs,
+        UseProgressive = UseProgressive, ProgressRate = ProgressRate, ReverseOrder = ReverseOrder,
+        BurdenReliefMsPerM = BurdenReliefMsPerM, Angle1Deg = Angle1Deg, Angle2Deg = Angle2Deg,
+        HoleIds = HoleIds.ToList(), IsChevron = IsChevron
+    };
 
     public override string KindName => "Timing line";
     public override IEnumerable<Vec3> GetVertices() => Points;

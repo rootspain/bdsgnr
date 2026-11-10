@@ -167,6 +167,7 @@ Click to place points.	Щёлкайте, чтобы ставить точки.
 Click to place the electronic opening point.	Щёлкните, чтобы поставить точку открытия электронной схемы.
 Click to place the initiation point, then use the Tie tool from it to the first hole.	Щёлкните, чтобы поставить точку инициирования, затем свяжите её с первой скважиной.
 Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, а круглую ручку выделенной линии, чтобы переместить её вершину. Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, а круглую ручку выделенной линии, чтобы переместить её вершину. Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину.
 Click two holes to measure between them.	Щёлкните две скважины, чтобы измерить расстояние.
 Click two points of the section line.	Щёлкните две точки линии разреза.
 Click two points to dimension.	Щёлкните две точки для размера.
@@ -2135,6 +2136,7 @@ ui:States differ	Состояния разные
 ui:Toe	Забой
 ui:first hole	первая скважина
 ui:Enter — confirm the field, Ctrl+Enter — apply, Esc — cancel	Enter — принять поле, Ctrl+Enter — применить, Esc — отмена
+ui:Enter — confirm the field, Ctrl+Enter — OK, Esc — cancel	Enter — принять поле, Ctrl+Enter — ОК, Esc — отмена
 in {0} holes	в {0} скв.
 in {0} ties	в {0} связях
 in {0} loading rules	в {0} правилах зарядки
@@ -2920,3 +2922,43 @@ mean	ср.
 My properties	Мои
 Insert a calculated field…	Вставить вычисляемое поле…
 ui:Insert a calculated field…	Вставить вычисляемое поле…
+# DaveyTronic (.BPD)
+BPD file…	Файл BPD...
+Delays in:	Замедления в:
+0.1 ms	0,1ms
+Line	Линия
+Tie type	Тип связи
+Lines (PATH)	Линии (PATH)
+Each line takes the holes tied with its tie type. Holes are numbered along the ties.	В линию попадают скважины, соединённые её типом связи. Нумерация идёт по связям.
+Each tie type can be chosen for one line only.	Каждый тип связи можно выбрать только для одной линии.
+Line {0}: PU Serial Number must be a whole number.	Линия {0}: PU Serial Number должен быть целым числом.
+There are no ties in the plan: the lines (PATH) are made by tie types.	В плане нет связей: линии (PATH) формируются по типам связей.
+The BPD file was not written:	Файл BPD не записан:
+Write the file?	Записать файл?
+{0} lines, {1} detonators	линий: {0}, детонаторов: {1}
+The UTM zone is not set (Edit ▸ Site coordinate system): zone 0 is written.	Не задана зона UTM (Правка ▸ Система координат участка): будет записана зона 0.
+No more than 26 lines (A–Z) can be written.	Можно записать не более 26 линий (A–Z).
+The tie type is chosen for more than one line: {0}	Тип связи выбран для нескольких линий: {0}
+{0} hole(s) with electronic detonators have no ties and are not written.	Скважин с электронными детонаторами без связей: {0}, они не записаны.
+{0} hole(s) are tied with a type not chosen for any line and are not written.	Скважин с типом связи, не выбранным ни для одной линии: {0}, они не записаны.
+Line {0}: {1} hole(s) without electronic detonators are not written.	Линия {0}: скважин без электронных детонаторов: {1}, они не записаны.
+Line {0} ({1}): no holes with electronic detonators.	Линия {0} ({1}): нет скважин с электронными детонаторами.
+Hole {0}: the electronic time is not set.	Скважина {0}: не задано электронное время.
+{0} ties of this type: more than {1}.	Связей этого типа: {0}, больше {1}.
+Line {0} ({1}): {2} ties, more than {3}.	Линия {0} ({1}): связей {2}, больше {3}.
+Chain of ties	Цепочка связей
+{0}: holes {1}–{2}, {3} ties	{0}: скв. {1}–{2}, связей {3}
+{0} ties in the chain: more than {1}.	Связей в цепочке: {0}, больше {1}.
+Each line takes the holes of its chain of ties. Holes are numbered along the ties in the order they were drawn.	В линию попадают скважины её цепочки связей. Нумерация идёт по связям в порядке их построения.
+Each chain can be chosen for one line only.	Каждую цепочку можно выбрать только для одной линии.
+There are no ties in the plan: the lines (PATH) are made by chains of ties.	В плане нет связей: линии (PATH) формируются по цепочкам связей.
+The chain is chosen for more than one line: {0}	Цепочка выбрана для нескольких линий: {0}
+{0} hole(s) are on a chain not chosen for any line and are not written.	Скважин на цепочках, не выбранных ни для одной линии: {0}, они не записаны.
+Line {0}: the chain of ties is not in the plan.	Линия {0}: цепочки связей нет в плане.
+Top detonator	Верхний детонатор
+Bottom detonator	Нижний детонатор
+{0}: holes {1}–{2}, {3} ties ({4} holes)	{0}: скв. {1}–{2}, связей {3} ({4} скважин)
+Press to place the vertex of the front and drag to set its direction and length (a click gives 60 px); the ray shows where the times grow. On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.	Нажмите, чтобы поставить вершину фронта, и тяните, чтобы задать направление и длину (щелчок даёт 60 px); луч показывает, куда растёт время. У выделенного фронта кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину, перетаскивание линии перемещает её.
+Rotate timing line	Поворот фронта отбойки ЭСИ
+Reshape timing line	Изменение угла фронта отбойки ЭСИ
+Timing line changed: {0} holes reprogrammed	Фронт отбойки ЭСИ изменён: перепрограммировано скважин — {0}
