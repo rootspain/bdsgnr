@@ -148,7 +148,8 @@ public class PrimerTimingTests
         t = Charging.PrimerTimes(p, h, 50);
         Assert.Equal(75, t[h.Decks[1].Primers[0]]);
         Assert.Equal(50, t[h.Decks[3].Primers[0]]);
-        Assert.Equal(0, t[extra]);
+        // before 0 it stays unprogrammed, as in SHOTPlus SetEBSTimes
+        Assert.False(t.ContainsKey(extra));
         // rounded as the detonators take it
         h.Decks[1].Primers[0].OffsetMs = 0.46;
         Assert.Equal(50, Charging.PrimerTimes(p, h, 50)[h.Decks[1].Primers[0]]);
@@ -235,12 +236,21 @@ public class PrimerTimingTests
         Assert.Equal(159, T(-5, 4));
         Assert.Equal(T(-10, 8), T(10, 8));
 
-        // not opened here: the times grow one way along the spacing, from the earliest hole
+        // not opened here: the times count from the point itself plus the offset, one way along the spacing (SHOTPlus)
         op.OpenHere = false;
         EbsOpening.Apply(p, p.Holes.ToList(), op);
-        Assert.Equal(100, T(-10, 0));
-        Assert.Equal(168, T(10, 0));
-        Assert.Equal(142, T(-10, 4));
+        Assert.Equal(68, T(-10, 0));
+        Assert.Equal(102, T(0, 0));
+        Assert.Equal(136, T(10, 0));
+        Assert.Equal(110, T(-10, 4));
+        // the holes behind the point are not programmed; an offset below 0 counts as 0
+        op.StartOffsetMs = -50;
+        r = EbsOpening.Apply(p, p.Holes.ToList(), op);
+        Assert.Null(holes.Single(h => h.Collar.X == -10 && h.Collar.Y == 0).ElectronicTimeMs);
+        Assert.Null(holes.Single(h => h.Collar.X == -5 && h.Collar.Y == 0).ElectronicTimeMs);
+        Assert.Equal(2, T(0, 0));
+        Assert.Equal(2, r.OutOfReach);
+        op.StartOffsetMs = 100;
 
         // kept in the file
         op.HoleIds = holes.Select(h => h.Id).ToList();

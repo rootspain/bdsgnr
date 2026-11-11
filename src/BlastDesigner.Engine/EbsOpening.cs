@@ -6,9 +6,10 @@ namespace BlastDesigner.Engine;
 /// <summary>
 /// Times of an EBS opening point (SHOTPlus <c>SPEBSOpeningPoint.ProgramBlast</c>). With d from the reference point to the hole's
 /// firing point (<see cref="EbsTimingLine.TimingPoint"/>), t = (d·b̂)/burden · burden delay + (d·ŝ)/spacing · spacing delay. Opened
-/// at the point, both terms are taken as they are, either way, and the reference becomes the hole with the least time. Then the
-/// times are shifted to the time of the first hole, and the largest delay, the holes out of reach and the manual times go as
-/// for a timing front; only the holes with an electronic detonator are timed.
+/// at the point, both terms are taken as they are, either way, and the reference becomes the hole with the least time, which
+/// fires at the offset. Not opened at the point, the times count from the point itself plus the offset, and the holes behind it
+/// (time below 0) are not programmed. An offset below 0 counts as 0. The largest delay, the holes out of reach and the manual
+/// times go as for a timing front; only the holes with an electronic detonator are timed.
 /// </summary>
 public static class EbsOpening
 {
@@ -33,7 +34,8 @@ public static class EbsOpening
     /// <summary>The times <see cref="Apply"/> would program, without changing the holes (the preview of its window).</summary>
     public static (Dictionary<Guid, double> Times, TimingLineResult Result) Plan(BlastProject project, IReadOnlyList<Hole> holes, EbsOpeningPoint op, bool keepManualTimes = true) =>
         EbsTimingLine.Program(project, holes, e => RawTimes(op, e.Select(h => EbsTimingLine.TimingPoint(project, h)).ToList()),
-            op.StartOffsetMs, keepManualTimes, false, project.Electronic.MaxTimeMs, project.Electronic.AllowSubMs);
+            Math.Max(0, op.StartOffsetMs), keepManualTimes, false, project.Electronic.MaxTimeMs, project.Electronic.AllowSubMs,
+            shiftToFirst: op.OpenHere);
 
     /// <summary>Programs the holes from the opening point.</summary>
     public static TimingLineResult Apply(BlastProject project, IReadOnlyList<Hole> holes, EbsOpeningPoint op, bool keepManualTimes = true) =>

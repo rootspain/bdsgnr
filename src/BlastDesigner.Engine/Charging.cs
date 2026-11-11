@@ -73,16 +73,12 @@ public static class Charging
     }
 
     /// <summary>
-    /// How much later than the hole its last electronic primer fires, ms: the largest offset with
-    /// <see cref="ElectronicSettings.UseOffsets"/>, else the largest shift of the deck delays (<see cref="PrimerTimes"/>).
-    /// A programmed time plus this must stay within the largest delay of the detonators.
+    /// The largest offset of the hole's electronic primers, ms, never below 0 (SHOTPlus <c>HoleLoading.MaxOffset</c>): taken
+    /// whether or not <see cref="ElectronicSettings.UseOffsets"/> is on, the deck delays not counted. A programmed time plus
+    /// this must stay within the largest delay of the detonators.
     /// </summary>
-    public static double MaxPrimerOffset(BlastProject project, Hole hole)
-    {
-        if (project.Electronic.UseOffsets)
-            return Primers(hole).Where(x => IsElectronic(project, x.Primer)).Select(x => x.Primer.OffsetMs).DefaultIfEmpty(0).Max();
-        return PrimerTimes(project, hole, 0).Values.DefaultIfEmpty(0).Max();
-    }
+    public static double MaxPrimerOffset(BlastProject project, Hole hole) =>
+        Math.Max(0, Primers(hole).Where(x => IsElectronic(project, x.Primer)).Select(x => x.Primer.OffsetMs).DefaultIfEmpty(0).Max());
 
     /// <summary>
     /// Time of each primer after the hole's own: an electronic one by <see cref="PrimerTimes"/> from 0, another by its delay.
@@ -90,7 +86,7 @@ public static class Charging
     /// </summary>
     public static Dictionary<Primer, double> RelativePrimerTimes(BlastProject project, Hole hole)
     {
-        var electronic = PrimerTimes(project, hole, 0);
+        var electronic = PrimerTimes(project, hole, 0, relative: true);
         var times = new Dictionary<Primer, double>(ReferenceEqualityComparer.Instance);
         foreach (var (p, _) in Primers(hole)) times[p] = electronic.TryGetValue(p, out var t) ? t : PrimerDelay(project, p) + PropagationDelay(project, p);
         return times;
@@ -131,11 +127,17 @@ public static class Charging
     /// <summary>
     /// Programmed time of each electronic primer of a hole whose time is <paramref name="holeTime"/> (SHOTPlus
     /// <c>HoleLoading.SetEBSTimes</c>), rounded as the detonators take it. With <see cref="ElectronicSettings.UseOffsets"/> a
-    /// primer fires at the hole's time plus its offset, never before 0. Otherwise the charges (<see cref="ExplosiveRuns"/>) with
+    /// primer fires at the hole's time plus its offset; one that would fire before 0 is not programmed and is left out. Otherwise the charges (<see cref="ExplosiveRuns"/>) with
     /// an electronic primer fire in the deck order: the first at the hole's time, each next one <see cref="ElectronicSettings.InterDeckDelayMs"/>
     /// later (all at once when simultaneous); within a charge the primers follow one another by <see cref="ElectronicSettings.IntraDeckDelayMs"/>.
     /// </summary>
-    public static Dictionary<Primer, double> PrimerTimes(BlastProject project, Hole hole, double holeTime)
+    public static Dictionary<Primer, double> PrimerTimes(BlastProject project, Hole hole, double holeTime) => PrimerTimes(project, hole, holeTime, false);
+
+    /// <summary>
+    /// <see cref="PrimerTimes(BlastProject, Hole, double)"/>; <paramref name="relative"/> keeps a time below 0 (the order of the
+    /// primers of a hole timed from 0, <see cref="RelativePrimerTimes"/>).
+    /// </summary>
+    internal static Dictionary<Primer, double> PrimerTimes(BlastProject project, Hole hole, double holeTime, bool relative)
     {
         var e = project.Electronic;
         var times = new Dictionary<Primer, double>(ReferenceEqualityComparer.Instance);
@@ -144,7 +146,12 @@ public static class Charging
         if (e.UseOffsets)
         {
             foreach (var (p, _) in Primers(hole))
-                if (IsElectronic(project, p)) times[p] = After(p.OffsetMs);
+            {
+                if (!IsElectronic(project, p)) continue;
+                var t = p.OffsetMs == 0 ? holeTime : Timing.RoundTime(holeTime + p.OffsetMs, e.AllowSubMs);
+                // SHOTPlus SetEBSTimes: a detonator before 0 stays unprogrammed
+                if (relative || t > -0.001) times[p] = relative ? t : Math.Max(0, t);
+            }
             return times;
         }
         var charges = ExplosiveRuns(project, hole)
@@ -311,6 +318,40 @@ public static class Charging
             }
         }
         return result.Where(d => d.Bottom > d.Top + 1e-6 && d.Top < toLength).Select(d => { d.Bottom = Math.Min(d.Bottom, toLength); return d; }).ToList();
+    }
+
+    /// <summary>
+    /// The column of a hole whose length changed: the last interval goes down to the toe, its primers keep their distance
+    /// from its bottom (within it); intervals the toe no longer reaches go, the one it cuts ends at the toe, its primers
+    /// staying where they are within it.
+    /// </summary>
+    public static void ColumnToToe(Hole h)
+    {
+        if (h.Decks.Count == 0) return;
+        var toe = h.EffectiveLength;
+        h.Decks.Sort((a, b) => a.Top.CompareTo(b.Top));
+        var cut = h.Decks.RemoveAll(d => d.Top >= toe - 1e-6) > 0;
+        if (h.Decks.Count == 0) return;
+        var last = h.Decks[^1];
+        var delta = toe - last.Bottom;
+        if (Math.Abs(delta) < 1e-9) return;
+        last.Bottom = toe;
+        // a primer of an interval the toe cuts stays where it is if it can
+        foreach (var p in last.Primers) p.Depth = Math.Clamp(p.Depth + (cut ? 0 : delta), last.Top, last.Bottom);
+    }
+
+    /// <summary>
+    /// Follows a change of a document (<see cref="Document.Followers"/>): every hole whose length changed in it, by hand,
+    /// with its level or by a move, has its last interval taken down to the toe (<see cref="ColumnToToe"/>).
+    /// </summary>
+    public static Action? FollowLength(BlastProject project)
+    {
+        var before = project.Holes.ToDictionary(h => h.Id, h => h.EffectiveLength);
+        return () =>
+        {
+            foreach (var h in project.Holes)
+                if (before.TryGetValue(h.Id, out var was) && Math.Abs(was - h.EffectiveLength) > 1e-9) ColumnToToe(h);
+        };
     }
 
     /// <summary>Shortest top stemming accepted without a warning, in hole diameters (edited in its check in the hole loading window, kept in the program settings).</summary>

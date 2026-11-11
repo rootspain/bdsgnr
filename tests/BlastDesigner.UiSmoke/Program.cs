@@ -262,6 +262,54 @@ Step("properties of holes: loading on top, fields in folding groups inside the p
     Shot("02d_properties_holes");
     vm.Undo(); Pump();
     if (vm.Project!.Holes.First(h => h.Id == holes[0]).Length != was) throw new Exception("undo should bring the length back");
+    // To level: the length goes down to it from each collar; a level not below every collar is refused with a message
+    var toLevel = (TextBox)Named("propToLevel");
+    // Length and To level share the tip of how the length is counted, every paragraph of it translated
+    foreach (var tipped in new[] { toLevel, (TextBox)Named("propLength") })
+        if (ToolTip.GetTip(tipped) is not string tip || tip.Split("\n\n").Length != PropertiesPanel.LengthTipParagraphs.Length || !tip.Contains("cos"))
+            throw new Exception($"no tip of the length on {tipped.Name}: {ToolTip.GetTip(tipped)}");
+    if (PropertiesPanel.LengthTipParagraphs.FirstOrDefault(t => !BlastDesigner.App.Services.Loc.HasTranslation("ui:" + t)) is { } untranslated) throw new Exception("not translated: " + untranslated);
+    var chosen = vm.Project.Holes.Where(h => holes.Contains(h.Id)).ToList();
+    var level = Math.Floor(chosen.Min(h => h.Collar.Z)) - 8;
+    toLevel.Text = level.ToString(System.Globalization.CultureInfo.CurrentCulture); toLevel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    foreach (var h in vm.Project.Holes.Where(h => holes.Contains(h.Id)))
+        if (h.ToLevel != level || Math.Abs(h.Length - (h.Collar.Z - level) / Math.Cos(h.Angle * Math.PI / 180) - h.Subdrill) > 1e-9 || Math.Abs(h.GradePoint.Z - level) > 1e-9) throw new Exception($"hole {h.Label}: length {h.Length} to the level {level} from {h.Collar.Z} with the subdrill {h.Subdrill}");
+    vm.Undo(); Pump();
+    if (vm.Project.Holes.First(h => h.Id == holes[0]).Length != was || vm.Project.Holes.Any(h => h.ToLevel != null)) throw new Exception("one undo should take the level and its length back");
+    var messages = BlastDesigner.App.Services.Dialogs.LastMessage;
+    toLevel = (TextBox)Named("propToLevel");
+    var above = Math.Ceiling(chosen.Max(h => h.Collar.Z)) + 1;
+    toLevel.Text = above.ToString(System.Globalization.CultureInfo.CurrentCulture); toLevel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); Pump();
+    if (vm.Project.Holes.Any(h => h.ToLevel != null) || vm.Project.Holes.First(h => h.Id == holes[0]).Length != was) throw new Exception("a level above the collars was taken");
+    var refusal = BlastDesigner.App.Services.Dialogs.LastMessage;
+    if (refusal == null || refusal == messages) throw new Exception("no message for a level above the collars");
+    refusal.Close(); Pump();
+    if (((TextBox)Named("propToLevel")).Text is { Length: > 0 } left) throw new Exception("the refused level stays in the field: " + left);
+    // To the surface, the small button right of To level: the holes go down to a floor under them, with their subdrill
+    var button = Named("holesToSurface");
+    var field = Named("propToLevel");
+    var (b0, f0) = (button.TranslatePoint(new Point(), window)!.Value, field.TranslatePoint(new Point(), window)!.Value);
+    if (b0.X <= f0.X + field.Bounds.Width - 1 || Math.Abs(b0.Y + button.Bounds.Height / 2 - f0.Y - field.Bounds.Height / 2) > 2) throw new Exception($"To the surface is not right of To level: {b0} {f0}");
+    double x0 = chosen.Min(h => h.Collar.X) - 50, x1 = chosen.Max(h => h.Collar.X) + 50, y0 = chosen.Min(h => h.Collar.Y) - 50, y1 = chosen.Max(h => h.Collar.Y) + 50, floor = chosen.Min(h => h.Collar.Z) - 9;
+    vm.Change("Smoke floor", pr => pr.Add(new SurfaceEntity { Name = "Smoke floor", Vertices = { new(x0, y0, floor), new(x1, y0, floor), new(x1, y1, floor), new(x0, y1, floor) }, Triangles = { 0, 1, 2, 0, 2, 3 } })); Pump();
+    // one hole far off every surface: it keeps its length and has no level
+    var far = holes[^1];
+    vm.Change("Smoke far hole", pr => pr.FindEntity(far)!.Translate(new BlastDesigner.Domain.Geometry.Vec3(1e6, 0, 0))); Pump();
+    var farLength = vm.Project!.Holes.First(h => h.Id == far).Length;
+    vm.Doc!.Select(holes); Pump();
+    // the demo has surfaces of its own: each hole goes to whichever its line meets first, the floor at the deepest
+    var reached = holes.Where(id => id != far).ToHashSet();
+    var expected = vm.Project.Holes.Where(h => reached.Contains(h.Id)).ToDictionary(h => h.Id, h => BlastDesigner.Engine.HoleLevel.LengthToSurface(vm.Project, h));
+    var levels = vm.Project.Holes.Where(h => reached.Contains(h.Id)).ToDictionary(h => h.Id, h => BlastDesigner.Engine.HoleLevel.SurfaceLevel(vm.Project, h));
+    if (expected.Values.Any(v => v == null)) throw new Exception("a hole meets no surface over the floor");
+    Press("holesToSurface"); Pump();
+    foreach (var h in vm.Project!.Holes.Where(h => reached.Contains(h.Id)))
+        // the level where it meets the surface is in To level, the length follows it with the subdrill
+        if (h.ToLevel is not double z || Math.Abs(z - levels[h.Id]!.Value) > 1e-9 || Math.Abs(h.Length - expected[h.Id]!.Value) > 1e-6 || h.Length > (h.Collar.Z - floor) / Math.Cos(h.Angle * Math.PI / 180) + h.Subdrill + 1e-6) throw new Exception($"hole {h.Label}: length {h.Length} to the surface, {expected[h.Id]} expected, floor {floor} from {h.Collar.Z}");
+    if (vm.Project.Holes.First(h => h.Id == far) is { } off && (off.ToLevel != null || off.Length != farLength)) throw new Exception($"the hole off the surfaces changed: level {off.ToLevel}, length {off.Length}");
+    if (vm.Doc.UndoNames[0] != BlastDesigner.App.Services.Loc.T("Holes to the surface")) throw new Exception("To the surface should be one undo step: " + vm.Doc.UndoNames[0]);
+    vm.Undo(); vm.Undo(); vm.Undo(); Pump();
+    if (vm.Project!.Holes.First(h => h.Id == holes[0]).Length != was || vm.Project.Entities.OfType<SurfaceEntity>().Any(s => s.Name == "Smoke floor")) throw new Exception("undo did not take the lengths and the floor back");
     vm.Doc!.Select(selected); Pump();
 });
 Step("properties of ties: the delay is taken by Enter and when the focus leaves, and the times follow", () =>
@@ -669,6 +717,8 @@ Step("pattern tool: direction, offset, prefix and start number on its panel, no 
     var start = Box("patternStart"); start.Text = "700"; start.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent));
     Pump();
     var before = vm.Project!.Holes.Count();
+    // the pattern selects its holes: the steps after it go on with the selection from before
+    var selectedBefore = vm.Doc!.Selection.ToList();
     var dialog = BlastDesigner.App.Services.Dialogs.LastShown;
     var x0 = vm.Project.Holes.Max(h => h.Collar.X) + 30;
     var y0 = vm.Project.Holes.Min(h => h.Collar.Y);
@@ -684,7 +734,14 @@ Step("pattern tool: direction, offset, prefix and start number on its panel, no 
     if (added.Count == 0) throw new Exception("no holes from the pattern tool");
     if (!added.Any(h => h.Label == "S700") || added.Any(h => !h.Label.StartsWith("S"))) throw new Exception("labels not from the panel: " + string.Join(",", added.Take(5).Select(h => h.Label)));
     if (vm.PatternStartNumber != null) throw new Exception("the start number should return to the next free one");
+    // the pattern is finished: its panel goes and the Select tool takes over
+    if (vm.ActiveTool is not SelectTool) throw new Exception("after the pattern the tool is " + vm.ActiveTool?.Name);
+    if (window.GetLogicalDescendants().OfType<TextBox>().Any(t => t.Name == "patternPrefix" && t.IsEffectivelyVisible)) throw new Exception("the pattern panel stays after the pattern");
+    if (!vm.Doc!.Selection.ToHashSet().SetEquals(added.Select(h => h.Id))) throw new Exception($"the new holes should be selected: {vm.Doc.Selection.Count} selected, {added.Count} made");
+    // the selection is no step of its own: one undo takes the pattern away and brings the selection from before back
     vm.Undo();
+    if (vm.Project.Holes.Count() != before) throw new Exception("one undo did not take the pattern away");
+    if (!vm.Doc.Selection.ToHashSet().SetEquals(selectedBefore)) throw new Exception("undo did not bring the selection from before the pattern back");
     vm.SelectTool();
 });
 Step("dark plan zoomed", () => { vm.Doc!.Select(vm.Project!.Rows[2].HoleIds); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); });
@@ -1890,6 +1947,42 @@ Step("hole form applies a field and the layer in one undo step", () =>
     if (vm.Project.FindEntity(h.Id) is not Hole after || Math.Abs(after.Diameter - 115) > 1e-9) throw new Exception("diameter not applied");
     vm.Undo();
     if (vm.Project.FindEntity(h.Id) is not Hole back || Math.Abs(back.Diameter - diameter) > 1e-9) throw new Exception("undo did not restore the diameter");
+});
+Step("hole form: To the surface puts in each hole the level of the surface its own line meets, a hole off them keeps its own", () =>
+{
+    var holes = vm.Project!.Holes.Where(x => !x.IsDummy).Take(3).ToList();
+    var ids = holes.Select(x => x.Id).ToList();
+    // a floor under the first hole, a higher one under the second, the third moved off both
+    Vec3 c0 = holes[0].Collar, c1 = holes[1].Collar;
+    SurfaceEntity Floor(Vec3 c, double z) => new() { Name = "Smoke floor", Vertices = { new(c.X - 0.5, c.Y - 0.5, z), new(c.X + 0.5, c.Y - 0.5, z), new(c.X + 0.5, c.Y + 0.5, z), new(c.X - 0.5, c.Y + 0.5, z) }, Triangles = { 0, 1, 2, 0, 2, 3 } };
+    var surfaces = vm.Project.Entities.OfType<SurfaceEntity>().Select(s => s.Id).ToList();
+    vm.Change("Smoke floors", p =>
+    {
+        // only these floors: the demo surfaces go for the step
+        p.Entities.RemoveAll(s => s is SurfaceEntity);
+        p.Add(Floor(c0, c0.Z - 12)); p.Add(Floor(c1, c1.Z - 7));
+        foreach (var x in p.Holes.Where(x => ids.Contains(x.Id))) { x.Angle = 0; x.ToLevel = null; }
+        p.FindEntity(ids[2])!.Translate(new Vec3(1e6, 0, 0));
+    });
+    var farLength = ((Hole)vm.Project.FindEntity(ids[2])!).Length;
+    var task = vm.EditHoles(vm.Project.Holes.Where(x => ids.Contains(x.Id)).ToList()); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var button = dlg.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "holeToSurface") ?? throw new Exception("no To the surface beside To level in the hole form");
+    var field = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == nameof(Hole.ToLevel));
+    if (button.TranslatePoint(new Point(), dlg)!.Value.X <= field.TranslatePoint(new Point(field.Bounds.Width - 1, 0), dlg)!.Value.X) throw new Exception("To the surface is not right of To level");
+    button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); Pump();
+    // one hole meets no surface: a message, then the levels differ, so the field shows them mixed
+    if (BlastDesigner.App.Services.Dialogs.LastMessage is { IsVisible: true } note) { note.Close(); Pump(); }
+    if (field.Text is { Length: > 0 }) throw new Exception("two levels from two surfaces should show mixed: " + field.Text);
+    var apply = dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Classes.Contains("primary") && b.Tag == null);
+    apply.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!task.IsCompleted) throw new Exception("form did not close");
+    Hole H(int i) => (Hole)vm.Project.FindEntity(ids[i])!;
+    if (H(0).ToLevel is not double z0 || Math.Abs(z0 - (c0.Z - 12)) > 1e-9 || Math.Abs(H(0).Length - 12 - H(0).Subdrill) > 1e-9) throw new Exception($"first hole: level {H(0).ToLevel}, length {H(0).Length}");
+    if (H(1).ToLevel is not double z1 || Math.Abs(z1 - (c1.Z - 7)) > 1e-9 || Math.Abs(H(1).Length - 7 - H(1).Subdrill) > 1e-9) throw new Exception($"second hole: level {H(1).ToLevel}, length {H(1).Length}");
+    if (H(2).ToLevel != null || H(2).Length != farLength) throw new Exception($"the hole off the surfaces changed: level {H(2).ToLevel}, length {H(2).Length}");
+    vm.Undo(); vm.Undo(); Pump();
+    if (!vm.Project.Entities.OfType<SurfaceEntity>().Select(s => s.Id).SequenceEqual(surfaces)) throw new Exception("undo did not bring the demo surfaces back");
 });
 Step("visibility: hole items in two columns", () =>
 {

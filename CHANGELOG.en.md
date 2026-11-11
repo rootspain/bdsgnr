@@ -56,8 +56,17 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   fires later by depth × that value. 0 by default.
 - **Font size of the hole labels.** The Visibility tab, Hole labels section, has a "Font size" field (whole numbers, with arrows,
   6–40, 12 by default). The size is kept in the project and in the program settings: a new blast starts with the last one chosen.
+- **To the surface button** right of the To level field in the Properties panel and the hole form. Each selected hole
+  takes as To level the elevation where the ray from its collar along the hole meets the first surface, each its own
+  surface; the length follows that level with the subdrill. Holes that meet no surface keep their level and length.
+- **Hole field "To level", m.** When set and not 0, the hole length runs along the hole from the collar down to that
+  elevation (at any angle and bearing) plus the subdrill; a negative subdrill, an underdrill, takes it off. The grade point
+  of the hole is on the level. The length follows every change of the collar, the angle, the subdrill or the level; a hole
+  loaded by its rules is loaded again.
+  The collar must be above the level, otherwise the value is refused. The field is in the Properties panel and the hole form.
 
 ### Changed
+- **The Pattern tool**, once the pattern is built, closes its panel, switches to Select and selects the new holes.
 - **The timing line is drawn as two segments.** A press places the vertex, where two segments meet at 30°;
   drag with the button held to set the direction and length, a click gives segments 60 px long. While the front is drawn or turned
   a ray leaves the vertex: the times of the holes grow that way. On a selected front, in the tool and in Select (V), the accent circle
@@ -80,12 +89,21 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The BPD export writes each detonator with the time of its primer.
 - **The EBS timing front follows its holes.** When a hole of a front is moved, loaded again or its primer moved, the front reprograms
   its holes in the same undo step, without opening its window again. Manual times stay.
-- The largest delay counts the primers with an offset: a hole is not programmed when its time with its last primer passes the
-  largest electronic delay. The message names the primer offset of such a hole.
+- The largest delay counts the primers with an offset: a hole is not programmed when its time plus the largest offset of its
+  electronic primers passes the largest electronic delay, as in SHOTPlus. The deck delays are not added. The message names
+  the primer offset of such a hole.
+- **An EBS opening point not opened at itself** times from the point, as in SHOTPlus: a hole takes its time plus the offset,
+  not the offset at the nearest hole. The holes behind the point (time below 0) are not programmed. A negative offset of
+  an opening point counts as 0.
+- **A primer whose offset puts it before 0** (with "Use offsets") stays without a time, as in SHOTPlus, instead of taking 0.
+  The BPD export names such a hole and leaves it out.
 - **Electric detonators taken out of the built-in catalogue** (25 and 500 ms and their family). The Electric detonator kind and
   the Electric type stay for products of your own. An older project keeps a built-in electric detonator only where it is used.
 - **Shift in the middle of a Select drag** no longer puts the objects back on their X and Y: the way made so far is kept and they go
   on along Z; letting go of Shift keeps the height.
+- **The last interval of the column follows the toe.** When the hole length changes — by hand, by "To level" or by a move
+  of the collar — the last interval goes down to the new depth and its primers keep their distance from its bottom. Intervals
+  below the new toe go, the one it cuts ends at the toe.
 
 ## 0.2.6 — 2026-11-06
 

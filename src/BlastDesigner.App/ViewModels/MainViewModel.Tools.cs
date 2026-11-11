@@ -30,6 +30,31 @@ public sealed partial class MainViewModel
     }
     private List<Hole> HolesById(BlastProject p, HashSet<Guid> ids) => p.Holes.Where(h => ids.Contains(h.Id)).ToList();
 
+    /// <summary>
+    /// Properties ▸ To the surface: each selected hole takes as its level the elevation where its line from the collar meets
+    /// the first surface, and its length follows that level with the subdrill (<see cref="HoleLevel.Follow"/>). A hole that
+    /// meets no surface keeps its level and length. One undo step.
+    /// </summary>
+    public async Task HolesToSurface()
+    {
+        if (Doc == null) return;
+        var ids = Doc.SelectedEntities.OfType<Hole>().Select(h => h.Id).ToHashSet();
+        if (ids.Count == 0) return;
+        if (!Project!.Entities.OfType<SurfaceEntity>().Any()) { await Dialogs.Info(Loc.T("The project has no surface to drill the holes down to.")); return; }
+        int done = 0, missed = 0;
+        Change("Holes to the surface", p =>
+        {
+            foreach (var h in HolesById(p, ids))
+            {
+                if (HoleLevel.SurfaceLevel(p, h) is not double z || !HoleLevel.Reaches(h, z)) { missed++; continue; }
+                h.ToLevel = z;
+                done++;
+            }
+        });
+        SetStatus(Loc.F("{0} holes down to the surface", done) + (missed > 0 ? "; " + Loc.F("{0} holes meet no surface and keep their length", missed) : ""));
+        if (missed > 0 && done == 0) await Dialogs.Info(Loc.F("{0} holes meet no surface and keep their length", missed));
+    }
+
     private async Task<bool> RequireSelection<T>(string what)
     {
         if (Doc?.SelectedEntities.OfType<T>().Any() == true) return true;
@@ -203,6 +228,7 @@ public sealed partial class MainViewModel
         if (ask) { PatternEdgeOffset = pp.EdgeOffset; PatternLabelPrefix = pp.LabelPrefix; }
         var hp = NewHoleParameters();
         int count = 0;
+        var made = new List<Guid>();
         Change("Pattern", p =>
         {
             var holes = HoleDesign.FillPolygon(polygon, pp, hp, out var rows);
@@ -217,10 +243,15 @@ public sealed partial class MainViewModel
             if (!p.Entities.OfType<PolylineEntity>().Any(x => x.Kind == LineKind.Boundary))
                 p.Add(new PolylineEntity { Points = polygon.ToList(), Closed = true, Kind = LineKind.Boundary }, p.GetOrCreateLayer(StandardLayers.Boundary, 0xFF16A34A, "Design"));
             count = holes.Count;
+            made = holes.Select(h => h.Id).ToList();
         });
-        // the next pattern starts after these holes again; the panel shows it
+        // the next pattern starts after these holes again
         PatternStartNumber = null;
-        ToolChanged?.Invoke();
+        // a pattern drawn with the tool is finished: its panel goes and the Select tool takes over, with the new holes selected
+        if (!ask && ActiveTool?.Name == "Pattern") SelectTool();
+        else ToolChanged?.Invoke();
+        // not a step of its own: one undo takes the pattern away, and the selection from before it comes back
+        if (made.Count > 0) Doc!.Select(made, record: false);
         SetStatus(Loc.F("{0} holes created", count));
     }
 

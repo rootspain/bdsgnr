@@ -45,6 +45,11 @@ public sealed class Hole : Entity
     public double Diameter { get; set; } = 102;
     /// <summary>Subdrill below grade, metres.</summary>
     public double Subdrill { get; set; }
+    /// <summary>
+    /// Elevation the hole goes down to, m: when set and not 0, the length is worked out from the collar down to it
+    /// (<c>HoleLevel</c> in the engine) after every change. The collar must be above it.
+    /// </summary>
+    public double? ToLevel { get; set; }
     /// <summary>User-defined hole type 1..8.</summary>
     public int HoleType { get; set; } = 1;
     /// <summary>Material (rock) type 1..8.</summary>

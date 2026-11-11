@@ -59,6 +59,10 @@ public sealed class PropertyGrid : Grid
     public string FieldColumns { get; set; } = "*,8,*";
     /// <summary>Unit shown in the field of a property, by property name.</summary>
     public Dictionary<string, string> Units { get; } = new();
+    /// <summary>Tool tip of the field of a property (the text as it is shown).</summary>
+    public Dictionary<string, string> Tips { get; } = new();
+    /// <summary>A small control of the caller's right of the field of a property, on its line (in a grid of sections).</summary>
+    public Dictionary<string, Control> After { get; } = new();
 
     private string MixedText => Sections != null ? Loc.T("(mixed)").Trim('(', ')') : Loc.T("(mixed)");
 
@@ -176,6 +180,7 @@ public sealed class PropertyGrid : Grid
             SetRow(editor, row);
             SetColumn(editor, 1);
             editor.Name = "prop" + p.Name;
+            if (Tips.TryGetValue(p.Name, out var tip)) ToolTip.SetTip(editor, tip);
             editor.Margin = new Thickness(0, 2);
             editor.IsEnabled = !ReadOnly && p.SetMethod?.IsPublic == true;
             Children.Add(label);
@@ -266,6 +271,7 @@ public sealed class PropertyGrid : Grid
         var editor = CreateEditor(p, target);
         if (editor == null) return null;
         editor.Name = "prop" + p.Name;
+        if (Tips.TryGetValue(p.Name, out var tip)) ToolTip.SetTip(editor, tip);
         editor.IsEnabled = !ReadOnly && p.SetMethod?.IsPublic == true;
         if (editor is ToggleSwitch or CheckBox)
         {
@@ -280,7 +286,16 @@ public sealed class PropertyGrid : Grid
         if (unit != null && (point || editor is not TextBox)) caption += ", " + unit;
         else if (unit != null && editor is TextBox box)
             box.InnerRightContent = new TextBlock { Text = unit, FontSize = 11, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
-        return (Captioned(caption, editor), point || WideFields.Contains(p.Name) || (p.PropertyType == typeof(string) && (!TextInColumns || editor is TextBox { AcceptsReturn: true })) || (editor is StackPanel && !Chips.Contains(p.Name)));
+        Control field = editor;
+        if (After.TryGetValue(p.Name, out var after))
+        {
+            // it moves to each new form of the grid
+            (after.Parent as Panel)?.Children.Remove(after);
+            after.Margin = new Thickness(4, 0, 0, 0);
+            after[DockPanel.DockProperty] = Dock.Right;
+            field = new DockPanel { Children = { after, editor } };
+        }
+        return (Captioned(caption, field), point || WideFields.Contains(p.Name) || (p.PropertyType == typeof(string) && (!TextInColumns || editor is TextBox { AcceptsReturn: true })) || (editor is StackPanel && !Chips.Contains(p.Name)));
     }
 
     private static Control Captioned(string caption, Control field) => new StackPanel

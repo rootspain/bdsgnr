@@ -363,10 +363,12 @@ public class EbsTimingLineTests
         Assert.Equal(new[] { h }, r.MaxTimeExceeded);
         Assert.Null(h.ElectronicTimeMs);
         Assert.Equal(19990, plain.ElectronicTimeMs);
-        // by the deck delays the shift counts the same way
+        // as in SHOTPlus (HoleLoading.MaxOffset): the offset counts without UseOffsets too, the deck delays do not
         p.Electronic.UseOffsets = false;
         p.Electronic.IntraDeckDelayMs = 15;
-        Assert.Equal(15, Charging.MaxPrimerOffset(p, h));
+        Assert.Equal(25, Charging.MaxPrimerOffset(p, h));
+        h.Decks[0].Primers[^1].OffsetMs = -10;
+        Assert.Equal(0, Charging.MaxPrimerOffset(p, h));
     }
 
     [Fact]

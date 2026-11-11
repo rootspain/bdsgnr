@@ -272,7 +272,7 @@ public sealed class HoleEditForm : DockPanel
     /// Number field: commits on Enter or when focus leaves it. Empty clears a value that may be missing (<paramref name="empty"/>
     /// is its placeholder); a field left empty while showing "mixed" changes nothing; bad input goes back to the last value.
     /// </summary>
-    private TextBox Number(string key, Func<Hole, double?> get, Action<Hole, double?> set, string? unit, string format = "0.0##", string? empty = null)
+    private TextBox Number(string key, Func<Hole, double?> get, Action<Hole, double?> set, string? unit, string format = "0.0##", string? empty = null, Func<double?, string?>? check = null)
     {
         var mixed = Mixed(get);
         var box = Box(unit);
@@ -281,6 +281,13 @@ public sealed class HoleEditForm : DockPanel
         box.Text = mixed ? "" : Show(get(_draft));
         box.Watermark = mixed ? MixedText : empty;
         var shown = box.Text;
+        // a value put in from outside (a button beside the field): shown as the field's own, "mixed" when the holes differ
+        _reshow[key] = values =>
+        {
+            var distinct = values.Distinct().ToList();
+            box.Text = shown = distinct.Count == 1 ? Show(distinct[0]) : "";
+            box.Watermark = distinct.Count == 1 ? empty : MixedText;
+        };
         void Commit()
         {
             if (box.Text == shown) return;
@@ -293,6 +300,8 @@ public sealed class HoleEditForm : DockPanel
             }
             else if (Parse(text) is double d) value = d;
             else { box.Text = shown; return; }
+            // a value the holes cannot take: why, and the field goes back to the last value
+            if (check?.Invoke(value) is { } error) { box.Text = shown; _ = Dialogs.Info(error); return; }
             Set(key, h => set(h, value));
             box.Text = shown = Show(get(_draft));
         }
@@ -493,8 +502,57 @@ public sealed class HoleEditForm : DockPanel
         };
     }
 
+    /// <summary>Puts a value in a number field from outside it, by its key: the values of the holes, one for each.</summary>
+    private readonly Dictionary<string, Action<IEnumerable<double?>>> _reshow = new();
+
+    /// <summary>
+    /// Elevation the holes go down to: the length follows it; refused when a collar is not above it. The button beside it
+    /// puts in each hole's level where its line meets the first surface; a hole that meets none keeps its own.
+    /// </summary>
+    private Control ToLevel()
+    {
+        var box = Number(nameof(Hole.ToLevel), h => h.ToLevel, (h, v) => h.ToLevel = v is 0 ? null : v, "m", "0.0##", L("not set"), v =>
+            v is double z && z != 0 && _holes.FirstOrDefault(h => !HoleLevel.Reaches(h, z)) is { } low
+                ? Loc.F("The collar of hole {0} ({1:0.###} m) is not above the level {2:0.###} m.", low.Label, low.Collar.Z, z)
+                : null);
+        ToolTip.SetTip(box, PropertiesPanel.LengthTip());
+        var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), L("To the surface: the holes take as their level the elevation where their line from the collar meets the first surface"), () => _ = ToSurface(), 32, 32);
+        toSurface.Name = "holeToSurface";
+        toSurface.Margin = new Thickness(4, 0, 0, 0);
+        Avalonia.Automation.AutomationProperties.SetName(toSurface, L("To the surface"));
+        DockPanel.SetDock(toSurface, Dock.Right);
+        return new DockPanel { Children = { toSurface, box } };
+
+        async Task ToSurface()
+        {
+            if (!_p.Entities.OfType<SurfaceEntity>().Any()) { await Dialogs.Info(Loc.T("The project has no surface to drill the holes down to.")); return; }
+            var levels = _holes.ToDictionary(h => h.Id, h => HoleLevel.SurfaceLevel(_p, h) is double z && HoleLevel.Reaches(h, z) ? z : (double?)null);
+            var missed = levels.Count(l => l.Value == null);
+            if (missed == _holes.Count) { await Dialogs.Info(Loc.F("{0} holes meet no surface and keep their length", missed)); return; }
+            // each hole its own level; one that meets no surface keeps what it has (the edit made in this form, if any)
+            var before = Edit.Fields.TryGetValue(nameof(Hole.ToLevel), out var typed) ? typed : null;
+            var typedLevel = _draft.ToLevel;
+            Set(nameof(Hole.ToLevel), h =>
+            {
+                if (levels.TryGetValue(h.Id, out var z) && z != null) h.ToLevel = z;
+                else before?.Invoke(h);
+            });
+            // every hole's level from the surface its own line meets first, which may be a different surface for each
+            _reshow[nameof(Hole.ToLevel)](_holes.Select(h => levels[h.Id] ?? (before == null ? h.ToLevel : typedLevel)));
+            if (missed > 0) await Dialogs.Info(Loc.F("{0} holes meet no surface and keep their length", missed));
+        }
+    }
+
+    /// <summary>A field of the length with the tip of how it is counted.</summary>
+    private static TextBox LengthTipped(TextBox box)
+    {
+        ToolTip.SetTip(box, PropertiesPanel.LengthTip());
+        return box;
+    }
+
     private Control GeometryFields() => Fields(2,
-        Labeled("Length", Number(nameof(Hole.Length), h => h.Length, (h, v) => h.Length = Math.Max(0, v ?? 0), "m")),
+        Labeled("Length", LengthTipped(Number(nameof(Hole.Length), h => h.Length, (h, v) => h.Length = Math.Max(0, v ?? 0), "m"))),
+        Labeled("To level", ToLevel()),
         Labeled("Diameter", Number(nameof(Hole.Diameter), h => h.Diameter, (h, v) => h.Diameter = Math.Max(0, v ?? 0), "mm", "0.#")),
         Labeled("Subdrill", Number(nameof(Hole.Subdrill), h => h.Subdrill, (h, v) => h.Subdrill = v ?? 0, "m")),
         Labeled("Actual length", Number(nameof(Hole.ActualLength), h => h.ActualLength, (h, v) => h.ActualLength = v, "m", empty: L("not measured"))),

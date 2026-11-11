@@ -2942,6 +2942,7 @@ The tie type is chosen for more than one line: {0}	Тип связи выбра�
 Line {0}: {1} hole(s) without electronic detonators are not written.	Линия {0}: скважин без электронных детонаторов: {1}, они не записаны.
 Line {0} ({1}): no holes with electronic detonators.	Линия {0} ({1}): нет скважин с электронными детонаторами.
 Hole {0}: the electronic time is not set.	Скважина {0}: не задано электронное время.
+Hole {0}: a primer fires before 0 with its offset and is not programmed.	Скважина {0}: боевик со своим смещением срабатывает раньше 0 и не запрограммирован.
 {0} ties of this type: more than {1}.	Связей этого типа: {0}, больше {1}.
 Line {0} ({1}): {2} ties, more than {3}.	Линия {0} ({1}): связей {2}, больше {3}.
 Chain of ties	Цепочка связей
@@ -3016,3 +3017,20 @@ Least relief	Наименьшая разгрузка
 Most relief	Наибольшая разгрузка
 ui:Font size	Размер шрифта
 ui:Font size of the hole labels on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen.	Размер шрифта подписей скважин на плане и в 3D, пикс. Хранится в проекте; новый взрыв начинается с последнего выбранного размера.
+To level	До уровня
+ui:To level	До уровня
+The collar of hole {0} ({1:0.###} m) is not above the level {2:0.###} m.	Устье скважины {0} ({1:0.###} м) не выше уровня {2:0.###} м.
+ui:Length: the full length of the hole along its axis, from the collar to the very bottom, subdrill included.	Длина — полная длина скважины вдоль её оси, от устья до самого низа, вместе с перебуром.
+ui:With To level set, the length is calculated automatically: length = (collar Z − level) / cos(angle) + subdrill.	При заданном «До уровня» длина вычисляется автоматически: длина = (Z устья − уровень) / cos(угол) + перебур.
+ui:The bearing does not change the length: at any angle the hole reaches the level.	Азимут на длину не влияет: при любом наклоне вертикальная проекция одинакова, и скважина всё равно доходит до уровня.
+ui:A negative subdrill is an underdrill: the hole ends that far above the level along its axis.	Отрицательный перебур работает как недобур: скважина заканчивается выше уровня на эту величину вдоль оси.
+ui:The length follows the collar, the angle, the subdrill and the level; the last interval of the column goes down to the new toe.	Длина пересчитывается при изменении устья, угла, перебура и самого уровня; последний интервал колонки доходит до нового забоя.
+ui:If the underdrill is as long as the whole way to the level, the length stays as it is.	Если недобур не меньше всего пути до уровня, длина не меняется.
+ui:Empty or 0: no level, the length is entered by hand.	Пусто или 0 — уровня нет, длина вводится вручную.
+ui:To the surface: the selected holes go down to the first surface their line meets from the collar, plus the subdrill	До поверхности: в «До уровня» каждой выделенной скважины ставится отметка Z, где её ось от устья пересекает первую поверхность; длина считается до неё с перебуром
+ui:To the surface	До поверхности
+The project has no surface to drill the holes down to.	В проекте нет поверхности, до которой можно пересчитать скважины.
+Holes to the surface	Скважины до поверхности
+{0} holes down to the surface	Скважин до поверхности: {0}
+{0} holes meet no surface and keep their length	Скважин без пересечения с поверхностью: {0}, их длина не изменилась
+ui:To the surface: the holes take as their level the elevation where their line from the collar meets the first surface	До поверхности: в «До уровня» каждой скважины ставится отметка Z, где её ось от устья пересекает первую поверхность

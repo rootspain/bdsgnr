@@ -7,11 +7,20 @@ namespace BlastDesigner.Engine;
 
 internal static class EngineModule
 {
-    /// <summary>Every change of a document is followed by the timing lines of its holes (<see cref="EbsTimingLine.Follow"/>).</summary>
+    /// <summary>
+    /// Every change of a document is followed by the lengths of the holes drilled to a level (<see cref="HoleLevel.Follow"/>),
+    /// the columns of the holes whose length changed (<see cref="Charging.FollowLength"/>), then by the timing lines of its
+    /// holes (<see cref="EbsTimingLine.Follow"/>), which time the holes at their new depth.
+    /// </summary>
 #pragma warning disable CA2255 // the engine is a library, but only the application and its tests use it
     [ModuleInitializer]
 #pragma warning restore CA2255
-    internal static void Init() => Document.Followers.Add(EbsTimingLine.Follow);
+    internal static void Init()
+    {
+        Document.Followers.Add(HoleLevel.Follow);
+        Document.Followers.Add(Charging.FollowLength);
+        Document.Followers.Add(EbsTimingLine.Follow);
+    }
 }
 
 public sealed class TimingLineOptions
@@ -107,10 +116,12 @@ public static class EbsTimingLine
     /// The times an object of time gives its holes, from their raw times (<paramref name="rawOf"/>, of the holes with an electronic
     /// detonator; ≥ 1e30 in magnitude: out of reach, below 0 too when <paramref name="fromZero"/>): shifted so the earliest in reach
     /// (manual ones included) fires at <paramref name="startOffsetMs"/>, rounded, and checked against the largest delay with the
-    /// hole's last primer. Manual times are kept with <paramref name="keepManual"/>.
+    /// hole's last primer. Manual times are kept with <paramref name="keepManual"/>. Without <paramref name="shiftToFirst"/> the
+    /// raw times are kept as they are, plus <paramref name="startOffsetMs"/>, and a hole whose time is below 0 is out of reach
+    /// (an opening point that is not opened at itself).
     /// </summary>
     internal static (Dictionary<Guid, double> Times, TimingLineResult Result) Program(BlastProject project, IReadOnlyList<Hole> holes, Func<IReadOnlyList<Hole>, double[]> rawOf,
-        double startOffsetMs, bool keepManual, bool fromZero, double maxTimeMs, bool allowSubMs)
+        double startOffsetMs, bool keepManual, bool fromZero, double maxTimeMs, bool allowSubMs, bool shiftToFirst = true)
     {
         // only the holes with an electronic detonator take a programmed time; a pyrotechnic one fires by its tie-up
         var all = holes;
@@ -120,7 +131,7 @@ public static class EbsTimingLine
         bool Reached(double t) => Math.Abs(t) < 1e30 && (!fromZero || t > -0.001);
         double min = Invalid;
         foreach (var t in raw) if (Reached(t) && t < min) min = t;
-        var shift = min - startOffsetMs;
+        var shift = (shiftToFirst ? min : 0) - startOffsetMs;
         int manual = 0;
         var unreached = new List<Hole>();
         var exceeded = new List<Hole>();

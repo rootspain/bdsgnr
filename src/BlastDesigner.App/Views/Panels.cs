@@ -134,10 +134,26 @@ public sealed class PropertiesPanel : DockPanel
     private readonly MainViewModel _vm;
     private readonly ContentControl _content = new();
     private readonly TextBlock _header = new() { Classes = { "caption" } };
+    /// <summary>
+    /// Tool tip of the fields "Length" and "To level" of a hole, here and in the hole form: how the length is counted and
+    /// how a level works it out. Paragraph by paragraph, each translated on its own (the table holds one line a text).
+    /// </summary>
+    public static readonly string[] LengthTipParagraphs =
+    {
+        "Length: the full length of the hole along its axis, from the collar to the very bottom, subdrill included.",
+        "With To level set, the length is calculated automatically: length = (collar Z − level) / cos(angle) + subdrill.",
+        "The bearing does not change the length: at any angle the hole reaches the level.",
+        "A negative subdrill is an underdrill: the hole ends that far above the level along its axis.",
+        "The length follows the collar, the angle, the subdrill and the level; the last interval of the column goes down to the new toe.",
+        "If the underdrill is as long as the whole way to the level, the length stays as it is.",
+        "Empty or 0: no level, the length is entered by hand."
+    };
+
+    public static string LengthTip() => string.Join("\n\n", LengthTipParagraphs.Select(Loc.Ui));
     /// <summary>The groups of the fields of a hole; the last one takes all the others.</summary>
     private static readonly PropertySection[] HoleSections =
     {
-        new("Geometry", nameof(Hole.Label), nameof(Hole.Collar), nameof(Hole.Angle), nameof(Hole.Bearing), nameof(Hole.Length), nameof(Hole.Diameter), nameof(Hole.Subdrill)),
+        new("Geometry", nameof(Hole.Label), nameof(Hole.Collar), nameof(Hole.Angle), nameof(Hole.Bearing), nameof(Hole.Length), nameof(Hole.ToLevel), nameof(Hole.Diameter), nameof(Hole.Subdrill)),
         new("Classification", nameof(Hole.HoleType), nameof(Hole.MaterialType), nameof(Hole.State), nameof(Hole.IsDummy)),
         new("Measurements", nameof(Hole.ActualLength), nameof(Hole.WaterDepth), nameof(Hole.Temperature), nameof(Hole.Exceptions)),
         new("Other")
@@ -191,13 +207,29 @@ public sealed class PropertiesPanel : DockPanel
             grid.Sections = HoleSections;
             grid.Collapsed = _collapsed;
             string m = Loc.Ui("m"), degrees = "°";
-            foreach (var (name, unit) in new[] { (nameof(Hole.Collar), m), (nameof(Hole.Angle), degrees), (nameof(Hole.Bearing), degrees), (nameof(Hole.Length), m), (nameof(Hole.Diameter), Loc.Ui("mm")), (nameof(Hole.Subdrill), m), (nameof(Hole.ActualLength), m), (nameof(Hole.WaterDepth), m), (nameof(Hole.Temperature), "°C") })
+            foreach (var (name, unit) in new[] { (nameof(Hole.Collar), m), (nameof(Hole.Angle), degrees), (nameof(Hole.Bearing), degrees), (nameof(Hole.Length), m), (nameof(Hole.ToLevel), m), (nameof(Hole.Diameter), Loc.Ui("mm")), (nameof(Hole.Subdrill), m), (nameof(Hole.ActualLength), m), (nameof(Hole.WaterDepth), m), (nameof(Hole.Temperature), "°C") })
                 grid.Units[name] = unit;
+            grid.Tips[nameof(Hole.Length)] = grid.Tips[nameof(Hole.ToLevel)] = LengthTip();
+            if (!doc.IsReadOnly)
+            {
+                var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), Loc.Ui("To the surface: the selected holes go down to the first surface their line meets from the collar, plus the subdrill"), () => _ = _vm.HolesToSurface(), 30, 30);
+                toSurface.Name = "holesToSurface";
+                Avalonia.Automation.AutomationProperties.SetName(toSurface, Loc.Ui("To the surface"));
+                grid.After[nameof(Hole.ToLevel)] = toSurface;
+            }
         }
         grid.SetTargets(template, sel);
         var ids = sel.Select(e => e.Id).ToHashSet();
         grid.PropertyEdited += name =>
         {
+            // a hole is drilled down to a level only from above it: the value is not taken, the panel shows the old one
+            if (name == nameof(Hole.ToLevel) && template is Hole level && HoleLevel.Of(level) is double z
+                && sel.OfType<Hole>().FirstOrDefault(h => !HoleLevel.Reaches(h, z)) is { } low)
+            {
+                _ = Dialogs.Info(Loc.F("The collar of hole {0} ({1:0.###} m) is not above the level {2:0.###} m.", low.Label, low.Collar.Z, z));
+                Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
+                return;
+            }
             _vm.Change(Loc.F("Edit {0}", Loc.Property(name)), p =>
             {
                 foreach (var e in p.Entities.Where(e => ids.Contains(e.Id)))

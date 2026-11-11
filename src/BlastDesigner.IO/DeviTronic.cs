@@ -230,6 +230,8 @@ public static class DeviTronic
                     .Where(p => project.FindProduct(p.Primer.DetonatorId)?.Kind == ProductKind.ElectronicDetonator)
                     .ToList();
                 primers = levels == BpdLevelOrder.BottomFirst ? primers.OrderByDescending(p => p.Primer.Depth).ToList() : primers.OrderBy(p => p.Primer.Depth).ToList();
+                // a primer whose offset puts it before 0 is not programmed (SHOTPlus SetEBSTimes): the hole cannot go to the blaster
+                if (primers.Any(p => !times.ContainsKey(p.Primer))) { errors.Add(new BpdMessage("Hole {0}: a primer fires before 0 with its offset and is not programmed.", h.Label)); continue; }
                 var dets = primers.Select((p, level) => new BpdDetonator(++order, level + 1, Delay(times.TryGetValue(p.Primer, out var t) ? t : ms.Value))).ToList();
                 path.Holes.Add(new BpdHole($"{id}{++n:0000}", dets, h));
             }
