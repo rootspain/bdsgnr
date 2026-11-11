@@ -36,6 +36,26 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Section lines.** The Drawing list has a Section line tool: one segment, the entry ends with the second click, of the type Cross section.
   The line is drawn thicker than a polyline. In the Section window arrows go to the previous and next line, the Print button opens the preview. The Properties tab of a line of that type has a Section along line button. A surface in a section and a horizontal slice is cut to the half width. A section goes along the first segment of the line. The colour of the line on the screen is set in the Viewport section of the program settings.
   The preview has a Section chip and sheet, one sheet per line, and the report a Cross section section after the Plan.
+- **DeviTronic detonator** in the product catalogue: electronic, with its own family "DeviTronic". It also appears in projects
+  from older files, and is offered wherever the Electronic detonator is: primers, loading rules, In-hole delay, BPD export.
+- **Electronic primers with times of their own.** A primer with an electronic detonator has the field "Offset from the hole time, ms"
+  in the hole loading window in place of the delay. The electronic settings have a new group "Decks and primers": inter deck delay,
+  intra deck delay, deck order (bottom up, top down, simultaneous), primer order and "Use offsets". The explosive decks between
+  inert ones fire in their order, the primers of a deck one after another by the intra deck delay; with offsets each primer fires
+  at the hole's time plus its offset.
+- **Loading rules keep every primer.** A rule saved from a hole's column keeps all the primers of a deck with their height, booster,
+  detonator, delay and offset. Rules of older files are read as a list of like primers.
+- **EBS opening point.** The Opening point button places a point the holes with an electronic detonator take their times from:
+  along the burden and the spacing with their delays and the bearing of the burden, from the time of the first hole. With
+  "Open the segment at this point" the times grow to both sides of the nearest hole, a V pattern. The window shows the overall
+  relief, ms/m; the plan shows two rays marked like "42ms / 4 m". A hole belongs to one opening point or one front.
+- **Burden relief over triangles.** The Burden relief command opens a window: the triangles between the holes in five colours,
+  blue to red by their relief, ms/m, with the legend, an "Upper limit" field and the value under the cursor. The plan shows the
+  same while the window is open. Reports have a new section "Burden relief". The burden relief dots at the holes are gone.
+- **Signal down the tube.** A downhole shock tube detonator has the field "Signal down the tube", ms/m, in the catalogue: its primer
+  fires later by depth × that value. 0 by default.
+- **Font size of the hole labels.** The Visibility tab, Hole labels section, has a "Font size" field (whole numbers, with arrows,
+  6–40, 12 by default). The size is kept in the project and in the program settings: a new blast starts with the last one chosen.
 
 ### Changed
 - **The timing line is drawn as two segments.** A press places the vertex, where two segments meet at 30°;
@@ -46,6 +66,26 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - The timing line keeps its English name; in Russian it is now «Фронт отбойки ЭСИ» throughout the program.
 - First movement window: the Show on plan switch is off by default.
 - The report preview always has the First movement chip, also when opened from the Reports command.
+- **The EBS timing front programs only holes with an electronic detonator.** Pyrotechnic holes are left out and fire by their tie-up;
+  their count shows in the front window and the status bar. Times an older version gave them are cleared when the file is opened
+  (manual ones stay). Holes out of the front's reach, for a chevron those behind its vertex, lose their time; their numbers are listed after Apply.
+- **Rounding of EBS times.** The electronic settings have an "Allow sub ms" check box in place of the time step: off, the times
+  are rounded to 1 ms, on, to 0.1 ms, as in SHOTPlus. Files with a step under 1 ms open with it on.
+- EBS timing front window: when some of its holes have a manual time, the note "There are holes with a manual time" and the
+  check box "Apply to holes with a manual time" show. The check box applies to this time only.
+- **The charges of a hole fire each at its own time.** Explosive decks between inert ones are separate charges; a charge fires with
+  its earliest primer: electronic by the hole's time and the deck delays, pyrotechnic by the tie-up and the detonator's delay. The hole
+  fires with its first charge. The time envelope, the charge vs time plot, vibration and the MIC take each charge apart, with its mass.
+  The timing front and first movement take the middle of the first charge to fire, a hole without a primer its collar.
+  The BPD export writes each detonator with the time of its primer.
+- **The EBS timing front follows its holes.** When a hole of a front is moved, loaded again or its primer moved, the front reprograms
+  its holes in the same undo step, without opening its window again. Manual times stay.
+- The largest delay counts the primers with an offset: a hole is not programmed when its time with its last primer passes the
+  largest electronic delay. The message names the primer offset of such a hole.
+- **Electric detonators taken out of the built-in catalogue** (25 and 500 ms and their family). The Electric detonator kind and
+  the Electric type stay for products of your own. An older project keeps a built-in electric detonator only where it is used.
+- **Shift in the middle of a Select drag** no longer puts the objects back on their X and Y: the way made so far is kept and they go
+  on along Z; letting go of Shift keeps the height.
 
 ## 0.2.6 — 2026-11-06
 

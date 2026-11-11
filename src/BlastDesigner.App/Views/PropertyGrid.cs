@@ -36,6 +36,10 @@ public sealed class PropertyGrid : Grid
     public Dictionary<string, long> MixedBits { get; set; } = new();
     /// <summary>For [Flags] properties with mixed bits: the bits the user actually changed.</summary>
     public Dictionary<string, long> FlagEdits { get; } = new();
+    /// <summary>For points (<see cref="Vec3"/>): the axes X, Y, Z that differ between the edited objects.</summary>
+    public Dictionary<string, bool[]> MixedAxes { get; set; } = new();
+    /// <summary>For points with mixed axes: the axes the user actually typed.</summary>
+    public Dictionary<string, bool[]> AxisEdits { get; } = new();
 
     /// <summary>Lays the fields out in these groups; the last one also takes the properties no group names.</summary>
     public IReadOnlyList<PropertySection>? Sections { get; set; }
@@ -63,6 +67,7 @@ public sealed class PropertyGrid : Grid
     {
         Mixed = FindMixed(objects);
         MixedBits = FindMixedBits(objects);
+        MixedAxes = FindMixedAxes(objects);
         SetTarget(template);
     }
 
@@ -97,7 +102,27 @@ public sealed class PropertyGrid : Grid
         return result;
     }
 
-    /// <summary>Copies the edited properties to a target; flag properties with mixed bits only change the bits that were edited.</summary>
+    public static Dictionary<string, bool[]> FindMixedAxes(IReadOnlyList<object> objects)
+    {
+        var result = new Dictionary<string, bool[]>();
+        if (objects.Count < 2) return result;
+        foreach (var p in objects[0].GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (p.PropertyType != typeof(Vec3) || p.GetIndexParameters().Length > 0 || p.GetMethod == null) continue;
+            var first = (Vec3)p.GetValue(objects[0])!;
+            var axes = new bool[3];
+            foreach (var o in objects.Skip(1))
+            {
+                var v = (Vec3)p.GetValue(o)!;
+                axes[0] |= v.X != first.X; axes[1] |= v.Y != first.Y; axes[2] |= v.Z != first.Z;
+            }
+            if (axes.Any(a => a)) result[p.Name] = axes;
+        }
+        return result;
+    }
+
+    /// <summary>Copies the edited properties to a target; flag properties with mixed bits only change the bits that were edited,
+    /// points with mixed axes only the axes typed.</summary>
     public void ApplyTo(object template, object target)
     {
         foreach (var n in Changed)
@@ -109,6 +134,14 @@ public sealed class PropertyGrid : Grid
                 var now = Convert.ToInt64(p.GetValue(target));
                 var want = Convert.ToInt64(p.GetValue(template));
                 p.SetValue(target, Enum.ToObject(p.PropertyType, (now & ~bits) | (want & bits)));
+            }
+            else if (AxisEdits.TryGetValue(n, out var axes) && MixedAxes.TryGetValue(n, out var mixedAxes))
+            {
+                var now = (Vec3)p.GetValue(target)!;
+                var want = (Vec3)p.GetValue(template)!;
+                // an axis the objects share is the same everywhere, so it is copied as it stands
+                bool Take(int i) => axes[i] || !mixedAxes[i];
+                p.SetValue(target, new Vec3(Take(0) ? want.X : now.X, Take(1) ? want.Y : now.Y, Take(2) ? want.Z : now.Z));
             }
             else p.SetValue(target, p.GetValue(template));
         }
@@ -368,8 +401,8 @@ public sealed class PropertyGrid : Grid
                 if (t.Length == 6) t = "FF" + t;
                 if (uint.TryParse(t, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var c))
                 {
-                    swatch.Background = new SolidColorBrush(Color.FromUInt32(c));
-                    Set(p, c);
+                swatch.Background = new SolidColorBrush(Color.FromUInt32(c));
+                Set(p, c);
                 }
             };
             return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { swatch, tb } };
@@ -401,19 +434,19 @@ public sealed class PropertyGrid : Grid
                 var current = Convert.ToInt64(value ?? 0);
                 foreach (var v in Enum.GetValues(enumType))
                 {
-                    var bits = Convert.ToInt64(v);
-                    if (bits == 0) continue;
-                    var bitMixed = MixedBits.TryGetValue(p.Name, out var mb) && (mb & bits) != 0;
-                    var cb = new CheckBox { Content = Loc.Enum(v), IsChecked = bitMixed ? null : (current & bits) == bits, IsThreeState = bitMixed, Margin = new Thickness(0, 0, 8, 0) };
-                    cb.IsCheckedChanged += (_, _) =>
-                    {
-                        if (cb.IsChecked == null) return;
-                        var now = Convert.ToInt64(p.GetValue(target) ?? 0);
-                        now = cb.IsChecked == true ? now | bits : now & ~bits;
-                        if (MixedBits.ContainsKey(p.Name)) { FlagEdits.TryGetValue(p.Name, out var fe); FlagEdits[p.Name] = fe | bits; }
-                        Set(p, Enum.ToObject(enumType, now));
-                    };
-                    panel.Children.Add(cb);
+                var bits = Convert.ToInt64(v);
+                if (bits == 0) continue;
+                var bitMixed = MixedBits.TryGetValue(p.Name, out var mb) && (mb & bits) != 0;
+                var cb = new CheckBox { Content = Loc.Enum(v), IsChecked = bitMixed ? null : (current & bits) == bits, IsThreeState = bitMixed, Margin = new Thickness(0, 0, 8, 0) };
+                cb.IsCheckedChanged += (_, _) =>
+                {
+                    if (cb.IsChecked == null) return;
+                    var now = Convert.ToInt64(p.GetValue(target) ?? 0);
+                    now = cb.IsChecked == true ? now | bits : now & ~bits;
+                    if (MixedBits.ContainsKey(p.Name)) { FlagEdits.TryGetValue(p.Name, out var fe); FlagEdits[p.Name] = fe | bits; }
+                    Set(p, Enum.ToObject(enumType, now));
+                };
+                panel.Children.Add(cb);
                 }
                 return panel;
             }
@@ -423,21 +456,21 @@ public sealed class PropertyGrid : Grid
                 var chips = new List<Button>();
                 foreach (var v in values)
                 {
-                    var chip = Ui.Chip(Loc.Enum(v), () =>
-                    {
-                        Set(p, v);
-                        for (int i = 0; i < chips.Count; i++) Ui.SetChip(chips[i], values[i].Equals(v));
-                    }, v.Equals(value));
-                    chip.Name = p.Name + v;
-                    chips.Add(chip);
+                var chip = Ui.Chip(Loc.Enum(v), () =>
+                {
+                    Set(p, v);
+                    for (int i = 0; i < chips.Count; i++) Ui.SetChip(chips[i], values[i].Equals(v));
+                }, v.Equals(value));
+                chip.Name = p.Name + v;
+                chips.Add(chip);
                 }
                 return Ui.Row(4, chips.Cast<Control>().ToArray());
             }
             System.Collections.IEnumerable items = values.Select(Loc.Enum).ToList();
             if (EnumColors.TryGetValue(enumType, out var colorOf))
                 items = values.Select(v => (Control)Ui.Row(8,
-                    new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromUInt32(colorOf(v))), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center },
-                    new TextBlock { Text = Loc.Enum(v), VerticalAlignment = VerticalAlignment.Center })).ToList();
+                new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromUInt32(colorOf(v))), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center },
+                new TextBlock { Text = Loc.Enum(v), VerticalAlignment = VerticalAlignment.Center })).ToList();
             var combo = new ComboBox { ItemsSource = items, SelectedIndex = value == null || mixed ? -1 : values.IndexOf(value), PlaceholderText = mixed ? MixedText : null, MinWidth = 160, HorizontalContentAlignment = HorizontalAlignment.Left };
             combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) Set(p, values[combo.SelectedIndex]); };
             return combo;
@@ -451,15 +484,35 @@ public sealed class PropertyGrid : Grid
         if (type == typeof(Vec3))
         {
             var v = (Vec3)value!;
-            var boxes = new[] { v.X, v.Y, v.Z }.Select(c => new TextBox { Text = mixed ? "" : c.ToString("0.###", CultureInfo.InvariantCulture), Watermark = mixed ? MixedText : null, MinWidth = 60 }).ToArray();
-            foreach (var b in boxes)
-                b.LostFocus += (_, _) =>
+            // with several objects each axis is mixed on its own: an empty one keeps every object's value, a typed one is applied
+            var axisMixed = mixed ? MixedAxes.GetValueOrDefault(p.Name) ?? new[] { true, true, true } : new bool[3];
+            var boxes = new[] { v.X, v.Y, v.Z }.Select((c, i) => new TextBox { Text = axisMixed[i] ? "" : c.ToString("0.###", CultureInfo.InvariantCulture), Watermark = axisMixed[i] ? MixedText : null, MinWidth = 60 }).ToArray();
+            bool Commit()
+            {
+                var was = (Vec3)p.GetValue(target)!;
+                var old = new[] { was.X, was.Y, was.Z };
+                var parsed = new double[3];
+                var typed = new bool[3];
+                for (int i = 0; i < 3; i++)
                 {
-                    var parsed = boxes.Select(x => double.TryParse((x.Text ?? "").Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var d) ? d : double.NaN).ToArray();
-                    if (parsed.Any(double.IsNaN)) return;
-                    var nv = new Vec3(parsed[0], parsed[1], parsed[2]);
-                    if (!nv.Equals(p.GetValue(target))) Set(p, nv);
-                };
+                    var text = (boxes[i].Text ?? "").Trim();
+                    if (axisMixed[i] && text.Length == 0) { parsed[i] = old[i]; continue; }
+                    if (!double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out parsed[i])) return false;
+                    typed[i] = axisMixed[i];
+                }
+                var nv = new Vec3(parsed[0], parsed[1], parsed[2]);
+                var edits = AxisEdits.GetValueOrDefault(p.Name);
+                var newAxis = typed.Where((t, i) => t && edits?[i] != true).Any();
+                if (nv.Equals(was) && !newAxis) return false;
+                if (mixed) AxisEdits[p.Name] = Enumerable.Range(0, 3).Select(i => typed[i] || edits?[i] == true).ToArray();
+                Set(p, nv);
+                return true;
+            }
+            foreach (var b in boxes)
+            {
+                b.LostFocus += (_, _) => Commit();
+                b.KeyDown += (_, e) => { if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && Commit()) e.Handled = true; };
+            }
             var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,4,*,4,*") };
             for (int i = 0; i < 3; i++)
             {

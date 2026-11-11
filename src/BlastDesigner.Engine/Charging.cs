@@ -43,6 +43,127 @@ public static class Charging
     public static double PrimerDelay(BlastProject project, Primer p) =>
         p.DelayMs ?? project.FindProduct(p.DetonatorId)?.DelayMs ?? 0;
 
+    /// <summary>Whether a primer carries an electronic detonator.</summary>
+    public static bool IsElectronic(BlastProject project, Primer p) => project.FindProduct(p.DetonatorId)?.Kind == ProductKind.ElectronicDetonator;
+
+    /// <summary>
+    /// The run of the signal down the tube of a downhole detonator to its primer: the depth of the primer times the
+    /// detonator's <see cref="Product.PropagationMsPerM"/>, ms; nothing for other detonators.
+    /// </summary>
+    public static double PropagationDelay(BlastProject project, Primer p) =>
+        project.FindProduct(p.DetonatorId) is { Kind: ProductKind.DownholeDetonator } d ? Math.Max(0, p.Depth) * d.PropagationMsPerM : 0;
+
+    /// <summary>
+    /// Charges of a hole: runs of explosive decks with no inert deck or gap between them, from the collar down, each with its
+    /// primers. A deck counts as explosive by its product.
+    /// </summary>
+    public static List<List<Deck>> ExplosiveRuns(BlastProject project, Hole hole)
+    {
+        var runs = new List<List<Deck>>();
+        List<Deck>? run = null;
+        double bottom = double.NaN;
+        foreach (var d in hole.Decks.Where(d => d.Length > 1e-9).OrderBy(d => d.Top))
+        {
+            if (project.FindProduct(d.ProductId)?.IsExplosive != true) { run = null; continue; }
+            if (run == null || d.Top > bottom + 1e-6) runs.Add(run = new List<Deck>());
+            run.Add(d);
+            bottom = d.Bottom;
+        }
+        return runs;
+    }
+
+    /// <summary>
+    /// How much later than the hole its last electronic primer fires, ms: the largest offset with
+    /// <see cref="ElectronicSettings.UseOffsets"/>, else the largest shift of the deck delays (<see cref="PrimerTimes"/>).
+    /// A programmed time plus this must stay within the largest delay of the detonators.
+    /// </summary>
+    public static double MaxPrimerOffset(BlastProject project, Hole hole)
+    {
+        if (project.Electronic.UseOffsets)
+            return Primers(hole).Where(x => IsElectronic(project, x.Primer)).Select(x => x.Primer.OffsetMs).DefaultIfEmpty(0).Max();
+        return PrimerTimes(project, hole, 0).Values.DefaultIfEmpty(0).Max();
+    }
+
+    /// <summary>
+    /// Time of each primer after the hole's own: an electronic one by <see cref="PrimerTimes"/> from 0, another by its delay.
+    /// It orders the primers of a hole however late the hole is.
+    /// </summary>
+    public static Dictionary<Primer, double> RelativePrimerTimes(BlastProject project, Hole hole)
+    {
+        var electronic = PrimerTimes(project, hole, 0);
+        var times = new Dictionary<Primer, double>(ReferenceEqualityComparer.Instance);
+        foreach (var (p, _) in Primers(hole)) times[p] = electronic.TryGetValue(p, out var t) ? t : PrimerDelay(project, p) + PropagationDelay(project, p);
+        return times;
+    }
+
+    /// <summary>
+    /// Depth of the middle of the charge that fires first in a hole (SHOTPlus <c>GetFiringCharge</c>): the charge of the
+    /// earliest primer, the deeper of two at once. Null when no explosive deck of the hole has a primer.
+    /// </summary>
+    public static double? FiringChargeMidDepth(BlastProject project, Hole hole)
+    {
+        var times = RelativePrimerTimes(project, hole);
+        (double T, double Depth, double Mid)? best = null;
+        foreach (var run in ExplosiveRuns(project, hole))
+            foreach (var p in run.SelectMany(d => d.Primers))
+            {
+                var t = times[p];
+                var mid = (run[0].Top + run[^1].Bottom) / 2;
+                if (best is not { } b || t < b.T - 1e-9 || (Math.Abs(t - b.T) <= 1e-9 && p.Depth > b.Depth)) best = (t, p.Depth, mid);
+            }
+        return best?.Mid;
+    }
+
+    /// <summary>
+    /// The explosive of a hole by charge, at the charge's time (a charge with no time fires with the hole): each takes the mass
+    /// of its decks and of the boosters in it, and together they make the hole's mass <paramref name="holeKg"/> (that of the
+    /// calculation profile). A hole of one charge, or with no charges, is one event.
+    /// </summary>
+    public static List<(double TimeMs, double Kg)> ChargeEvents(BlastProject project, Hole hole, double holeKg)
+    {
+        if (hole.FiringTimeMs is not double holeTime) return new();
+        if (hole.Charges.Count <= 1) return new() { (hole.Charges.FirstOrDefault()?.TimeMs ?? holeTime, holeKg) };
+        var masses = hole.Charges.Select(c => c.Decks.Sum(d => DeckMass(project, hole, d) + d.Primers.Sum(p => project.FindProduct(p.BoosterId)?.UnitMass ?? 0))).ToList();
+        var total = masses.Sum();
+        return hole.Charges.Select((c, i) => (c.TimeMs ?? holeTime, total > 0 ? holeKg * masses[i] / total : holeKg / hole.Charges.Count)).ToList();
+    }
+
+    /// <summary>
+    /// Programmed time of each electronic primer of a hole whose time is <paramref name="holeTime"/> (SHOTPlus
+    /// <c>HoleLoading.SetEBSTimes</c>), rounded as the detonators take it. With <see cref="ElectronicSettings.UseOffsets"/> a
+    /// primer fires at the hole's time plus its offset, never before 0. Otherwise the charges (<see cref="ExplosiveRuns"/>) with
+    /// an electronic primer fire in the deck order: the first at the hole's time, each next one <see cref="ElectronicSettings.InterDeckDelayMs"/>
+    /// later (all at once when simultaneous); within a charge the primers follow one another by <see cref="ElectronicSettings.IntraDeckDelayMs"/>.
+    /// </summary>
+    public static Dictionary<Primer, double> PrimerTimes(BlastProject project, Hole hole, double holeTime)
+    {
+        var e = project.Electronic;
+        var times = new Dictionary<Primer, double>(ReferenceEqualityComparer.Instance);
+        // the hole's time is programmed already; a primer after it is rounded as the detonator takes it
+        double After(double delta) => delta == 0 ? holeTime : Math.Max(0, Timing.RoundTime(holeTime + delta, e.AllowSubMs));
+        if (e.UseOffsets)
+        {
+            foreach (var (p, _) in Primers(hole))
+                if (IsElectronic(project, p)) times[p] = After(p.OffsetMs);
+            return times;
+        }
+        var charges = ExplosiveRuns(project, hole)
+            .Select(run => run.SelectMany(d => d.Primers).Where(p => IsElectronic(project, p)).ToList())
+            .Where(c => c.Count > 0).ToList();
+        // the primers in no charge (a primer of an inert deck) fire with the hole
+        foreach (var (p, _) in Primers(hole))
+            if (IsElectronic(project, p) && !charges.Any(c => c.Contains(p))) times[p] = holeTime;
+        // the runs come from the collar down
+        if (e.DeckOrder == DeckFiringOrder.BottomUp) charges.Reverse();
+        for (int k = 0; k < charges.Count; k++)
+        {
+            var start = e.DeckOrder == DeckFiringOrder.Simultaneous ? 0 : k * e.InterDeckDelayMs;
+            var primers = e.PrimerOrder == PrimerFiringOrder.BottomUp ? charges[k].OrderByDescending(p => p.Depth).ToList() : charges[k].OrderBy(p => p.Depth).ToList();
+            for (int i = 0; i < primers.Count; i++) times[primers[i]] = After(start + i * e.IntraDeckDelayMs);
+        }
+        return times;
+    }
+
     /// <summary>Loads holes with the first matching rule by priority. Manually loaded holes are skipped unless forced.</summary>
     public static int ApplyRules(BlastProject project, IEnumerable<Hole> holes, bool overwriteManual = false)
     {
@@ -77,11 +198,13 @@ public static class Charging
             var top = Math.Max(stemTop, bottom - len);
             if (bottom - top < 1e-6) continue;
             var deck = new Deck { Top = top, Bottom = bottom, ProductId = t.ProductId };
-            var offsets = t.PrimerOffsets is { } o && o.Count == t.PrimerCount ? o : null;
-            for (int i = 0; i < t.PrimerCount; i++)
+            var count = t.Primers.Count;
+            for (int i = 0; i < count; i++)
             {
-                var depth = offsets != null ? bottom - offsets[i] : bottom - t.PrimerOffset - i * Math.Max(1, (bottom - top) / Math.Max(1, t.PrimerCount));
-                deck.Primers.Add(new Primer { Depth = Math.Clamp(depth, top, bottom), BoosterId = t.BoosterId, DetonatorId = t.DetonatorId });
+                var x = t.Primers[i];
+                // a primer with no height of its own is spread evenly up the deck from the first
+                var depth = x.Offset is double o ? bottom - o : bottom - t.PrimerOffset - i * Math.Max(1, (bottom - top) / Math.Max(1, count));
+                deck.Primers.Add(new Primer { Depth = Math.Clamp(depth, top, bottom), BoosterId = x.BoosterId, DetonatorId = x.DetonatorId, DelayMs = x.DelayMs, OffsetMs = x.OffsetMs });
             }
             h.Decks.Add(deck);
             bottom = top;
@@ -121,11 +244,11 @@ public static class Charging
             {
                 ProductId = d.ProductId,
                 Length = d == fill ? 0 : Math.Round(d.Length, 3),
-                PrimerCount = primers.Count,
-                BoosterId = primers.FirstOrDefault()?.BoosterId,
-                DetonatorId = primers.FirstOrDefault()?.DetonatorId,
-                PrimerOffset = primers.Count > 0 ? Math.Round(d.Bottom - primers[0].Depth, 3) : 0.5,
-                PrimerOffsets = primers.Count > 0 ? primers.Select(p => Math.Round(d.Bottom - p.Depth, 3)).ToList() : null
+                // every primer as it is: its height, booster, detonator, delay and offset
+                Primers = primers.Select(p => new PrimerTemplate
+                {
+                    Offset = Math.Round(d.Bottom - p.Depth, 3), BoosterId = p.BoosterId, DetonatorId = p.DetonatorId, DelayMs = p.DelayMs, OffsetMs = p.OffsetMs
+                }).ToList()
             });
         }
         return rule;

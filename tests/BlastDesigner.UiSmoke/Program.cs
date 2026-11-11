@@ -188,6 +188,31 @@ Step("hole labels in two columns", () =>
     vm.ToggleView(HoleLabelLayout.Reset); Pump();
     Named("labelsLeft").BringIntoView(); Pump();
 });
+Step("font size of the hole labels: whole steps by the arrows, in the project and in the settings", () =>
+{
+    var saved = File.Exists(ProgramSettings.SettingsPath) ? File.ReadAllBytes(ProgramSettings.SettingsPath) : null;
+    var p = vm.Project!;
+    var was = p.View.HoleLabelFontSize;
+    try
+    {
+        var box = window.GetLogicalDescendants().OfType<NumericUpDown>().FirstOrDefault(c => c.Name == "holeLabelFontSize" && c.IsEffectivelyVisible) ?? throw new Exception("no font size under Hole labels");
+        if (box.Value != was) throw new Exception($"the field shows {box.Value}, the project has {was}");
+        box.Value = box.Value + box.Increment; Pump();
+        if (box.Increment != 1 || p.View.HoleLabelFontSize != was + 1) throw new Exception("the arrow up did not take the size one up: " + p.View.HoleLabelFontSize);
+        if (vm.Settings.HoleLabelFontSize != was + 1 || ProgramSettings.Load().HoleLabelFontSize != was + 1) throw new Exception("the size did not reach the settings file");
+        box.Value = 1000; Pump();
+        if (p.View.HoleLabelFontSize != ViewState.MaxHoleLabelFontSize) throw new Exception("the size went past its largest: " + p.View.HoleLabelFontSize);
+        box.Value = 14; Pump();
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "02d_hole_label_font.png"));
+    }
+    finally
+    {
+        vm.SetHoleLabelFontSize(was); Pump();
+        if (saved != null) File.WriteAllBytes(ProgramSettings.SettingsPath, saved);
+        else File.Delete(ProgramSettings.SettingsPath);
+    }
+});
 Shot("02c_hole_labels");
 Shot("02b_visibility_tab");
 Step("back to properties", () => window.ShowInspectorTab(0));
@@ -293,6 +318,58 @@ Step("mixed values and flag merge", () =>
     grid.FlagEdits["Exceptions"] = (long)HoleException.Misfire;
     grid.ApplyTo(template, b);
     if (b.Exceptions != (HoleException.Wet | HoleException.Blocked | HoleException.Misfire)) throw new Exception("flag merge wrong: " + b.Exceptions);
+});
+Step("properties of several points: a typed axis of the position is set on all of them, the others stay", () =>
+{
+    var selected = vm.Doc!.Selection.ToList();
+    var ids = new List<Guid>();
+    vm.Change("Smoke points", pr => { for (int i = 0; i < 3; i++) ids.Add(pr.Add(new PointEntity { Position = new Vec3(100 + i, 200 + 2 * i, 10 * i) }).Id); });
+    Vec3[] Positions() => ids.Select(id => ((PointEntity)vm.Project!.FindEntity(id)!).Position).ToArray();
+    var before = Positions();
+    vm.Doc.Select(ids); window.ShowPropertiesTab(); Pump();
+    TextBox[] Axes() => window.GetLogicalDescendants().OfType<Grid>().First(g => g.Name == "propPosition" && g.IsEffectivelyVisible).Children.OfType<TextBox>().ToArray();
+    var axes = Axes();
+    if (axes.Any(b => b.Text != "")) throw new Exception("axes that differ should start empty");
+    var steps = vm.Doc.UndoNames.Count;
+    axes[2].Text = "3";
+    axes[2].RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    var after = Positions();
+    for (int i = 0; i < 3; i++)
+        if (after[i].Z != 3 || after[i].X != before[i].X || after[i].Y != before[i].Y) throw new Exception($"point {i}: {before[i]} became {after[i]}");
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("the Z of several points should be one undo step");
+    // the panel built anew shows the Z they now share, X and Y still differ
+    axes = Axes();
+    if (axes[2].Text != "3" || axes[0].Text != "" || axes[1].Text != "") throw new Exception($"axes after the edit: {string.Join(" ", axes.Select(b => $"'{b.Text}'"))}");
+    // an axis the points share is kept as it is when another one is typed
+    axes[0].Text = "50";
+    axes[0].RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    after = Positions();
+    for (int i = 0; i < 3; i++)
+        if (after[i].X != 50 || after[i].Y != before[i].Y || after[i].Z != 3) throw new Exception($"point {i} after X: {after[i]}");
+    for (int i = 0; i < 10 && ids.Any(id => vm.Project!.FindEntity(id) != null); i++) vm.Undo();
+    Pump();
+    if (ids.Any(id => vm.Project!.FindEntity(id) != null)) throw new Exception("undo should take the points away");
+    vm.Doc.Select(selected); Pump();
+});
+Step("properties of a polygon: its position is the middle of its extent, and typed it moves the whole polygon", () =>
+{
+    var selected = vm.Doc!.Selection.ToList();
+    Guid id = default;
+    vm.Change("Smoke polygon", pr => id = pr.Add(new PolylineEntity { Closed = true, Points = { new Vec3(100, 200, 10), new Vec3(120, 200, 20), new Vec3(120, 230, 20) } }).Id);
+    List<Vec3> Points() => ((PolylineEntity)vm.Project!.FindEntity(id)!).Points.ToList();
+    var before = Points();
+    vm.Doc.Select(new[] { id }); window.ShowPropertiesTab(); Pump();
+    var axes = window.GetLogicalDescendants().OfType<Grid>().FirstOrDefault(g => g.Name == "propPosition" && g.IsEffectivelyVisible)?.Children.OfType<TextBox>().ToArray()
+        ?? throw new Exception("a polygon has no X, Y, Z on the properties tab");
+    if (string.Join(" ", axes.Select(b => b.Text)) != "110 215 15") throw new Exception("the position of the polygon: " + string.Join(" ", axes.Select(b => b.Text)));
+    axes[2].Text = "3";
+    axes[2].RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    var after = Points();
+    for (int i = 0; i < before.Count; i++)
+        if (after[i] != before[i] + new Vec3(0, 0, -12)) throw new Exception($"vertex {i}: {before[i]} became {after[i]}");
+    for (int i = 0; i < 10 && vm.Project!.FindEntity(id) != null; i++) vm.Undo();
+    Pump();
+    vm.Doc.Select(selected); Pump();
 });
 Step("toggle table", () => window.ToggleTable());
 Shot("03_table");
@@ -786,15 +863,46 @@ Step("Shift adds a vertex to a selected line, Ctrl deletes one", () =>
     Click(polygonId, 450, 250, shift);
     if (Line(polygonId).Points.Count != 4 || (Line(polygonId).Points[3] - cam.ToWorld(450, 250)).Length2D > 1e-6) throw new Exception("the closing side did not take the vertex");
     vm.Undo();
-    // Shift on a grip adds nothing, a Shift drag is the box, Shift on a line not selected selects it
+    // Shift on a grip adds nothing, a Shift drag of the selection moves it up or down, Shift on a line not selected selects it
     Click(openId, 300, 200, shift);
     if (Line(openId).Points.Count != 3) throw new Exception("Shift on a grip added a vertex");
+    var lifted = Line(openId).Points.ToList();
+    var otherBefore = Line(polygonId).Points.ToList();
     vm.ActiveTool!.PointerPressed(At(openId, 250, 200, shift));
-    vm.ActiveTool.PointerMoved(At(openId, 290, 240, shift));
-    if (vm.View.Preview.ScreenRect == null) throw new Exception("a Shift drag from a line should be the box");
+    vm.ActiveTool.PointerMoved(At(openId, 290, 150, shift));
+    if (vm.View.Preview.ScreenRect != null || vm.View.Preview.Moving == null) throw new Exception("a Shift drag of a selected line should move it, not draw the box");
+    var dz = 50 / cam.Scale;
+    if (vm.View.Preview.MoveOffset.Length2D != 0 || Math.Abs(vm.View.Preview.MoveOffset.Z - dz) > 1e-9) throw new Exception("a Shift drag up should only raise: " + vm.View.Preview.MoveOffset);
+    vm.ActiveTool.PointerReleased(At(openId, 290, 150, shift)); Pump();
+    var up = Line(openId).Points;
+    if (up.Count != 3 || up.Zip(lifted).Any(t => t.First.X != t.Second.X || t.First.Y != t.Second.Y || Math.Abs(t.First.Z - t.Second.Z - dz) > 1e-9)) throw new Exception("the line did not go up by the drag");
+    if (Line(polygonId).Points.Zip(otherBefore).Any(t => Math.Abs(t.First.Z - t.Second.Z - dz) > 1e-9)) throw new Exception("the other selected line did not go up with it");
+    if (vm.Doc.UndoNames[0] != BlastDesigner.App.Services.Loc.T("Move") && vm.Doc.UndoNames[0] != "Move") throw new Exception("the Z move should be one Move step: " + vm.Doc.UndoNames[0]);
+    vm.Undo();
+    if (!Line(openId).Points.SequenceEqual(lifted)) throw new Exception("undo did not bring the line down");
+    // Shift pressed in the middle of a drag keeps the way made so far and goes on up from there
+    var none = Avalonia.Input.KeyModifiers.None;
+    vm.ActiveTool.PointerPressed(At(openId, 250, 200, none));
+    vm.ActiveTool.PointerMoved(At(openId, 290, 200, none));
+    var across = vm.View.Preview.MoveOffset;
+    vm.ActiveTool.PointerMoved(At(openId, 290, 200, shift));
+    vm.ActiveTool.PointerMoved(At(openId, 290, 150, shift));
+    var both = vm.View.Preview.MoveOffset;
+    if (Math.Abs(across.Length2D - 40 / cam.Scale) > 1e-9 || (both - across).Length2D > 1e-9 || Math.Abs(both.Z - across.Z - dz) > 1e-9) throw new Exception($"Shift in the middle of a drag lost the way across: {across} then {both}");
+    // and let go of, it keeps the height
+    vm.ActiveTool.PointerMoved(At(openId, 290, 150, none));
+    vm.ActiveTool.PointerMoved(At(openId, 330, 150, none));
+    if (Math.Abs(vm.View.Preview.MoveOffset.Z - both.Z) > 1e-9 || Math.Abs((vm.View.Preview.MoveOffset - both).Length2D - 40 / cam.Scale) > 1e-9) throw new Exception("letting go of Shift lost the height: " + vm.View.Preview.MoveOffset);
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, none);
+    vm.ActiveTool.PointerReleased(At(openId, 330, 150, none));
+    if (!Line(openId).Points.SequenceEqual(lifted)) throw new Exception("Esc did not drop the move");
+    // down too, and Esc drops it
+    vm.ActiveTool.PointerPressed(At(openId, 250, 200, shift));
+    vm.ActiveTool.PointerMoved(At(openId, 250, 260, shift));
+    if (vm.View.Preview.MoveOffset.Z >= 0) throw new Exception("a Shift drag down should lower");
     vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
-    vm.ActiveTool.PointerReleased(At(openId, 290, 240, shift));
-    if (Line(openId).Points.Count != 3) throw new Exception("the drag added a vertex");
+    vm.ActiveTool.PointerReleased(At(openId, 250, 260, shift));
+    if (!Line(openId).Points.SequenceEqual(lifted)) throw new Exception("Esc did not drop the Z move");
     Click(otherId, 650, 200, shift);
     if (Line(otherId).Points.Count != 2 || !vm.Doc.Selection.Contains(otherId)) throw new Exception("Shift on another line should select it");
     vm.Doc.Select(new[] { openId, polygonId }); Pump();
@@ -833,7 +941,7 @@ Step("analysis overlays never stack", () =>
         ("timing", vm.VisualizeTiming, typeof(BlastDesigner.Rendering.TimingContourOverlay)),
         ("angle", vm.AngleOfInitiation, typeof(BlastDesigner.Rendering.TimingVectorOverlay)),
         ("movement", vm.FirstMovement, typeof(BlastDesigner.Rendering.FirstMovementOverlay)),
-        ("relief", vm.BurdenRelief, typeof(BlastDesigner.Rendering.TimingVectorOverlay)),
+        ("relief", vm.BurdenRelief, typeof(BlastDesigner.Rendering.BurdenReliefOverlay)),
         ("vibration map", () => vm.VibrationMap(false), typeof(BlastDesigner.Rendering.VibrationMapOverlay)),
         ("airblast map", () => vm.VibrationMap(true), typeof(BlastDesigner.Rendering.VibrationMapOverlay))
     };
@@ -847,7 +955,7 @@ Step("analysis overlays never stack", () =>
             // the first movement window leaves the plan as it is while its switch is off
             var shown = b.Name == "movement" ? a : b;
             if (a.Name != b.Name && (n != 1 || vm.AnalysisOverlays[0].GetType() != shown.Kind)) throw new Exception($"{a.Name} then {b.Name}: expected only {shown.Name}, got {n}");
-            vm.ClearOverlays(); BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); Pump();
+            vm.ClearOverlays(); BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); BlastDesigner.App.Services.Dialogs.CloseWindow("Burden relief"); Pump();
         }
     vm.VisualizeTiming(); Pump(); vm.VisualizeTiming(); Pump();
     if (vm.AnalysisOverlays.Count != 1) throw new Exception($"timing twice: {vm.AnalysisOverlays.Count} overlays");
@@ -1346,6 +1454,45 @@ Step("loading dialog: primer cards are always open", () =>
     if (!dlg.IsVisible) throw new Exception("Enter closed the window");
 });
 WindowShot("37f_loading_dialog_primers_open");
+Step("loading dialog: a second explosive deck takes a primer of its own", () =>
+{
+    var p = vm.Project!;
+    var hole = p.Holes.First(h => h.Decks.Count > 1);
+    var explosives = p.Products.Where(x => x.IsExplosive).ToList();
+    var stemming = p.Products.First(x => x.Kind == ProductKind.Stemming);
+    var length = hole.Length;
+    vm.Change("Smoke decks", q =>
+    {
+        var h = (Hole)q.FindEntity(hole.Id)!;
+        var primer = h.Decks.SelectMany(d => d.Primers).First().Clone();
+        primer.Depth = 6;
+        h.Decks = new List<Deck>
+        {
+            new() { Top = 0, Bottom = 3, ProductId = stemming.Id },
+            new() { Top = 3, Bottom = 7, ProductId = explosives[0].Id, Primers = { primer } },
+            new() { Top = 7, Bottom = length, ProductId = explosives[^1].Id }
+        };
+    });
+    _ = HoleLoadingWindow.Show(vm, (Hole)p.FindEntity(hole.Id)!); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var editor = dlg.GetLogicalDescendants().OfType<HoleLoadingEditor>().First();
+    var col = editor.Column;
+    var pick = col.TranslatePoint(col.TubePoint((7 + length) / 2), dlg)!.Value;
+    dlg.MouseDown(pick, Avalonia.Input.MouseButton.Left); dlg.MouseUp(pick, Avalonia.Input.MouseButton.Left); Pump();
+    if (editor.Selected != 2) throw new Exception($"the click on the second explosive selected deck {editor.Selected}");
+    // in place of the note a deck with no primer shows a button that is hard to miss
+    var add = dlg.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().FirstOrDefault(b => (string?)b.Tag == "addFirstPrimer" && b.IsEffectivelyVisible)
+        ?? throw new Exception("no Add a primer button in place of the note");
+    if (!add.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Any(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Add a primer"))) throw new Exception("the button does not say Add a primer");
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "37g_loading_dialog_add_primer.png"));
+    var at = add.TranslatePoint(new Avalonia.Point(add.Bounds.Width / 2, add.Bounds.Height / 2), dlg)!.Value;
+    dlg.MouseDown(at, Avalonia.Input.MouseButton.Left); dlg.MouseUp(at, Avalonia.Input.MouseButton.Left); Pump();
+    if (editor.Decks[2].Primers.Count != 1) throw new Exception($"the second explosive deck has {editor.Decks[2].Primers.Count} primers after Add a primer");
+    if (dlg.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().Any(b => (string?)b.Tag == "addFirstPrimer" && b.IsEffectivelyVisible)) throw new Exception("the button stayed after the primer went in");
+    dlg.Close(); Pump();
+    vm.Undo(); Pump();
+});
 Step("loading dialog: empty hole warns about primers", () =>
 {
     var hole = vm.Project!.Holes.First(h => h.Decks.Count > 1);
@@ -1780,6 +1927,24 @@ Step("hole items back off", () =>
 {
     vm.Undo(); vm.Undo(); vm.PlanView(); vm.ZoomAll();
 });
+// A timing line programs only the holes with an electronic detonator: its steps load the smoke blast with them for a while.
+Dictionary<Guid, List<string?>> keptDetonators = new();
+void AllElectronic(bool on)
+{
+    var p = vm.Project!;
+    if (on)
+    {
+        var det = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator).Id;
+        keptDetonators = p.Holes.ToDictionary(h => h.Id, h => BlastDesigner.Engine.Charging.Primers(h).Select(x => x.Primer.DetonatorId).ToList());
+        foreach (var h in p.Holes) foreach (var (x, _) in BlastDesigner.Engine.Charging.Primers(h)) x.DetonatorId = det;
+    }
+    else
+        foreach (var h in p.Holes)
+            if (keptDetonators.TryGetValue(h.Id, out var kept))
+                foreach (var ((x, _), d) in BlastDesigner.Engine.Charging.Primers(h).Zip(kept)) x.DetonatorId = d;
+    BlastDesigner.Engine.Timing.Solve(p);
+}
+Step("electronic detonators for the timing line steps", () => AllElectronic(true));
 Task<TimingLineSetup?>? timingLineTask = null;
 Step("timing line window: result, preview and fields by type", () =>
 {
@@ -1853,6 +2018,90 @@ Step("edit a timing line: its values, layer and reprogramming in one step", () =
     if (Math.Abs(((TimingLineEntity)vm.Project.FindEntity(line.Id)!).Segments[0].ReliefMsPerM - 8) > 1e-9) throw new Exception("one undo should restore the line");
     vm.Undo();
 });
+Step("timing front tool: the panel chooses a line or a chevron, the window offers no type, a line times to the side of its holes", () =>
+{
+    var shape = vm.FrontShape;
+    vm.Doc!.ClearSelection(false);
+    vm.PlanView(); vm.ZoomAll(); Pump();
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy).ToList();
+    var y = holes.Max(h => h.Collar.Y) + 3;
+    void Chip(BlastDesigner.Domain.Model.TimingFrontShape s) { window.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "front:" + s).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    ToolPointer At(double x, double yy) { var w = new BlastDesigner.Domain.Geometry.Vec3(x, yy, 300); var (sx, sy) = vm.View.Camera.ToScreen(w); return new ToolPointer { X = sx, Y = sy, World = w, Snapped = w, Left = true, ClickCount = 1 }; }
+    TimingLineForm Draw(double x0, double x1, double y1)
+    {
+        vm.ActiveTool!.PointerPressed(At(x0, y)); vm.ActiveTool.PointerMoved(At((x0 + x1) / 2, (y + y1) / 2)); vm.ActiveTool.PointerMoved(At(x1, y1)); vm.ActiveTool.PointerReleased(At(x1, y1)); Pump();
+        var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+        if (dlg.GetLogicalDescendants().OfType<Button>().Any(b => (b.Tag as string)?.StartsWith("type:") == true)) throw new Exception("the window of a front still offers the type of line");
+        if (!dlg.GetLogicalDescendants().OfType<Button>().Any(b => b.Tag as string == "reverse")) throw new Exception("the window of a front lost its direction");
+        return dlg.GetLogicalDescendants().OfType<TimingLineForm>().First();
+    }
+    try
+    {
+        vm.TimingLineTool(); Pump();
+        Chip(BlastDesigner.Domain.Model.TimingFrontShape.Line);
+        if (vm.FrontShape != BlastDesigner.Domain.Model.TimingFrontShape.Line || vm.ActiveTool is not FrontLineTool || !vm.ActiveTool.Hint.StartsWith("Press at one end")) throw new Exception("the Line chip did not choose the line");
+        // drawn from west to east above the block: its ends are turned so that the times grow southwards, into the holes
+        var lines = vm.Project.Entities.OfType<TimingLineEntity>().Count();
+        var form = Draw(holes.Min(h => h.Collar.X) - 3, holes.Max(h => h.Collar.X) + 3, y);
+        if (form.Options.ReverseOrder || form.Options.Style != TimingLineStyle.TimeLine) throw new Exception("a new line should be a contour line A → B");
+        form.Closing!(true); Pump();
+        var line = vm.Project.Entities.OfType<TimingLineEntity>().Last();
+        if (vm.Project.Entities.OfType<TimingLineEntity>().Count() != lines + 1 || line.Front != BlastDesigner.Domain.Model.TimingFrontShape.Line || line.Points.Count != 2 || !line.HasHandles) throw new Exception("no line front made");
+        if (line.Points[0].X < line.Points[1].X) throw new Exception("the ends of the line were not turned to the holes");
+        var top = vm.Project.Holes.Where(h => line.HoleIds.Contains(h.Id) && h.ElectronicTimeMs.HasValue).ToList();
+        if (top.Count == 0) throw new Exception("the line timed no hole");
+        var first = top.MinBy(h => h.ElectronicTimeMs!.Value)!;
+        if (top.Max(h => h.Collar.Y) - first.Collar.Y > 1) throw new Exception("the holes next to the line do not fire first");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47d_front_line.png"));
+        vm.Undo(); Pump();
+
+        // a chevron: its times grow along its ray, not reversed
+        vm.TimingLineTool(); Pump();
+        Chip(BlastDesigner.Domain.Model.TimingFrontShape.Chevron);
+        if (vm.FrontShape != BlastDesigner.Domain.Model.TimingFrontShape.Chevron) throw new Exception("the Chevron chip did not choose the chevron");
+        var x = holes.Average(h => h.Collar.X);
+        var chevron = Draw(x, x, y + 10);
+        if (chevron.Options.ReverseOrder) throw new Exception("a new chevron should go A → B, its times along its ray");
+        chevron.Closing!(true); Pump();
+        // its ray is drawn while it is selected (it is, made), and not once it is not
+        var made = vm.Project.Entities.OfType<TimingLineEntity>().Last();
+        if (made.Front != BlastDesigner.Domain.Model.TimingFrontShape.Chevron || !vm.Doc.Selection.Contains(made.Id)) throw new Exception("the chevron was not made and selected");
+        uint[] RayPixels()
+        {
+            vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+            using var frame = window.CaptureRenderedFrame()!;
+            using var buffer = frame.Lock();
+            var ray = BlastDesigner.Domain.Geometry.Chevron.RayDir(made.Points);
+            var length = BlastDesigner.Domain.Geometry.Chevron.Length(made.Points);
+            return Enumerable.Range(0, 40).Select(i =>
+            {
+                var (sx, sy) = vm.View.Camera.ToScreen(made.Points[1] + ray * (length * (0.2 + 0.7 * i / 39.0)));
+                var at = vm.View.TranslatePoint(new Avalonia.Point(sx, sy), window)!.Value;
+                return (uint)System.Runtime.InteropServices.Marshal.ReadInt32(buffer.Address, (int)at.Y * buffer.RowBytes + (int)at.X * 4);
+            }).ToArray();
+        }
+        vm.View.Camera.Target = made.Points[1]; vm.View.Camera.Scale = 250 / BlastDesigner.Domain.Geometry.Chevron.Length(made.Points);
+        var withRay = RayPixels();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47e_front_chevron_selected.png"));
+        vm.Doc.ClearSelection(false); Pump();
+        var withoutRay = RayPixels();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47f_front_chevron_unselected.png"));
+        // against the plan without the chevron at all: ahead of its vertex only the ray can be drawn
+        vm.HiddenEntities.Add(made.Id);
+        var none = RayPixels();
+        vm.HiddenEntities.Remove(made.Id);
+        if (withRay.Zip(none).Count(p => p.First != p.Second) < 8) throw new Exception("the ray of the selected chevron is not drawn");
+        if (withoutRay.Zip(none).Any(p => p.First != p.Second)) throw new Exception("an unselected chevron still draws its ray");
+        vm.Undo(); vm.ZoomAll(); Pump();
+    }
+    finally
+    {
+        vm.FrontShape = shape;
+        vm.SelectTool(); Pump();
+    }
+});
+Step("pyrotechnic detonators back for Add holes", () => AllElectronic(false));
 Step("Properties ▸ Add holes: electronic holes on no timing line join the line, are programmed and selected", () =>
 {
     var holes = vm.Project!.Holes.Where(h => !h.IsDummy && h.Decks.Any(d => d.Primers.Count > 0)).ToList();
@@ -1882,7 +2131,7 @@ Step("Properties ▸ Add holes: electronic holes on no timing line join the line
     var want = holes.Take(20).Concat(holes.Skip(25).Take(5)).Select(h => h.Id).ToHashSet();
     if (!after.SetEquals(want)) throw new Exception($"the line has {after.Count} holes, {after.Count(want.Contains)} of the {want.Count} expected (holes of the other line must stay with it)");
     if (!vm.Doc.Selection.SetEquals(want)) throw new Exception("the line's holes are not selected");
-    var planned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, vm.Project.Holes.Where(h => want.Contains(h.Id)).ToList(), line.Points, line.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(line), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.TimeStepMs).Times;
+    var planned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, vm.Project.Holes.Where(h => want.Contains(h.Id)).ToList(), line.Points, line.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(line), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
     foreach (var (id, t) in planned)
         if (((Hole)vm.Project.FindEntity(id)!).ElectronicTimeMs is not double et || Math.Abs(et - t) > 1e-6) throw new Exception("an added hole is not programmed from the line");
     // Select assigned: the holes the line programs, from its properties
@@ -1898,6 +2147,7 @@ Step("Properties ▸ Add holes: electronic holes on no timing line join the line
     vm.Doc.ClearSelection();
     tabs.SelectedIndex = tabBefore; Pump();
 });
+Step("electronic detonators for moving a timing line", () => AllElectronic(true));
 Step("moving a timing line reprograms its holes in the same undo step", () =>
 {
     var holes = vm.Project!.Holes.Where(h => !h.IsDummy).ToList();
@@ -1913,7 +2163,7 @@ Step("moving a timing line reprograms its holes in the same undo step", () =>
     // what a line drawn at the new place would give
     var moved = (TimingLineEntity)vm.Project.FindEntity(line.Id)!.CloneWithNewId();
     moved.Translate(delta);
-    var expected = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, vm.Project.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), moved.Points, moved.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(moved), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.TimeStepMs).Times;
+    var expected = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, vm.Project.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), moved.Points, moved.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(moved), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
     vm.Doc!.Select(new[] { line.Id });
     vm.MoveSelection(delta);
     var changed = 0;
@@ -1948,6 +2198,65 @@ Step("moving a timing line reprograms its holes in the same undo step", () =>
     vm.Doc.ClearSelection();
     vm.Undo();
 });
+Step("EBS opening point: a click, its window with the overall relief, OK programs the holes and draws its rays", () =>
+{
+    vm.PlanView(); vm.ZoomAll(); vm.Doc!.ClearSelection(false); Pump();
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy).ToList();
+    var at = new BlastDesigner.Domain.Geometry.Vec3(holes.Average(h => h.Collar.X), holes.Min(h => h.Collar.Y), 300);
+    var (sx, sy) = vm.View.Camera.ToScreen(at);
+    vm.OpeningPointTool(); Pump();
+    vm.ActiveTool!.PointerPressed(new ToolPointer { X = sx, Y = sy, World = at, Snapped = at, Left = true, ClickCount = 1 });
+    vm.ActiveTool.PointerReleased(new ToolPointer { X = sx, Y = sy, World = at, Snapped = at, Left = true, ClickCount = 1 }); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    TextBox Box(string name) => dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == name);
+    var relief = dlg.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Name == "totalRelief") ?? throw new Exception("no overall relief in the opening point window");
+    Box("burden").Text = "4"; Box("spacing").Text = "5"; Box("burdenDelay").Text = "42"; Box("spacingDelay").Text = "17"; Pump();
+    if (!relief.Text!.StartsWith(11.0.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture))) throw new Exception("overall relief: " + relief.Text);
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47g_opening_point.png"));
+    var before = vm.Project.Entities.OfType<EbsOpeningPoint>().Count();
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Classes.Contains("primary")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    for (int i = 0; i < 20; i++) Pump();
+    var op = vm.Project.Entities.OfType<EbsOpeningPoint>().ToList();
+    if (op.Count != before + 1) throw new Exception("OK made no opening point");
+    var made = op.Last();
+    if (made.HoleIds.Count == 0 || vm.Project.Holes.Count(h => made.HoleIds.Contains(h.Id) && h.ElectronicTimeMs.HasValue) < made.HoleIds.Count / 2) throw new Exception("the opening point timed too few holes");
+    if (!vm.Doc.Selection.Contains(made.Id)) throw new Exception("the new opening point is not selected");
+    // it timed the holes from a line before: they left the line
+    if (vm.Project.Entities.OfType<TimingLineEntity>().Any(l => l.HoleIds.Intersect(made.HoleIds).Any())) throw new Exception("a hole stays on a timing line and on the opening point");
+    vm.View.Camera.Target = made.Position; vm.View.Camera.Scale = 14;
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47h_opening_point_plan.png"));
+    vm.ZoomAll();
+    vm.Undo(); Pump();
+    if (vm.Project.Entities.OfType<EbsOpeningPoint>().Count() != before) throw new Exception("one undo should take the opening point away");
+    vm.SelectTool(); Pump();
+});
+Step("burden relief: its window fills the triangles in five colours, an upper limit, the relief under the cursor", () =>
+{
+    vm.BurdenRelief(); Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    if (!vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.BurdenReliefOverlay>().Any()) throw new Exception("the main plan does not show the burden relief");
+    var limit = w.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "reliefLimit");
+    limit.Text = "12"; Pump();
+    if (vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.BurdenReliefOverlay>().First().UpperLimit != 12) throw new Exception("the upper limit did not reach the plan");
+    var view = w.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.Viewport>().First();
+    var hole = vm.Project!.Holes.First(h => h.FiringTimeMs.HasValue && !h.IsDummy);
+    var d = vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.BurdenReliefOverlay>().First().Delaunay(vm.Project);
+    var t = BlastDesigner.Engine.BurdenRelief.Valid(d).First();
+    var mid = d.MidPoint(t);
+    var (mx, my) = view.Camera.ToScreen(mid);
+    var p = view.TranslatePoint(new Point(mx, my), w)!.Value;
+    w.MouseMove(p); Pump();
+    var under = w.GetLogicalDescendants().OfType<TextBlock>().First(x => x.Name == "reliefUnder");
+    if (!under.Text!.Contains(t.Slope.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture))) throw new Exception("relief under the cursor: " + under.Text);
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47i_burden_relief.png"));
+    limit.Text = ""; Pump();
+    w.Close(); Pump();
+    if (vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.BurdenReliefOverlay>().Any()) throw new Exception("the burden relief stayed on the plan after its window closed");
+});
+Step("pyrotechnic detonators back after the timing line steps", () => AllElectronic(false));
 Step("timing line tool shows the hole order instead of the hole number with electronic detonators", () =>
 {
     var p = vm.Project!;
@@ -2442,16 +2751,16 @@ Step("initiation catalogue: Type → Family → Variant, user-defined delay, the
     void Press(string tag) { Chip(tag).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
     var types = win.GetLogicalDescendants().OfType<Button>().Count(b => (b.Tag as string)?.StartsWith("type:") == true);
     if (types != 7) throw new Exception($"{types} types instead of 7");
-    // Electric: the family of the electric detonators and its variants by delay
+    // Cord delay: the family of the cord relays and its variants by delay
     string TypeTag(string name) => "type:" + vm.Project!.Catalogue.Types.First(t => t.Name == name).Id;
-    Press(TypeTag("Electric"));
+    Press(TypeTag("Cord delay"));
     if (BlastDesigner.App.Services.Dialogs.LastShown != win || !win.IsVisible) throw new Exception("choosing a type recreated or closed the catalogue");
-    if (vm.ActiveConnector?.Kind != ProductKind.ElectricDetonator) throw new Exception("Electric did not pick an electric detonator");
-    Chip("family:Electric detonator");
+    if (vm.ActiveConnector?.Kind != ProductKind.CordRelay) throw new Exception("Cord delay did not pick a cord relay");
+    Chip("family:Cord relay");
     if (win.GetLogicalDescendants().OfType<Button>().Any(b => (b.Tag as string)?.StartsWith("subtype:") == true)) throw new Exception("the Subtype group is still there");
     var variants = win.GetLogicalDescendants().OfType<Button>().Where(b => (b.Tag as string)?.StartsWith("variant:") == true).ToList();
-    if (variants.Count != vm.Project!.Products.Count(p => p.Kind == ProductKind.ElectricDetonator && p.FamilyName == "Electric detonator")) throw new Exception($"{variants.Count} variants of the electric detonator family");
-    var last = vm.Project.Products.Where(p => p.Kind == ProductKind.ElectricDetonator).OrderBy(p => p.DelayMs).Last();
+    if (variants.Count != vm.Project!.Products.Count(p => p.Kind == ProductKind.CordRelay && p.FamilyName == "Cord relay")) throw new Exception($"{variants.Count} variants of the cord relay family");
+    var last = vm.Project.Products.Where(p => p.Kind == ProductKind.CordRelay).OrderBy(p => p.DelayMs).Last();
     Press("variant:" + last.Id);
     if (vm.ActiveConnector?.Id != last.Id) throw new Exception("the variant was not taken");
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();

@@ -24,6 +24,18 @@ public sealed partial class MainViewModel
         Doc.NotifyViewChanged();
     }
 
+    /// <summary>Font size of the hole labels: kept in the project and, for the next new blast, in the settings.</summary>
+    public void SetHoleLabelFontSize(int size)
+    {
+        if (Doc == null) return;
+        size = Math.Clamp(size, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize);
+        if (ViewSettings.HoleLabelFontSize == size && Settings.HoleLabelFontSize == size) return;
+        ViewSettings.HoleLabelFontSize = size;
+        Settings.HoleLabelFontSize = size;
+        Settings.Save();
+        Doc.NotifyViewChanged();
+    }
+
     private static readonly System.Reflection.PropertyInfo[] FlagProperties =
         typeof(ViewState).GetProperties().Where(p => p.CanWrite && (p.PropertyType == typeof(bool) || p.PropertyType.IsEnum)).ToArray();
 
@@ -359,7 +371,8 @@ public sealed partial class MainViewModel
         View.Redraw();
         OverlaysChanged?.Invoke();
     }
-    public void BurdenRelief() => VectorOverlay(TimingVectorOverlay.Mode.BurdenRelief);
+    /// <summary>Burden relief: opens its window, which also fills the triangles of the main plan.</summary>
+    public void BurdenRelief() { if (Doc != null) AnalysisWindows.BurdenReliefWindow(this); }
     private double NeighbourRadius => Math.Max(Project!.Design.Burden, Project.Design.Spacing) * 1.6;
 
     private void VectorOverlay(TimingVectorOverlay.Mode mode)

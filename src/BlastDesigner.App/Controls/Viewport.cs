@@ -287,6 +287,11 @@ public sealed class Viewport : Control
                 return SegmentsDistance(new[] { a.Start, a.End }, false, sx, sy);
             case TimingLineEntity tl:
                 return SegmentsDistance(tl.Points, false, sx, sy);
+            case EbsOpeningPoint op:
+            {
+                var (x, y) = Camera.ToScreen(op.Position);
+                return Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
+            }
             case DimensionEntity d:
                 return SegmentsDistance(new[] { d.Start, d.End }, false, sx, sy);
             case CircleEntity c:

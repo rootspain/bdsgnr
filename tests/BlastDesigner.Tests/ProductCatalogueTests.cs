@@ -236,6 +236,33 @@ public class ProductCatalogueTests
         Assert.Equal((count, families), (back.Products.Count, back.Catalogue.Families.Count));
     }
 
+    /// <summary>The built-in electric detonators were taken out: a new project has none, an old one keeps only the one it uses.</summary>
+    [Fact]
+    public void TheBuiltInElectricDetonatorsAreGone_ButOneAnOldProjectUsesStays()
+    {
+        const string used = "b6b2be9a-c3d3-4fa1-83bf-c42467dc8e56", unused = "7ff165ec-6ed6-4544-94a3-4e16747fe227", family = "d5fc75c8-a80e-4459-a141-764999265be3";
+        var fresh = BlastProject.CreateNew();
+        Assert.DoesNotContain(fresh.Products, x => x.Kind == ProductKind.ElectricDetonator);
+        Assert.DoesNotContain(fresh.Catalogue.Families, f => f.Id == family);
+        // the kind and the Electric type stay for products of one's own
+        Assert.Contains(fresh.Catalogue.Kinds, k => k.Behaviour == ProductKind.ElectricDetonator);
+
+        Product Electric(string id, double ms) => new() { Id = id, Name = $"Electric detonator {ms} ms", Family = "Electric detonator", FamilyId = family, Kind = ProductKind.ElectricDetonator, DelayMs = ms };
+        var p = new BlastProject { Products = { Electric(used, 25), Electric(unused, 500) } };
+        p.Catalogue.Families.Add(new CatalogueFamily { Id = family, Name = "Electric detonator", KindId = ProductCatalogue.KindId(ProductKind.ElectricDetonator) });
+        p.Add(new Hole { Decks = { new Deck { Top = 3, Bottom = 10, Primers = { new Primer { Depth = 9, DetonatorId = used } } } } });
+        var back = ProjectJson.Deserialize(ProjectJson.Serialize(p));
+        ProductCatalogue.Attach(back, new ProductCatalogue(), Array.Empty<Product>());
+        Assert.Equal(new[] { used }, back.Products.Where(x => x.Kind == ProductKind.ElectricDetonator).Select(x => x.Id));
+        Assert.Equal(family, back.FindProduct(used)!.FamilyId);
+
+        // nothing uses them: both go, and their family
+        back.Holes.Single().Decks.Clear();
+        ProductCatalogue.Attach(back, new ProductCatalogue(), Array.Empty<Product>());
+        Assert.DoesNotContain(back.Products, x => x.Kind == ProductKind.ElectricDetonator);
+        Assert.DoesNotContain(back.Catalogue.Families, f => f.Id == family);
+    }
+
     [Fact]
     public void DeletingAKindOrFamily_TakesTheirProducts_WhichComeBackOneByOne()
     {

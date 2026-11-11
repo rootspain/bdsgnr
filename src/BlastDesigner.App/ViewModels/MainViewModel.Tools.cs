@@ -9,7 +9,7 @@ namespace BlastDesigner.App.ViewModels;
 
 public sealed partial class MainViewModel
 {
-    private List<Hole> SelectedOrAllHoles() => Doc!.SelectedHoles.Any() ? Doc.SelectedHoles.ToList() : Project!.Holes.ToList();
+    internal List<Hole> SelectedOrAllHoles() => Doc!.SelectedHoles.Any() ? Doc.SelectedHoles.ToList() : Project!.Holes.ToList();
     private HashSet<Guid> SelectedHoleIds() => Doc!.SelectedHoles.Select(h => h.Id).ToHashSet();
 
     /// <summary>
@@ -681,7 +681,7 @@ public sealed partial class MainViewModel
     public void SetTimeTool() => SetTool(new TimeSetTool(this, false));
 
     /// <summary>
-    /// The timing front tool: two segments meeting at a vertex (<see cref="FrontLineTool"/>). When the front is drawn the
+    /// The timing front tool: a line, or two segments meeting at a vertex (<see cref="FrontLineTool"/>). When the front is drawn the
     /// timing line window opens; applied, the front stays in the project, programs the selected holes (or all) and is
     /// selected, so that it can be turned and reshaped at once.
     /// </summary>
@@ -696,30 +696,117 @@ public sealed partial class MainViewModel
         try
         {
             var holes = SelectedOrAllHoles().Where(h => !h.IsDummy).ToList();
-            if (await TimingLineWindow.Show(this, pts, holes) is not { } setup) return;
-            var ids = holes.Select(h => h.Id).ToHashSet();
+            var front = pts.Count == 2 ? TimingFrontShape.Line : TimingFrontShape.Chevron;
+            if (await TimingLineWindow.Show(this, pts, holes, front: front) is not { } setup) return;
+            var ids = ElectronicHoleIds(holes);
             TimingLineResult? r = null;
             Guid? lineId = null;
             // The line stays in the project as an object; its points keep the elevation they were picked at.
-            // It remembers its holes, so editing it later reprograms exactly those.
+            // It remembers its holes (those with an electronic detonator), so editing it later reprograms exactly those.
             Change("Timing line", p =>
             {
                 var line = EbsTimingLine.CreateEntity(pts, setup.Segments, setup.Options);
-                line.IsChevron = true;
+                line.Front = front;
                 line.HoleIds = ids.ToList();
+                TakeHoles(p, line.Id, ids);
                 p.Add(line, p.GetOrCreateLayer(StandardLayers.TimingLines, 0xFF008000, "Design"));
                 lineId = line.Id;
-                r = EbsTimingLine.Apply(p, HolesById(p, ids), line);
+                r = EbsTimingLine.Apply(p, HolesById(p, ids), line, setup.Options.KeepManualTimes);
             });
             if (r == null) return;
             // selected without an undo step of its own: one Undo takes the line back
             if (lineId is Guid id) Doc!.Select(new[] { id }, record: false);
             View.Redraw();
-            SetStatus(Loc.F("{0} holes timed, {1} with manual time kept", r.Timed, r.SkippedManual));
-            if (r.MaxTimeExceeded.Count > 0)
-                await Dialogs.Info(Loc.F("Maximum delay {0} ms exceeded, holes not timed: {1}", Project!.Electronic.MaxTimeMs, string.Join(", ", r.MaxTimeExceeded.Select(h => h.Label))));
+            await ReportTimingLine(r);
         }
         catch (Exception ex) { Dialogs.ShowError(ex); }
+    }
+
+    /// <summary>The holes with an electronic detonator among <paramref name="holes"/>: only those take the times of a timing line.</summary>
+    private HashSet<Guid> ElectronicHoleIds(IEnumerable<Hole> holes) =>
+        holes.Where(h => Charging.HasElectronicDetonator(Project!, h)).Select(h => h.Id).ToHashSet();
+
+    /// <summary>A hole is timed by one object of time (a timing front or an opening point): the holes one takes leave the others.</summary>
+    internal static void TakeHoles(BlastProject p, Guid timerId, ISet<Guid> ids)
+    {
+        foreach (var other in p.Entities.OfType<IHoleTimer>().Where(l => l.Id != timerId))
+            other.HoleIds.RemoveAll(ids.Contains);
+    }
+
+    /// <summary>
+    /// The EBS opening point tool: a click where the electronic blast opens, then its window; applied, the point stays in the
+    /// project, programs the selected holes with an electronic detonator (or all of them) and is selected.
+    /// </summary>
+    public void OpeningPointTool()
+    {
+        PreferHoleOrderLabel();
+        SetTool(new PickPointsTool(this, "EBS opening point", "Click where the electronic blast opens; the holes take their times from there.", 1, 1, false, pts => CreateOpeningPoint(pts[0])));
+    }
+
+    private async void CreateOpeningPoint(Vec3 at)
+    {
+        try
+        {
+            var holes = SelectedOrAllHoles().Where(h => !h.IsDummy).ToList();
+            if (await OpeningPointWindow.Show(this, at, holes) is not { } setup) return;
+            var ids = ElectronicHoleIds(holes);
+            TimingLineResult? r = null;
+            var point = setup.Point;
+            point.HoleIds = ids.ToList();
+            Change("EBS opening point", p =>
+            {
+                TakeHoles(p, point.Id, ids);
+                p.Add(point, p.GetOrCreateLayer(StandardLayers.TimingLines, 0xFF008000, "Design"));
+                r = EbsOpening.Apply(p, HolesById(p, ids), point, setup.KeepManualTimes);
+            });
+            if (r == null) return;
+            Doc!.Select(new[] { point.Id }, record: false);
+            SelectTool();
+            await ReportTimingLine(r);
+        }
+        catch (Exception ex) { Dialogs.ShowError(ex); }
+    }
+
+    /// <summary>Edits an opening point of the project in its window: its values and the times of its holes, in one undo step.</summary>
+    public async Task EditOpeningPoint(EbsOpeningPoint point)
+    {
+        var holes = Project!.Holes.Where(h => point.HoleIds.Contains(h.Id) && !h.IsDummy).ToList();
+        if (holes.Count == 0) holes = SelectedOrAllHoles().Where(h => !h.IsDummy).ToList();
+        if (await OpeningPointWindow.Show(this, point.Position, holes, point) is not { } setup) return;
+        var ids = ElectronicHoleIds(holes);
+        var id = point.Id;
+        var v = setup.Point;
+        TimingLineResult? r = null;
+        Change("Edit EBS opening point", p =>
+        {
+            if (p.FindEntity(id) is not EbsOpeningPoint op) return;
+            op.BurdenM = v.BurdenM; op.SpacingM = v.SpacingM; op.BurdenBearingDeg = v.BurdenBearingDeg; op.BurdenDelayMs = v.BurdenDelayMs;
+            op.SpacingDelayMs = v.SpacingDelayMs; op.StartOffsetMs = v.StartOffsetMs; op.OpenHere = v.OpenHere;
+            // the holes that lost their electronic detonator leave the point, with the time it gave them
+            r = EbsOpening.Apply(p, HolesById(p, op.HoleIds.Union(ids).ToHashSet()), op, setup.KeepManualTimes);
+            op.HoleIds = ids.ToList();
+            TakeHoles(p, id, ids);
+        });
+        if (r != null) await ReportTimingLine(r);
+    }
+
+    /// <summary>
+    /// What a timing line did, in the status bar: the holes timed, the manual ones kept and those left out for having no
+    /// electronic detonator; the holes past the largest delay and those out of its reach (which lost their time) in a message.
+    /// </summary>
+    private async Task ReportTimingLine(TimingLineResult r)
+    {
+        var status = Loc.F("{0} holes timed, {1} with manual time kept", r.Timed, r.SkippedManual);
+        if (r.NotElectronic > 0) status += "; " + Loc.F("{0} holes without an electronic detonator left out", r.NotElectronic);
+        SetStatus(status);
+        var lines = new List<string>();
+        // a hole whose last primer fires after it is named with that offset: the line's time plus it passed the limit
+        string Exceeded(Hole h) => Charging.MaxPrimerOffset(Project!, h) is var o && o > 0 ? Loc.F("{0} (primer offset {1} ms)", h.Label, o.ToString("0.#")) : h.Label;
+        if (r.MaxTimeExceeded.Count > 0)
+            lines.Add(Loc.F("Maximum delay {0} ms exceeded, holes not timed: {1}", Project!.Electronic.MaxTimeMs, string.Join(", ", r.MaxTimeExceeded.Select(Exceeded))));
+        if (r.Unreached.Count > 0)
+            lines.Add(Loc.F("Out of reach of the line, the time was cleared: {0}", string.Join(", ", r.Unreached.Where(h => !h.ElectronicTimeManual).Select(h => h.Label))));
+        if (lines.Count > 0) await Dialogs.Info(string.Join("\n\n", lines));
     }
 
     /// <summary>
@@ -748,7 +835,7 @@ public sealed partial class MainViewModel
             ? Project!.Holes.Where(h => line.HoleIds.Contains(h.Id) && !h.IsDummy).ToList()
             : SelectedOrAllHoles().Where(h => !h.IsDummy).ToList();
         if (await TimingLineWindow.Show(this, line.Points, holes, line) is not { } setup) return;
-        var ids = holes.Select(h => h.Id).ToHashSet();
+        var ids = ElectronicHoleIds(holes);
         var lineId = line.Id;
         TimingLineResult? r = null;
         Change("Edit timing line", p =>
@@ -761,13 +848,13 @@ public sealed partial class MainViewModel
             if (setup.LayerId is Guid layer) l.LayerId = layer;
             if (setup.Reprogram)
             {
+                // the holes that lost their electronic detonator leave the line, with the time it gave them
+                r = EbsTimingLine.Apply(p, HolesById(p, l.HoleIds.Union(ids).ToHashSet()), l, o.KeepManualTimes);
                 l.HoleIds = ids.ToList();
-                r = EbsTimingLine.Apply(p, HolesById(p, ids), l);
+                TakeHoles(p, l.Id, ids);
             }
         });
-        if (r != null) SetStatus(Loc.F("{0} holes timed, {1} with manual time kept", r.Timed, r.SkippedManual));
-        if (r?.MaxTimeExceeded.Count > 0)
-            await Dialogs.Info(Loc.F("Maximum delay {0} ms exceeded, holes not timed: {1}", Project!.Electronic.MaxTimeMs, string.Join(", ", r.MaxTimeExceeded.Select(h => h.Label))));
+        if (r != null) await ReportTimingLine(r);
     }
 
     /// <summary>
@@ -778,7 +865,7 @@ public sealed partial class MainViewModel
     public async Task AddHolesToTimingLine(TimingLineEntity line)
     {
         var p = Project!;
-        var bound = p.Entities.OfType<TimingLineEntity>().SelectMany(l => l.HoleIds).ToHashSet();
+        var bound = p.Entities.OfType<IHoleTimer>().SelectMany(l => l.HoleIds).ToHashSet();
         var electronic = p.Holes.Where(h => !h.IsDummy && !bound.Contains(h.Id) && Charging.HasElectronicDetonator(p, h)).Select(h => h.Id).ToList();
         if (electronic.Count == 0) { await Dialogs.Info(Loc.T("Every hole with an electronic detonator is already on a timing line.")); return; }
         var lineId = line.Id;
@@ -794,9 +881,8 @@ public sealed partial class MainViewModel
         // selected without an undo step of its own: one Undo takes the whole command back
         Doc!.Select(ids, record: false);
         if (r == null) return;
+        await ReportTimingLine(r);
         SetStatus(Loc.F("Timing line: {0} holes added, {1} holes timed, {2} with manual time kept", added, r.Timed, r.SkippedManual));
-        if (r.MaxTimeExceeded.Count > 0)
-            await Dialogs.Info(Loc.F("Maximum delay {0} ms exceeded, holes not timed: {1}", p.Electronic.MaxTimeMs, string.Join(", ", r.MaxTimeExceeded.Select(h => h.Label))));
     }
 
     /// <summary>
@@ -843,7 +929,7 @@ public sealed partial class MainViewModel
         var off = to == null ? null : await Dialogs.PromptNumber("Copy times between horizons", Loc.T("Time offset (ms)"), 0);
         if (off is not double o) return;
         int n = 0;
-        Change("Copy times between horizons", p => n = Timing.CopyTimesBetweenHorizons(p.Holes.ToList(), (int)from!.Value, (int)to!.Value, o));
+        Change("Copy times between horizons", p => n = Timing.CopyTimesBetweenHorizons(p.Holes.ToList(), (int)from!.Value, (int)to!.Value, o, p.Electronic.AllowSubMs));
         SetStatus(Loc.F("{0} holes timed", n));
     }
 

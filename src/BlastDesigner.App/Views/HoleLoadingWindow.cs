@@ -1045,7 +1045,7 @@ public sealed class HoleLoadingEditor : DockPanel
         primerHead.Children.Add(PaneHead(L("Primers in the deck")));
         _props.Children.Add(primerHead);
         if (!expl) { _props.Children.Add(EmptyNote(L("Primers go only into explosive decks."))); return; }
-        if (d.Primers.Count == 0) { _props.Children.Add(EmptyNote(L("This deck has no primer: the charge will not fire."))); return; }
+        if (d.Primers.Count == 0) { _props.Children.Add(AddFirstPrimer()); return; }
         var list = new StackPanel { Spacing = 6, Margin = new Thickness(0, -8, 0, 0) };
         for (int j = 0; j < d.Primers.Count; j++) list.Children.Add(PrimerCard(d, j));
         _props.Children.Add(list);
@@ -1066,6 +1066,36 @@ public sealed class HoleLoadingEditor : DockPanel
         BorderThickness = new Thickness(1),
         Child = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, FontSize = 12.5, Foreground = Look.Muted, TextAlignment = TextAlignment.Center }
     };
+
+    /// <summary>An explosive deck with no primer: in place of the note, a button that puts one in, and why it is needed.</summary>
+    private Control AddFirstPrimer()
+    {
+        var b = new Button
+        {
+            Content = new StackPanel
+            {
+                Spacing = 4,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Children =
+                {
+                    Ui.Row(8, Look.Icon("plus", 16, Look.Accent), new TextBlock { Text = L("Add a primer"), FontWeight = FontWeight.SemiBold, Foreground = Look.Accent, VerticalAlignment = VerticalAlignment.Center }),
+                    new TextBlock { Text = L("Without a primer the charge will not fire."), FontSize = 11.5, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center }
+                }
+            },
+            Margin = new Thickness(0, -8, 0, 0),
+            Padding = new Thickness(12),
+            CornerRadius = new CornerRadius(8),
+            Background = Look.AccentSoft,
+            BorderBrush = Look.Accent,
+            BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            Tag = "addFirstPrimer"
+        };
+        b.Classes.Add("flat");
+        b.Click += (_, _) => Ui.Safe(AddPrimer);
+        return b;
+    }
 
     private static Control ReadOnly(string value, string unit) => new Border
     {
@@ -1191,12 +1221,17 @@ public sealed class HoleLoadingEditor : DockPanel
                 };
                 return c;
             }
-            var delay = new TextBox { Text = pr.DelayMs is double ms ? N(ms, "0.##") : "", Watermark = det != null ? N(det.DelayMs, "0") : "", Height = 30, MinHeight = 30, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong };
+            // an electronic detonator has no delay of its own: its time is the hole's, plus its offset
+            var electronic = det?.Kind == ProductKind.ElectronicDetonator;
+            var delay = electronic
+                ? new TextBox { Text = pr.OffsetMs != 0 ? N(pr.OffsetMs, "0.##") : "", Watermark = "0", Height = 30, MinHeight = 30, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong }
+                : new TextBox { Text = pr.DelayMs is double ms ? N(ms, "0.##") : "", Watermark = det != null ? N(det.DelayMs, "0") : "", Height = 30, MinHeight = 30, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong };
             void CommitDelay(bool keepFocus)
             {
                 var v = Parse(delay.Text);
-                if (v == pr.DelayMs) { if (keepFocus) delay.SelectAll(); return; }
-                pr.DelayMs = v;
+                if (electronic ? (v ?? 0) == pr.OffsetMs : v == pr.DelayMs) { if (keepFocus) delay.SelectAll(); return; }
+                if (electronic) pr.OffsetMs = v ?? 0;
+                else pr.DelayMs = v;
                 if (keepFocus) _refocus = "primerDelay" + j;
                 Refresh();
             }
@@ -1210,7 +1245,8 @@ public sealed class HoleLoadingEditor : DockPanel
             var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,8,*"), RowDefinitions = new RowDefinitions("Auto,8,Auto,8,Auto") };
             void Put(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); g.Children.Add(c); }
             Put(Field(L("Depth"), NumberBox("primerDepth" + j, pr.Depth, v => ColumnEdit.MovePrimer(d, pr, v))), 0, 0);
-            Put(Field(L("Delay, ms"), delay), 0, 2);
+            delay.Name = electronic ? "primerOffset" + j : "primerDelayBox" + j;
+            Put(Field(electronic ? L("Offset from the hole time, ms") : L("Delay, ms"), delay), 0, 2);
             // Detonator above booster, each across the whole card.
             var detField = Field(L("Detonator"), Pick(dets, pr.DetonatorId, v => pr.DetonatorId = v));
             var boosterField = Field(Loc.T("Booster"), Pick(boosters, pr.BoosterId, v => pr.BoosterId = v));

@@ -14,7 +14,9 @@ public enum ReportSections
     Timing = 64,
     Vibration = 128,
     Outcomes = 256,
-    All = 511
+    /// <summary>Burden relief over the timing triangulation, on a plan with its legend.</summary>
+    BurdenRelief = 512,
+    All = 1023
 }
 
 public sealed class ReportOptions
@@ -30,6 +32,8 @@ public sealed class ReportOptions
     public ReportSections NewPage { get; set; } = ReportSections.None;
     public bool Landscape { get; set; }
     public TimingLabelMode PlanTimingLabels { get; set; } = TimingLabelMode.InholeTime;
+    /// <summary>Top of the colour scale of the burden relief section, ms/m; null: the most relief of the blast.</summary>
+    public double? BurdenReliefLimit { get; set; }
 }
 
 /// <summary>A plan on one sheet.</summary>

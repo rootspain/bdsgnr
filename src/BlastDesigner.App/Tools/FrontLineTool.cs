@@ -5,15 +5,17 @@ using BlastDesigner.App.ViewModels;
 using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
+using BlastDesigner.Engine;
 using BlastDesigner.Rendering;
 using SkiaSharp;
 
 namespace BlastDesigner.App.Tools;
 
 /// <summary>
-/// Circles of the selected two-segment fronts, shared by the front tool and the Select tool: the vertex circle turns the
-/// front about its centre, a circle at the base changes its angle and length (the other end mirrors it). The front is
-/// changed, and its holes reprogrammed, in one undo step when the button is released; Esc drops the drag.
+/// Circles of the selected fronts, shared by the front tool and the Select tool. On a chevron the vertex circle turns the
+/// front about its centre, a circle at the base changes its angle and length (the other end mirrors it); on a line a circle
+/// moves its end. The front is changed, and its holes reprogrammed, in one undo step when the button is released; Esc drops
+/// the drag.
 /// </summary>
 public sealed class FrontLineHandles
 {
@@ -45,7 +47,7 @@ public sealed class FrontLineHandles
         (TimingLineEntity, int)? best = null;
         var bestD = VertexGripsOverlay.Reach + 1;
         foreach (var line in _vm.EditableFrontLines())
-            foreach (var i in new[] { 1, 0, 2 })
+            foreach (var i in line.Front == TimingFrontShape.Line ? new[] { 0, 1 } : new[] { 1, 0, 2 })
             {
                 var (x, y) = _vm.View.Camera.ToScreen(line.Points[i]);
                 var d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
@@ -82,7 +84,16 @@ public sealed class FrontLineHandles
         var cam = _vm.View.Camera;
         var pts = line.Points;
         preview.Labels.Clear();
-        if (handle == 1)
+        if (line.Front == TimingFrontShape.Line)
+        {
+            var other = pts[1 - handle];
+            var end = cam.ToWorld(p.X, p.Y, pts[handle].Z);
+            if (p.Modifiers.HasFlag(KeyModifiers.Shift)) end = FrontLineTool.Stepped(other, end);
+            _shown = pts.ToList();
+            _shown[handle] = end;
+            preview.Labels.Add((end, $"{Vec3.Distance2D(other, end):0.00} m"));
+        }
+        else if (handle == 1)
         {
             var center = Chevron.Center(pts);
             var cursor = cam.ToWorld(p.X, p.Y, center.Z);
@@ -98,7 +109,7 @@ public sealed class FrontLineHandles
             _shown = Chevron.Reshape(pts, cam.ToWorld(p.X, p.Y, pts[1].Z));
             preview.Labels.Add((_shown[handle], $"{Chevron.AngleDeg(_shown):0.0}° · {Chevron.Length(_shown):0.00} m"));
         }
-        Overlay.Dragged = (line, _shown, handle == 1);
+        Overlay.Dragged = (line, _shown, line.Front == TimingFrontShape.Chevron && handle == 1);
     }
 
     /// <summary>Applies the drag (with undo, reprogramming the front's holes); a press without a drag changes nothing.</summary>
@@ -108,7 +119,7 @@ public sealed class FrontLineHandles
         var (line, handle) = drag;
         var shown = _dragging ? _shown : null;
         Reset();
-        if (shown != null) _vm.SetTimingLinePoints(line.Id, shown, handle == 1 ? "Rotate timing line" : "Reshape timing line");
+        if (shown != null) _vm.SetTimingLinePoints(line.Id, shown, line.Front == TimingFrontShape.Chevron && handle == 1 ? "Rotate timing line" : "Reshape timing line");
     }
 
     public void Cancel() => Reset();
@@ -125,10 +136,12 @@ public sealed class FrontLineHandles
 }
 
 /// <summary>
-/// Timing front tool: two segments meeting at a vertex at 30°, with a ray from the vertex outwards that shows where the times
-/// grow. A press places the vertex; dragging with the button held pulls the base after the cursor (direction and length),
-/// a click without a drag gives segments 60 px long at the present zoom, pointing up the screen. On release the timing
-/// line window opens. A selected front is turned and reshaped by its circles and moved by dragging the line itself.
+/// Timing front tool, drawing the shape chosen in its panel (<see cref="MainViewModel.FrontShape"/>).
+/// A chevron: two segments meeting at a vertex at 30°, with a ray from the vertex outwards that shows where the times grow. A press places the vertex; dragging with the button held pulls the base after the cursor (direction and length),
+/// a click without a drag gives segments 60 px long at the present zoom, pointing up the screen.
+/// A line: a press places one end, the drag the other (a click gives 60 px across the screen); its ends are put in the order
+/// that makes the times grow to the side of most holes, which an arrow shows.
+/// On release the timing line window opens. A selected front is changed by its circles and moved by dragging the line itself.
 /// </summary>
 public sealed class FrontLineTool : Tool
 {
@@ -142,6 +155,8 @@ public sealed class FrontLineTool : Tool
     private ToolPointer? _down;
     private Vec3 _apex;
     private bool _stretching;
+    private bool _line;
+    private List<Vec3> _holes = new();
     private List<Vec3>? _shape;
     // a selected front being moved
     private ToolPointer? _moveDown;
@@ -156,7 +171,18 @@ public sealed class FrontLineTool : Tool
     }
 
     public override string Name => "Timing line";
-    public override string Hint => "Press to place the vertex of the front and drag to set its direction and length (a click gives 60 px); the ray shows where the times grow. On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.";
+    public override string Hint => Vm.FrontShape == TimingFrontShape.Line
+        ? "Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line to the side of most holes, the arrow shows it. On a selected line drag a circle to move its end, the line to move it."
+        : "Press to place the vertex of the front and drag to set its direction and length (a click gives 60 px); the ray shows where the times grow. On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.";
+
+    /// <summary>The end of a segment from <paramref name="from"/> turned to the nearest step of 15°, its length kept.</summary>
+    public static Vec3 Stepped(Vec3 from, Vec3 to)
+    {
+        var v = (to - from).WithZ(0);
+        var step = DirectionStepDeg * GeoMath.Deg;
+        var a = Math.Round(Math.Atan2(v.Y, v.X) / step) * step;
+        return new Vec3(from.X + Math.Cos(a) * v.Length2D, from.Y + Math.Sin(a) * v.Length2D, to.Z);
+    }
 
     public override void Activate()
     {
@@ -193,6 +219,8 @@ public sealed class FrontLineTool : Tool
         _down = p;
         _apex = p.Snapped;
         _stretching = false;
+        _line = Vm.FrontShape == TimingFrontShape.Line;
+        _holes = _line ? Vm.SelectedOrAllHoles().Where(h => !h.IsDummy).Select(h => h.Collar).ToList() : new();
         UpdateShape(p);
     }
 
@@ -242,6 +270,7 @@ public sealed class FrontLineTool : Tool
     /// <summary>The front as the pointer gives it now, shown with its circles and its ray.</summary>
     private void UpdateShape(ToolPointer p)
     {
+        if (_line) { UpdateLine(p); return; }
         var cam = View.Camera;
         Vec3 dir;
         double length;
@@ -276,6 +305,40 @@ public sealed class FrontLineTool : Tool
         // bearing of the ray, clockwise from north
         var bearing = (Math.Atan2(dir.X, dir.Y) / GeoMath.Deg + 360) % 360;
         Preview.Labels.Add((_shape[0], $"{bearing:0.0}° · {Chevron.Length(_shape):0.00} m"));
+    }
+
+    /// <summary>The line as the pointer gives it now, its ends in order, with an arrow from its middle to the side the times grow to.</summary>
+    private void UpdateLine(ToolPointer p)
+    {
+        var cam = View.Camera;
+        var end = _stretching ? cam.ToWorld(p.X, p.Y, _apex.Z) : _apex;
+        if (_stretching && p.Modifiers.HasFlag(KeyModifiers.Shift)) end = Stepped(_apex, end);
+        if (Vec3.Distance2D(_apex, end) < Chevron.MinLength)
+        {
+            var up = cam.Up.WithZ(0).Normalized();
+            if (up == Vec3.Zero) up = new Vec3(0, 1, 0);
+            end = _apex + new Vec3(up.Y, -up.X, 0) * (DefaultLengthPx / Math.Max(cam.Scale, 1e-9));
+        }
+        _shape = EbsTimingLine.FacingLine(_apex, end, _holes);
+
+        Preview.Lines.Clear();
+        Preview.Guides.Clear();
+        Preview.Points.Clear();
+        Preview.Labels.Clear();
+        Preview.Lines.Add((_shape, false, PreviewColor));
+        foreach (var q in _shape) Preview.Points.Add((q, PreviewColor));
+        // the left of the line walked from its first end to its second is timed later
+        var d = (_shape[1] - _shape[0]).WithZ(0);
+        var length = d.Length2D;
+        var mid = (_shape[0] + _shape[1]) / 2;
+        var left = new Vec3(-d.Y, d.X, 0).Normalized();
+        var tip = mid + left * (length / 4);
+        var back = -left * (length / 16);
+        var across = d.Normalized() * (length / 24);
+        Preview.Guides.Add((new[] { mid, tip }, PreviewColor));
+        Preview.Guides.Add((new[] { tip + back + across, tip, tip + back - across }, PreviewColor));
+        var bearing = (Math.Atan2(d.X, d.Y) / GeoMath.Deg + 360) % 360;
+        Preview.Labels.Add((_shape[1], $"{bearing:0.0}° · {length:0.00} m"));
     }
 
     /// <summary>The selected objects follow the cursor; the move is applied (with undo and reprogramming) on release.</summary>

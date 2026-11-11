@@ -202,7 +202,9 @@ public class TimingTests
         Assert.Equal(25, Delay(p.Products.First(x => x.Kind == ProductKind.SurfaceConnector && x.DelayMs == 25)));
         Assert.Equal(17, Delay(p.Products.First(x => x.Kind == ProductKind.CordRelay && x.DelayMs == 17)));
         Assert.Equal(13 / 6500.0 * 1000, Delay(Of(ProductKind.DetonatingCord)), 6);
-        Assert.Equal(0, Delay(Of(ProductKind.ElectricDetonator)));
+        var electric = new Product { Name = "Electric detonator 25 ms", Kind = ProductKind.ElectricDetonator, DelayMs = 25 };
+        p.Products.Add(electric);
+        Assert.Equal(0, Delay(electric));
         Assert.Equal(0, Delay(Of(ProductKind.HarnessWire)));
         Assert.Equal(33, Delay(null, 33));
     }
@@ -213,7 +215,9 @@ public class TimingTests
     {
         var p = BlastProject.CreateNew();
         var wire = p.Products.First(x => x.Kind == ProductKind.HarnessWire);
-        var dets = p.Products.Where(x => x.Kind == ProductKind.ElectricDetonator).OrderBy(x => x.DelayMs).ToList();
+        // the built-in catalogue has no electric detonators: the round brings its own
+        var dets = new[] { 25.0, 500.0 }.Select(ms => new Product { Name = $"Electric detonator {ms} ms", Kind = ProductKind.ElectricDetonator, DelayMs = ms }).ToList();
+        p.Products.AddRange(dets);
         var ip = p.Add(new InitiationPoint { Position = new Vec3(-5, 0, 100) });
         var holes = new List<Hole>();
         for (int i = 0; i < 2; i++)
@@ -700,7 +704,10 @@ public class SurfaceAndQuantityTests
         moved.Translate(new Vec3(1, 0, 0));
         var afterMove = overlay.Analysis(p);
         Assert.NotSame(first, afterMove);
-        p.Holes.Last().ElectronicTimeMs = 5000;
+        // a programmed time fires a hole with an electronic detonator
+        var last = p.Holes.Last();
+        foreach (var (primer, _) in Charging.Primers(last)) primer.DetonatorId = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator).Id;
+        last.ElectronicTimeMs = 5000;
         Timing.Solve(p);
         var afterTime = overlay.Analysis(p);
         Assert.NotSame(afterMove, afterTime);

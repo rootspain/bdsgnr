@@ -126,8 +126,9 @@ public sealed class VertexGripsOverlay : IOverlay
 }
 
 /// <summary>
-/// Circles of the selected two-segment fronts (<see cref="TimingLineEntity.HasHandles"/>): the vertex in the accent colour
+/// Circles of the selected fronts (<see cref="TimingLineEntity.HasHandles"/>). A chevron: the vertex in the accent colour
 /// (drag to turn the front), the two ends of the base in the colour of the line (drag to change the angle and the length).
+/// A line: its two ends in its colour (drag to move one).
 /// While one is dragged the front is drawn as it will be, with the ray from its vertex when it is turned.
 /// </summary>
 public sealed class FrontLineHandlesOverlay : IOverlay
@@ -162,12 +163,12 @@ public sealed class FrontLineHandlesOverlay : IOverlay
         foreach (var l in _lines())
         {
             var points = Dragged is { } d && d.Line.Id == l.Id ? d.Points : l.Points;
-            if (points.Count != 3) continue;
-            for (int i = 0; i < 3; i++)
+            if (!l.HasHandles || points.Count != l.Points.Count) continue;
+            for (int i = 0; i < points.Count; i++)
             {
                 var (x, y) = cam.ToScreen(points[i]);
                 var r = (Hot is { } hot && hot.Line == l.Id && hot.Handle == i ? VertexGripsOverlay.Radius + 2 : VertexGripsOverlay.Radius) + 1;
-                fill.Color = i == 1 ? _accent() : PlanRenderer.TimingLineColor(l);
+                fill.Color = l.Front == TimingFrontShape.Chevron && i == 1 ? _accent() : PlanRenderer.TimingLineColor(l);
                 c.DrawCircle(x, y, r, fill);
                 c.DrawCircle(x, y, r, edge);
             }
@@ -409,14 +410,94 @@ public sealed class FirstMovementOverlay : IMovePreviewOverlay
     }
 }
 
-/// <summary>Per-hole arrows: direction of initiation or first movement, coloured by burden relief.</summary>
+/// <summary>
+/// Burden relief over the timing triangulation (<see cref="BurdenRelief"/>): each triangle filled in one of five colours, blue
+/// to red, from the least relief to the most or to the upper limit, with the legend top left.
+/// </summary>
+public sealed class BurdenReliefOverlay : IMovePreviewOverlay
+{
+    /// <summary>Blue to red, from the least relief to the most.</summary>
+    public static readonly SKColor[] Colours = { new(0xFF2563EB), new(0xFF06B6D4), new(0xFF16A34A), new(0xFFF59E0B), new(0xFFDC2626) };
+
+    /// <summary>Top of the scale, ms/m; null: the most relief of the triangles. More than it is drawn in the last colour.</summary>
+    public double? UpperLimit { get; set; }
+    /// <summary>Caption of the legend.</summary>
+    public string LegendTitle { get; set; } = "";
+    public bool ShowLegend { get; set; } = true;
+
+    List<(Vec3, double)>? _inputs;
+    TimingDelaunay _delaunay = TimingDelaunay.Build(Array.Empty<(Vec3, double)>());
+
+    /// <summary>The triangulation, rebuilt when the firing points or times change.</summary>
+    public TimingDelaunay Delaunay(BlastProject project, ISet<Guid>? moved = null, Vec3 offset = default)
+    {
+        var inputs = FirstMovement.Inputs(project, moved, offset);
+        if (_inputs == null || !inputs.SequenceEqual(_inputs))
+        {
+            _inputs = inputs;
+            _delaunay = TimingDelaunay.Build(inputs);
+        }
+        return _delaunay;
+    }
+
+    /// <summary>The range of the colours, ms/m.</summary>
+    public (double Min, double Max) Range(BlastProject project) => BurdenRelief.Range(Delaunay(project), UpperLimit);
+
+    public void Draw(SKCanvas c, Camera cam, BlastProject project) => Draw(c, cam, project, null, default);
+
+    public void Draw(SKCanvas c, Camera cam, BlastProject project, ISet<Guid>? moved, Vec3 offset)
+    {
+        var d = Delaunay(project, moved, offset);
+        var triangles = BurdenRelief.Valid(d).ToList();
+        if (triangles.Count == 0) return;
+        var (min, max) = BurdenRelief.Range(d, UpperLimit);
+        using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
+        foreach (var t in triangles)
+        {
+            var (x1, y1) = cam.ToScreen(d.Vertices[t.V1]);
+            var (x2, y2) = cam.ToScreen(d.Vertices[t.V2]);
+            var (x3, y3) = cam.ToScreen(d.Vertices[t.V3]);
+            using var path = new SKPath();
+            path.MoveTo(x1, y1); path.LineTo(x2, y2); path.LineTo(x3, y3); path.Close();
+            fill.Color = Colours[BurdenRelief.Class(t.Slope, min, max)].WithAlpha(0xB0);
+            c.DrawPath(path, fill);
+        }
+        if (ShowLegend) DrawLegend(c, LegendTitle, min, max, UpperLimit != null);
+    }
+
+    /// <summary>Top left of the view: the five colours with the relief each stands for, ms/m.</summary>
+    public static void DrawLegend(SKCanvas c, string title, double min, double max, bool limited, float left = 12, float top = 12)
+    {
+        using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = SKColors.White };
+        string Row(int i)
+        {
+            var step = (max - min) / BurdenRelief.Classes;
+            var to = i == BurdenRelief.Classes - 1 && limited ? "" : (min + (i + 1) * step).ToString("0.0");
+            return i == BurdenRelief.Classes - 1 && limited ? $"> {min + i * step:0.0}" : $"{min + i * step:0.0} – {to}";
+        }
+        var width = Math.Max(text.MeasureText(title), Enumerable.Range(0, BurdenRelief.Classes).Max(i => text.MeasureText(Row(i)) + 26)) + 20;
+        using var back = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = new SKColor(0xB8101215) };
+        c.DrawRoundRect(new SKRect(left, top, left + width, top + 30 + BurdenRelief.Classes * 17), 8, 8, back);
+        c.DrawText(title, left + 10, top + 18, text);
+        using var swatch = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
+        // the most relief at the top, as a scale reads
+        for (int k = 0; k < BurdenRelief.Classes; k++)
+        {
+            var i = BurdenRelief.Classes - 1 - k;
+            var y = top + 28 + k * 17;
+            swatch.Color = Colours[i];
+            c.DrawRect(new SKRect(left + 10, y, left + 26, y + 12), swatch);
+            c.DrawText(Row(i), left + 32, y + 10, text);
+        }
+    }
+}
+
+/// <summary>Per-hole arrows: direction of initiation or first movement.</summary>
 public sealed class TimingVectorOverlay : IOverlay
 {
-    public enum Mode { InitiationAngle, FirstMovement, BurdenRelief }
+    public enum Mode { InitiationAngle, FirstMovement }
     public Mode Show { get; set; } = Mode.FirstMovement;
     public double NeighbourRadius { get; set; } = 8;
-    public double ReliefLow { get; set; } = 4;
-    public double ReliefHigh { get; set; } = 15;
 
     // The analysis of the last holes: rebuilt only when a hole moves or changes time, not on every frame of panning.
     private readonly object _lock = new();
@@ -453,15 +534,6 @@ public sealed class TimingVectorOverlay : IOverlay
         var len = Math.Max(project.Design.Burden, 2) * 0.8;
         foreach (var r in res)
         {
-            if (Show == Mode.BurdenRelief)
-            {
-                if (r.ReliefMsPerM is not double rel) continue;
-                fill.Color = rel < ReliefLow ? new SKColor(0xC0DC2626) : rel > ReliefHigh ? new SKColor(0xC02563EB) : new SKColor(0xC016A34A);
-                var (x, y) = cam.ToScreen(r.Hole.Collar);
-                c.DrawCircle(x, y, (float)Math.Max(7, r.Hole.RadiusM * cam.Scale * 2), fill);
-                c.DrawText($"{rel:0.0}", x + 8, y + 12, text);
-                continue;
-            }
             var bearing = Show == Mode.InitiationAngle ? r.InitiationBearing : r.MovementBearing;
             if (bearing is not double b) continue;
             var dir = GeoMath.HoleDirection(b, 90);

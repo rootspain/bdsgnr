@@ -85,4 +85,19 @@ public class MinStemmingTests
         // a file from before it has none: the program settings give it
         Assert.Null(ProjectJson.Deserialize(ProjectJson.Serialize(new BlastProject())).MinStemmingDiameters);
     }
+
+    [Fact]
+    public void TheFontSizeOfTheLabelsIsKeptInTheFile_AndAFileBeforeItHasTheDefault()
+    {
+        var p = new BlastProject();
+        p.View.HoleLabelFontSize = 14;
+        Assert.Equal(14, ProjectJson.Deserialize(ProjectJson.Serialize(p)).View.HoleLabelFontSize);
+        var old = System.Text.Encoding.UTF8.GetString(ProjectJson.Serialize(new BlastProject())).Replace("\"holeLabelFontSize\":12,", "");
+        Assert.DoesNotContain("holeLabelFontSize", old);
+        Assert.Equal(12, ProjectJson.Deserialize(System.Text.Encoding.UTF8.GetBytes(old)).View.HoleLabelFontSize);
+        // and the program settings keep the last size chosen
+        var s = new BlastDesigner.IO.ProgramSettings { HoleLabelFontSize = 16 };
+        var back = System.Text.Json.JsonSerializer.Deserialize<BlastDesigner.IO.ProgramSettings>(System.Text.Json.JsonSerializer.Serialize(s, ProjectJson.Options), ProjectJson.Options)!;
+        Assert.Equal(16, back.HoleLabelFontSize);
+    }
 }

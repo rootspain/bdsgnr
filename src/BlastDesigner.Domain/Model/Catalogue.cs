@@ -181,6 +181,7 @@ public sealed class ProductCatalogue
     public static void Attach(BlastProject project, ProductCatalogue user, IReadOnlyList<Product> userProducts)
     {
         project.Catalogue = Layered(BuiltIn(), user, project.Catalogue);
+        DropRetired(project);
         foreach (var p in Product.DefaultCatalogue())
             if (!project.Products.Any(x => x.Id == p.Id || (x.Kind == p.Kind && x.Name == p.Name))) project.Products.Add(p);
         foreach (var p in userProducts)
@@ -190,6 +191,21 @@ public sealed class ProductCatalogue
             else if (p.Deleted) own.Deleted = true;
         }
         Link(project);
+    }
+
+    /// <summary>Ids of the products the built-in catalogue had once, and of their family.</summary>
+    private static readonly string[] RetiredProducts = { "b6b2be9a-c3d3-4fa1-83bf-c42467dc8e56", "7ff165ec-6ed6-4544-94a3-4e16747fe227" };
+    private const string RetiredFamily = "d5fc75c8-a80e-4459-a141-764999265be3";
+
+    /// <summary>
+    /// A project from a file before the built-in electric detonators were taken out loses them unless something uses
+    /// them, and their family with them when no product is left in it.
+    /// </summary>
+    private static void DropRetired(BlastProject project)
+    {
+        var used = UsedProducts(project);
+        project.Products.RemoveAll(p => RetiredProducts.Contains(p.Id) && !used.Contains(p.Id));
+        if (!project.Products.Any(p => p.FamilyId == RetiredFamily)) project.Catalogue.Families.RemoveAll(f => f.Id == RetiredFamily);
     }
 
     /// <summary>
@@ -233,7 +249,11 @@ public sealed class ProductCatalogue
         foreach (var r in p.LoadingRules)
         {
             Add(r.StemmingProductId, r.WetAlternateProductId, r.HardAlternateProductId, r.SoftAlternateProductId);
-            foreach (var d in r.Decks) Add(d.ProductId, d.BoosterId, d.DetonatorId);
+            foreach (var d in r.Decks)
+            {
+                Add(d.ProductId);
+                foreach (var x in d.Primers) Add(x.BoosterId, x.DetonatorId);
+            }
         }
         foreach (var r in p.InitiationRules) Add(r.DetonatorId, r.BoosterId);
         return used;
@@ -330,10 +350,10 @@ public sealed class ProductCatalogue
 
         Family("ddc6ed48-5bc2-4902-be8f-64cdbfd8e90d", "Downhole detonator", DownholeDetonator);
         Family("73a7dd8e-133d-402d-ba26-703f1d430510", "Electronic detonator", ElectronicDetonator);
+        Family("31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2", "DeviTronic", ElectronicDetonator);
         Family("1b2212dd-fc1d-4409-916c-4313f4b912ae", "Surface connector", SurfaceConnector);
         Family("a70df506-c21a-4e74-8f5a-22bd5f22a86f", "Detonating cord", DetonatingCord);
         Family("f5d36999-3c77-4a86-be52-14c75c75dd7b", "Cord relay", CordRelay);
-        Family("d5fc75c8-a80e-4459-a141-764999265be3", "Electric detonator", ElectricDetonator);
         Family("7685543d-be13-4b47-97b2-dd52d770dd35", "Harness wire", HarnessWire);
         return c;
     }

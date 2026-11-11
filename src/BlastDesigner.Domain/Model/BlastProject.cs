@@ -109,7 +109,7 @@ public sealed class BlastProject
             Name = "Standard production",
             StemmingLength = 3,
             StemmingProductId = stem.Id,
-            Decks = { new DeckTemplate { ProductId = anfo.Id, Length = 0, PrimerCount = 1, BoosterId = booster.Id, DetonatorId = det.Id, PrimerOffset = 0.5 } }
+            Decks = { new DeckTemplate { ProductId = anfo.Id, Length = 0, Primers = { new PrimerTemplate { Offset = 0.5, BoosterId = booster.Id, DetonatorId = det.Id } } } }
         };
     }
 }
@@ -241,10 +241,27 @@ public sealed class ElectronicSettings
     public double HoleIntervalMs { get; set; } = 17;
     public double RowIntervalMs { get; set; } = 42;
     public double MaxTimeMs { get; set; } = 20000;
-    public double TimeStepMs { get; set; } = 1;
+    /// <summary>Times are programmed to 0.1 ms; off, to whole milliseconds (files before 0.3.1 had a time step instead).</summary>
+    public bool AllowSubMs { get; set; }
     /// <summary>Programmed times are offset from this base time.</summary>
     public double BaseTimeMs { get; set; }
+    /// <summary>Between the explosive decks of a hole (separated by inert ones), each next one after the one before, ms.</summary>
+    public double InterDeckDelayMs { get; set; }
+    /// <summary>Between the electronic primers of one deck, ms.</summary>
+    public double IntraDeckDelayMs { get; set; }
+    /// <summary>The order the explosive decks of a hole fire in.</summary>
+    public DeckFiringOrder DeckOrder { get; set; }
+    /// <summary>The order the electronic primers of a deck fire in.</summary>
+    public PrimerFiringOrder PrimerOrder { get; set; }
+    /// <summary>Each electronic primer fires at the hole's time plus its own offset (<see cref="Primer.OffsetMs"/>), not by the deck delays.</summary>
+    public bool UseOffsets { get; set; }
 }
+
+/// <summary>The order the explosive decks of a hole fire in (SHOTPlus: bottom-top, top-bottom, simultaneous).</summary>
+public enum DeckFiringOrder { BottomUp, TopDown, Simultaneous }
+
+/// <summary>The order the electronic primers of one deck fire in.</summary>
+public enum PrimerFiringOrder { BottomUp, TopDown }
 
 /// <summary>Site constants for scaled-distance vibration and airblast prediction.</summary>
 public sealed class VibrationModel
@@ -293,6 +310,9 @@ public sealed class ViewState
     public bool ReverseDrawOrder { get; set; }
     public bool ShowLoading { get; set; } = true;
     public HoleLabelMode HoleLabels { get; set; } = HoleLabelMode.Label;
+    /// <summary>Font size of the hole labels on the plan and in 3D, px; a file before it reads the default.</summary>
+    public int HoleLabelFontSize { get; set; } = DefaultHoleLabelFontSize;
+    public const int DefaultHoleLabelFontSize = 12, MinHoleLabelFontSize = 6, MaxHoleLabelFontSize = 40;
     public TimingLabelMode TimingLabels { get; set; } = TimingLabelMode.None;
     public bool ShowSurfaceTimeLabel { get; set; }
     public bool ShowInholeDelayLabel { get; set; }

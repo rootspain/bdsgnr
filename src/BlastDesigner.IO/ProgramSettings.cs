@@ -88,6 +88,8 @@ public sealed class ProgramSettings
     public bool ShowFps { get; set; }
     /// <summary>Tie tool panel ▸ Capture width: grey lines beside the tie being drawn show what it captures.</summary>
     public bool TieCaptureShown { get; set; } = true;
+    /// <summary>Timing front tool panel: the shape it draws, a line or a chevron.</summary>
+    public TimingFrontShape TimingFrontShape { get; set; } = TimingFrontShape.Chevron;
     /// <summary>Visualization window: seconds the whole blast is shown in; 0 runs on the blast's own clock.</summary>
     public double PlaybackSeconds { get; set; }
     /// <summary>Visualization window: isochrone interval, ms.</summary>
@@ -125,6 +127,8 @@ public sealed class ProgramSettings
 
     [System.Text.Json.Serialization.JsonIgnore] public bool IsLight => Theme == LightTheme;
     public double CollarSizePixels { get; set; } = 6;
+    /// <summary>Font size of the hole labels last chosen: a new blast starts with it, the project keeps its own.</summary>
+    public int HoleLabelFontSize { get; set; } = BlastDesigner.Domain.Model.ViewState.DefaultHoleLabelFontSize;
     public bool ShowCoordinatesBox { get; set; } = true;
     public Dictionary<string, string> Window { get; set; } = new();
 

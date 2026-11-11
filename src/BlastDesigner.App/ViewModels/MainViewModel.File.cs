@@ -46,7 +46,11 @@ public sealed partial class MainViewModel
             }
             Settings.LastTemplate = name;
         }
-        else project = BlastProject.CreateNew();
+        else
+        {
+            project = BlastProject.CreateNew();
+            project.View.HoleLabelFontSize = Settings.HoleLabelFontSize;
+        }
         header.Created = DateTime.Now;
         project.Header = header;
         Settings.Author = header.Author;
@@ -60,6 +64,7 @@ public sealed partial class MainViewModel
     public void NewSilent()
     {
         var p = BlastProject.CreateNew(Loc.T("New blast"));
+        p.View.HoleLabelFontSize = Settings.HoleLabelFontSize;
         p.Header.Author = Settings.Author;
         p.Header.ShotDate = DateTime.Today;
         Attach(new Document(p));

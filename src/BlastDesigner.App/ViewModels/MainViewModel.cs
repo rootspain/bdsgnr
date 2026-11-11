@@ -72,6 +72,17 @@ public sealed partial class MainViewModel : ObservableObject
             Settings.Save();
         }
     }
+    /// <summary>Timing front tool panel ▸ Line / Chevron: the shape the tool draws; kept in the settings.</summary>
+    public TimingFrontShape FrontShape
+    {
+        get => Settings.TimingFrontShape == TimingFrontShape.Line ? TimingFrontShape.Line : TimingFrontShape.Chevron;
+        set
+        {
+            if (Settings.TimingFrontShape == value) return;
+            Settings.TimingFrontShape = value;
+            Settings.Save();
+        }
+    }
     /// <summary>Tie palette ▸ User defined: the delay new ties get instead of a product's; null uses the connector.</summary>
     public double? ActiveTieDelayMs { get; set; }
     /// <summary>Tie palette ▸ Initiation system chosen: the id of its record in the table of types.</summary>
@@ -391,11 +402,11 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var holes = p.Holes.Where(h => !h.IsDummy && h.ElectronicTimeMs.HasValue && !h.ElectronicTimeManual).ToList();
         if (holes.Count == 0 || line.Points.Count < 2) return new();
-        var planned = EbsTimingLine.Plan(p, holes, line.Points, line.Segments, EbsTimingLine.OptionsOf(line), double.MaxValue, p.Electronic.TimeStepMs).Times;
+        var planned = EbsTimingLine.Plan(p, holes, line.Points, line.Segments, EbsTimingLine.OptionsOf(line), double.MaxValue, p.Electronic.AllowSubMs).Times;
         var shifts = holes.Where(h => planned.ContainsKey(h.Id)).Select(h => (h.Id, D: h.ElectronicTimeMs!.Value - planned[h.Id])).ToList();
         if (shifts.Count == 0) return new();
-        // both times are rounded to the time step, so the shift of the line's holes may differ by one step
-        var tol = Math.Max(p.Electronic.TimeStepMs, 0.01) + 1e-6;
+        // both times are rounded, so the shift of the line's holes may differ by one step of the rounding
+        var tol = (p.Electronic.AllowSubMs ? 0.1 : 1) + 1e-6;
         var best = shifts.MaxBy(s => shifts.Count(o => Math.Abs(o.D - s.D) <= tol)).D;
         return shifts.Where(s => Math.Abs(s.D - best) <= tol).Select(s => s.Id).ToList();
     }

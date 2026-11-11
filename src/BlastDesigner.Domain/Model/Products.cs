@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace BlastDesigner.Domain.Model;
 
 public enum ProductKind
@@ -62,6 +64,11 @@ public sealed class Product
     public double Vod { get; set; }
     /// <summary>Nominal delay for detonators and connectors, ms.</summary>
     public double DelayMs { get; set; }
+    /// <summary>
+    /// Downhole (shock tube) detonator: the time the signal takes down the tube, ms per metre of depth of the primer
+    /// (SHOTPlus PropDel); 0 leaves it out.
+    /// </summary>
+    public double PropagationMsPerM { get; set; }
     /// <summary>Mass of one unit for boosters and cartridges, kg.</summary>
     public double UnitMass { get; set; }
     /// <summary>Cartridge length for packaged products, m.</summary>
@@ -107,6 +114,7 @@ public sealed class Product
         new() { Id = "9b1a41ce-34f1-41fb-b691-10ef5d988960", Name = "Downhole det 500 ms", Family = "Downhole detonator", Kind = ProductKind.DownholeDetonator, DelayMs = 500, Cost = 4, Color = 0xFF1976D2 },
         new() { Id = "3d1c671d-5460-4696-ba1c-59a8c5bbea03", Name = "Downhole det 400 ms", Family = "Downhole detonator", Kind = ProductKind.DownholeDetonator, DelayMs = 400, Cost = 4, Color = 0xFF1565C0 },
         new() { Id = "38a53a3b-bf68-4fa1-a7a4-6998b9284666", Name = "Electronic detonator", Family = "Electronic detonator", Kind = ProductKind.ElectronicDetonator, DelayMs = 0, Cost = 25, Color = 0xFF00897B },
+        new() { Id = "5f2d6f31-4a02-4514-a200-0a6d6490db5a", Name = "DeviTronic", Family = "DeviTronic", Kind = ProductKind.ElectronicDetonator, DelayMs = 0, Cost = 25, Color = 0xFF00897B },
         new() { Id = "0fe4a38c-2cbe-45a4-9f66-73016d8029fa", Name = "Surface connector 17 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 17, Cost = 3, Color = 0xFFFFEB3B },
         new() { Id = "95edced9-9aab-4121-84e0-55eb7ee2f529", Name = "Surface connector 25 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 25, Cost = 3, Color = 0xFFF44336 },
         new() { Id = "dfe87a96-71f0-4a93-9bf0-431198d83df2", Name = "Surface connector 42 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 42, Cost = 3, Color = 0xFFFFFFFF },
@@ -117,28 +125,101 @@ public sealed class Product
         new() { Id = "0ec2651e-4945-4554-915e-f8c4378e6058", Name = "Cord relay 17 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 17, Cost = 3, Color = 0xFFFFB300 },
         new() { Id = "2eaae6f2-75f8-45b1-ae7b-10d76024d14b", Name = "Cord relay 25 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 25, Cost = 3, Color = 0xFFE53935 },
         new() { Id = "9bc120bb-4f12-4f79-9421-a3878a714183", Name = "Cord relay 42 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 42, Cost = 3, Color = 0xFF8D6E63 },
-        new() { Id = "b6b2be9a-c3d3-4fa1-83bf-c42467dc8e56", Name = "Electric detonator 25 ms", Family = "Electric detonator", Kind = ProductKind.ElectricDetonator, DelayMs = 25, Cost = 3, Color = 0xFF5C6BC0 },
-        new() { Id = "7ff165ec-6ed6-4544-94a3-4e16747fe227", Name = "Electric detonator 500 ms", Family = "Electric detonator", Kind = ProductKind.ElectricDetonator, DelayMs = 500, Cost = 3, Color = 0xFF3949AB },
         new() { Id = "f7407010-0e86-4dae-8a4f-2b03856e388a", Name = "Harness wire", Family = "Harness wire", Kind = ProductKind.HarnessWire, Cost = 0.2, Color = 0xFF78909C },
     };
 }
 
-/// <summary>One step of a charging rule, built from the bottom of the hole upward.</summary>
+/// <summary>One primer of a deck of a charging rule.</summary>
+public sealed class PrimerTemplate
+{
+    /// <summary>Height above the bottom of the deck, m; null: spread evenly up the deck after the first primer.</summary>
+    public double? Offset { get; set; }
+    public string? BoosterId { get; set; }
+    public string? DetonatorId { get; set; }
+    /// <summary>Overrides the detonator's nominal delay when not null.</summary>
+    public double? DelayMs { get; set; }
+    /// <summary>Electronic detonator: its offset from the hole's time, ms (<see cref="Primer.OffsetMs"/>).</summary>
+    public double OffsetMs { get; set; }
+
+    public PrimerTemplate Clone() => (PrimerTemplate)MemberwiseClone();
+}
+
+/// <summary>
+/// One step of a charging rule, built from the bottom of the hole upward, with its primers (<see cref="Primers"/>).
+/// Files written before 0.3.1 had one booster and detonator for all the primers of a deck (PrimerCount, PrimerOffset(s),
+/// BoosterId, DetonatorId): they are read as a list of like primers. The rules window edits those fields, over the list.
+/// </summary>
 public sealed class DeckTemplate
 {
     public string? ProductId { get; set; }
     /// <summary>Deck length in metres. Zero means "fill the remaining column below the top stemming".</summary>
     public double Length { get; set; }
-    public int PrimerCount { get; set; }
-    public string? BoosterId { get; set; }
-    public string? DetonatorId { get; set; }
-    /// <summary>Primer offset above the bottom of the deck, m.</summary>
-    public double PrimerOffset { get; set; } = 0.5;
-    /// <summary>
-    /// Offsets of each primer above the bottom of the deck, m (deepest first). When it lists <see cref="PrimerCount"/> values it is used
-    /// instead of <see cref="PrimerOffset"/> and the even spacing; set by rules saved from a designed column.
-    /// </summary>
-    public List<double>? PrimerOffsets { get; set; }
+
+    private List<PrimerTemplate>? _primers;
+    /// <summary>The primers of the deck, deepest first.</summary>
+    public List<PrimerTemplate> Primers
+    {
+        get => _primers ??= Legacy();
+        set => _primers = value;
+    }
+
+    // ---- the fields of the files before the list: read, never written ----
+    private int _oldCount;
+    private double _oldOffset = 0.5;
+    private List<double>? _oldOffsets;
+    private string? _oldBooster, _oldDetonator;
+    [JsonInclude, JsonPropertyName("primerCount")] private int? OldCount { get => null; set => _oldCount = value ?? 0; }
+    [JsonInclude, JsonPropertyName("primerOffset")] private double? OldOffset { get => null; set => _oldOffset = value ?? 0.5; }
+    [JsonInclude, JsonPropertyName("primerOffsets")] private List<double>? OldOffsets { get => null; set => _oldOffsets = value; }
+    [JsonInclude, JsonPropertyName("boosterId")] private string? OldBooster { get => null; set => _oldBooster = value; }
+    [JsonInclude, JsonPropertyName("detonatorId")] private string? OldDetonator { get => null; set => _oldDetonator = value; }
+
+    private List<PrimerTemplate> Legacy()
+    {
+        var offsets = _oldOffsets is { } o && o.Count == _oldCount ? o : null;
+        return Enumerable.Range(0, _oldCount).Select(i => new PrimerTemplate
+        {
+            Offset = offsets != null ? offsets[i] : i == 0 ? _oldOffset : null,
+            BoosterId = _oldBooster,
+            DetonatorId = _oldDetonator
+        }).ToList();
+    }
+
+    // ---- the fields of the rules window: like primers over the list ----
+    /// <summary>Number of primers; more are made like the first, the extra ones spread evenly up the deck.</summary>
+    [JsonIgnore] public int PrimerCount
+    {
+        get => Primers.Count;
+        set
+        {
+            value = Math.Max(0, value);
+            while (Primers.Count > value) Primers.RemoveAt(Primers.Count - 1);
+            while (Primers.Count < value)
+            {
+                var like = Primers.FirstOrDefault()?.Clone() ?? new PrimerTemplate { BoosterId = _oldBooster, DetonatorId = _oldDetonator };
+                like.Offset = Primers.Count == 0 ? _oldOffset : null;
+                Primers.Add(like);
+            }
+        }
+    }
+    /// <summary>Height of the first primer above the bottom of the deck, m.</summary>
+    [JsonIgnore] public double PrimerOffset
+    {
+        get => Primers.FirstOrDefault()?.Offset ?? _oldOffset;
+        set { _oldOffset = value; if (Primers.Count > 0) Primers[0].Offset = value; }
+    }
+    /// <summary>Booster of the primers (of the first, when they differ); set, of all of them.</summary>
+    [JsonIgnore] public string? BoosterId
+    {
+        get => Primers.Count > 0 ? Primers[0].BoosterId : _oldBooster;
+        set { _oldBooster = value; foreach (var p in Primers) p.BoosterId = value; }
+    }
+    /// <summary>Detonator of the primers (of the first, when they differ); set, of all of them.</summary>
+    [JsonIgnore] public string? DetonatorId
+    {
+        get => Primers.Count > 0 ? Primers[0].DetonatorId : _oldDetonator;
+        set { _oldDetonator = value; foreach (var p in Primers) p.DetonatorId = value; }
+    }
 }
 
 /// <summary>Automatic charging rule. The first matching rule by priority loads a hole.</summary>

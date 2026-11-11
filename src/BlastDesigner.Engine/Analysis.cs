@@ -96,7 +96,10 @@ public static class Analysis
     {
         Timing.Solve(project);
         var calc = CalcService.Live(project) ?? CalcService.Session(project);
-        var timed = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy).Select(h => (T: h.FiringTimeMs!.Value, Kg: Charging.Calculated(calc, "hole.chargeMass", h, 0))).ToList();
+        // each charge of a hole fires at its own time, with its share of the hole's explosive
+        var timed = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy)
+            .SelectMany(h => Charging.ChargeEvents(project, h, Charging.Calculated(calc, "hole.chargeMass", h, 0)))
+            .Select(e => (T: e.TimeMs, Kg: e.Kg)).ToList();
         if (timed.Count == 0 || binMs <= 0) return new();
         var t0 = Math.Floor(timed.Min(x => x.T) / binMs) * binMs;
         var bins = timed.GroupBy(x => (int)Math.Floor((x.T - t0) / binMs)).OrderBy(g => g.Key).ToList();

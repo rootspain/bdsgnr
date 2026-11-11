@@ -277,8 +277,13 @@ public static class PlanRenderer
                 case InitiationPoint:
                     // drawn after the holes: an initiation point usually sits on one
                     break;
+                case EbsOpeningPoint op:
+                    DrawOpeningPoint(canvas, cam, op, selected ? color : Adapt(new SKColor(0xFF00897B)), text);
+                    break;
                 case TimingLineEntity tl:
                     DrawTimingLine(canvas, cam, tl, selected || e.Color != null ? color : (SKColor?)null, text);
+                    // a selected chevron of the front tool shows its ray, as long as its sides
+                    if (selected && tl.Front == TimingFrontShape.Chevron && tl.Points.Count == 3) DrawChevronRay(canvas, cam, tl.Points, color, Chevron.Length(tl.Points));
                     break;
             }
         }
@@ -506,20 +511,50 @@ public static class PlanRenderer
     }
 
     /// <summary>Own colour of a timing line, as drawn when not selected: its colour override, else the colour of its style.</summary>
+    /// <summary>
+    /// An EBS opening point: a four-pointed star with two rays, along the burden and along the spacing, each as long as the
+    /// distance it stands for and marked with its delay and that distance ("42ms / 4 m").
+    /// </summary>
+    public static void DrawOpeningPoint(SKCanvas c, Camera cam, EbsOpeningPoint op, SKColor color, SKPaint text)
+    {
+        var (x, y) = cam.ToScreen(op.Position);
+        using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = color };
+        using var line = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.6f, Color = color };
+        using var head = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = color };
+        using (var star = new SKPath())
+        {
+            const float r = 9, w = 2.6f;
+            star.MoveTo(x, y - r); star.LineTo(x + w, y - w); star.LineTo(x + r, y); star.LineTo(x + w, y + w);
+            star.LineTo(x, y + r); star.LineTo(x - w, y + w); star.LineTo(x - r, y); star.LineTo(x - w, y - w); star.Close();
+            c.DrawPath(star, fill);
+        }
+        var label = text.Color;
+        text.Color = color;
+        foreach (var (dir, length, delay) in new[] { (op.BurdenDir, op.BurdenM, op.BurdenDelayMs), (op.SpacingDir, op.SpacingM, op.SpacingDelayMs) })
+        {
+            if (length <= 0) continue;
+            var end = op.Position + dir * length;
+            DrawArrow(c, cam, op.Position, end, line, head, 7);
+            var (ex, ey) = cam.ToScreen(end);
+            c.DrawText(FormattableString.Invariant($"{delay:0.#}ms / {length:0.##} m"), ex + 5, ey - 4, text);
+        }
+        text.Color = label;
+    }
+
     public static SKColor TimingLineColor(TimingLineEntity tl) =>
         Adapt(tl.Color is uint own ? new SKColor(own) : tl.Style == TimingLineStyle.BurnLine ? new SKColor(0xFF808000) : new SKColor(0xFF008000));
 
     /// <summary>
-    /// Ray of a two-segment front (<see cref="Chevron"/>): dashed, from the vertex outwards along the axis, as long as the
-    /// view is wide. Drawn only while the front is created or turned, never with the plan.
+    /// Ray of a two-segment front (<see cref="Chevron"/>): dashed, from the vertex outwards along the axis. On a selected front it
+    /// is as long as the sides, while the front is created or turned as long as the view is wide; an unselected one has none.
     /// </summary>
-    public static void DrawChevronRay(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color)
+    public static void DrawChevronRay(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color, double? length = null)
     {
         if (points.Count != 3) return;
         var apex = points[1];
-        var length = cam.Width / Math.Max(cam.Scale, 1e-9);
+        length ??= cam.Width / Math.Max(cam.Scale, 1e-9);
         using var dashed = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, Color = color, PathEffect = SKPathEffect.CreateDash(new[] { 8f, 5f }, 0) };
-        DrawPolyline(c, cam, new[] { apex, apex + Chevron.RayDir(points) * length }, false, dashed);
+        DrawPolyline(c, cam, new[] { apex, apex + Chevron.RayDir(points) * length.Value }, false, dashed);
     }
 
     /// <summary>
@@ -1106,7 +1141,8 @@ public static class PlanRenderer
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
         var selected = opt.Selection.Contains(h.Id);
         text.Color = selected ? opt.SelectionColor : Ink;
-        text.TextSize = 10;
+        var size = Math.Clamp(view.HoleLabelFontSize, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize);
+        text.TextSize = size;
         // each side top to bottom in the order of its list, the column centred on the collar; a label with nothing to
         // say for this hole (no time yet, no detonator) leaves no gap
         var (left, right) = sides;
@@ -1123,12 +1159,13 @@ public static class PlanRenderer
             // the calculated properties chosen in Edit ▸ Calculations go under the labels of the right side
             if (onRight && view.CalcLabels is { Count: > 0 } calc && !h.IsDummy)
                 foreach (var id in calc) lines.Add((CalcService.Format(project, id, h), ink));
-            // 11 px a line; the first baseline puts the middle of the column at the collar centre
-            var top = y - lines.Count * 11 / 2f + 8;
+            // a line is the font size and a pixel; the first baseline puts the middle of the column at the collar centre
+            var line = size + 1;
+            var top = y - lines.Count * line / 2f + size * 0.8f;
             for (int i = 0; i < lines.Count; i++)
             {
                 var lx = onRight ? x + r + 2 : x - r - 2 - text.MeasureText(lines[i].Text);
-                batch.Add(lines[i].Text, lx, top + i * 11, lines[i].Color, text.TextSize);
+                batch.Add(lines[i].Text, lx, top + i * line, lines[i].Color, text.TextSize);
             }
         }
         Column(left, false);

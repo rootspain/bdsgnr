@@ -858,6 +858,112 @@ public static class AnalysisWindows
         w.Closed += (_, _) => { if (_firstMovementOpen == planOverlay) _firstMovementOpen = null; vm.DragPreview -= view.Redraw; };
     }
 
+    /// <summary>Upper limit of the burden relief window, kept for the next time it opens (null: the most relief of the blast).</summary>
+    static double? _burdenReliefLimit;
+    /// <summary>The triangles the open burden relief window puts on the main plan.</summary>
+    static BurdenReliefOverlay? _burdenReliefOnPlan;
+
+    /// <summary>
+    /// Burden relief over the timing triangulation: the triangles in five colours on a plan of their own and on the main plan,
+    /// the upper limit of the scale, the legend, and the relief under the cursor.
+    /// </summary>
+    public static void BurdenReliefWindow(MainViewModel vm)
+    {
+        // already open: bring it forward and put its triangles back on the plan if another analysis replaced them
+        if (Dialogs.ActivateExisting("Burden relief"))
+        {
+            if (_burdenReliefOnPlan is { } shown) vm.ShowOverlay(shown);
+            return;
+        }
+        var p = vm.Project!;
+        Timing.Solve(p);
+        var overlay = new BurdenReliefOverlay { UpperLimit = _burdenReliefLimit, LegendTitle = Loc.T("Burden relief, ms/m") };
+        var count = BurdenRelief.Valid(overlay.Delaunay(p)).Count();
+        if (count == 0)
+        {
+            _ = Dialogs.Info(NoFirstMovement(p));
+            return;
+        }
+        var view = SecondaryViewport(vm, () =>
+        {
+            var o = vm.BuildSceneOptions();
+            return new SceneOptions { Selection = o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, Overlays = new IOverlay[] { overlay } };
+        });
+        // the main plan takes the same triangles, without a second legend over its own corner
+        var planOverlay = new BurdenReliefOverlay { UpperLimit = overlay.UpperLimit, ShowLegend = false };
+        _burdenReliefOnPlan = planOverlay;
+        vm.ShowOverlay(planOverlay);
+
+        var under = new TextBlock { Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center, Name = "reliefUnder", MinWidth = 220 };
+        void Under(double? value) => under.Text = value is double v ? Loc.F("Under the cursor: {0} ms/m", v.ToString("0.0", CultureInfo.CurrentCulture)) : Loc.T("Move the cursor over the triangles");
+        Under(null);
+        view.PointerMoved += (_, e) =>
+        {
+            var at = e.GetPosition(view);
+            Under(BurdenRelief.At(overlay.Delaunay(vm.Project!), view.Camera.ToWorld(at.X, at.Y)));
+        };
+
+        var (min, max) = BurdenRelief.Range(overlay.Delaunay(p), null);
+        var limit = new TextBox
+        {
+            Text = _burdenReliefLimit is double u ? u.ToString("0.##", CultureInfo.CurrentCulture) : "",
+            Watermark = max.ToString("0.0", CultureInfo.CurrentCulture),
+            Width = 110, Height = 32, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong, Name = "reliefLimit",
+            InnerRightContent = new TextBlock { Text = Loc.Ui("ms/m"), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }
+        };
+        ToolTip.SetTip(limit, Loc.T("Empty: the most relief of the blast. More than the limit is drawn in red."));
+        limit.TextChanged += (_, _) =>
+        {
+            var text = (limit.Text ?? "").Trim().Replace(',', '.');
+            double? value = text.Length == 0 ? null : double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v > 0 ? v : overlay.UpperLimit;
+            overlay.UpperLimit = planOverlay.UpperLimit = _burdenReliefLimit = value;
+            view.Redraw();
+            vm.View.Redraw();
+        };
+        var fit = Ui.Flat(Ui.Row(6, Look.Icon("fit", 16, Look.TextSoft), new TextBlock { Text = Loc.T("Zoom all"), VerticalAlignment = VerticalAlignment.Center }), null, view.ZoomAll, height: 32);
+        static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(2, 0, 0, 5) };
+        var header = new Border
+        {
+            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(14, 10, 14, 8),
+            Child = new WrapPanel { Children =
+            {
+                new StackPanel { Margin = new Thickness(0, 0, 22, 0), Children = { Caption("Upper limit"), limit } },
+                new StackPanel { Children = { Caption("View"), fit } }
+            } }
+        };
+        var note = new TextBlock
+        {
+            Text = Loc.F("{0} triangles: {1} – {2} ms/m", count, min.ToString("0.0", CultureInfo.CurrentCulture), max.ToString("0.0", CultureInfo.CurrentCulture)),
+            FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(14, 0, 0, 0)
+        };
+        var bar = new DockPanel();
+        DockPanel.SetDock(under, Dock.Left);
+        bar.Children.Add(under);
+        bar.Children.Add(note);
+        var footer = new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 1, 0, 0), Padding = new Thickness(14, 8), Child = bar };
+        var dock = new DockPanel { Background = Look.Ground };
+        DockPanel.SetDock(header, Dock.Top);
+        DockPanel.SetDock(footer, Dock.Bottom);
+        dock.Children.Add(header);
+        dock.Children.Add(footer);
+        dock.Children.Add(view);
+        var fitted = false;
+        view.SizeChanged += (_, e) =>
+        {
+            if (fitted || e.NewSize.Width < 1 || e.NewSize.Height < 1) return;
+            fitted = true;
+            view.ZoomAll();
+        };
+        var w = Dialogs.ShowWindow("Burden relief", dock, 860, 620);
+        w.MinWidth = 520;
+        w.MinHeight = 360;
+        w.Closed += (_, _) =>
+        {
+            if (_burdenReliefOnPlan == planOverlay) _burdenReliefOnPlan = null;
+            if (vm.AnalysisOverlays.Contains(planOverlay)) vm.ClearOverlays();
+        };
+    }
+
     // ---- secondary viewports -----------------------------------------------------------
 
     public static void SectionTool(MainViewModel vm)

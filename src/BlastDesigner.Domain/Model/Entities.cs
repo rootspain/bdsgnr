@@ -16,6 +16,7 @@ namespace BlastDesigner.Domain.Model;
 [JsonDerivedType(typeof(TieEntity), "tie")]
 [JsonDerivedType(typeof(InitiationPoint), "initiation")]
 [JsonDerivedType(typeof(TimingLineEntity), "timingline")]
+[JsonDerivedType(typeof(EbsOpeningPoint), "ebsopening")]
 public abstract class Entity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -110,6 +111,12 @@ public enum LineKind
 public sealed class PolylineEntity : Entity
 {
     public List<Vec3> Points { get; set; } = new();
+    /// <summary>Middle of the line's extent; set, it moves the whole line there, its shape and the heights of its vertices kept.</summary>
+    [JsonIgnore] public Vec3 Position
+    {
+        get => Points.Count == 0 ? Vec3.Zero : GetBounds().Center;
+        set { if (Points.Count > 0) Translate(value - GetBounds().Center); }
+    }
     public bool Closed { get; set; }
     public LineKind Kind { get; set; }
     public string Label { get; set; } = string.Empty;

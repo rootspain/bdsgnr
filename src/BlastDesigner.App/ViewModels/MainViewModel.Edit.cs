@@ -219,6 +219,11 @@ public sealed partial class MainViewModel
             await EditTimingLine(line);
             return;
         }
+        if (first is EbsOpeningPoint opening && sel.Count == 1)
+        {
+            await EditOpeningPoint(opening);
+            return;
+        }
         var template = first.EditCopy();
         var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "Triangles", "Vertices", "Points", "KindName" } };
         AddProductChoices(grid);

@@ -167,7 +167,7 @@ Click to place points.	Щёлкайте, чтобы ставить точки.
 Click to place the electronic opening point.	Щёлкните, чтобы поставить точку открытия электронной схемы.
 Click to place the initiation point, then use the Tie tool from it to the first hole.	Щёлкните, чтобы поставить точку инициирования, затем свяжите её с первой скважиной.
 Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, а круглую ручку выделенной линии, чтобы переместить её вершину. Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её.
-Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, а круглую ручку выделенной линии, чтобы переместить её вершину. Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, with Shift held up or down (Z), a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, с зажатым Shift — вверх или вниз (по Z), а круглую ручку выделенной линии, чтобы переместить её вершину. Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину.
 Click two holes to measure between them.	Щёлкните две скважины, чтобы измерить расстояние.
 Click two points of the section line.	Щёлкните две точки линии разреза.
 Click two points to dimension.	Щёлкните две точки для размера.
@@ -957,7 +957,6 @@ Time at the line (ms)	Время на фронте (мс)
 Time envelope	Время на ступень
 Time offset (ms)	Смещение времени (мс)
 Time offset (s)	Смещение времени (с)
-Time step ms	Шаг времени, мс
 Timing	Время
 Timing labels	Подписи времени
 Timing labels on the plan	Подписи времени на плане
@@ -1192,7 +1191,6 @@ Other fixed	Прочие постоянные
 Hole interval ms	Интервал между скважинами, мс
 Row interval ms	Интервал между рядами, мс
 Max time ms	Макс. время, мс
-Time step ms	Шаг времени, мс
 Base time ms	Базовое время, мс
 Site k	Коэффициент K площадки
 Site b	Показатель B площадки
@@ -2018,6 +2016,7 @@ ui:Add a primer	Добавить боевик
 ui:Primers in the deck	Боевики в интервале
 ui:Primers go only into explosive decks.	Боевики ставятся только в интервалы с ВВ.
 ui:This deck has no primer: the charge will not fire.	В этом интервале нет боевика: заряд не сработает.
+ui:Without a primer the charge will not fire.	Без боевика заряд не сработает.
 at {0} m	на {0} м
 ui:Delete the primer	Удалить боевик
 ui:Depth	Глубина
@@ -2369,7 +2368,6 @@ Shortest interval between neighbours: {0} ms	Мин. интервал между
 Up to {0} holes fire within one {1} ms window	До {0} скв. срабатывают в одном окне {1} мс
 No two holes within one {0} ms window	Нет совпадений в окне {0} мс
 {0} holes with a time set by hand keep it	{0} скв. с временем, заданным вручную, сохранят его
-{0} holes are out of reach of the line	{0} скв. вне досягаемости фронта
 {0} holes would pass the maximum delay {1} ms and stay as they are	{0} скв. превысят максимальное время {1} мс и останутся без изменений
 ui:Mouse wheel or ↑/↓ change a value; Ctrl+Enter applies, Esc cancels	Колесо мыши или ↑/↓ меняют значение; Ctrl+Enter — применить, Esc — отмена
 ui:Line type	Тип линии
@@ -2959,6 +2957,62 @@ Top detonator	Верхний детонатор
 Bottom detonator	Нижний детонатор
 {0}: holes {1}–{2}, {3} ties ({4} holes)	{0}: скв. {1}–{2}, связей {3} ({4} скважин)
 Press to place the vertex of the front and drag to set its direction and length (a click gives 60 px); the ray shows where the times grow. On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.	Нажмите, чтобы поставить вершину фронта, и тяните, чтобы задать направление и длину (щелчок даёт 60 px); луч показывает, куда растёт время. У выделенного фронта кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину, перетаскивание линии перемещает её.
+Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line to the side of most holes, the arrow shows it. On a selected line drag a circle to move its end, the line to move it.	Нажмите в одном конце линии и тяните к другому (щелчок даёт 60 px); время растёт от линии в ту сторону, где больше скважин, это показывает стрелка. У выделенной линии кружок перемещает её конец, перетаскивание линии перемещает её.
+ui:Shape	Фигура
+ui:Line	Линия
+ui:Chevron	Галочка
+ui:The times grow from the line to the side of most holes; the holes at one distance from it fire together	Время растёт от линии в ту сторону, где больше скважин; скважины на одном расстоянии от неё взрываются вместе
+ui:Two segments at a vertex: the times grow along its ray, from the vertex outwards	Два отрезка с общей вершиной: время растёт вдоль луча, от вершины наружу
 Rotate timing line	Поворот фронта отбойки ЭСИ
-Reshape timing line	Изменение угла фронта отбойки ЭСИ
+Reshape timing line	Изменение формы фронта отбойки ЭСИ
 Timing line changed: {0} holes reprogrammed	Фронт отбойки ЭСИ изменён: перепрограммировано скважин — {0}
+{0} holes are out of reach of the line and lose their time	{0} скв. вне досягаемости фронта, их время сбрасывается
+{0} holes without an electronic detonator fire by their tie-up	{0} скв. без ЭСИ взрываются по коммутации
+{0} holes without an electronic detonator left out	{0} скв. без ЭСИ пропущено
+Out of reach of the line, the time was cleared: {0}	Вне досягаемости фронта, время сброшено: {0}
+Allow sub ms	Доли миллисекунды (шаг 0,1 мс)
+ui:Apply to holes with a manual time	Применить к скважинам с ручным временем
+ui:There are holes with a manual time	Есть скважины с ручным временем
+ui:Decks and primers	Секции и боевики
+Inter deck delay ms	Между секциями, мс
+Intra deck delay ms	Замедление в секции, мс
+Deck order	Взрыв секций
+Primer order	Порядок боевиков в секции
+Use offsets	Использовать смещения
+Bottom up	Низ-Верх
+Top down	Верх-Низ
+Simultaneous	Одновременно
+Offset ms	Смещение, мс
+ui:Offset from the hole time, ms	Смещение от времени скважины, мс
+{0} (primer offset {1} ms)	{0} (смещение боевика {1} мс)
+ui:Signal down the tube	Прохождение сигнала по волноводу
+Propagation ms per m	Прохождение сигнала по волноводу, мс/м
+EBS opening point	Точка открытия ЭСИ
+Edit EBS opening point	Изменение точки открытия ЭСИ
+Click where the electronic blast opens; the holes take their times from there.	Щёлкните там, где открывается взрыв ЭСИ; скважины получат время от этой точки.
+ui:Burden	ЛНС
+ui:Spacing	РМС
+ui:Delay along the burden	Замедление по ЛНС
+ui:Delay along the spacing	Замедление по РМС
+ui:Burden bearing	Азимут ЛНС
+ui:Open the segment at this point	Открыть сегмент в этой точке
+ui:Overall relief	Общий рельеф
+ui:No hole gets a time from this point	Ни одна скважина не получит время от этой точки
+Edit opening point…	Изменить точку открытия…
+Spacing m	РМС, м
+Burden bearing deg	Азимут ЛНС, °
+Burden delay ms	Замедление по ЛНС, мс
+Spacing delay ms	Замедление по РМС, мс
+Start offset ms	Время первой скважины, мс
+Open here	Открыть сегмент в этой точке
+Total relief ms per m	Общий рельеф, мс/м
+Burden relief, ms/m	Разгрузка ЛНС, мс/м
+Under the cursor: {0} ms/m	Под курсором: {0} мс/м
+Move the cursor over the triangles	Наведите курсор на треугольники
+Empty: the most relief of the blast. More than the limit is drawn in red.	Пусто — наибольшая разгрузка взрыва. Больше предела рисуется красным.
+Upper limit	Верхний предел
+{0} triangles: {1} – {2} ms/m	Треугольников: {0}, {1} – {2} мс/м
+Least relief	Наименьшая разгрузка
+Most relief	Наибольшая разгрузка
+ui:Font size	Размер шрифта
+ui:Font size of the hole labels on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen.	Размер шрифта подписей скважин на плане и в 3D, пикс. Хранится в проекте; новый взрыв начинается с последнего выбранного размера.

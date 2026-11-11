@@ -93,8 +93,12 @@ public static class Timing
         {
             h.SurfaceTimeMs = arrival.TryGetValue(h.Id, out var s) ? s : null;
             var primers = Charging.Primers(h).ToList();
+            // the in-hole delay stays for the labels; the hole fires with its first charge
             h.InholeDelayMs = primers.Count == 0 ? 0 : primers.Min(p => Charging.PrimerDelay(project, p.Primer));
-            if (h.ElectronicTimeMs is double et)
+            h.Charges = Charges(project, h);
+            if (h.Charges.Where(c => c.TimeMs.HasValue).Select(c => c.TimeMs!.Value).DefaultIfEmpty(double.NaN).Min() is var first && !double.IsNaN(first))
+                h.FiringTimeMs = first;
+            else if (h.ElectronicTimeMs is double et)
                 h.FiringTimeMs = project.Electronic.BaseTimeMs + et;
             else
                 h.FiringTimeMs = h.SurfaceTimeMs + h.InholeDelayMs;
@@ -104,6 +108,28 @@ public static class Timing
         foreach (var h in holes.Values.Where(h => h.FiringTimeMs.HasValue).OrderBy(h => h.FiringTimeMs))
             h.FiringSequence = seq++;
         foreach (var h in holes.Values.Where(h => !h.FiringTimeMs.HasValue)) h.FiringSequence = null;
+    }
+
+    /// <summary>
+    /// The charges of a hole (<see cref="Charging.ExplosiveRuns"/>), each at the time of its earliest primer: an electronic one
+    /// at the base time plus its programmed time (<see cref="Charging.PrimerTimes"/>), a pyrotechnic one when the surface signal
+    /// gets to the hole plus its delay and the run of the signal down its tube (SHOTPlus <c>BaseHole.CalcInholeTiming</c>).
+    /// </summary>
+    public static List<HoleCharge> Charges(BlastProject project, Hole h)
+    {
+        var runs = Charging.ExplosiveRuns(project, h);
+        if (runs.Count == 0) return new();
+        var electronic = h.ElectronicTimeMs is double et ? Charging.PrimerTimes(project, h, et) : new Dictionary<Primer, double>();
+        double? PrimerTime(Primer p)
+        {
+            if (Charging.IsElectronic(project, p)) return electronic.TryGetValue(p, out var t) ? project.Electronic.BaseTimeMs + t : null;
+            return h.SurfaceTimeMs is double s ? s + Charging.PrimerDelay(project, p) + Charging.PropagationDelay(project, p) : null;
+        }
+        return runs.Select(run =>
+        {
+            var times = run.SelectMany(d => d.Primers).Select(PrimerTime).Where(t => t.HasValue).Select(t => t!.Value).ToList();
+            return new HoleCharge(run, run[0].Top, run[^1].Bottom, times.Count > 0 ? times.Min() : null);
+        }).ToList();
     }
 
     public static Vec3? PositionOf(BlastProject project, Guid id) => project.FindEntity(id) switch
@@ -255,28 +281,33 @@ public static class Timing
 
     // ---- electronic programming -------------------------------------------
 
-    public static void SetTime(Hole h, double ms, bool manual = true)
+    /// <summary>
+    /// A programmed time as the detonators take it: whole milliseconds, or tenths with <see cref="ElectronicSettings.AllowSubMs"/>
+    /// (as SHOTPlus rounds a delay, <c>InitiationPoint.RoundDelayTime</c>).
+    /// </summary>
+    public static double RoundTime(double ms, bool allowSubMs) => Math.Round(ms, allowSubMs ? 1 : 0, MidpointRounding.AwayFromZero);
+
+    /// <summary>Programs the time of a hole, rounded (<see cref="RoundTime"/>); the one place a programmed time is rounded.</summary>
+    public static void SetTime(Hole h, double ms, bool manual = true, bool allowSubMs = false)
     {
-        h.ElectronicTimeMs = Math.Max(0, ms);
+        h.ElectronicTimeMs = Math.Max(0, RoundTime(ms, allowSubMs));
         h.ElectronicTimeManual = manual;
     }
 
     /// <summary>Times holes in the given order from a start time with a fixed increment (Row set tool).</summary>
-    public static void RowSet(IReadOnlyList<Hole> orderedHoles, double startMs, double incrementMs)
+    public static void RowSet(IReadOnlyList<Hole> orderedHoles, double startMs, double incrementMs, bool allowSubMs = false)
     {
-        for (int i = 0; i < orderedHoles.Count; i++) SetTime(orderedHoles[i], startMs + i * incrementMs, false);
+        for (int i = 0; i < orderedHoles.Count; i++) SetTime(orderedHoles[i], startMs + i * incrementMs, false, allowSubMs);
     }
 
     /// <summary>Times holes by their distance from a line (Vee / timing line tool): t = start + distance × ms per metre.</summary>
-    public static void TimeFromLine(IEnumerable<Hole> holes, Vec3 a, Vec3 b, double startMs, double msPerMetre, double roundToMs)
+    public static void TimeFromLine(IEnumerable<Hole> holes, Vec3 a, Vec3 b, double startMs, double msPerMetre, bool allowSubMs = false)
     {
         foreach (var h in holes)
         {
             var (c, _) = GeoMath.ClosestOnSegment2D(a, b, h.Collar);
             var d = Vec3.Distance2D(c, h.Collar);
-            var t = startMs + d * msPerMetre;
-            if (roundToMs > 0) t = Math.Round(t / roundToMs) * roundToMs;
-            SetTime(h, t, false);
+            SetTime(h, startMs + d * msPerMetre, false, allowSubMs);
         }
     }
 
@@ -306,7 +337,7 @@ public static class Timing
     }
 
     /// <summary>Copies times from holes of one horizon to the closest holes of another.</summary>
-    public static int CopyTimesBetweenHorizons(IReadOnlyList<Hole> holes, int fromHorizon, int toHorizon, double offsetMs)
+    public static int CopyTimesBetweenHorizons(IReadOnlyList<Hole> holes, int fromHorizon, int toHorizon, double offsetMs, bool allowSubMs = false)
     {
         var src = holes.Where(h => h.Horizon == fromHorizon && h.ElectronicTimeMs.HasValue).ToList();
         int n = 0;
@@ -314,7 +345,7 @@ public static class Timing
         {
             var best = src.OrderBy(s => Vec3.Distance2D(s.Collar, h.Collar)).FirstOrDefault();
             if (best == null) continue;
-            SetTime(h, best.ElectronicTimeMs!.Value + offsetMs, false);
+            SetTime(h, best.ElectronicTimeMs!.Value + offsetMs, false, allowSubMs);
             n++;
         }
         return n;
@@ -337,7 +368,7 @@ public static class Timing
         int n = 0;
         foreach (var h in holes)
         {
-            if (h.FiringTimeMs is double t) SetTime(h, t, false);
+            if (h.FiringTimeMs is double t) SetTime(h, t, false, project.Electronic.AllowSubMs);
             foreach (var (p, _) in Charging.Primers(h)) { p.DetonatorId = electronicDet.Id; p.DelayMs = null; }
             n++;
         }
@@ -361,11 +392,16 @@ public static class Timing
         return TimeEnvelope(project, windowMs, h => Charging.Calculated(s, "hole.chargeMass", h, 0));
     }
 
-    /// <summary>Time envelope with the charge of each hole given (the calculation engine passes its cached masses).</summary>
+    /// <summary>
+    /// Time envelope with the charge of each hole given (the calculation engine passes its cached masses). Each charge of a
+    /// hole is an event of its own, at its time and with its share of the hole's mass (<see cref="Charging.ChargeEvents"/>);
+    /// "holes" counts the charges.
+    /// </summary>
     public static List<EnvelopePoint> TimeEnvelope(BlastProject project, double windowMs, Func<Hole, double> charge)
     {
         var events = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy)
-            .Select(h => (T: h.FiringTimeMs!.Value, Q: charge(h)))
+            .SelectMany(h => Charging.ChargeEvents(project, h, charge(h)))
+            .Select(e => (T: e.TimeMs, Q: e.Kg))
             .OrderBy(e => e.T).ToList();
         var result = new List<EnvelopePoint>();
         int j = 0;

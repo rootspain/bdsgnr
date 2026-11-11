@@ -1,7 +1,18 @@
+using System.Runtime.CompilerServices;
+using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 
 namespace BlastDesigner.Engine;
+
+internal static class EngineModule
+{
+    /// <summary>Every change of a document is followed by the timing lines of its holes (<see cref="EbsTimingLine.Follow"/>).</summary>
+#pragma warning disable CA2255 // the engine is a library, but only the application and its tests use it
+    [ModuleInitializer]
+#pragma warning restore CA2255
+    internal static void Init() => Document.Followers.Add(EbsTimingLine.Follow);
+}
 
 public sealed class TimingLineOptions
 {
@@ -20,9 +31,18 @@ public sealed class TimingLineOptions
     public double Angle2Deg { get; set; }
     /// <summary>Holes whose time was set by hand keep it.</summary>
     public bool KeepManualTimes { get; set; } = true;
+    /// <summary>Shape of the front tool: a chevron times only the holes on its side of the vertex.</summary>
+    public TimingFrontShape Front { get; set; }
 }
 
-public sealed record TimingLineResult(int Timed, int SkippedManual, int OutOfReach, List<Hole> MaxTimeExceeded);
+/// <summary>
+/// What a timing line did: holes timed, manual ones kept, holes out of its reach (<see cref="Unreached"/>: no time of
+/// the line, or behind a chevron's vertex) and past the largest delay, and holes left out for having no electronic detonator.
+/// </summary>
+public sealed record TimingLineResult(int Timed, int SkippedManual, int OutOfReach, List<Hole> MaxTimeExceeded, int NotElectronic = 0, List<Hole>? Unreached = null)
+{
+    public List<Hole> Unreached { get; init; } = Unreached ?? new();
+}
 
 /// <summary>
 /// Electronic timing line: the points picked in plan, the timing values of each segment, and the options for how to apply them.
@@ -32,12 +52,9 @@ public static class EbsTimingLine
     public const int MaxPoints = 4;
     const double Invalid = 1e32;
 
-    /// <summary>Point used for timing: the first firing primer (its plan position), else the collar.</summary>
-    public static Vec3 TimingPoint(BlastProject project, Hole h)
-    {
-        var primer = Charging.Primers(h).OrderBy(p => Charging.PrimerDelay(project, p.Primer)).ThenByDescending(p => p.Primer.Depth).FirstOrDefault();
-        return primer.Primer != null ? h.PointAtDepth(primer.Primer.Depth) : h.Collar;
-    }
+    /// <summary>Point used for timing: the middle of the charge that fires first (<see cref="Charging.FiringChargeMidDepth"/>), else the collar.</summary>
+    public static Vec3 TimingPoint(BlastProject project, Hole h) =>
+        Charging.FiringChargeMidDepth(project, h) is double mid ? h.PointAtDepth(mid) : h.Collar;
 
     /// <summary>Raw (un-normalised) time of every point; values ≥ 1e30 in magnitude mean the point is out of reach.</summary>
     public static double[] RawTimes(IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o, IReadOnlyList<Vec3> points, IReadOnlyList<Vec3>? advPoints = null)
@@ -53,42 +70,111 @@ public static class EbsTimingLine
     }
 
     /// <summary>
-    /// Programs electronic times of the holes. Times are shifted so the earliest of all holes in reach
+    /// Programs electronic times of the holes with an electronic detonator. Times are shifted so the earliest of all holes in reach
     /// (manual ones included) fires at the start offset; holes past <paramref name="maxTimeMs"/> are reported and left as they were.
+    /// Holes out of reach lose their time, and so do the holes without an electronic detonator: a programmed time would fire
+    /// them past their tie-up. Manual times stay.
     /// </summary>
-    public static TimingLineResult Apply(BlastProject project, IReadOnlyList<Hole> holes, IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o, double maxTimeMs, double roundToMs)
+    public static TimingLineResult Apply(BlastProject project, IReadOnlyList<Hole> holes, IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o, double maxTimeMs, bool allowSubMs = false) =>
+        Put(project, holes, Plan(project, holes, line, data, o, maxTimeMs, allowSubMs), allowSubMs);
+
+    /// <summary>Programs the planned times; the holes out of reach and those without an electronic detonator lose theirs, manual ones stay.</summary>
+    internal static TimingLineResult Put(BlastProject project, IReadOnlyList<Hole> holes, (Dictionary<Guid, double> Times, TimingLineResult Result) plan, bool allowSubMs)
     {
-        var (times, result) = Plan(project, holes, line, data, o, maxTimeMs, roundToMs);
+        var (times, result) = plan;
+        var unreached = result.Unreached.ToHashSet();
         foreach (var h in holes)
-            if (times.TryGetValue(h.Id, out var t)) Timing.SetTime(h, t, false);
+        {
+            if (times.TryGetValue(h.Id, out var t)) Timing.SetTime(h, t, false, allowSubMs);
+            else if (!h.ElectronicTimeManual && (unreached.Contains(h) || !Charging.HasElectronicDetonator(project, h))) h.ElectronicTimeMs = null;
+        }
         return result;
     }
 
     /// <summary>
     /// The times <see cref="Apply"/> would program, without changing the holes (for the preview in the timing line window).
     /// </summary>
-    public static (Dictionary<Guid, double> Times, TimingLineResult Result) Plan(BlastProject project, IReadOnlyList<Hole> holes, IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o, double maxTimeMs, double roundToMs)
+    public static (Dictionary<Guid, double> Times, TimingLineResult Result) Plan(BlastProject project, IReadOnlyList<Hole> holes, IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o, double maxTimeMs, bool allowSubMs = false)
     {
+        // a chevron's times start at its vertex, on the line: the holes behind it would fire before it and are out of its reach
+        var chevron = o.Front == TimingFrontShape.Chevron && line.Count == 3 && o.Style == TimingLineStyle.TimeLine;
         // Time / burn lines use the firing point, the advanced burn uses the collar.
-        var raw = RawTimes(line, data, o, holes.Select(h => TimingPoint(project, h)).ToList(), holes.Select(h => h.Collar).ToList());
+        return Program(project, holes, e => RawTimes(line, data, o, e.Select(h => TimingPoint(project, h)).ToList(), e.Select(h => h.Collar).ToList()),
+            o.StartOffsetMs, o.KeepManualTimes, chevron, maxTimeMs, allowSubMs);
+    }
+
+    /// <summary>
+    /// The times an object of time gives its holes, from their raw times (<paramref name="rawOf"/>, of the holes with an electronic
+    /// detonator; ≥ 1e30 in magnitude: out of reach, below 0 too when <paramref name="fromZero"/>): shifted so the earliest in reach
+    /// (manual ones included) fires at <paramref name="startOffsetMs"/>, rounded, and checked against the largest delay with the
+    /// hole's last primer. Manual times are kept with <paramref name="keepManual"/>.
+    /// </summary>
+    internal static (Dictionary<Guid, double> Times, TimingLineResult Result) Program(BlastProject project, IReadOnlyList<Hole> holes, Func<IReadOnlyList<Hole>, double[]> rawOf,
+        double startOffsetMs, bool keepManual, bool fromZero, double maxTimeMs, bool allowSubMs)
+    {
+        // only the holes with an electronic detonator take a programmed time; a pyrotechnic one fires by its tie-up
+        var all = holes;
+        holes = all.Where(h => Charging.HasElectronicDetonator(project, h)).ToList();
+        var notElectronic = all.Count - holes.Count;
+        var raw = rawOf(holes);
+        bool Reached(double t) => Math.Abs(t) < 1e30 && (!fromZero || t > -0.001);
         double min = Invalid;
-        foreach (var t in raw) if (Math.Abs(t) < 1e30 && t < min) min = t;
-        var shift = min - o.StartOffsetMs;
-        int manual = 0, outOfReach = 0;
+        foreach (var t in raw) if (Reached(t) && t < min) min = t;
+        var shift = min - startOffsetMs;
+        int manual = 0;
+        var unreached = new List<Hole>();
         var exceeded = new List<Hole>();
         var times = new Dictionary<Guid, double>();
         for (int i = 0; i < holes.Count; i++)
         {
             var h = holes[i];
-            if (o.KeepManualTimes && h.ElectronicTimeManual && h.ElectronicTimeMs.HasValue) { manual++; continue; }
-            if (Math.Abs(raw[i]) >= 1e30) { outOfReach++; continue; }
-            var t = raw[i] - shift;
-            if (t > maxTimeMs) { exceeded.Add(h); continue; }
-            if (t <= -0.001) { outOfReach++; continue; }
-            if (roundToMs > 0) t = Math.Round(t / roundToMs) * roundToMs;
+            if (keepManual && h.ElectronicTimeManual && h.ElectronicTimeMs.HasValue) { manual++; continue; }
+            if (!Reached(raw[i])) { unreached.Add(h); continue; }
+            // rounded as the hole will take it, so the preview shows what Apply programs
+            var t = Timing.RoundTime(raw[i] - shift, allowSubMs);
+            if (t <= -0.001) { unreached.Add(h); continue; }
+            // the last primer of the hole fires after it: that one must stay within the largest delay too
+            if (t + Charging.MaxPrimerOffset(project, h) > maxTimeMs) { exceeded.Add(h); continue; }
             times[h.Id] = t;
         }
-        return (times, new TimingLineResult(times.Count, manual, outOfReach, exceeded));
+        return (times, new TimingLineResult(times.Count, manual, unreached.Count, exceeded, notElectronic, unreached));
+    }
+
+    /// <summary>
+    /// Before a change of the project: where the holes of its objects of time (timing fronts, opening points) are timed from
+    /// (<see cref="TimingPoint"/>), whether they have an electronic detonator, and the values of the opening points. After it,
+    /// each object with a hole that changed so (moved, loaded or primed otherwise), and each opening point changed itself,
+    /// programs its holes again, in the same undo step; manual times stay. Null when no object knows its holes.
+    /// </summary>
+    public static Action? Follow(BlastProject project)
+    {
+        if (!project.Entities.OfType<IHoleTimer>().Any(l => l.HoleIds.Count > 0)) return null;
+        var before = State(project);
+        var points = Openings(project);
+        return () =>
+        {
+            var after = State(project);
+            var nowPoints = Openings(project);
+            foreach (var timer in project.Entities.OfType<IHoleTimer>().Where(l => l.HoleIds.Count > 0))
+            {
+                var ids = timer.HoleIds.ToHashSet();
+                var itself = timer is EbsOpeningPoint && (!points.TryGetValue(timer.Id, out var was0) || was0 != nowPoints[timer.Id]);
+                if (!itself && !ids.Any(id => after.TryGetValue(id, out var now) && before.TryGetValue(id, out var was) && (now.On != was.On || (now.Point - was.Point).Length > 1e-9))) continue;
+                var holes = project.Holes.Where(h => ids.Contains(h.Id) && !h.IsDummy).ToList();
+                if (timer is TimingLineEntity line && line.Points.Count >= 2 && line.Segments.Count >= line.Points.Count - 1) Apply(project, holes, line);
+                else if (timer is EbsOpeningPoint op) EbsOpening.Apply(project, holes, op);
+            }
+        };
+
+        // the values an opening point times by, its holes included
+        static Dictionary<Guid, string> Openings(BlastProject p) => p.Entities.OfType<EbsOpeningPoint>().ToDictionary(o => o.Id, o =>
+            FormattableString.Invariant($"{o.Position}|{o.BurdenM}|{o.SpacingM}|{o.BurdenBearingDeg}|{o.BurdenDelayMs}|{o.SpacingDelayMs}|{o.StartOffsetMs}|{o.OpenHere}|{string.Join(",", o.HoleIds)}"));
+
+        static Dictionary<Guid, (Vec3 Point, bool On)> State(BlastProject p)
+        {
+            var ids = p.Entities.OfType<IHoleTimer>().SelectMany(l => l.HoleIds).ToHashSet();
+            return p.Holes.Where(h => ids.Contains(h.Id)).ToDictionary(h => h.Id, h => (TimingPoint(p, h), Charging.HasElectronicDetonator(p, h)));
+        }
     }
 
     /// <summary>Builds the timing line object kept in the project from the picked points and the chosen values.</summary>
@@ -103,8 +189,26 @@ public static class EbsTimingLine
         ReverseOrder = o.ReverseOrder,
         BurdenReliefMsPerM = o.BurdenReliefMsPerM,
         Angle1Deg = o.Angle1Deg,
-        Angle2Deg = o.Angle2Deg
+        Angle2Deg = o.Angle2Deg,
+        Front = o.Front
     };
+
+    /// <summary>
+    /// The ends of a one-segment line in the order that makes the times grow to the side of most of <paramref name="points"/>:
+    /// walked from the first end to the second, a contour line times the left side later.
+    /// </summary>
+    public static List<Vec3> FacingLine(Vec3 a, Vec3 b, IEnumerable<Vec3> points)
+    {
+        var d = Flat(b - a);
+        int left = 0, right = 0;
+        foreach (var p in points)
+        {
+            var side = d.X * (p.Y - a.Y) - d.Y * (p.X - a.X);
+            if (side > 1e-9) left++;
+            else if (side < -1e-9) right++;
+        }
+        return right > left ? new List<Vec3> { b, a } : new List<Vec3> { a, b };
+    }
 
     public static TimingLineOptions OptionsOf(TimingLineEntity e) => new()
     {
@@ -115,12 +219,17 @@ public static class EbsTimingLine
         ReverseOrder = e.ReverseOrder,
         BurdenReliefMsPerM = e.BurdenReliefMsPerM,
         Angle1Deg = e.Angle1Deg,
-        Angle2Deg = e.Angle2Deg
+        Angle2Deg = e.Angle2Deg,
+        Front = e.Front
     };
 
     /// <summary>Programs the holes from a timing line kept in the project.</summary>
-    public static TimingLineResult Apply(BlastProject project, IReadOnlyList<Hole> holes, TimingLineEntity line) =>
-        Apply(project, holes, line.Points, line.Segments, OptionsOf(line), project.Electronic.MaxTimeMs, project.Electronic.TimeStepMs);
+    public static TimingLineResult Apply(BlastProject project, IReadOnlyList<Hole> holes, TimingLineEntity line, bool keepManualTimes = true)
+    {
+        var o = OptionsOf(line);
+        o.KeepManualTimes = keepManualTimes;
+        return Apply(project, holes, line.Points, line.Segments, o, project.Electronic.MaxTimeMs, project.Electronic.AllowSubMs);
+    }
 
     static Vec3 Flat(Vec3 v) => new(v.X, v.Y, 0);
     static Vec3 Unit2D(Vec3 v) => Flat(v).Normalized();

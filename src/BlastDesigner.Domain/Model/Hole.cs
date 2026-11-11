@@ -89,6 +89,11 @@ public sealed class Hole : Entity
     [JsonIgnore] public double InholeDelayMs { get; set; }
     /// <summary>Firing order (1-based) computed by the timing engine.</summary>
     [JsonIgnore] public int? FiringSequence { get; set; }
+    /// <summary>
+    /// The charges of the hole as the timing engine fires them: runs of explosive decks between inert ones, from the collar
+    /// down, each at the time of its earliest primer (SHOTPlus <c>BaseHole.CalcInholeTiming</c>).
+    /// </summary>
+    [JsonIgnore] public List<HoleCharge> Charges { get; set; } = new();
 
     public override string KindName => IsDummy ? "Dummy hole" : "Hole";
 
@@ -144,6 +149,15 @@ public sealed class Hole : Entity
         Math.PI * RadiusM * RadiusM * Math.Max(0, bottom - top);
 }
 
+/// <summary>
+/// One charge of a hole: explosive decks with no inert deck between them, from <see cref="Top"/> to <see cref="Bottom"/> (depths),
+/// and the time its earliest primer fires, ms (null: no primer in it, or the primer is not reached).
+/// </summary>
+public sealed record HoleCharge(IReadOnlyList<Deck> Decks, double Top, double Bottom, double? TimeMs)
+{
+    public double MidDepth => (Top + Bottom) / 2;
+}
+
 /// <summary>Interval of the charge column measured as depth from the collar.</summary>
 public sealed class Deck
 {
@@ -171,6 +185,11 @@ public sealed class Primer
     public string? DetonatorId { get; set; }
     /// <summary>Overrides the detonator's nominal delay when not null.</summary>
     public double? DelayMs { get; set; }
+    /// <summary>
+    /// Electronic detonator: its time after the hole's, ms, used when the electronic settings fire by offsets
+    /// (<see cref="ElectronicSettings.UseOffsets"/>).
+    /// </summary>
+    public double OffsetMs { get; set; }
 
-    public Primer Clone() => new() { Depth = Depth, BoosterId = BoosterId, DetonatorId = DetonatorId, DelayMs = DelayMs };
+    public Primer Clone() => new() { Depth = Depth, BoosterId = BoosterId, DetonatorId = DetonatorId, DelayMs = DelayMs, OffsetMs = OffsetMs };
 }

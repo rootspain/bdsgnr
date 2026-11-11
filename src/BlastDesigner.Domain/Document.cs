@@ -58,6 +58,12 @@ public sealed class Document
 
     public string DisplayName => FilePath != null ? Path.GetFileName(FilePath) : (string.IsNullOrWhiteSpace(Project.Header.Name) ? "Untitled" : Project.Header.Name);
 
+    /// <summary>
+    /// Work that follows every change, in its undo step: each is called with the project before the change and gives what to do
+    /// after it (null: nothing). The engine registers the timing lines here, which reprogram their holes when the holes change.
+    /// </summary>
+    public static readonly List<Func<BlastProject, Action?>> Followers = new();
+
     /// <summary>Runs a change as one undoable step.</summary>
     public void Execute(string name, Action<BlastProject> change)
     {
@@ -67,9 +73,11 @@ public sealed class Document
         IsChanging = true;
         try
         {
+            var follow = Followers.Select(f => f(Project)).ToList();
             change(Project);
             // initiation points stay on their holes, whatever the change moved or deleted
             InitiationLinks.Apply(Project, links);
+            foreach (var f in follow) f?.Invoke();
         }
         catch
         {

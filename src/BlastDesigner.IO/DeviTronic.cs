@@ -223,12 +223,14 @@ public static class DeviTronic
             {
                 var ms = h.ElectronicTimeMs ?? h.FiringTimeMs;
                 if (ms == null) { errors.Add(new BpdMessage("Hole {0}: the electronic time is not set.", h.Label)); continue; }
-                var delay = unit == BpdDelayUnit.Ms ? (long)Math.Round(ms.Value, MidpointRounding.AwayFromZero) : (long)Math.Round(ms.Value * 10, MidpointRounding.AwayFromZero);
+                long Delay(double t) => unit == BpdDelayUnit.Ms ? (long)Math.Round(t, MidpointRounding.AwayFromZero) : (long)Math.Round(t * 10, MidpointRounding.AwayFromZero);
+                // every detonator its own time: the hole's, by the deck delays or the primer's offset
+                var times = Engine.Charging.PrimerTimes(project, h, ms.Value);
                 var primers = Engine.Charging.Primers(h)
                     .Where(p => project.FindProduct(p.Primer.DetonatorId)?.Kind == ProductKind.ElectronicDetonator)
                     .ToList();
                 primers = levels == BpdLevelOrder.BottomFirst ? primers.OrderByDescending(p => p.Primer.Depth).ToList() : primers.OrderBy(p => p.Primer.Depth).ToList();
-                var dets = primers.Select((p, level) => new BpdDetonator(++order, level + 1, delay)).ToList();
+                var dets = primers.Select((p, level) => new BpdDetonator(++order, level + 1, Delay(times.TryGetValue(p.Primer, out var t) ? t : ms.Value))).ToList();
                 path.Holes.Add(new BpdHole($"{id}{++n:0000}", dets, h));
             }
             var e = lineHoles.Select(h => h.Collar.X + project.Coordinates.OffsetEasting).ToList();

@@ -34,10 +34,12 @@ internal static class Legacy
         return first?.Top ?? hole.EffectiveLength;
     }
 
+    /// <summary>The old window sum, over the charges of the holes (each at its time with its share of the hole's mass) since 0.3.1.</summary>
     public static double Mic(BlastProject project, double windowMs)
     {
         var events = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy)
-            .Select(h => (T: h.FiringTimeMs!.Value, Q: ExplosiveMass(project, h))).OrderBy(e => e.T).ToList();
+            .SelectMany(h => Charging.ChargeEvents(project, h, ExplosiveMass(project, h)))
+            .Select(e => (T: e.TimeMs, Q: e.Kg)).OrderBy(e => e.T).ToList();
         double best = 0, q = 0;
         int j = 0;
         for (int i = 0; i < events.Count; i++)

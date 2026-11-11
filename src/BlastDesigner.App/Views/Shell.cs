@@ -568,6 +568,29 @@ public sealed class ToolPanel : Border
             capture.IsCheckedChanged += (_, _) => { _vm.TieCaptureShown = capture.IsChecked == true; _vm.View.Redraw(); };
             _fields.Children.Add(capture);
         }
+        if (tool is FrontLineTool)
+        {
+            // the shape the next front is drawn with; the hint above follows it
+            var shapes = Ui.Row(6);
+            foreach (var (shape, text, tip) in new[]
+            {
+                (Domain.Model.TimingFrontShape.Line, "Line", "The times grow from the line to the side of most holes; the holes at one distance from it fire together"),
+                (Domain.Model.TimingFrontShape.Chevron, "Chevron", "Two segments at a vertex: the times grow along its ray, from the vertex outwards")
+            })
+            {
+                var s = shape;
+                var chip = Ui.Chip(Loc.Ui(text), () =>
+                {
+                    if (_vm.FrontShape == s) return;
+                    _vm.ActiveTool?.Cancel();
+                    _vm.FrontShape = s;
+                    _vm.TimingLineTool();
+                }, _vm.FrontShape == shape, Loc.Ui(tip));
+                chip.Tag = "front:" + shape;
+                shapes.Children.Add(chip);
+            }
+            _fields.Children.Add(Labelled("Shape", shapes));
+        }
         if (tool.Name is "Set" or "Row set")
             _fields.Children.Add(Field("Step, ms", _vm.Project.Electronic.HoleIntervalMs, v => _vm.Change("Electronic settings", p => p.Electronic.HoleIntervalMs = v)));
         _fieldsScroll.IsVisible = _fields.Children.Count > 0;
@@ -803,7 +826,21 @@ public sealed class Inspector : DockPanel
         DockPanel.SetDock(reset, Dock.Right);
         top.Children.Add(reset);
         top.Children.Add(title);
-        return new StackPanel { Children = { top, hint } };
+        var size = new NumericUpDown
+        {
+            Name = "holeLabelFontSize",
+            Value = _vm.Project?.View.HoleLabelFontSize ?? ViewState.DefaultHoleLabelFontSize,
+            Minimum = ViewState.MinHoleLabelFontSize, Maximum = ViewState.MaxHoleLabelFontSize, Increment = 1, FormatString = "0",
+            ParsingNumberStyle = System.Globalization.NumberStyles.Integer,
+            Width = 100, Height = 24, MinHeight = 24, FontSize = 11.5
+        };
+        ToolTip.SetTip(size, Loc.Ui("Font size of the hole labels on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen."));
+        size.ValueChanged += (_, _) => { if (size.Value is { } v) _vm.SetHoleLabelFontSize((int)Math.Round(v)); };
+        var sizeRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        DockPanel.SetDock(size, Dock.Right);
+        sizeRow.Children.Add(size);
+        sizeRow.Children.Add(new TextBlock { Text = Loc.Ui("Font size"), Foreground = Look.Muted, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center });
+        return new StackPanel { Children = { top, hint, sizeRow } };
     }
 
     /// <summary>The colour the label has on the plan: the number blue, the times red, the rest the text colour.</summary>

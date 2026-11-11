@@ -27,24 +27,29 @@ public static class TimingLineWindow
     /// <summary>
     /// New line from picked points (<paramref name="existing"/> null) or a line of the project to edit: its values fill the
     /// form, which then also offers its layer and reprogramming the holes. <paramref name="holes"/> are the holes it times.
+    /// A front of the front tool (<paramref name="front"/>, or the shape of the line edited) is a contour line: no choice of type.
     /// </summary>
-    public static async Task<TimingLineSetup?> Show(MainViewModel vm, IReadOnlyList<Vec3> points, IReadOnlyList<Hole> holes, TimingLineEntity? existing = null)
+    public static async Task<TimingLineSetup?> Show(MainViewModel vm, IReadOnlyList<Vec3> points, IReadOnlyList<Hole> holes, TimingLineEntity? existing = null, TimingFrontShape front = TimingFrontShape.None)
     {
+        if (existing != null) front = existing.Front;
         var source = existing != null ? EbsTimingLine.OptionsOf(existing) : _last;
         var options = new TimingLineOptions
         {
             Style = source.Style, StartOffsetMs = source.StartOffsetMs, UseProgressive = source.UseProgressive, ProgressRate = source.ProgressRate,
-            ReverseOrder = source.ReverseOrder, BurdenReliefMsPerM = source.BurdenReliefMsPerM, Angle1Deg = source.Angle1Deg, Angle2Deg = source.Angle2Deg
+            ReverseOrder = source.ReverseOrder, BurdenReliefMsPerM = source.BurdenReliefMsPerM, Angle1Deg = source.Angle1Deg, Angle2Deg = source.Angle2Deg,
+            Front = front
         };
-        // A new two-segment front: the times grow along its ray, from the vertex outwards.
-        if (existing == null && points.Count == 3) options.ReverseOrder = false;
+        if (front != TimingFrontShape.None) options.Style = TimingLineStyle.TimeLine;
+        // A new front goes A → B: a chevron's times grow along its ray, from the vertex outwards, a line's (its ends put in
+        // order by the tool) to the side of most holes. A front edited keeps its direction, which A → B / B → A turn.
+        if (existing == null && front != TimingFrontShape.None) options.ReverseOrder = false;
         var count = Math.Max(1, points.Count - 1);
         var segments = existing != null && existing.Segments.Count >= count
             ? existing.Segments.Take(count).ToList()
             : Enumerable.Range(0, count).Select(_ => existing?.Segments.FirstOrDefault() ?? _lastSegment).ToList();
         var same = existing != null ? segments.All(s => s == segments[0]) : _sameForAll;
         var preview = new TimingLinePreviewOverlay();
-        var form = new TimingLineForm(vm, points, holes, options, segments, same, preview, existing);
+        var form = new TimingLineForm(vm, points, holes, options, segments, same, preview, existing, front);
         var w = new Window
         {
             Title = existing != null ? Loc.T("Edit timing line") : Loc.T("Timing line"),
@@ -100,9 +105,10 @@ public sealed class TimingLineForm : DockPanel
     private readonly StackPanel _result = new() { Spacing = 5 };
     private readonly Button _apply;
 
-    public TimingLineForm(MainViewModel vm, IReadOnlyList<Vec3> points, IReadOnlyList<Hole> holes, TimingLineOptions options, List<TimingLineSegment> segments, bool sameForAll, TimingLinePreviewOverlay preview, TimingLineEntity? existing = null)
+    public TimingLineForm(MainViewModel vm, IReadOnlyList<Vec3> points, IReadOnlyList<Hole> holes, TimingLineOptions options, List<TimingLineSegment> segments, bool sameForAll, TimingLinePreviewOverlay preview, TimingLineEntity? existing = null, TimingFrontShape front = TimingFrontShape.None)
     {
         _vm = vm;
+        _front = front;
         _points = points;
         _holes = holes;
         _preview = preview;
@@ -137,6 +143,7 @@ public sealed class TimingLineForm : DockPanel
     }
 
     private readonly TimingLineEntity? _existing;
+    private readonly TimingFrontShape _front;
 
     public TimingLineOptions Options { get; }
     public bool SameForAll { get; private set; }
@@ -293,7 +300,7 @@ public sealed class TimingLineForm : DockPanel
     private void Build()
     {
         _body.Children.Clear();
-        _body.Children.Add(Section("Line type", TypeCards()));
+        if (_front == TimingFrontShape.None) _body.Children.Add(Section("Line type", TypeCards()));
 
         var start = Number("start", Options.StartOffsetMs, "ms", 1, 0, 100000, v => Options.StartOffsetMs = v);
         var startRow = new WrapPanel();
@@ -320,6 +327,7 @@ public sealed class TimingLineForm : DockPanel
             });
         }
         _body.Children.Add(Section("Start", startRow));
+        if (ManualRow() is { } manual) _body.Children.Add(manual);
 
         if (Advanced) _body.Children.Add(Section("Burn with angles", AdvancedFields()));
         else
@@ -342,6 +350,28 @@ public sealed class TimingLineForm : DockPanel
     }
 
     private Border? _resultCard;
+
+    /// <summary>
+    /// With holes whose time was set by hand among those the line times: a note, and a check box that gives them the line's
+    /// time too (off by default, and not kept for the next line).
+    /// </summary>
+    private Control? ManualRow()
+    {
+        var p = _vm.Project!;
+        if (!_holes.Any(h => h.ElectronicTimeManual && h.ElectronicTimeMs.HasValue && Charging.HasElectronicDetonator(p, h))) return null;
+        var box = new CheckBox { IsChecked = !Options.KeepManualTimes, Content = L("Apply to holes with a manual time"), Name = "applyToManual" };
+        box.IsCheckedChanged += (_, _) => { Options.KeepManualTimes = box.IsChecked != true; Recompute(); };
+        return new StackPanel
+        {
+            Spacing = 4,
+            Children =
+            {
+                Ui.Row(8, new Ellipse { Width = 8, Height = 8, Fill = Warn, VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock { Text = L("There are holes with a manual time"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center, Name = "manualNote" }),
+                box
+            }
+        };
+    }
 
     private Control TypeCards()
     {
@@ -505,7 +535,7 @@ public sealed class TimingLineForm : DockPanel
         TimingLineResult result;
         try
         {
-            (times, result) = EbsTimingLine.Plan(p, _holes, _points, segments, Options, p.Electronic.MaxTimeMs, p.Electronic.TimeStepMs);
+            (times, result) = EbsTimingLine.Plan(p, _holes, _points, segments, Options, p.Electronic.MaxTimeMs, p.Electronic.AllowSubMs);
         }
         catch (Exception ex)
         {
@@ -520,6 +550,7 @@ public sealed class TimingLineForm : DockPanel
         Planned = result;
         PlannedTimes = times;
         _preview.Line = EbsTimingLine.CreateEntity(_points, segments, Options);
+        _preview.Line.Front = _front;
         _preview.Times = times;
         _vm.View.Redraw();
 
@@ -552,7 +583,8 @@ public sealed class TimingLineForm : DockPanel
                 : Line(Ok, Loc.F("No two holes within one {0} ms window", N(window, "0"))));
         }
         if (result.SkippedManual > 0) _result.Children.Add(Line(Look.Muted, Loc.F("{0} holes with a time set by hand keep it", result.SkippedManual)));
-        if (result.OutOfReach > 0) _result.Children.Add(Line(Warn, Loc.F("{0} holes are out of reach of the line", result.OutOfReach)));
+        if (result.OutOfReach > 0) _result.Children.Add(Line(Warn, Loc.F("{0} holes are out of reach of the line and lose their time", result.OutOfReach)));
+        if (result.NotElectronic > 0) _result.Children.Add(Line(Look.Muted, Loc.F("{0} holes without an electronic detonator fire by their tie-up", result.NotElectronic)));
         if (result.MaxTimeExceeded.Count > 0) _result.Children.Add(Line(Warn, Loc.F("{0} holes would pass the maximum delay {1} ms and stay as they are", result.MaxTimeExceeded.Count, N(p.Electronic.MaxTimeMs, "0"))));
         // Editing without reprogramming changes only the line, so it can always be applied.
         var timesHoles = !Editing || Reprogram;

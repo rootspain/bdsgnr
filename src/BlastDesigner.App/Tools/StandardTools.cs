@@ -21,6 +21,11 @@ public sealed class SelectTool : Tool
     private HoleRow? _row;
     /// <summary>Offset of the last drag preview.</summary>
     private Vec3? _shown;
+    /// <summary>
+    /// Whether the move goes up or down (Shift held) and where it went over to that: the offset made so far is kept and
+    /// the cursor is read from the pointer of the switch, so pressing or letting go of Shift does not undo the way made.
+    /// </summary>
+    private (bool Vertical, Vec3 Base, ToolPointer From) _way;
     private readonly VertexGripsOverlay _grips;
     /// <summary>Circles of the selected two-segment fronts: turn and reshape.</summary>
     private readonly FrontLineHandles _front;
@@ -40,7 +45,7 @@ public sealed class SelectTool : Tool
     }
 
     public override string Name => "Select";
-    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.";
+    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, with Shift held up or down (Z), a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.";
 
     public override void Activate()
     {
@@ -64,8 +69,10 @@ public sealed class SelectTool : Tool
         if (!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.Press(p)) { _down = null; return; }
         _down = p;
         _shown = null;
+        _way = (p.Modifiers.HasFlag(KeyModifiers.Shift), default, p);
         _dragging = false;
-        _moving = p.Hit != null && Vm.Doc!.Selection.Contains(p.Hit.Id) && !p.Modifiers.HasFlag(KeyModifiers.Shift) && !p.Modifiers.HasFlag(KeyModifiers.Control);
+        // with Shift a selected object is dragged up or down; a Shift click on it still only adds to the selection
+        _moving = p.Hit != null && Vm.Doc!.Selection.Contains(p.Hit.Id) && !p.Modifiers.HasFlag(KeyModifiers.Control);
         // the line of a row, with nothing else under the cursor than a surface (picked by area) or a tie along the
         // row: a selected row is dragged by it, an unselected one is selected by a click on it (a tie keeps its click)
         var free = !p.Modifiers.HasFlag(KeyModifiers.Shift) && !p.Modifiers.HasFlag(KeyModifiers.Control);
@@ -79,7 +86,7 @@ public sealed class SelectTool : Tool
         if (_row != null)
         {
             var selected = _row.HoleIds.All(Vm.Doc!.Selection.Contains);
-            if (selected && free) _moving = true;
+            if (selected && !p.Modifiers.HasFlag(KeyModifiers.Control)) _moving = true;
             else if (p.Hit is TieEntity) _row = null;
         }
         // quick clicks that edit a line go on editing it, they are no double click
@@ -129,7 +136,7 @@ public sealed class SelectTool : Tool
             Preview.Moving ??= InitiationLinks.WithLinked(Vm.Project!, Vm.Doc!.Selection);
             Vm.RaiseDragPreview();
             Preview.MoveOffset = delta;
-            Preview.Labels.Add((handle + delta, $"Δ {delta.Length2D:0.00} m"));
+            Preview.Labels.Add((handle + delta, _way.Vertical ? $"Δ Z {delta.Z:+0.00;-0.00} m" : $"Δ {delta.Length2D:0.00} m"));
         }
         else Preview.ScreenRect = ((float)_down.X, (float)_down.Y, (float)p.X, (float)p.Y);
     }
@@ -270,7 +277,7 @@ public sealed class SelectTool : Tool
     }
 
     /// <summary>
-    /// Horizontal move of a drag. The grabbed object is held by its handle — a hole by its collar, anything else by the
+    /// Move of a drag: horizontal, or with Shift held vertical (<see cref="VerticalDelta"/>). The grabbed object is held by its handle — a hole by its collar, anything else by the
     /// vertex nearest to the press — and the cursor is read on the horizontal plane through that handle, so in 3D the
     /// handle stays under the cursor whatever the elevation.
     /// </summary>
@@ -288,11 +295,28 @@ public sealed class SelectTool : Tool
             }),
             _ => down.World
         };
+        var vertical = p.Modifiers.HasFlag(KeyModifiers.Shift);
+        if (vertical != _way.Vertical) _way = (vertical, _shown ?? default, p);
+        if (vertical) return (_way.Base + VerticalDelta(p), handle, null);
         // Snapping takes the object under the cursor other than the dragged ones, and puts the handle right on it, with
-        // its elevation, so that in 3D the handle stays under the cursor. Without a snap the move is horizontal.
+        // its elevation, so that in 3D the handle stays under the cursor. Without a snap the move is horizontal, from
+        // where the way so far put the handle.
         var snap = View.SnapForDrag(p.X, p.Y, Vm.Doc!.Selection);
-        var target = snap ?? handle + (cam.ToWorld(p.X, p.Y, handle.Z) - cam.ToWorld(down.X, down.Y, handle.Z)).WithZ(0);
+        var from = handle + _way.Base;
+        var target = snap ?? from + (cam.ToWorld(p.X, p.Y, from.Z) - cam.ToWorld(_way.From.X, _way.From.Y, from.Z)).WithZ(0);
         return (target - handle, handle, snap);
+    }
+
+    /// <summary>
+    /// Shift drag: the selection goes up or down by the cursor's way up or down the screen. In a tilted view the vertical
+    /// is foreshortened, so the way is read along it; in the plan, where the vertical points at the viewer, a pixel up is
+    /// a pixel's worth of metres up.
+    /// </summary>
+    private Vec3 VerticalDelta(ToolPointer p)
+    {
+        var cam = View.Camera;
+        var upward = cam.IsPlan ? 1 : Math.Max(cam.Up.Z, 0.25);
+        return new Vec3(0, 0, (_way.From.Y - p.Y) / (cam.Scale * upward));
     }
 
     public override bool KeyDown(Key key, KeyModifiers mods)
@@ -621,7 +645,7 @@ public sealed class TimeSetTool : Tool
         if (_sequence)
         {
             var t = _next;
-            Vm.Change("Set hole time", _ => Timing.SetTime(h, t));
+            Vm.Change("Set hole time", p => Timing.SetTime(h, t, true, p.Electronic.AllowSubMs));
             var e = Vm.Project!.Electronic;
             _next = t + (p.Modifiers.HasFlag(KeyModifiers.Control) ? e.RowIntervalMs : e.HoleIntervalMs);
             Vm.SetStatus(Loc.F("Next time: {0} ms", _next));
@@ -629,7 +653,7 @@ public sealed class TimeSetTool : Tool
         else
         {
             var v = await Dialogs.PromptNumber(Loc.T("Hole time"), Loc.F("Programmed time for hole {0} (ms)", h.Label), h.ElectronicTimeMs ?? h.FiringTimeMs ?? 0);
-            if (v is double t) Vm.Change("Set hole time", _ => Timing.SetTime(h, t));
+            if (v is double t) Vm.Change("Set hole time", p => Timing.SetTime(h, t, true, p.Electronic.AllowSubMs));
         }
     }
 

@@ -167,7 +167,7 @@ public static class FormLayouts
         [typeof(BlastOutcomes)] = Of("",
             S("Results", "FragmentationP50 FragmentationP80 MaxFlyrock MeasuredPpv MeasuredAirblast"), S("Digging", "MuckpileHeight DiggingRate"), S("Rating", "Rating Comments")),
         [typeof(CostSchema)] = Of("", S("Costs", "Currency DrillingPerMetre LoadingPerHole LabourPerBlast OtherFixed")),
-        [typeof(ElectronicSettings)] = Of("", S("Intervals", "HoleIntervalMs RowIntervalMs"), S("Limits", "MaxTimeMs TimeStepMs BaseTimeMs")),
+        [typeof(ElectronicSettings)] = Of("", S("Intervals", "HoleIntervalMs RowIntervalMs"), S("Limits", "MaxTimeMs BaseTimeMs AllowSubMs"), S("Decks and primers", "InterDeckDelayMs IntraDeckDelayMs DeckOrder PrimerOrder UseOffsets")),
         [typeof(VibrationModel)] = Of("", S("Vibration", "SiteK SiteB PpvLimit WindowMs"), S("Airblast", "AirK AirB AirblastLimitDb")),
         [typeof(SummaryBlock)] = Of("", S("Summary block", "Corner Visible ShowHeader ShowQuantities ShowPattern")),
         [typeof(DesignTolerances)] = Of("m: CollarXY, ToeXY, Depth", S("Position", "CollarXY ToeXY Depth"), S("Direction", "AngleDeg BearingDeg"), S("Redrilling", "RedrillFraction")),

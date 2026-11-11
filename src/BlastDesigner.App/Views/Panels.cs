@@ -182,7 +182,7 @@ public sealed class PropertiesPanel : DockPanel
         _header.Text = sel.Count == 1 ? Loc.T(first.KindName) : $"{Loc.T(first.KindName)} × {sel.Count}";
         var template = first.EditCopy();
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
-        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint" }, ReadOnly = doc.IsReadOnly };
+        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid);
         if (first is Hole)
         {
@@ -245,6 +245,12 @@ public sealed class PropertiesPanel : DockPanel
             ToolTip.SetTip(assigned, Loc.T("Select the holes this timing line programs"));
             assigned.Click += (_, _) => _vm.SelectTimingLineHoles(line);
             panel.Children.Add(assigned);
+        }
+        if (first is EbsOpeningPoint opening && sel.Count == 1)
+        {
+            var edit = new Button { Content = Loc.T("Edit opening point…"), Margin = new Thickness(6), IsEnabled = !doc.IsReadOnly, Name = "editOpeningPoint" };
+            edit.Click += async (_, _) => await _vm.EditOpeningPoint(opening);
+            panel.Children.Add(edit);
         }
         if (first is PolylineEntity { Kind: LineKind.CrossSection, Points.Count: >= 2 } section && sel.Count == 1)
         {

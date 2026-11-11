@@ -16,7 +16,6 @@ public sealed class TimingTriangle
 
 /// <summary>
 /// Timing triangulation used by First movement, Burden relief and timing contours
-/// (SPISDelaunayCalc → EVIETimingDelaunay : EVIEModifiedDelaunay : EVIEBaseDelaunay), ported one to one:
 /// incremental Delaunay with a super-triangle and Lawson flips, the modified in-circle test, the time plane per triangle,
 /// the "too thin" filter (including the original's squared/linear typo) and the slope range.
 /// </summary>
@@ -188,7 +187,7 @@ public sealed class TimingDelaunay
     static double Det3(double a, double b, double c, double d, double e, double f, double g, double h, double i) =>
         a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
 
-    /// <summary>EVIETimingDelaunay.SetupZvalues: time plane, slope and validity of every triangle, slope range.</summary>
+    /// <summary>time plane, slope and validity of every triangle, slope range.</summary>
     void SetupZvalues()
     {
         SortedTimes = Times.Skip(_lastSuper + 1).OrderBy(t => t).ToArray();
@@ -253,8 +252,8 @@ public static class FirstMovement
         foreach (var h in project.Holes)
         {
             if (h.FiringTimeMs is not double t) continue;
-            var first = Charging.Primers(h).OrderBy(p => Charging.PrimerDelay(project, p.Primer)).FirstOrDefault();
-            var point = first.Deck != null ? h.PointAtDepth((first.Deck.Top + first.Deck.Bottom) / 2) : h.Collar;
+            // the middle of the charge that fires first, as the timing front takes it
+            var point = Charging.FiringChargeMidDepth(project, h) is double mid ? h.PointAtDepth(mid) : h.Collar;
             if (moved != null && moved.Contains(h.Id)) point += offset;
             list.Add((point, t));
         }

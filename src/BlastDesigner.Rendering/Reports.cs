@@ -160,6 +160,26 @@ public static class Reports
                     new[] { 0.3f, 0.15f, 0.15f, 0.2f, 0.2f });
             }
         }
+        if (opt.Sections.HasFlag(ReportSections.BurdenRelief))
+        {
+            var relief = new BurdenReliefOverlay { UpperLimit = opt.BurdenReliefLimit, LegendTitle = T("Burden relief, ms/m") };
+            var triangles = BurdenRelief.Valid(relief.Delaunay(project)).ToList();
+            if (triangles.Count > 0)
+            {
+                Begin(ReportSections.BurdenRelief);
+                writer.Heading(T("Burden relief"));
+                writer.KeyValues(new()
+                {
+                    [T("Triangles")] = triangles.Count.ToString(),
+                    [T("Least relief")] = $"{triangles.Min(t => t.Slope):0.0} ms/m",
+                    [T("Most relief")] = $"{triangles.Max(t => t.Slope):0.0} ms/m",
+                    [T("Upper limit")] = opt.BurdenReliefLimit is double u ? $"{u:0.0} ms/m" : "-",
+                });
+                var size = Math.Min(writer.Width, writer.Remaining - 10);
+                if (size < 250) { writer.NewPage(); size = Math.Min(writer.Width, writer.Remaining - 10); }
+                writer.Image((c, rect) => DrawPlan(c, rect, project, TimingLabelMode.None, design, overlays: new IOverlay[] { relief }), size);
+            }
+        }
         if (opt.Sections.HasFlag(ReportSections.Outcomes))
         {
             Begin(ReportSections.Outcomes);
@@ -297,7 +317,7 @@ public static class Reports
 
     private static void Pan(Camera cam, DrawingView view) => cam.Pan(-view.PanX * cam.Width, view.PanY * cam.Height);
 
-    public static void DrawPlan(SKCanvas c, SKRect rect, BlastProject project, TimingLabelMode timing, ReportDesign design, double? scaleDenominator = null)
+    public static void DrawPlan(SKCanvas c, SKRect rect, BlastProject project, TimingLabelMode timing, ReportDesign design, double? scaleDenominator = null, IReadOnlyList<IOverlay>? overlays = null)
     {
         var hidden = Hidden(project, design.HiddenKinds);
         var unframed = Unframed(project, design.View, hidden);
@@ -323,7 +343,7 @@ public static class Reports
             view.ShowHoleTimeLabel = false;
             view.ShowInholeDelayLabel = false;
             view.ShowHoleSequenceLabel = false;
-            DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = design.ShowGrid });
+            DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = design.ShowGrid, Overlays = overlays ?? Array.Empty<IOverlay>() });
         }
         finally
         {

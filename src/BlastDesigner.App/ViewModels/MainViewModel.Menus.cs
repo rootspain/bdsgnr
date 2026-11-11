@@ -357,7 +357,7 @@ public sealed partial class MainViewModel
         ("Electronic tools", new()
         {
             ("⏲", "Set hole time", SetTimeTool, "Set"), ("⏩", "Row set", RowSetTool, "Row set"), ("⋰", "Timing line", TimingLineTool, "Timing line"),
-            ("±", "Add/subtract time", Run(AddSubtractTime), null), ("✦", "Opening point", () => InitiationPointTool(true), "Opening point")
+            ("±", "Add/subtract time", Run(AddSubtractTime), null), ("✦", "Opening point", OpeningPointTool, "Opening point")
         }),
         ("Drawing tools", new()
         {

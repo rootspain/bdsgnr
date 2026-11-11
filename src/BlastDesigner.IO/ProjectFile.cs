@@ -54,8 +54,11 @@ public static class ProjectFile
         if (manifest.SchemaVersion > BlastProject.CurrentSchemaVersion)
             throw new InvalidDataException($"The file was saved by a newer version (schema {manifest.SchemaVersion}).");
         var projectEntry = zip.GetEntry("project.json") ?? throw new InvalidDataException("Project data missing.");
-        var project = ProjectJson.Deserialize(ReadEntry(projectEntry));
+        var data = ReadEntry(projectEntry);
+        var project = ProjectJson.Deserialize(data);
         Migrate(project);
+        // before 0.3.1 the times were rounded to a step; a step under a millisecond now allows tenths
+        if (LegacyTimeStep(data) is double step && step < 1) project.Electronic.AllowSubMs = true;
         foreach (var a in project.Attachments)
             if (zip.GetEntry($"attachments/{a.Id:N}") is { } e) a.Data = ReadEntry(e);
         return project;
@@ -84,7 +87,23 @@ public static class ProjectFile
         InitiationLinks.Normalize(p);
         // schema 1: kinds and families lived on the products; the tables are made from them
         ProductCatalogue.Attach(p, new ProductCatalogue(), Array.Empty<Product>());
+        // before 0.3.1 a timing line programmed pyrotechnic holes too, and a programmed time fired them past their tie-up
+        var lined = p.Entities.OfType<TimingLineEntity>().SelectMany(l => l.HoleIds).ToHashSet();
+        foreach (var h in p.Holes)
+            if (lined.Contains(h.Id) && h.ElectronicTimeMs.HasValue && !h.ElectronicTimeManual && !Engine.Charging.HasElectronicDetonator(p, h))
+                h.ElectronicTimeMs = null;
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;
+    }
+
+    /// <summary>The time step of the electronic settings of a file written before <see cref="ElectronicSettings.AllowSubMs"/>.</summary>
+    private static double? LegacyTimeStep(byte[] json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json, new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+            return doc.RootElement.TryGetProperty("electronic", out var e) && e.TryGetProperty("timeStepMs", out var s) && s.TryGetDouble(out var v) ? v : null;
+        }
+        catch (JsonException) { return null; }
     }
 
     /// <summary>Shifts existing backups: file.bdp → file.bdp.001 → .002 … up to <paramref name="copies"/>.</summary>

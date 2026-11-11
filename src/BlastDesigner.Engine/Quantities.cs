@@ -219,17 +219,20 @@ public static class Vibration
             var calc = CalcService.Live(project) ?? CalcService.Session(project);
             var holes = project.Holes.Where(h => !h.IsDummy).Select(h => (H: h, Q: Charging.Calculated(calc, "hole.chargeMass", h, 0))).Where(x => x.Q > 0).ToList();
             _holes = holes.Select(x => (x.H.Collar, x.Q)).ToList();
-            var timed = holes.Where(x => x.H.FiringTimeMs.HasValue).OrderBy(x => x.H.FiringTimeMs).ToList();
+            // a hole of several charges is an event for each, at its time and with its share of the explosive
+            var timed = holes.Where(x => x.H.FiringTimeMs.HasValue)
+                .SelectMany(x => Charging.ChargeEvents(project, x.H, x.Q).Select(e => (x.H.Collar, T: e.TimeMs, Q: e.Kg)))
+                .OrderBy(x => x.T).ToList();
             _windows = new (Vec3, double, double, int)[timed.Count];
             _distance = new double[timed.Count];
             _nearest = new int[timed.Count];
             for (int i = 0; i < timed.Count; i++)
             {
-                var t0 = timed[i].H.FiringTimeMs!.Value;
+                var t0 = timed[i].T;
                 double q = 0;
                 int j = i;
-                for (; j < timed.Count && timed[j].H.FiringTimeMs!.Value < t0 + _m.WindowMs; j++) q += timed[j].Q;
-                _windows[i] = (timed[i].H.Collar, t0, q, j);
+                for (; j < timed.Count && timed[j].T < t0 + _m.WindowMs; j++) q += timed[j].Q;
+                _windows[i] = (timed[i].Collar, t0, q, j);
             }
         }
 
