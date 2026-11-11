@@ -541,10 +541,12 @@ public sealed class ToolPanel : Border
                 combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) _vm.Change("Design data", p => p.Design.Pattern = (PatternType)combo.SelectedIndex); };
                 _fields.Children.Add(Labelled("Pattern", combo));
                 // what the pattern dialog used to ask after the outline was drawn
-                _fields.Children.Add(Field("Direction, °", _vm.Project.Header.BlastOrientation, v => _vm.Change("Blast orientation", p => p.Header.BlastOrientation = v), "patternDirection"));
+                _fields.Children.Add(Field("Direction, °", _vm.Project.Header.BlastOrientation, v => _vm.Change("Blast orientation", p => p.Header.BlastOrientation = v), "patternDirection",
+                    string.Join("\n\n", DirectionTipParagraphs.Select(Loc.Ui))));
                 _fields.Children.Add(Field("Edge offset, m", _vm.PatternEdgeOffset, v => _vm.PatternEdgeOffset = v, "patternOffset"));
                 _fields.Children.Add(TextField("Number prefix", _vm.PatternLabelPrefix, v => _vm.PatternLabelPrefix = v, "patternPrefix"));
                 _fields.Children.Add(Field("Start number", _vm.NextPatternNumber, v => _vm.PatternStartNumber = Math.Max(0, (int)Math.Round(v)), "patternStart"));
+                _fields.Children.Add(PatternLevel());
             }
         }
         if (tool.Name == "Tie")
@@ -601,20 +603,78 @@ public sealed class ToolPanel : Border
 
     private static Control TextField(string label, string value, Action<string> set, string name)
     {
-        var box = new TextBox { Text = value, Width = 92, Height = 26, MinHeight = 26, Padding = new Thickness(8, 2), FontFamily = Look.Mono, FontSize = 12, Background = Look.Field, Name = name };
+        var box = new TextBox { Text = value, Width = 76, Height = 26, MinHeight = 26, Padding = new Thickness(8, 2), FontFamily = Look.Mono, FontSize = 12, Background = Look.Field, Name = name };
         void Commit() { if ((box.Text ?? "") != value) { value = box.Text ?? ""; Ui.Safe(() => set(value)); } }
         box.LostFocus += (_, _) => Commit();
         box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(); e.Handled = true; } };
         return Labelled(label, box);
     }
 
-    private static Control Field(string label, double value, Action<double> set, string? name = null)
+    /// <summary>
+    /// To level of the holes of the pattern, as the field of a hole: a level for all of them, or with To the surface on, each
+    /// its own where its line meets the first surface. Empty or 0: none, the holes keep the design length.
+    /// </summary>
+    private Control PatternLevel()
+    {
+        var box = new TextBox
+        {
+            Name = "patternToLevel", Width = 76, Height = 26, MinHeight = 26, Padding = new Thickness(8, 2), FontFamily = Look.Mono, FontSize = 12, Background = Look.Field
+        };
+        ToolTip.SetTip(box, PropertiesPanel.LengthTip());
+        var surface = new ToggleButton
+        {
+            Name = "patternToSurface", Content = Look.Icon("surface", 14, Look.TextSoft), Width = 26, Height = 26, MinWidth = 0, MinHeight = 0,
+            Padding = new Thickness(0), Margin = new Thickness(4, 0, 0, 0), IsChecked = _vm.PatternToSurface
+        };
+        ToolTip.SetTip(surface, Loc.Ui("To the surface: each hole of the pattern takes as its level the elevation where its line from the collar meets the first surface"));
+        AutomationProperties.SetName(surface, Loc.Ui("To the surface"));
+        void Show()
+        {
+            box.Text = _vm.PatternToSurface || _vm.PatternToLevel is not double z ? "" : z.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture);
+            box.Watermark = Loc.Ui(_vm.PatternToSurface ? "by the surface" : "not set");
+        }
+        Show();
+        void Commit()
+        {
+            var text = (box.Text ?? "").Trim();
+            double? level = null;
+            if (text.Length > 0)
+            {
+                if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out var v)) { Show(); return; }
+                level = v == 0 ? null : v;
+            }
+            // a level typed in takes over from the surface; an empty field leaves the surface on
+            if (level != null) { _vm.PatternToSurface = false; surface.IsChecked = false; }
+            else if (_vm.PatternToSurface) { Show(); return; }
+            _vm.PatternToLevel = level;
+            Show();
+        }
+        box.LostFocus += (_, _) => Commit();
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(); e.Handled = true; } };
+        surface.IsCheckedChanged += (_, _) =>
+        {
+            if (_vm.PatternToSurface == (surface.IsChecked == true)) return;
+            _vm.PatternToSurface = surface.IsChecked == true;
+            Show();
+        };
+        return Labelled("To level", new StackPanel { Orientation = Orientation.Horizontal, Children = { box, surface } });
+    }
+
+    /// <summary>Tip of the pattern direction: how the rows and holes are laid out and numbered by it, paragraph by paragraph.</summary>
+    private static readonly string[] DirectionTipParagraphs =
+    {
+        "The rows lie across this direction. At 0° the rows run west to east, at 90° north to south.",
+        "The first row goes on the face side, half a burden from the edge of the outline. The next rows step back, against the direction, a burden apart. The spacing is laid along the row; in a staggered pattern every second row is shifted by half a spacing.",
+        "The program numbers the rows by this direction (Row 1 is at the face), and the holes by it too."
+    };
+
+    private static Control Field(string label, double value, Action<double> set, string? name = null, string? tip = null)
     {
         var box = new TextBox
         {
             Name = name,
             Text = value.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture),
-            Width = 92,
+            Width = 76,
             Height = 26,
             MinHeight = 26,
             Padding = new Thickness(8, 2),
@@ -628,6 +688,7 @@ public sealed class ToolPanel : Border
         }
         box.LostFocus += (_, _) => Commit();
         box.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(); e.Handled = true; } };
+        if (tip != null) ToolTip.SetTip(box, tip);
         return Labelled(label, box);
     }
 }

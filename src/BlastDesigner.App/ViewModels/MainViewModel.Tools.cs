@@ -211,6 +211,10 @@ public sealed partial class MainViewModel
     /// <summary>First hole number of the next pattern; null: the next free number.</summary>
     public int? PatternStartNumber { get; set; }
     public int NextPatternNumber => PatternStartNumber ?? (int.TryParse(NextHoleLabel(), out var n) ? n : 1);
+    /// <summary>To level of the holes of the next pattern (<see cref="Hole.ToLevel"/>); null: none.</summary>
+    public double? PatternToLevel { get; set; }
+    /// <summary>The holes of the next pattern take as their level where their line meets the first surface, each its own.</summary>
+    public bool PatternToSurface { get; set; }
 
     /// <summary>
     /// Fills a polygon with the pattern. The pattern tool takes its values from its panel; filling a selected polygon,
@@ -227,12 +231,22 @@ public sealed partial class MainViewModel
         if (ask && await Dialogs.EditObject("Pattern properties", pp) is not { } edited) return;
         if (ask) { PatternEdgeOffset = pp.EdgeOffset; PatternLabelPrefix = pp.LabelPrefix; }
         var hp = NewHoleParameters();
-        int count = 0;
+        int count = 0, unlevelled = 0;
         var made = new List<Guid>();
+        // the level from the tool panel: one for all the holes, or each its own from the surface its line meets
+        var toSurface = !ask && PatternToSurface;
+        var toLevel = ask ? null : PatternToLevel;
         Change("Pattern", p =>
         {
             var holes = HoleDesign.FillPolygon(polygon, pp, hp, out var rows);
             foreach (var h in holes) p.Add(h, HoleLayer);
+            if (toSurface || toLevel != null)
+                foreach (var h in holes)
+                {
+                    // a hole whose collar is not above its level keeps the design length (the length follows the level after this step)
+                    if ((toSurface ? HoleLevel.SurfaceLevel(p, h) : toLevel) is double z && HoleLevel.Reaches(h, z)) h.ToLevel = z;
+                    else unlevelled++;
+                }
             int r0 = p.Rows.Count;
             foreach (var r in rows) r.Name = $"Row {++r0}";
             p.Rows.AddRange(rows);
@@ -252,7 +266,9 @@ public sealed partial class MainViewModel
         else ToolChanged?.Invoke();
         // not a step of its own: one undo takes the pattern away, and the selection from before it comes back
         if (made.Count > 0) Doc!.Select(made, record: false);
-        SetStatus(Loc.F("{0} holes created", count));
+        SetStatus(Loc.F("{0} holes created", count) + (unlevelled == 0 ? "" : "; " + (toSurface
+            ? Loc.F("{0} holes meet no surface and keep their length", unlevelled)
+            : Loc.F("{0} holes have the collar not above the level and keep their length", unlevelled))));
     }
 
     public async Task AddHolesAtPoints()

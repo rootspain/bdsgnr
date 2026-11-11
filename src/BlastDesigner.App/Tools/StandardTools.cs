@@ -45,7 +45,7 @@ public sealed class SelectTool : Tool
     }
 
     public override string Name => "Select";
-    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, with Shift held up or down (Z), a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.";
+    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, with Shift held up or down (Z), a round grip of a selected line to move its vertex. Arrows move the selection by 1 m, with Shift by 0.1 m, Ctrl+↑/↓ up or down (Z). Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.";
 
     public override void Activate()
     {

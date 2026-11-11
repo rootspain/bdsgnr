@@ -530,7 +530,15 @@ public sealed class MainWindow : Window
         var m = e.KeyModifiers;
         var shiftCtrl = KeyModifiers.Control | KeyModifiers.Shift;
         Action? a = null;
-        if (m == KeyModifiers.Alt && e.Key >= Key.D1 && e.Key <= Key.D7) a = () => _ribbon.Select(e.Key - Key.D1);
+        // arrows move the selection with the Select tool: a metre, 0.1 m with Shift, Ctrl+↑/↓ up and down (Z)
+        if (!typing && e.Key is Key.Left or Key.Right or Key.Up or Key.Down && _vm.ActiveTool is SelectTool && _vm.HasSelection
+            && (m & ~(KeyModifiers.Shift | KeyModifiers.Control)) == 0)
+        {
+            var right = e.Key == Key.Right ? 1 : e.Key == Key.Left ? -1 : 0;
+            var up = e.Key == Key.Up ? 1 : e.Key == Key.Down ? -1 : 0;
+            a = () => _vm.NudgeSelection(right, up, m.HasFlag(KeyModifiers.Control), m.HasFlag(KeyModifiers.Shift));
+        }
+        else if (m == KeyModifiers.Alt && e.Key >= Key.D1 && e.Key <= Key.D7) a = () => _ribbon.Select(e.Key - Key.D1);
         else if (m == KeyModifiers.Control) a = e.Key switch
         {
             Key.K => _palette.Focus2,

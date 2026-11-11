@@ -710,6 +710,9 @@ Step("pattern tool: direction, offset, prefix and start number on its panel, no 
     vm.PatternTool(); Pump();
     TextBox Box(string name) => window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == name) ?? throw new Exception("no field " + name + " on the pattern panel");
     foreach (var name in new[] { "patternDirection", "patternOffset", "patternPrefix", "patternStart" }) Box(name);
+    // the direction tells how the rows lie and are numbered by it, in three paragraphs
+    if (ToolTip.GetTip(Box("patternDirection")) is not string directionTip || directionTip.Split("\n\n").Length != 3 || !directionTip.Contains(BlastDesigner.App.Services.Loc.Ui("The rows lie across this direction. At 0° the rows run west to east, at 90° north to south.")))
+        throw new Exception("no tip of the rows on the direction: " + ToolTip.GetTip(Box("patternDirection")));
     // all the fields on one line (a narrow window scrolls them instead of wrapping)
     var tops = new[] { "patternDirection", "patternOffset", "patternPrefix", "patternStart" }.Select(n => Box(n).TranslatePoint(new Point(0, 0), window)!.Value.Y).Distinct().ToList();
     if (tops.Count != 1) throw new Exception("the pattern fields are on more than one line");
@@ -743,6 +746,97 @@ Step("pattern tool: direction, offset, prefix and start number on its panel, no 
     if (vm.Project.Holes.Count() != before) throw new Exception("one undo did not take the pattern away");
     if (!vm.Doc.Selection.ToHashSet().SetEquals(selectedBefore)) throw new Exception("undo did not bring the selection from before the pattern back");
     vm.SelectTool();
+});
+Step("pattern tool: To level on its panel, a level for all the holes or each its own by To the surface", () =>
+{
+    var p = vm.Project!;
+    var x0 = p.Holes.Max(h => h.Collar.X) + 30;
+    var y0 = p.Holes.Min(h => h.Collar.Y);
+    List<Hole> Draw()
+    {
+        var before = vm.Project!.Holes.Select(h => h.Id).ToHashSet();
+        foreach (var (x, y) in new[] { (x0, y0), (x0 + 20, y0), (x0 + 20, y0 + 16), (x0, y0 + 16) })
+        {
+            var w = new Vec3(x, y, 300);
+            vm.ActiveTool!.PointerPressed(new ToolPointer { World = w, Snapped = w, Left = true, ClickCount = 1 });
+        }
+        vm.ActiveTool!.KeyDown(Avalonia.Input.Key.Enter, Avalonia.Input.KeyModifiers.None);
+        for (int i = 0; i < 20; i++) Pump();
+        return vm.Project.Holes.Where(h => !before.Contains(h.Id)).ToList();
+    }
+    try
+    {
+        vm.PatternTool(); Pump();
+        var box = window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "patternToLevel" && t.IsEffectivelyVisible) ?? throw new Exception("no To level on the pattern panel");
+        var surface = window.GetLogicalDescendants().OfType<Avalonia.Controls.Primitives.ToggleButton>().FirstOrDefault(t => t.Name == "patternToSurface" && t.IsEffectivelyVisible) ?? throw new Exception("no To the surface beside To level on the pattern panel");
+        if (ToolTip.GetTip(box) as string != PropertiesPanel.LengthTip()) throw new Exception("To level on the pattern panel has not the tip of the length");
+        if (Math.Abs(box.TranslatePoint(new Point(), window)!.Value.Y - window.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "patternStart").TranslatePoint(new Point(), window)!.Value.Y) > 1) throw new Exception("To level is not on the line of the other pattern fields");
+        // a level for all the holes: each goes down to it with its subdrill
+        var level = Math.Floor(p.Holes.Min(h => h.Collar.Z)) - 20;
+        box.Text = level.ToString(System.Globalization.CultureInfo.CurrentCulture); box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+        if (vm.PatternToLevel != level) throw new Exception("the level did not reach the pattern: " + vm.PatternToLevel);
+        var made = Draw();
+        if (made.Count == 0) throw new Exception("no holes from the pattern");
+        foreach (var h in made)
+            if (h.ToLevel != level || Math.Abs(h.GradePoint.Z - level) > 1e-6) throw new Exception($"hole {h.Label}: level {h.ToLevel}, grade at {h.GradePoint.Z} instead of {level}");
+        vm.Undo(); Pump();
+        // To the surface: each hole its own level where its line meets a surface, the field shows it is by the surface
+        vm.PatternTool(); Pump();
+        box = window.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "patternToLevel" && t.IsEffectivelyVisible);
+        surface = window.GetLogicalDescendants().OfType<Avalonia.Controls.Primitives.ToggleButton>().First(t => t.Name == "patternToSurface" && t.IsEffectivelyVisible);
+        var floor = level + 5;
+        vm.Change("Smoke floor", pr => pr.Add(new SurfaceEntity { Name = "Smoke floor", Vertices = { new(x0 - 5, y0 - 5, floor), new(x0 + 10, y0 - 5, floor), new(x0 + 10, y0 + 21, floor), new(x0 - 5, y0 + 21, floor) }, Triangles = { 0, 1, 2, 0, 2, 3 } })); Pump();
+        surface.IsChecked = true; Pump();
+        if (!vm.PatternToSurface || box.Text is { Length: > 0 }) throw new Exception("To the surface did not take over the field");
+        made = Draw();
+        var levelled = 0;
+        foreach (var h in made)
+        {
+            var z = BlastDesigner.Engine.HoleLevel.SurfaceLevel(vm.Project!, h);
+            if (z is double zz && BlastDesigner.Engine.HoleLevel.Reaches(h, zz))
+            {
+                if (h.ToLevel is not double got || Math.Abs(got - zz) > 1e-9) throw new Exception($"hole {h.Label}: level {h.ToLevel} instead of {zz} where its line meets the surface");
+                levelled++;
+            }
+            else if (h.ToLevel != null) throw new Exception($"hole {h.Label} meets no surface but has the level {h.ToLevel}");
+        }
+        // the floor is under only a part of the pattern
+        if (levelled == 0 || made.Count(h => h.ToLevel is double l && Math.Abs(l - floor) < 1e-9) == 0) throw new Exception("no hole of the pattern took the level of the floor under it");
+        vm.Undo(); vm.Undo(); Pump();
+    }
+    finally
+    {
+        vm.PatternToLevel = null;
+        vm.PatternToSurface = false;
+        vm.SelectTool(); Pump();
+    }
+});
+Step("arrows move the selection: a metre the way they point on the screen, 0.1 m with Shift, Ctrl+↑ up (Z)", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var hole = vm.Project!.Holes.First(h => !h.IsDummy && !h.Locked);
+    vm.Doc!.Select(new[] { hole.Id }); Pump();
+    vm.View.Focus(); Pump();
+    Vec3 At() => ((Hole)vm.Project!.FindEntity(hole.Id)!).Collar;
+    var start = At();
+    var cam = vm.View.Camera;
+    var right = cam.Right;
+    var screenUp = new Vec3(-right.Y, right.X, 0);
+    void Press(Avalonia.Input.Key key, Avalonia.Input.PhysicalKey physical, Avalonia.Input.RawInputModifiers mods = Avalonia.Input.RawInputModifiers.None) { window.KeyPress(key, mods, physical, null); Pump(); }
+    Press(Avalonia.Input.Key.Right, Avalonia.Input.PhysicalKey.ArrowRight);
+    if ((At() - (start + right)).Length > 1e-9) throw new Exception($"→ should move a metre to the right of the screen: {start} → {At()}");
+    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp, Avalonia.Input.RawInputModifiers.Shift);
+    if ((At() - (start + right + screenUp * 0.1)).Length > 1e-9) throw new Exception("Shift+↑ should move 0.1 m up the screen: " + At());
+    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp, Avalonia.Input.RawInputModifiers.Control);
+    if ((At() - (start + right + screenUp * 0.1 + new Vec3(0, 0, 1))).Length > 1e-9) throw new Exception("Ctrl+↑ should raise a metre: " + At());
+    vm.Undo(); vm.Undo(); vm.Undo(); Pump();
+    if ((At() - start).Length > 1e-9) throw new Exception("three undos should bring the hole back: " + At());
+    // typing in a field keeps the arrows for the text
+    var box = window.GetLogicalDescendants().OfType<TextBox>().First(t => t.IsEffectivelyVisible && t.IsEnabled);
+    box.Focus(); Pump();
+    Press(Avalonia.Input.Key.Right, Avalonia.Input.PhysicalKey.ArrowRight);
+    if ((At() - start).Length > 1e-9) throw new Exception("an arrow in a text field moved the selection");
+    vm.View.Focus(); vm.Doc.ClearSelection(); Pump();
 });
 Step("dark plan zoomed", () => { vm.Doc!.Select(vm.Project!.Rows[2].HoleIds); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); });
 Shot("32_dark_plan");

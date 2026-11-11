@@ -9,6 +9,12 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.1 — 2026-11-06
 
 ### New
+- **Arrow keys move the selected objects** with the Select tool: 1 m the way the arrow points on the screen, 0.1 m with
+  Shift; Ctrl+↑/↓ up and down (Z). In a section ↑/↓ move along Z. Each press is one undo step.
+- **To level and To the surface on the Pattern tool panel.** A level typed in the field goes to every hole of the new
+  pattern; with To the surface pressed each hole takes the elevation where its line meets the first surface. The length
+  follows the level with the subdrill. Holes with the collar not above the level, or meeting no surface, keep the design length. The Direction field of this panel
+  has a tip on how the rows lie and are numbered by it.
 - **Line vertices.** The vertices of selected polylines and polygons show round grips. Dragging a grip moves the vertex,
   snapping to other objects; Esc cancels. The whole line still moves by the part between its vertices.
   Shift and a click on a selected line add a vertex, Ctrl and a click on a grip delete it.

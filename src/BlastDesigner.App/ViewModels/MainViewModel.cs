@@ -375,6 +375,23 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Arrow keys with the Select tool: the selection moves a metre (with <paramref name="fine"/> a tenth) the way the arrow
+    /// points on the screen, along the ground; up and down go up and down (Z) with <paramref name="vertical"/>, or in a view
+    /// where the screen's up is more the vertical than the ground (a section).
+    /// </summary>
+    public void NudgeSelection(int right, int up, bool vertical, bool fine)
+    {
+        if (Doc == null || !HasSelection) return;
+        var cam = View.Camera;
+        var screenRight = cam.Right;
+        var screenUp = new Vec3(-screenRight.Y, screenRight.X, 0);
+        var lift = vertical || Math.Abs(cam.Up.Z) > Math.Sqrt(cam.Up.X * cam.Up.X + cam.Up.Y * cam.Up.Y);
+        var delta = (lift ? new Vec3(0, 0, up) + screenRight * right : screenRight * right + screenUp * up) * (fine ? 0.1 : 1);
+        if (delta.Length2D < 1e-12 && Math.Abs(delta.Z) < 1e-12) return;
+        MoveSelection(delta);
+    }
+
+    /// <summary>
     /// Runs <paramref name="move"/> and reprograms the holes of every timing line among <paramref name="moved"/> from its
     /// new position (in the same undo step as the move), as a line drawn there would. A line from an older file that does
     /// not know its holes first takes them from its old position (<see cref="HolesTimedBy"/>) and keeps them.
