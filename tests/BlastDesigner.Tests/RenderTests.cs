@@ -215,4 +215,44 @@ public class RenderTests
         var ms = FirstFrameMs(Survey(140));
         Assert.True(ms < 400, $"{ms:0} ms");
     }
+
+    /// <summary>The circle that turns a pattern is filled solid: green when the grid can be turned, red when it cannot.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PatternTurnCircleIsGreenOrRed(bool refused)
+    {
+        var p = BlastProject.CreateNew("turn");
+        var pat = new HolePattern { Center = new Vec3(0, 0, 0), Azimuth = 0, Burden = 3 };
+        var cam = new Camera { Width = 400, Height = 300, Scale = 4, Target = new Vec3(0, 0, 0) };
+        var overlay = new PatternRotateHandleOverlay(() => new[] { pat }, _ => refused, () => (new SKColor(0xFF16A34A), new SKColor(0xFFDC2626)));
+        var (x, y) = cam.ToScreen(PatternRotateHandleOverlay.CircleCentre(pat, pat.Azimuth, cam));
+        using var bitmap = new SKBitmap(400, 300);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(SKColors.Black);
+            overlay.Draw(canvas, cam, p);
+        }
+        var want = refused ? new SKColor(0xFFDC2626) : new SKColor(0xFF16A34A);
+        // the middle and a pixel off it, inside the edge: solid, no ring
+        foreach (var (dx, dy) in new[] { (0, 0), (2, 0), (0, -2) })
+            Assert.Equal(want, bitmap.GetPixel((int)Math.Round(x) + dx, (int)Math.Round(y) + dy));
+    }
+
+    /// <summary>The burden arrow ends at the edge of the circle, not in its middle: the centre is a radius beyond the tip.</summary>
+    [Fact]
+    public void PatternTurnCircleTouchesTheArrowTip()
+    {
+        var pat = new HolePattern { Center = new Vec3(0, 0, 0), Azimuth = 30, Burden = 3 };
+        var cam = new Camera { Width = 400, Height = 300, Scale = 4, Target = new Vec3(0, 0, 0) };
+        foreach (var big in new[] { false, true })
+        {
+            var (tx, ty) = cam.ToScreen(PatternRotateHandleOverlay.ArrowTip(pat, pat.Azimuth, cam));
+            var (cx, cy) = cam.ToScreen(PatternRotateHandleOverlay.CircleCentre(pat, pat.Azimuth, cam, big));
+            var (ox, oy) = cam.ToScreen(pat.Center);
+            Assert.Equal(PatternRotateHandleOverlay.RadiusPx(big), Math.Sqrt((cx - tx) * (cx - tx) + (cy - ty) * (cy - ty)), 3);
+            // beyond the tip, along the arrow
+            Assert.True(Math.Sqrt((cx - ox) * (cx - ox) + (cy - oy) * (cy - oy)) > Math.Sqrt((tx - ox) * (tx - ox) + (ty - oy) * (ty - oy)));
+        }
+    }
 }

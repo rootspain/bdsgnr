@@ -167,7 +167,7 @@ Click to place points.	Щёлкайте, чтобы ставить точки.
 Click to place the electronic opening point.	Щёлкните, чтобы поставить точку открытия электронной схемы.
 Click to place the initiation point, then use the Tie tool from it to the first hole.	Щёлкните, чтобы поставить точку инициирования, затем свяжите её с первой скважиной.
 Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, a round grip of a selected line to move its vertex. Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, а круглую ручку выделенной линии, чтобы переместить её вершину. Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её.
-Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, with Shift held up or down (Z), a round grip of a selected line to move its vertex. Arrows move the selection by 1 m, with Shift by 0.1 m, Ctrl+↑/↓ up or down (Z). Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное, чтобы переместить, с зажатым Shift — вверх или вниз (по Z), а круглую ручку выделенной линии, чтобы переместить её вершину. Стрелки сдвигают выделенное на 1 м, с Shift — на 0,1 м, Ctrl+↑/↓ — вверх или вниз (по Z). Shift добавляет, Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное или нажимайте стрелки (1 м за нажатие), чтобы сдвинуть его по горизонтали, с зажатым Shift — вверх или вниз (по Z), с зажатым Ctrl — шагом 0,1 м. Круглая ручка выделенной линии перемещает её вершину. Щелчок с Shift добавляет, с Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину.
 Click two holes to measure between them.	Щёлкните две скважины, чтобы измерить расстояние.
 Click two points of the section line.	Щёлкните две точки линии разреза.
 Click two points to dimension.	Щёлкните две точки для размера.
@@ -2294,6 +2294,12 @@ ui:Lines, points, polygons and text without their own colour	Линии, точ�
 ui:Section line	Линия разреза
 ui:Section lines without their own colour	Линии разреза без собственного цвета
 ui:Selected objects colour	Цвет выделенных объектов
+ui:Pattern arrow	Стрелка сетки
+ui:The burden arrow of a selected pattern	Стрелка направления отбойки выделенной сетки
+ui:Pattern turn circle	Кружок поворота сетки
+ui:Pattern turn circle, refused	Кружок поворота сетки, поворот нельзя
+ui:The circle at the tip of the burden arrow of a selected pattern, when the grid can be turned	Кружок на конце стрелки отбойки выделенной сетки, когда сетку можно повернуть
+ui:The same circle when the grid cannot be turned: a hole of it is drilled, loaded or locked	Тот же кружок, когда сетку повернуть нельзя: её скважина пробурена, заряжена или заблокирована
 ui:Collar size	Размер устья
 ui:px	пкс
 ui:Coordinates box	Окно координат
@@ -3040,3 +3046,66 @@ ui:by the surface	по поверхности
 ui:The rows lie across this direction. At 0° the rows run west to east, at 90° north to south.	Ряды ложатся перпендикулярно этому направлению. При 0° ряды идут с запада на восток, при 90° — с севера на юг.
 ui:The first row goes on the face side, half a burden from the edge of the outline. The next rows step back, against the direction, a burden apart. The spacing is laid along the row; in a staggered pattern every second row is shifted by half a spacing.	Первый ряд ставится со стороны откоса, в половине ЛНС от края контура. Следующие ряды отходят назад, против направления отбойки, через каждую ЛНС. Шаг откладывается вдоль ряда, а в шахматной сетке каждый второй ряд сдвигается на полшага.
 ui:The program numbers the rows by this direction (Row 1 is at the face), and the holes by it too.	По этому направлению программа и нумерует ряды (Ряд 1 стоит у откоса), и по нему же нумерует скважины.
+# Pattern grids: turning and laying out a pattern again
+Rotate pattern	Поворот сетки
+Rotate pattern…	Повернуть сетку…
+Rotate pattern with the mouse	Повернуть сетку мышью
+Rebuild pattern	Перестроить сетку
+Detach from pattern	Отвязать от сетки
+Dissolve pattern	Расформировать сетку
+Select pattern	Выделить сетку
+Pattern grid	Сетка
+Pattern settings	Настройки сетки
+Rename pattern	Переименование сетки
+Rotate objects	Поворот объектов
+Pattern {0}	Сетка {0}
+Rotate orientation	Отбойка вместе с сеткой
+Click a segment of a line: the rows of the pattern run along it.	Щёлкните отрезок линии: ряды сетки лягут вдоль него.
+Drag to turn the pattern about its centre (1° steps, Shift 5°, Ctrl 0.1°). Esc cancels the turn.	Перетаскивайте, чтобы повернуть сетку вокруг её центра (шаг 1°, с Shift — 5°, с Ctrl — 0,1°). Esc отменяет поворот.
+Select the holes of a pattern (or objects to turn) first.	Сначала выделите скважины сетки (или объекты, которые нужно повернуть).
+Turn by +90°	Повернуть на +90°
+Turn by −90°	Повернуть на −90°
+Along a line	По линии
+Select a hole of a pattern first.	Сначала выделите скважину сетки.
+Turn, ° (clockwise)	Поворот, ° (по часовой стрелке)
+The pattern cannot be laid out again.	Сетку нельзя перестроить.
+{0} holes loaded or timed by hand leave the outline and will be deleted. Continue?	Скважин с заряжанием или временем, заданными вручную, выходящих за контур и подлежащих удалению: {0}. Продолжить?
+{0} moved, {1} deleted, {2} added	перемещено {0}, удалено {1}, добавлено {2}
+{0} ties removed	удалено связей: {0}
+{0} holes detached from the pattern	Скважин отвязано от сетки: {0}
+Dissolve {0}? Its holes stay as they are, but the grid can no longer be turned.	Расформировать «{0}»? Скважины останутся на месте, но повернуть сетку будет уже нельзя.
+Hole {0} is already drilled.	Скважина {0} уже пробурена.
+Hole {0} is released for loading.	Скважина {0} уже допущена к зарядке.
+Hole {0} is already loaded.	Скважина {0} уже заряжена.
+Hole {0} is already fired.	Скважина {0} уже взорвана.
+The pattern cannot be turned:	Сетку нельзя повернуть:
+Hole {0} is locked.	Скважина {0} заблокирована.
+Hole {0} has a surveyed collar.	У скважины {0} есть замеренное устье.
+The layer of hole {0} is locked or frozen.	Слой скважины {0} заблокирован или заморожен.
+The holes layer is locked or frozen.	Слой скважин заблокирован или заморожен.
+ui:Orientation turns with the pattern	Отбойка вместе с сеткой
+ui:On: when the pattern is turned later, the blast orientation turns with it. Off: the orientation stays, and the face row is then the row furthest along it	Вкл.: при последующем повороте сетки направление отбойки поворачивается вместе с ней. Выкл.: направление остаётся прежним, и первым (у откоса) становится ряд, дальше всех продвинутый по нему
+ui:Turn, °	Поворот, °
+ui:Clockwise; Enter turns by it	По часовой стрелке; Enter поворачивает на это значение
+ui:Turn by a quarter	Повернуть на четверть оборота
+ui:Along a line	По линии
+ui:Click a segment of a line: the rows of the pattern run along it	Щёлкните отрезок линии: ряды сетки лягут вдоль него
+ui:Keep the numbers	Сохранить номера
+ui:On: the holes keep their numbers and new holes take the next free ones. Off: the holes are numbered again by the rows	Вкл.: скважины сохраняют номера, новые получают следующие свободные. Выкл.: скважины перенумеровываются по рядам
+ui:Turn with the pattern	Поворачивать вместе с сеткой
+ui:Keep	Не менять
+ui:Along the blast orientation	По направлению отбойки
+ui:Hole bearing	Азимут скважин
+ui:Burden × spacing	ЛНС × шаг
+ui:Burden azimuth, °	Азимут ЛНС, °
+ui:Direction of the burden, degrees from north; a new value turns the grid about its centre	Направление ЛНС, градусы от севера; новое значение поворачивает сетку вокруг её центра
+ui:Turned since made	Поворот от исходного
+ui:Off its node	Смещение от узла
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное или нажимайте стрелки (1 м за нажатие), чтобы сдвинуть его по горизонтали, с зажатым Shift — вверх или вниз (по Z), с зажатым Ctrl — шагом 0,1 м. Круглая ручка выделенной линии перемещает её вершину. Щелчок с Shift добавляет, с Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину. Кружок на конце стрелки сетки, у которой выделена скважина, поворачивает сетку (с Shift — шагом 5°, с Ctrl — 0,1°), его контекстное меню поворачивает на четверть оборота, на заданный угол или по линии.
+Turn the pattern	Повернуть сетку
+Turn by…	Повернуть на…
+ui:Burden, m: the distance between the rows; a new value lays the grid out again	ЛНС, м: расстояние между рядами; новое значение перестраивает сетку
+ui:Spacing, m: the distance between the holes of a row; a new value lays the grid out again	Шаг, м: расстояние между скважинами в ряду; новое значение перестраивает сетку
+Pattern size	Размеры сетки
+The burden and the spacing are at least {0} m.	ЛНС и шаг — не меньше {0} м.
+The pattern is too dense for its outline.	Сетка слишком частая для своего контура.

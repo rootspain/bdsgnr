@@ -11,86 +11,92 @@ using SkiaSharp;
 
 namespace BlastDesigner.App.Tools;
 
-/// <summary>Click / box selection and drag-move of selected objects.</summary>
+/// <summary>
+/// Click / box selection and drag-move of selected objects. What a press does is decided here, in the order of the gestures:
+/// the circles of a front, the circle of a pattern, the grips of a line, the line of a row, the selection, the box; each does
+/// its own work.
+/// </summary>
 public sealed class SelectTool : Tool
 {
     private ToolPointer? _down;
     private bool _dragging;
-    private bool _moving;
-    /// <summary>Row whose line was pressed (between its holes): a drag moves it when selected, a click selects it.</summary>
-    private HoleRow? _row;
-    /// <summary>Offset of the last drag preview.</summary>
-    private Vec3? _shown;
-    /// <summary>
-    /// Whether the move goes up or down (Shift held) and where it went over to that: the offset made so far is kept and
-    /// the cursor is read from the pointer of the switch, so pressing or letting go of Shift does not undo the way made.
-    /// </summary>
-    private (bool Vertical, Vec3 Base, ToolPointer From) _way;
-    private readonly VertexGripsOverlay _grips;
     /// <summary>Circles of the selected two-segment fronts: turn and reshape.</summary>
     private readonly FrontLineHandles _front;
-    /// <summary>Vertex whose grip was pressed: a drag moves it, a click selects as anywhere else.</summary>
-    private (PolylineEntity Line, int Vertex)? _grip;
-    /// <summary>Where the last drag preview put the vertex.</summary>
-    private Vec3? _gripTo;
-    /// <summary>Spot of a selected line pressed with Shift: a click adds a vertex there, a drag is the box as anywhere else.</summary>
-    private (PolylineEntity Line, int At, Vec3 Point)? _newVertex;
-    /// <summary>Grip pressed with Ctrl: a click deletes its vertex.</summary>
-    private (PolylineEntity Line, int Vertex)? _oldVertex;
+    /// <summary>Circles at the tips of the arrows of the patterns of the selected holes: turn the grid.</summary>
+    private readonly PatternRotateHandle _pattern;
+    private readonly VertexGrips _vertices;
+    private readonly RowPick _rows;
+    private readonly SelectionDrag _move;
+    private readonly BoxSelect _box;
+    /// <summary>Gestures that take a press for themselves: nothing else happens with it.</summary>
+    private readonly ISelectGesture[] _handles;
+    /// <summary>The gestures that share a press: the tool decides between them on the drag and the release.</summary>
+    private readonly ISelectGesture[] _shared;
+    /// <summary>All the gestures in the order they are asked.</summary>
+    private readonly ISelectGesture[] _gestures;
 
     public SelectTool(MainViewModel vm) : base(vm)
     {
-        _grips = new VertexGripsOverlay(() => Preview.Moving == null ? vm.EditableLines() : new List<PolylineEntity>(), () => new SKColor(vm.Settings.SelectionColor));
         _front = new FrontLineHandles(vm, () => Preview.Moving == null);
+        _pattern = new PatternRotateHandle(vm, () => Preview.Moving == null);
+        _vertices = new VertexGrips(vm, () => Preview.Moving == null);
+        _move = new SelectionDrag(vm);
+        _rows = new RowPick(vm, _move);
+        _box = new BoxSelect(vm);
+        _handles = new ISelectGesture[] { _front, _pattern };
+        _shared = new ISelectGesture[] { _vertices, _rows, _move, _box };
+        _gestures = _handles.Concat(_shared).ToArray();
     }
 
     public override string Name => "Select";
-    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object to move it, with Shift held up or down (Z), a round grip of a selected line to move its vertex. Arrows move the selection by 1 m, with Shift by 0.1 m, Ctrl+↑/↓ up or down (Z). Shift adds, Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length.";
+    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line.";
+
+    /// <summary>Fine drag step, the same as an arrow press with Ctrl.</summary>
+    public const double FineStep = SelectionDrag.FineStep;
+
+    /// <inheritdoc cref="SelectionDrag.Steps"/>
+    public static Vec3 Steps(Vec3 d, bool fine, bool vertical) => SelectionDrag.Steps(d, fine, vertical);
+
+    /// <summary>How a click or a box changes the selection: Ctrl toggles, Shift adds, else it replaces.</summary>
+    internal static SelectionMode Mode(ToolPointer p) =>
+        p.Modifiers.HasFlag(KeyModifiers.Control) ? SelectionMode.Toggle : p.Modifiers.HasFlag(KeyModifiers.Shift) ? SelectionMode.Add : SelectionMode.Replace;
 
     public override void Activate()
     {
         base.Activate();
-        View.Overlays.Add(_grips);
-        View.Overlays.Add(_front.Overlay);
+        _pattern.Attach();
+        foreach (var g in _gestures)
+            if (g.Overlay is { } o) View.Overlays.Add(o);
     }
 
     public override void Deactivate()
     {
         base.Deactivate();
-        _front.Cancel();
-        View.Overlays.Remove(_grips);
-        View.Overlays.Remove(_front.Overlay);
+        _pattern.Detach();
+        foreach (var g in _gestures)
+        {
+            g.Cancel();
+            if (g.Overlay is { } o) View.Overlays.Remove(o);
+        }
     }
+
+    /// <summary>The gesture that took the press for itself and is not done with it.</summary>
+    private ISelectGesture? Held => _handles.FirstOrDefault(h => h.Active);
 
     public override void PointerPressed(ToolPointer p)
     {
         if (!p.Left) return;
-        // a circle of a selected front: turned or reshaped, nothing else happens with this press
-        if (!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.Press(p)) { _down = null; return; }
+        // a circle of a selected front (turned or reshaped) or of a pattern (its grid turned): nothing else happens with this press
+        if ((!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.TryPress(p)) || _pattern.TryPress(p)) { _down = null; return; }
         _down = p;
-        _shown = null;
-        _way = (p.Modifiers.HasFlag(KeyModifiers.Shift), default, p);
         _dragging = false;
-        // with Shift a selected object is dragged up or down; a Shift click on it still only adds to the selection
-        _moving = p.Hit != null && Vm.Doc!.Selection.Contains(p.Hit.Id) && !p.Modifiers.HasFlag(KeyModifiers.Control);
-        // the line of a row, with nothing else under the cursor than a surface (picked by area) or a tie along the
-        // row: a selected row is dragged by it, an unselected one is selected by a click on it (a tie keeps its click)
-        var free = !p.Modifiers.HasFlag(KeyModifiers.Shift) && !p.Modifiers.HasFlag(KeyModifiers.Control);
-        _grip = free && p.ClickCount < 2 ? GripAt(p.X, p.Y) : null;
-        _gripTo = null;
-        var shift = p.Modifiers.HasFlag(KeyModifiers.Shift);
-        var control = p.Modifiers.HasFlag(KeyModifiers.Control);
-        _oldVertex = control && !shift ? GripAt(p.X, p.Y) : null;
-        _newVertex = shift && !control && GripAt(p.X, p.Y) == null ? SegmentAt(p.X, p.Y) : null;
-        _row = p.Hit is null or SurfaceEntity || (p.Hit is TieEntity && !Vm.Doc!.Selection.Contains(p.Hit.Id)) ? RowAt(p.X, p.Y) : null;
-        if (_row != null)
-        {
-            var selected = _row.HoleIds.All(Vm.Doc!.Selection.Contains);
-            if (selected && !p.Modifiers.HasFlag(KeyModifiers.Control)) _moving = true;
-            else if (p.Hit is TieEntity) _row = null;
-        }
+        // the selection before the row: a selected row hands its drag to the selection
+        _move.TryPress(p);
+        _vertices.TryPress(p);
+        _rows.TryPress(p);
+        _box.TryPress(p);
         // quick clicks that edit a line go on editing it, they are no double click
-        if (p.ClickCount >= 2 && p.Hit != null && _newVertex == null && _oldVertex == null)
+        if (p.ClickCount >= 2 && p.Hit != null && !_vertices.EditsLine)
         {
             Vm.Doc!.Select(new[] { p.Hit.Id });
             ShowProperties();
@@ -101,173 +107,51 @@ public sealed class SelectTool : Tool
 
     public override void PointerMoved(ToolPointer p)
     {
-        if (_front.Active) { _front.Drag(p, Preview); return; }
+        if (Held is { } held) { held.Drag(p, Preview); return; }
         Preview.Labels.Clear();
         if (_down == null)
         {
-            _grips.Hot = GripAt(p.X, p.Y);
+            _vertices.Hover(p);
             _front.Hover(p);
-            if (p.Hit != null) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m" : Loc.T(p.Hit.KindName)));
+            _pattern.Hover(p);
+            if (p.Hit != null && !_pattern.Hot) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m" : Loc.T(p.Hit.KindName)));
             return;
         }
         if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) _dragging = true;
         if (!_dragging) return;
-        if (_grip is { } grip)
-        {
-            var from = grip.Line.Points[grip.Vertex];
-            var (to, snap) = VertexTarget(p, grip.Line, from);
-            _gripTo = to;
-            Preview.Snap = snap;
-            var points = grip.Line.Points.ToList();
-            points[grip.Vertex] = to;
-            Preview.Lines.Clear();
-            Preview.Points.Clear();
-            Preview.Lines.Add((points, grip.Line.Closed, PreviewColor));
-            Preview.Points.Add((to, PreviewColor));
-            Preview.Labels.Add((to, $"Δ {(to - from).Length2D:0.00} m"));
-        }
-        else if (_moving)
-        {
-            // The selection itself follows the cursor; the move is applied (with undo) on release.
-            var (delta, handle, snap) = MoveDelta(p);
-            _shown = delta;
-            Preview.Snap = snap;
-            // a bound initiation point and its hole move together, on screen as on release
-            Preview.Moving ??= InitiationLinks.WithLinked(Vm.Project!, Vm.Doc!.Selection);
-            Vm.RaiseDragPreview();
-            Preview.MoveOffset = delta;
-            Preview.Labels.Add((handle + delta, _way.Vertical ? $"Δ Z {delta.Z:+0.00;-0.00} m" : $"Δ {delta.Length2D:0.00} m"));
-        }
-        else Preview.ScreenRect = ((float)_down.X, (float)_down.Y, (float)p.X, (float)p.Y);
+        // a grip moves its vertex, a selected object (or row) the selection, anything else draws the box
+        if (_vertices.Active) _vertices.Drag(p, Preview);
+        else if (_move.Active) _move.Drag(p, Preview);
+        else _box.Drag(p, Preview);
     }
 
     public override void PointerReleased(ToolPointer p)
     {
-        if (_front.Active) { _front.Release(); Preview.Clear(); return; }
+        if (Held is { } held) { held.Release(p); Preview.Clear(); return; }
         if (_down == null) return;
-        var down = _down;
         Preview.Clear();
-        var mode = p.Modifiers.HasFlag(KeyModifiers.Control) ? SelectionMode.Toggle : p.Modifiers.HasFlag(KeyModifiers.Shift) ? SelectionMode.Add : SelectionMode.Replace;
-        if (!_dragging && _newVertex is { } added)
-        {
-            _down = null;
-            _newVertex = null;
-            Vm.AddVertex(added.Line.Id, added.At, added.Point);
-            return;
-        }
-        if (!_dragging && _oldVertex is { } deleted)
-        {
-            _down = null;
-            _oldVertex = null;
-            _grips.Hot = null;
-            Vm.DeleteVertex(deleted.Line.Id, deleted.Vertex);
-            return;
-        }
-        if (_dragging && _grip is { } grip)
-        {
-            _down = null;
-            _grip = null;
-            if (_gripTo is Vec3 to) Vm.MoveVertex(grip.Line.Id, grip.Vertex, to);
-            return;
-        }
-        if (_dragging && _moving)
-        {
-            // Apply exactly what was on screen, not a fresh reading of the release point.
-            var delta = _shown ?? MoveDelta(p).Delta;
-            _down = null;
-            _shown = null;
-            Vm.MoveSelection(delta);
-            return;
-        }
+        Finish(p);
         _down = null;
+        foreach (var g in _shared) g.Cancel();
+    }
+
+    /// <summary>What the press let go does: a click edits the line or selects, a drag moves or selects in the box.</summary>
+    private void Finish(ToolPointer p)
+    {
+        if (!_dragging && _vertices.Click()) return;
+        if (_dragging && _vertices.Active) { _vertices.Release(p); return; }
+        if (_dragging && _move.Active) { _move.Release(p); return; }
         // a click on the line of a row selects its holes
-        if (!_dragging && _row != null)
-        {
-            Vm.Doc!.Select(_row.HoleIds, mode);
-            _row = null;
-            ShowProperties();
-            return;
-        }
+        if (!_dragging && _rows.Click(Mode(p))) { ShowProperties(); return; }
         if (_dragging)
         {
-            var crossing = p.X < down.X;
-            Vm.Doc!.Select(View.InRect(down.X, down.Y, p.X, p.Y, crossing).Select(e => e.Id), mode);
+            _box.Release(p);
             ShowProperties();
             return;
         }
+        var mode = Mode(p);
         Vm.Doc!.Select(p.Hit != null ? new[] { p.Hit.Id } : Array.Empty<Guid>(), p.Hit == null && mode != SelectionMode.Replace ? SelectionMode.Add : mode);
         ShowProperties();
-    }
-
-    /// <summary>
-    /// Row whose line (through its holes, in order) passes within the pick radius of the screen point, when rows are
-    /// shown; the nearest one.
-    /// </summary>
-    private HoleRow? RowAt(double sx, double sy)
-    {
-        var p = Vm.Project!;
-        if (!p.View.ShowRows) return null;
-        var cam = View.Camera;
-        HoleRow? best = null;
-        double bestD = View.TargetRadius;
-        foreach (var row in p.Rows)
-        {
-            var pts = row.HoleIds.Select(id => p.FindEntity(id)).OfType<Hole>().Select(h => cam.ToScreen(h.Collar)).ToList();
-            for (int i = 1; i < pts.Count; i++)
-            {
-                double ax = pts[i - 1].X, ay = pts[i - 1].Y, dx = pts[i].X - ax, dy = pts[i].Y - ay, l2 = dx * dx + dy * dy;
-                var t = l2 > 0 ? Math.Clamp(((sx - ax) * dx + (sy - ay) * dy) / l2, 0, 1) : 0;
-                var d = Math.Sqrt(Math.Pow(ax + t * dx - sx, 2) + Math.Pow(ay + t * dy - sy, 2));
-                if (d < bestD) { bestD = d; best = row; }
-            }
-        }
-        return best;
-    }
-
-    /// <summary>The grip of a selected line at a screen point; the nearest one.</summary>
-    private (PolylineEntity Line, int Vertex)? GripAt(double sx, double sy)
-    {
-        (PolylineEntity, int)? best = null;
-        var bestD = VertexGripsOverlay.Reach;
-        foreach (var line in Vm.EditableLines())
-            for (int i = 0; i < line.Points.Count; i++)
-            {
-                var (x, y) = View.Camera.ToScreen(line.Points[i]);
-                var d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
-                if (d < bestD) { bestD = d; best = (line, i); }
-            }
-        return best;
-    }
-
-    /// <summary>The nearest spot of a selected line to a screen point, within the pick radius, with the index a vertex there takes.</summary>
-    private (PolylineEntity Line, int At, Vec3 Point)? SegmentAt(double sx, double sy)
-    {
-        (PolylineEntity, int, Vec3)? best = null;
-        var bestD = View.TargetRadius;
-        foreach (var line in Vm.EditableLines())
-        {
-            int n = line.Points.Count;
-            for (int i = 0; i < (line.Closed ? n : n - 1); i++)
-            {
-                Vec3 a = line.Points[i], b = line.Points[(i + 1) % n];
-                var (ax, ay) = View.Camera.ToScreen(a);
-                var (bx, by) = View.Camera.ToScreen(b);
-                double dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
-                var t = l2 > 0 ? Math.Clamp(((sx - ax) * dx + (sy - ay) * dy) / l2, 0, 1) : 0;
-                var d = Math.Sqrt(Math.Pow(ax + t * dx - sx, 2) + Math.Pow(ay + t * dy - sy, 2));
-                // the view is a parallel projection: the same share of the segment on the screen and in the world, elevation too
-                if (d < bestD) { bestD = d; best = (line, i + 1, Vec3.Lerp(a, b, t)); }
-            }
-        }
-        return best;
-    }
-
-    /// <summary>Where a drag puts a vertex: as an object is moved, on another object under the cursor, else horizontally.</summary>
-    private (Vec3 To, Vec3? Snap) VertexTarget(ToolPointer p, PolylineEntity line, Vec3 from)
-    {
-        var cam = View.Camera;
-        var snap = View.SnapForDrag(p.X, p.Y, new[] { line.Id });
-        return (snap ?? from + (cam.ToWorld(p.X, p.Y, from.Z) - cam.ToWorld(_down!.X, _down.Y, from.Z)).WithZ(0), snap);
     }
 
     /// <summary>Selecting something on the plan shows its properties in the right panel.</summary>
@@ -276,62 +160,20 @@ public sealed class SelectTool : Tool
         if (Vm.HasSelection) Vm.Window.ShowPropertiesTab();
     }
 
-    /// <summary>
-    /// Move of a drag: horizontal, or with Shift held vertical (<see cref="VerticalDelta"/>). The grabbed object is held by its handle — a hole by its collar, anything else by the
-    /// vertex nearest to the press — and the cursor is read on the horizontal plane through that handle, so in 3D the
-    /// handle stays under the cursor whatever the elevation.
-    /// </summary>
-    private (Vec3 Delta, Vec3 Handle, Vec3? Snap) MoveDelta(ToolPointer p)
-    {
-        var down = _down!;
-        var cam = View.Camera;
-        var handle = _row != null ? down.World : down.Hit switch
-        {
-            Hole h => h.Collar,
-            { } e => e.GetVertices().DefaultIfEmpty(down.World).MinBy(v =>
-            {
-                var (x, y) = cam.ToScreen(v);
-                return (x - down.X) * (x - down.X) + (y - down.Y) * (y - down.Y);
-            }),
-            _ => down.World
-        };
-        var vertical = p.Modifiers.HasFlag(KeyModifiers.Shift);
-        if (vertical != _way.Vertical) _way = (vertical, _shown ?? default, p);
-        if (vertical) return (_way.Base + VerticalDelta(p), handle, null);
-        // Snapping takes the object under the cursor other than the dragged ones, and puts the handle right on it, with
-        // its elevation, so that in 3D the handle stays under the cursor. Without a snap the move is horizontal, from
-        // where the way so far put the handle.
-        var snap = View.SnapForDrag(p.X, p.Y, Vm.Doc!.Selection);
-        var from = handle + _way.Base;
-        var target = snap ?? from + (cam.ToWorld(p.X, p.Y, from.Z) - cam.ToWorld(_way.From.X, _way.From.Y, from.Z)).WithZ(0);
-        return (target - handle, handle, snap);
-    }
-
-    /// <summary>
-    /// Shift drag: the selection goes up or down by the cursor's way up or down the screen. In a tilted view the vertical
-    /// is foreshortened, so the way is read along it; in the plan, where the vertical points at the viewer, a pixel up is
-    /// a pixel's worth of metres up.
-    /// </summary>
-    private Vec3 VerticalDelta(ToolPointer p)
-    {
-        var cam = View.Camera;
-        var upward = cam.IsPlan ? 1 : Math.Max(cam.Up.Z, 0.25);
-        return new Vec3(0, 0, (_way.From.Y - p.Y) / (cam.Scale * upward));
-    }
-
     public override bool KeyDown(Key key, KeyModifiers mods)
     {
         // Esc during a drag cancels it at once: the objects snap back and the release does nothing.
-        if (key == Key.Escape && _front.Active)
+        if (key == Key.Escape && Held is { } held)
         {
-            _front.Cancel();
+            held.Cancel();
             Preview.Clear();
             return true;
         }
         if (key == Key.Escape && _down != null)
         {
             _down = null;
-            _dragging = _moving = false;
+            _dragging = false;
+            foreach (var g in _shared) g.Cancel();
             Preview.Clear();
             return true;
         }
@@ -342,6 +184,8 @@ public sealed class SelectTool : Tool
 
     public override IEnumerable<MenuEntry> ContextMenu(ToolPointer p)
     {
+        foreach (var g in _gestures)
+            if (g.ContextMenu(p) is { } menu) return menu;
         // The menu follows the object under the cursor: right-clicking an unselected object selects it first.
         if (p.Hit != null && !Vm.Doc!.Selection.Contains(p.Hit.Id)) Vm.Doc.Select(new[] { p.Hit.Id });
         return Vm.ObjectContextMenu();

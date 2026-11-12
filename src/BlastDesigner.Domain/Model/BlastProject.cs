@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using BlastDesigner.Domain.Geometry;
 
 namespace BlastDesigner.Domain.Model;
 
@@ -19,6 +20,11 @@ public sealed class BlastProject
     public List<Layer> Layers { get; set; } = new();
     public List<Entity> Entities { get; set; } = new();
     public List<HoleRow> Rows { get; set; } = new();
+    /// <summary>
+    /// Patterns the pattern tool filled outlines with: each remembers its grid, so it can be turned or laid out again later
+    /// (<see cref="HolePattern"/>). Kept beside the entities, not as one: a program that does not know them reads the holes as before.
+    /// </summary>
+    public List<HolePattern> Patterns { get; set; } = new();
     public List<LoadingRule> LoadingRules { get; set; } = new();
     public BlastOutcomes Outcomes { get; set; } = new();
     public CostSchema Costs { get; set; } = new();
@@ -56,6 +62,7 @@ public sealed class BlastProject
     public Product? FindProduct(string? id) => id is null ? null : Products.FirstOrDefault(p => p.Id == id);
     public Layer? FindLayer(Guid id) => Layers.FirstOrDefault(l => l.Id == id);
     public Entity? FindEntity(Guid id) => Entities.FirstOrDefault(e => e.Id == id);
+    public HolePattern? FindPattern(Guid? id) => id is null ? null : Patterns.FirstOrDefault(p => p.Id == id);
 
     /// <summary>Returns the layer with the given name, creating it when missing.</summary>
     public Layer GetOrCreateLayer(string name, uint color = 0xFF000000, string group = "")
@@ -196,6 +203,71 @@ public sealed class HoleRow
     public List<Guid> HoleIds { get; set; } = new();
     public double Burden { get; set; }
     public double Spacing { get; set; }
+}
+
+/// <summary>
+/// The grid of a pattern drawn with the pattern tool. Node (i, j) lies at
+/// <c>Center + u·(PhaseU + i·Spacing + stagger) + v·(PhaseV + j·Burden)</c>, where v points against the blast movement
+/// (<see cref="Azimuth"/>), u along the rows, and odd rows of a staggered pattern are shifted by half a spacing; row j = 0 was
+/// the face row when the pattern was made. Its holes know their node (<see cref="Hole.GridI"/>, <see cref="Hole.GridJ"/>), so
+/// turning the grid moves each hole with its node and keeps everything else of it.
+/// </summary>
+public sealed class HolePattern
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = "Pattern 1";
+    /// <summary>The outline the pattern fills (a copy of its points).</summary>
+    public List<Vec3> Outline { get; set; } = new();
+    /// <summary>The polygon the outline was taken from, when there is one in the project.</summary>
+    public Guid? OutlineEntityId { get; set; }
+    /// <summary>Centre of the outline's area: the grid turns about it. Z is the collar level of new holes.</summary>
+    public Vec3 Center { get; set; }
+    /// <summary>Direction of the burden (the blast movement the rows were laid across), degrees clockwise from north.</summary>
+    public double Azimuth { get; set; }
+    /// <summary><see cref="Azimuth"/> when the pattern was made: the turn of the grid since is the difference.</summary>
+    public double InitialAzimuth { get; set; }
+    public double PhaseU { get; set; }
+    public double PhaseV { get; set; }
+    public double Burden { get; set; }
+    public double Spacing { get; set; }
+    public PatternType Type { get; set; }
+    public double EdgeOffset { get; set; }
+    public string LabelPrefix { get; set; } = string.Empty;
+    public int StartNumber { get; set; } = 1;
+    public double? ToLevel { get; set; }
+    public bool ToSurface { get; set; }
+    public PatternHoleDefaults HoleDefaults { get; set; } = new();
+    /// <summary>The row of each grid row j.</summary>
+    public Dictionary<int, Guid> RowIds { get; set; } = new();
+    /// <summary>Nodes whose hole was deleted by hand: laying the grid out again does not bring them back.</summary>
+    public List<GridIndex> Suppressed { get; set; } = new();
+    /// <summary>Turning the grid turns the blast orientation by as much.</summary>
+    public bool RotateOrientation { get; set; }
+    /// <summary>Laying the grid out again keeps the numbers of the holes; new holes take the next free ones.</summary>
+    public bool KeepLabels { get; set; }
+    /// <summary>Raised by every layout of the grid within a change, so what follows the change can tell it from a hand edit.</summary>
+    [JsonIgnore] public int Revision { get; set; }
+
+    public bool IsSuppressed(int i, int j) => Suppressed.Any(s => s.I == i && s.J == j);
+}
+
+/// <summary>What the new holes of a pattern are made with.</summary>
+public sealed class PatternHoleDefaults
+{
+    public double Diameter { get; set; } = 102;
+    public double Angle { get; set; }
+    public double Bearing { get; set; }
+    public double Subdrill { get; set; } = 1;
+    public double BenchHeight { get; set; } = 10;
+    public int HoleType { get; set; } = 1;
+    public bool Dummy { get; set; }
+}
+
+/// <summary>A node of a pattern grid.</summary>
+public sealed class GridIndex
+{
+    public int I { get; set; }
+    public int J { get; set; }
 }
 
 public sealed class Layer

@@ -298,7 +298,8 @@ public sealed class ChargeColumn : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key is not (Key.Up or Key.Down) || e.KeyModifiers.HasFlag(KeyModifiers.Alt)) return;
+        // a number field stepped by the arrows has them: the column stays
+        if (e.Handled || e.Key is not (Key.Up or Key.Down) || e.KeyModifiers.HasFlag(KeyModifiers.Alt)) return;
         var step = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? 0.1 : 1;
         double Next(double v) => e.Key == Key.Up ? ColumnEdit.StepUp(v, step) : ColumnEdit.StepDown(v, step);
         var (pd, pp) = ActivePrimer;

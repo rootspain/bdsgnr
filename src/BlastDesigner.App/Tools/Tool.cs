@@ -159,7 +159,7 @@ public abstract class Tool
     public virtual Vec3? ActionAnchor => null;
     public virtual IReadOnlyList<AnchorAction> AnchorActions => Array.Empty<AnchorAction>();
 
-    protected static SKColor PreviewColor => new(0xFF2563EB);
+    internal static SKColor PreviewColor => new(0xFF2563EB);
 }
 
 /// <summary>Collects clicked points; finishes on a count, double-click or Enter.</summary>

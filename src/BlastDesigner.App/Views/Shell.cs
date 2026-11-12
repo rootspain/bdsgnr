@@ -387,6 +387,8 @@ public sealed class CommandPalette : Border
         _popup.Child = new Border { Background = Look.Panel, BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(4), Child = _list };
         _box.GotFocus += (_, _) => { Index(); Filter(); };
         _box.TextChanged += (_, _) => Filter();
+        // ↑/↓ go through the list, also when a hole number is typed
+        _box.Classes.Add(NumberStep.TextClass);
         _box.KeyDown += OnKey;
         _list.DoubleTapped += (_, _) => Run();
     }
@@ -541,8 +543,12 @@ public sealed class ToolPanel : Border
                 combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) _vm.Change("Design data", p => p.Design.Pattern = (PatternType)combo.SelectedIndex); };
                 _fields.Children.Add(Labelled("Pattern", combo));
                 // what the pattern dialog used to ask after the outline was drawn
-                _fields.Children.Add(Field("Direction, °", _vm.Project.Header.BlastOrientation, v => _vm.Change("Blast orientation", p => p.Header.BlastOrientation = v), "patternDirection",
-                    string.Join("\n\n", DirectionTipParagraphs.Select(Loc.Ui))));
+                var direction = Field("Direction, °", _vm.Project.Header.BlastOrientation, v => _vm.Change("Blast orientation", p => p.Header.BlastOrientation = v), "patternDirection",
+                    string.Join("\n\n", DirectionTipParagraphs.Select(Loc.Ui)));
+                var withGrid = new CheckBox { Content = Loc.Ui("Orientation turns with the pattern"), IsChecked = _vm.PatternRotateOrientation, Name = "patternRotateOrientation", FontSize = 11, MinHeight = 0, Padding = new Thickness(4, 0, 0, 0) };
+                ToolTip.SetTip(withGrid, Loc.Ui("On: when the pattern is turned later, the blast orientation turns with it. Off: the orientation stays, and the face row is then the row furthest along it"));
+                withGrid.IsCheckedChanged += (_, _) => _vm.PatternRotateOrientationChoice = withGrid.IsChecked == true;
+                _fields.Children.Add(new StackPanel { Spacing = 2, Children = { direction, withGrid } });
                 _fields.Children.Add(Field("Edge offset, m", _vm.PatternEdgeOffset, v => _vm.PatternEdgeOffset = v, "patternOffset"));
                 _fields.Children.Add(TextField("Number prefix", _vm.PatternLabelPrefix, v => _vm.PatternLabelPrefix = v, "patternPrefix"));
                 _fields.Children.Add(Field("Start number", _vm.NextPatternNumber, v => _vm.PatternStartNumber = Math.Max(0, (int)Math.Round(v)), "patternStart"));
@@ -593,9 +599,36 @@ public sealed class ToolPanel : Border
             }
             _fields.Children.Add(Labelled("Shape", shapes));
         }
+        if (tool is PatternRotateTool rotate) RotateFields(rotate);
         if (tool.Name is "Set" or "Row set")
             _fields.Children.Add(Field("Step, ms", _vm.Project.Electronic.HoleIntervalMs, v => _vm.Change("Electronic settings", p => p.Electronic.HoleIntervalMs = v)));
         _fieldsScroll.IsVisible = _fields.Children.Count > 0;
+    }
+
+    /// <summary>Panel of the rotate tool: a turn typed in or by a quarter, along a line, and how the pattern follows.</summary>
+    private void RotateFields(PatternRotateTool tool)
+    {
+        _fields.Children.Add(Field("Turn, °", 0, v => tool.Apply(v), "rotateAngle", Loc.Ui("Clockwise; Enter turns by it")));
+        foreach (var (text, turn) in new[] { ("−90°", -90.0), ("+90°", 90.0) })
+        {
+            var t = turn;
+            _fields.Children.Add(Labelled(" ", Ui.Chip(text, () => tool.Apply(t), false, Loc.Ui("Turn by a quarter"))));
+        }
+        var pat = tool.Pattern;
+        if (pat == null) return;
+        _fields.Children.Add(Labelled(" ", Ui.Chip(Loc.Ui("Along a line"), () => tool.ByLine = !tool.ByLine, tool.ByLine, Loc.Ui("Click a segment of a line: the rows of the pattern run along it"))));
+        var id = pat.Id;
+        var orientation = new CheckBox { Content = Loc.Ui("Orientation turns with the pattern"), IsChecked = pat.RotateOrientation, Name = "rotateOrientation", VerticalAlignment = VerticalAlignment.Center };
+        orientation.IsCheckedChanged += (_, _) => { var on = orientation.IsChecked == true; if (on != pat.RotateOrientation) _vm.SetPatternFlag(id, "Pattern settings", x => x.RotateOrientation = on); };
+        _fields.Children.Add(orientation);
+        var labels = new CheckBox { Content = Loc.Ui("Keep the numbers"), IsChecked = pat.KeepLabels, Name = "rotateKeepLabels", VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(labels, Loc.Ui("On: the holes keep their numbers and new holes take the next free ones. Off: the holes are numbered again by the rows"));
+        labels.IsCheckedChanged += (_, _) => { var on = labels.IsChecked == true; if (on != pat.KeepLabels) _vm.SetPatternFlag(id, "Pattern settings", x => x.KeepLabels = on); };
+        _fields.Children.Add(labels);
+        var modes = new[] { "Turn with the pattern", "Keep", "Along the blast orientation" };
+        var bearing = new ComboBox { ItemsSource = modes.Select(Loc.Ui).ToList(), SelectedIndex = (int)_vm.PatternBearing, Width = 170, Height = 26, Name = "rotateBearing" };
+        bearing.SelectionChanged += (_, _) => { if (bearing.SelectedIndex >= 0) _vm.PatternBearing = (Engine.PatternBearingMode)bearing.SelectedIndex; };
+        _fields.Children.Add(Labelled("Hole bearing", bearing));
     }
 
     private static Control Labelled(string label, Control c) =>

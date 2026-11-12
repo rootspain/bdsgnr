@@ -257,7 +257,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public SceneOptions BuildSceneOptions()
     {
-        var overlays = new List<IOverlay>(AnalysisOverlays) { Highlight };
+        var overlays = new List<IOverlay>(AnalysisOverlays) { Highlight, PatternGrid };
         return new SceneOptions
         {
             Selection = Doc?.Selection ?? new HashSet<Guid>(),

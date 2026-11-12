@@ -172,6 +172,8 @@ public sealed class StartupForm : DockPanel
             VerticalContentAlignment = VerticalAlignment.Center,
             InnerLeftContent = new Border { Padding = new Thickness(8, 0, 0, 0), Child = Look.Icon("search", 14, Look.Faint) }
         };
+        // ↑/↓ go through the list, also when digits are typed
+        _search.Classes.Add(NumberStep.TextClass);
         _search.TextChanged += (_, _) => { _selected = 0; Rebuild(); };
         var head = new DockPanel
         {

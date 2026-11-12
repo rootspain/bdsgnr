@@ -20,6 +20,8 @@ public partial class App : Application
         var settings = ProgramSettings.Load();
         Loc.Language = settings.Language;
         Look.ApplyTheme(settings.IsLight, settings.AccentColor);
+        // ↑/↓ add or take away 1 in every number field
+        NumberStep.Attach();
         // Esc closes every dialog and tool window as Cancel; the main window keeps it for the tools. What uses Esc itself
         // (an open dropdown, a search box, a window's own Esc handling) marks it handled first, and this handler skips it.
         InputElement.KeyDownEvent.AddClassHandler<Window>((w, e) =>

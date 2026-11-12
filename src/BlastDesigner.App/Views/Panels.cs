@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -170,7 +171,49 @@ public sealed class PropertiesPanel : DockPanel
         vm.SelectionRefreshed += Refresh;
     }
 
+    /// <summary>
+    /// Builds the panel for the selection. A field that had the focus has it again in the panel built anew (Enter in a field
+    /// takes its value and the panel follows the change): the arrows go on stepping it instead of moving the selection.
+    /// </summary>
     public void Refresh()
+    {
+        // a change made while the panel is built (a box taken away loses its focus and takes its text) builds it again after
+        // this build, once, not inside it
+        if (_building) { _again = true; return; }
+        _building = true;
+        try
+        {
+            // a few times at most: a field that took its text on every build must not hang the program
+            var builds = 0;
+            do
+            {
+                _again = false;
+                RefreshOnce();
+            } while (_again && ++builds < 3);
+        }
+        finally { _building = false; }
+    }
+
+    private bool _building, _again;
+
+    private void RefreshOnce()
+    {
+        var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox { Name: { Length: > 0 } name } box
+            && box.GetLogicalAncestors().Contains(this) ? name : null;
+        Build();
+        if (focused == null) return;
+        if (this.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(b => b.Name == focused && b.IsEffectivelyVisible && b.IsEnabled) is not { } again) return;
+        void Take()
+        {
+            again.Focus();
+            again.CaretIndex = again.Text?.Length ?? 0;
+        }
+        // a box just made may be laid out only on the next pass
+        if (!again.Focus()) Avalonia.Threading.Dispatcher.UIThread.Post(Take, Avalonia.Threading.DispatcherPriority.Loaded);
+        else Take();
+    }
+
+    private void Build()
     {
         if (!IsVisible) return;
         _header.IsVisible = true;
@@ -198,8 +241,8 @@ public sealed class PropertiesPanel : DockPanel
         _header.Text = sel.Count == 1 ? Loc.T(first.KindName) : $"{Loc.T(first.KindName)} × {sel.Count}";
         var template = first.EditCopy();
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
-        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir" }, ReadOnly = doc.IsReadOnly };
-        _vm.AddProductChoices(grid);
+        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset" }, ReadOnly = doc.IsReadOnly };
+        _vm.AddProductChoices(grid, first is TieEntity ? sel.OfType<TieEntity>().ToList() : null);
         if (first is Hole)
         {
             // the detonator id of a hole is its serial number, not a product
@@ -263,6 +306,7 @@ public sealed class PropertiesPanel : DockPanel
                 Margin = new Thickness(14, 12, 14, 14),
                 Children = { HoleHead(hole, sel.Count), edit, sel.Count == 1 ? HoleCharge(doc.Project, hole) : HolesCharge(doc.Project, sel.OfType<Hole>().ToList()), LayerRow(doc, sel, stacked: true), grid, HoleCalculations(doc.Project, sel.OfType<Hole>().ToList()) }
             };
+            if (PatternSection(doc, sel.OfType<Hole>().ToList()) is { } pattern) ((StackPanel)_content.Content).Children.Insert(4, pattern);
             return;
         }
         var panel = new StackPanel { Children = { LayerRow(doc, sel) } };
@@ -330,6 +374,82 @@ public sealed class PropertiesPanel : DockPanel
         Grid.SetColumn(combo, 1);
         // the columns and margin of the property grid under it, so the row lines up with its fields
         return new Grid { ColumnDefinitions = new ColumnDefinitions("2*,3*"), Margin = new Thickness(4, 4, 4, 0), Children = { label, combo } };
+    }
+
+    /// <summary>
+    /// Group «Pattern» of holes of one pattern grid: its name, burden and spacing, the direction of its burden (typed in, it
+    /// turns the grid), the turn since it was made, the offset of a hole moved off its node and whether the blast orientation
+    /// turns with it.
+    /// </summary>
+    private Control? PatternSection(Document doc, List<Hole> holes)
+    {
+        var ids = holes.Select(h => h.PatternId).Distinct().ToList();
+        if (ids.Count != 1 || doc.Project.FindPattern(ids[0]) is not { } pat) return null;
+        const string key = "Pattern";
+        var body = new StackPanel { Spacing = 6, IsVisible = !_collapsed.Contains(key), Name = "holePattern" };
+        var chevron = new TextBlock { Text = body.IsVisible ? "▾" : "▸", Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
+        var head = new Button
+        {
+            Background = Brushes.Transparent, BorderThickness = new Thickness(0), Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Stretch, Name = "holePatternHead",
+            Content = Ui.Row(6, chevron, new TextBlock { Text = Loc.Ui("Pattern").ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue })
+        };
+        head.Click += (_, _) =>
+        {
+            body.IsVisible = !body.IsVisible;
+            chevron.Text = body.IsVisible ? "▾" : "▸";
+            if (body.IsVisible) _collapsed.Remove(key); else _collapsed.Add(key);
+        };
+        var id = pat.Id;
+        var c = CultureInfo.CurrentCulture;
+        Control Row(string label, Control value)
+        {
+            var row = new DockPanel();
+            value[DockPanel.DockProperty] = Dock.Right;
+            row.Children.Add(value);
+            row.Children.Add(new TextBlock { Text = Loc.Ui(label), FontSize = 12, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center });
+            return row;
+        }
+        TextBlock Value(string text) => new() { Text = text, FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center };
+        TextBox Box(string text, string name, Action<string> commit)
+        {
+            var box = new TextBox { Text = text, Width = 120, Height = 26, MinHeight = 26, Padding = new Thickness(6, 2), FontSize = 12, Name = name, IsEnabled = !doc.IsReadOnly };
+            void Commit() { if ((box.Text ?? "") != text) commit(box.Text ?? ""); }
+            box.LostFocus += (_, _) => Commit();
+            box.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { Commit(); e.Handled = true; } };
+            return box;
+        }
+        body.Children.Add(Row("Name", Box(pat.Name, "patternName", v => { if (v.Trim().Length > 0) _vm.SetPatternFlag(id, "Rename pattern", x => x.Name = v.Trim()); })));
+        // burden and spacing typed in lay the grid out again; refused or declined, the panel shows the old values
+        double? Metres(string v) => double.TryParse(v.Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var m) ? m : null;
+        async void Resize(double burden, double spacing)
+        {
+            if (!await _vm.ResizePattern(id, burden, spacing)) Refresh();
+        }
+        var burdenBox = Box(pat.Burden.ToString("0.###", c), "patternBurden", v => { if (Metres(v) is double b) Resize(b, pat.Spacing); else Refresh(); });
+        var spacingBox = Box(pat.Spacing.ToString("0.###", c), "patternSpacing", v => { if (Metres(v) is double s) Resize(pat.Burden, s); else Refresh(); });
+        burdenBox.Width = spacingBox.Width = 52;
+        ToolTip.SetTip(burdenBox, Loc.Ui("Burden, m: the distance between the rows; a new value lays the grid out again"));
+        ToolTip.SetTip(spacingBox, Loc.Ui("Spacing, m: the distance between the holes of a row; a new value lays the grid out again"));
+        TextBlock Faint(string text) => new() { Text = text, FontSize = 12, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
+        body.Children.Add(Row("Burden × spacing", Ui.Row(4, burdenBox, Faint("×"), spacingBox, Faint(Loc.Ui("m")))));
+        var azimuth = Box(pat.Azimuth.ToString("0.#", c), "patternAzimuth", v =>
+        {
+            if (double.TryParse(v, NumberStyles.Float, c, out var a)) _ = _vm.RotatePattern(id, MainViewModel.Turn(pat.Azimuth, a));
+        });
+        ToolTip.SetTip(azimuth, Loc.Ui("Direction of the burden, degrees from north; a new value turns the grid about its centre"));
+        body.Children.Add(Row("Burden azimuth, °", azimuth));
+        body.Children.Add(Row("Turned since made", Value(MainViewModel.Turn(pat.InitialAzimuth, pat.Azimuth).ToString("+0.#;−0.#;0", c) + "°")));
+        if (holes.Count == 1 && holes[0].GridOffset is Vec3 o)
+            body.Children.Add(Row("Off its node", Value($"{o.X.ToString("0.##", c)} / {o.Y.ToString("0.##", c)} {Loc.Ui("m")}")));
+        var turns = new CheckBox { Content = Loc.Ui("Orientation turns with the pattern"), IsChecked = pat.RotateOrientation, Name = "patternRotateOrientationProp", IsEnabled = !doc.IsReadOnly };
+        turns.IsCheckedChanged += (_, _) => { var on = turns.IsChecked == true; if (on != pat.RotateOrientation) _vm.SetPatternFlag(id, "Pattern settings", x => x.RotateOrientation = on); };
+        body.Children.Add(turns);
+        var select = new Button { Content = Loc.T("Select pattern"), Height = 28, Name = "selectPattern" };
+        select.Click += (_, _) => _vm.SelectPatternHoles();
+        var rotate = new Button { Content = Loc.T("Rotate pattern with the mouse"), Height = 28, Name = "rotatePattern", IsEnabled = !doc.IsReadOnly };
+        rotate.Click += (_, _) => _vm.PatternRotateTool();
+        body.Children.Add(Ui.Row(6, select, rotate));
+        return new StackPanel { Spacing = 8, Children = { head, body } };
     }
 
     /// <summary>What is selected: the kind on the left, the number of the hole or how many on the right.</summary>

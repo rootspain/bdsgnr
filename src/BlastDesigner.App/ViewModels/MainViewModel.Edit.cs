@@ -271,7 +271,6 @@ public sealed partial class MainViewModel
                 {
                     h.Decks = h.Id == templateId ? decks.Select(d => d.Clone()).ToList() : Charging.AdaptColumn(p, decks, edit.DecksLength, h.EffectiveLength);
                     h.ManualLoading = true;
-                    if (!edit.StateChanged && h.Decks.Count > 0 && h.State < HoleState.Loaded) h.State = HoleState.Loaded;
                 }
                 else if (edit.LengthChanged && !h.ManualLoading && h.Decks.Count > 0)
                     Charging.ApplyRules(p, new[] { h });
@@ -279,14 +278,24 @@ public sealed partial class MainViewModel
         });
     }
 
-    public void AddProductChoices(PropertyGrid grid)
+    /// <summary>
+    /// Products offered by the lists of a property grid. With <paramref name="ties"/> (the grid of ties) the product is one
+    /// that goes on a tie (<see cref="Product.IsTieProduct"/>); what a tie has now stays in the list whatever it is, so it
+    /// shows and can be kept.
+    /// </summary>
+    public void AddProductChoices(PropertyGrid grid, IEnumerable<TieEntity>? ties = null)
     {
         if (Project == null) return;
         // a deleted product is offered no more, but what uses it goes on showing it
         var used = Project.Products.Any(p => p.Deleted) ? ProductCatalogue.UsedProducts(Project) : new HashSet<string>();
         List<(string, string)> Of(Func<Product, bool> pick) => Project.Products.Where(p => pick(p) && (!p.Deleted || used.Contains(p.Id)))
             .Select(p => (p.Id, p.Deleted ? $"{p.Name} ({Loc.Ui("deleted")})" : p.Name)).ToList();
-        grid.Choices["ProductId"] = Of(_ => true);
+        if (ties != null)
+        {
+            var now = ties.Select(t => t.ProductId).OfType<string>().ToHashSet();
+            grid.Choices["ProductId"] = Of(p => p.IsTieProduct || now.Contains(p.Id));
+        }
+        else grid.Choices["ProductId"] = Of(_ => true);
         grid.Choices["StemmingProductId"] = Of(p => p.Kind == ProductKind.Stemming);
         grid.Choices["BoosterId"] = Of(p => p.Kind == ProductKind.Booster);
         grid.Choices["DetonatorId"] = Of(p => p.IsDetonator);
@@ -357,6 +366,9 @@ public sealed partial class MainViewModel
         // a copy: the window keeps editing its own after Apply, and Cancel must not leave those edits here
         s.SurfaceColors = new Dictionary<string, uint>(edited.SurfaceColors);
         s.SelectionColor = edited.SelectionColor;
+        s.PatternArrowColor = edited.PatternArrowColor;
+        s.PatternTurnColor = edited.PatternTurnColor;
+        s.PatternTurnRefusedColor = edited.PatternTurnRefusedColor;
         s.CollarSizePixels = edited.CollarSizePixels;
         s.ShowCoordinatesBox = edited.ShowCoordinatesBox;
         s.UsageLogging = edited.UsageLogging;

@@ -104,6 +104,15 @@ public sealed class ProgramSettings
     public string LastTemplate { get; set; } = string.Empty;
     public uint BackgroundColor { get; set; } = DarkBackground;
     public uint SelectionColor { get; set; } = 0xFF4C9BFF;
+    /// <summary>Fill of the circle that turns a pattern (Select tool) when the grid can be turned.</summary>
+    public uint PatternTurnColor { get; set; } = DefaultPatternTurn;
+    /// <summary>Fill of the circle of a pattern that cannot be turned (its holes drilled, locked and so on).</summary>
+    public uint PatternTurnRefusedColor { get; set; } = DefaultPatternTurnRefused;
+    /// <summary>The burden arrow of a selected pattern, from its centre to the circle.</summary>
+    public uint PatternArrowColor { get; set; } = DefaultPatternArrow;
+    public const uint DefaultPatternArrow = 0xFFFACC15;
+    public const uint DefaultPatternTurn = 0xFF16A34A;
+    public const uint DefaultPatternTurnRefused = 0xFFDC2626;
     /// <summary>Version of the defaults the file was written with; older files are upgraded on load.</summary>
     public int SettingsVersion { get; set; }
     public const int CurrentVersion = 3;

@@ -302,7 +302,7 @@ public sealed partial class MainViewModel
         {
             "holes" => new[]
             {
-                props, Item("Select like", SelectLike), Item("Select exact", SelectExact), Item("Invert selection", InvertSelection), Separator,
+                props, Item("Select like", SelectLike), Item("Select exact", SelectExact), Item("Select pattern", SelectPatternHoles, () => SelectedPattern != null), Item("Invert selection", InvertSelection), Separator,
                 Item("Apply loading rules", Run(ApplyLoadingRules), W), Item("Add/Subtract time from holes…", Run(AddSubtractTime), W), Item("Selected holes to dummy holes", () => ConvertDummy(true), W), Separator,
                 Sub("Loading", Item("Edit loading…", Run(() => EditHoleLoading()), W), Item("Empty", Run(EmptyHoles), W), Item("Join like decks", Run(JoinLikeDecks), W),
                     Item("Set loading factor…", Run(SetLoadingFactor), W), Item("Apply initiation rules only", Run(ApplyInitiationRules), W), Item("Release for loading", () => SetHoleState(HoleState.Released), W)),
@@ -312,6 +312,9 @@ public sealed partial class MainViewModel
                     Item("Detach holes from rows", DetachHolesFromRows, W), Item("Set material type from strata", Run(MaterialFromStrata), W)),
                 Sub("Tracks and points", Item("Create points at collar", () => CreatePointsAt("collar"), W), Item("Create points at grade", () => CreatePointsAt("grade"), W),
                     Item("Create points at toe", () => CreatePointsAt("toe"), W), Item("Create polyline of bore track", CreateBoreTrackPolylines, W), Item("Reset design tracks", Run(ResetDesignTracks), W)),
+                Sub("Pattern grid", Item("Rotate pattern with the mouse", PatternRotateTool, W),
+                    Item("Rotate pattern…", Run(RotatePatternDialog), () => W() && SelectedPattern != null), Item("Rebuild pattern", Run(RebuildSelectedPattern), () => W() && SelectedPattern != null),
+                    Item("Detach from pattern", Run(DetachSelectedFromPattern), () => W() && SelectedPattern != null)),
                 Separator, Item("Show only selected", ShowOnlySelected)
             }.Concat(edit),
             "polyline" => new[]

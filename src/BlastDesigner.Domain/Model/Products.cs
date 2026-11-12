@@ -81,6 +81,8 @@ public sealed class Product
     public bool IsExplosive => Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive;
     public bool IsColumnProduct => Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive or ProductKind.Stemming or ProductKind.GasBag;
     public bool IsDetonator => Kind is ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.ElectricDetonator;
+    /// <summary>Goes on a tie: a surface connector (non-electric), detonating cord, a relay on cord or harness wire.</summary>
+    public bool IsTieProduct => Kind is ProductKind.SurfaceConnector or ProductKind.DetonatingCord or ProductKind.CordRelay or ProductKind.HarnessWire;
 
     public override string ToString() => Name;
 

@@ -202,7 +202,7 @@ public sealed partial class MainViewModel
     {
         var poly = Doc?.SelectedEntities.OfType<PolylineEntity>().FirstOrDefault(p => p.Closed);
         if (poly == null) { await Dialogs.Info(Loc.T("Select a closed polygon first.")); return; }
-        await FillPolygon(poly.Points, true);
+        await FillPolygon(poly.Points, true, poly.Id);
     }
 
     /// <summary>Pattern tool panel: fields kept for the session (the project has no place for them).</summary>
@@ -220,16 +220,23 @@ public sealed partial class MainViewModel
     /// Fills a polygon with the pattern. The pattern tool takes its values from its panel; filling a selected polygon,
     /// which has no panel, asks for them.
     /// </summary>
-    private async Task FillPolygon(IReadOnlyList<Vec3> polygon, bool ask)
+    private async Task FillPolygon(IReadOnlyList<Vec3> polygon, bool ask, Guid? outlineId = null)
     {
         var d = Project!.Design;
         var pp = new PatternParameters
         {
             Burden = d.Burden, Spacing = d.Spacing, Pattern = d.Pattern, Orientation = Project.Header.BlastOrientation,
-            EdgeOffset = PatternEdgeOffset, LabelPrefix = PatternLabelPrefix, StartNumber = NextPatternNumber
+            EdgeOffset = PatternEdgeOffset, LabelPrefix = PatternLabelPrefix, StartNumber = NextPatternNumber, RotateOrientation = PatternRotateOrientation
         };
-        if (ask && await Dialogs.EditObject("Pattern properties", pp) is not { } edited) return;
-        if (ask) { PatternEdgeOffset = pp.EdgeOffset; PatternLabelPrefix = pp.LabelPrefix; }
+        if (ask)
+        {
+            // the dialog edits a copy: the values it gives are the ones the pattern is made with
+            if (await Dialogs.EditObject("Pattern properties", pp) is not { } edited) return;
+            pp = edited;
+            PatternEdgeOffset = pp.EdgeOffset;
+            PatternLabelPrefix = pp.LabelPrefix;
+            PatternRotateOrientationChoice = pp.RotateOrientation;
+        }
         var hp = NewHoleParameters();
         int count = 0, unlevelled = 0;
         var made = new List<Guid>();
@@ -238,7 +245,7 @@ public sealed partial class MainViewModel
         var toLevel = ask ? null : PatternToLevel;
         Change("Pattern", p =>
         {
-            var holes = HoleDesign.FillPolygon(polygon, pp, hp, out var rows);
+            var holes = HoleDesign.FillPolygon(polygon, pp, hp, out var rows, out var pattern);
             foreach (var h in holes) p.Add(h, HoleLayer);
             if (toSurface || toLevel != null)
                 foreach (var h in holes)
@@ -255,7 +262,16 @@ public sealed partial class MainViewModel
             p.Design.Pattern = pp.Pattern;
             p.Header.BlastOrientation = pp.Orientation;
             if (!p.Entities.OfType<PolylineEntity>().Any(x => x.Kind == LineKind.Boundary))
-                p.Add(new PolylineEntity { Points = polygon.ToList(), Closed = true, Kind = LineKind.Boundary }, p.GetOrCreateLayer(StandardLayers.Boundary, 0xFF16A34A, "Design"));
+                outlineId ??= p.Add(new PolylineEntity { Points = polygon.ToList(), Closed = true, Kind = LineKind.Boundary }, p.GetOrCreateLayer(StandardLayers.Boundary, 0xFF16A34A, "Design")).Id;
+            // the grid is kept, so the pattern can be turned or laid out again later
+            if (holes.Count > 0)
+            {
+                pattern.Name = Loc.F("Pattern {0}", p.Patterns.Count + 1);
+                pattern.OutlineEntityId = outlineId;
+                pattern.ToLevel = toLevel;
+                pattern.ToSurface = toSurface;
+                p.Patterns.Add(pattern);
+            }
             count = holes.Count;
             made = holes.Select(h => h.Id).ToList();
         });
@@ -620,7 +636,6 @@ public sealed partial class MainViewModel
             {
                 h.Decks = h.Id == template.Id ? decks.Select(d => d.Clone()).ToList() : Charging.AdaptColumn(p, decks, template.EffectiveLength, h.EffectiveLength);
                 h.ManualLoading = true;
-                if (h.Decks.Count > 0 && h.State < HoleState.Loaded) h.State = HoleState.Loaded;
             }
         });
         if (targets.Count > 1) SetStatus(Loc.F("Loading applied to {0} holes", targets.Count));

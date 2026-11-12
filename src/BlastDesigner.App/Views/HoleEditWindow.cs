@@ -315,6 +315,8 @@ public sealed class HoleEditForm : DockPanel
         var mixed = Mixed(get);
         var box = Box(null, mono: false);
         box.Name = key;
+        // text even when it is digits (a hole number): the arrows do not step it
+        box.Classes.Add(NumberStep.TextClass);
         box.Text = mixed ? "" : get(_draft);
         box.Watermark = mixed ? MixedText : null;
         if (multiline)

@@ -8,7 +8,7 @@ namespace BlastDesigner.Engine;
 internal static class EngineModule
 {
     /// <summary>
-    /// Every change of a document is followed by the lengths of the holes drilled to a level (<see cref="HoleLevel.Follow"/>),
+    /// Every change of a document is followed by the pattern grids of its holes (<see cref="HoleDesign.FollowPatterns"/>), the lengths of the holes drilled to a level (<see cref="HoleLevel.Follow"/>),
     /// the columns of the holes whose length changed (<see cref="Charging.FollowLength"/>), then by the timing lines of its
     /// holes (<see cref="EbsTimingLine.Follow"/>), which time the holes at their new depth.
     /// </summary>
@@ -17,6 +17,7 @@ internal static class EngineModule
 #pragma warning restore CA2255
     internal static void Init()
     {
+        Document.Followers.Add(HoleDesign.FollowPatterns);
         Document.Followers.Add(HoleLevel.Follow);
         Document.Followers.Add(Charging.FollowLength);
         Document.Followers.Add(EbsTimingLine.Follow);

@@ -75,6 +75,13 @@ public sealed class Hole : Entity
     /// <summary>Identifier of the logged electronic detonator.</summary>
     public string DetonatorId { get; set; } = string.Empty;
     public Guid? RowId { get; set; }
+    /// <summary>The pattern grid the hole was laid out on (<see cref="HolePattern"/>); null for a hole of its own.</summary>
+    public Guid? PatternId { get; set; }
+    /// <summary>Node of the hole in its pattern grid: along the row and row number.</summary>
+    public int? GridI { get; set; }
+    public int? GridJ { get; set; }
+    /// <summary>Where the hole was moved by hand off its node, in the grid's axes: X along the row, Y against the blast.</summary>
+    public Vec3? GridOffset { get; set; }
     /// <summary>Horizon (timing deck level) for multi-horizon timing.</summary>
     public int Horizon { get; set; }
     public bool Locked { get; set; }
@@ -138,6 +145,14 @@ public sealed class Hole : Entity
     }
 
     public override double PickDistance(Vec3 p) => Math.Max(0, Vec3.Distance2D(Collar, p) - RadiusM);
+
+    /// <summary>Makes the hole one of its own: no longer on a pattern grid.</summary>
+    public void DetachFromPattern()
+    {
+        PatternId = null;
+        GridI = GridJ = null;
+        GridOffset = null;
+    }
 
     /// <summary>Re-derives angle, bearing and length from a target toe point.</summary>
     public void SetToe(Vec3 toe)

@@ -17,7 +17,7 @@ namespace BlastDesigner.App.Tools;
 /// moves its end. The front is changed, and its holes reprogrammed, in one undo step when the button is released; Esc drops
 /// the drag.
 /// </summary>
-public sealed class FrontLineHandles
+public sealed class FrontLineHandles : ISelectGesture
 {
     /// <summary>Screen distance a press has to travel before it is a drag, px.</summary>
     private const double DragPx = 4;
@@ -37,6 +37,7 @@ public sealed class FrontLineHandles
     }
 
     public FrontLineHandlesOverlay Overlay { get; }
+    IOverlay? ISelectGesture.Overlay => Overlay;
 
     /// <summary>A circle was pressed and its drag is not over yet.</summary>
     public bool Active => _drag != null;
@@ -60,7 +61,7 @@ public sealed class FrontLineHandles
     public void Hover(ToolPointer p) => Overlay.Hot = HandleAt(p.X, p.Y) is { } hit ? (hit.Line.Id, hit.Handle) : null;
 
     /// <summary>Takes a press on a circle; false when there is none at the point (the tool goes on as usual).</summary>
-    public bool Press(ToolPointer p)
+    public bool TryPress(ToolPointer p)
     {
         if (!p.Left || p.Modifiers.HasFlag(KeyModifiers.Control) || HandleAt(p.X, p.Y) is not { } hit) return false;
         _drag = hit;
@@ -113,7 +114,7 @@ public sealed class FrontLineHandles
     }
 
     /// <summary>Applies the drag (with undo, reprogramming the front's holes); a press without a drag changes nothing.</summary>
-    public void Release()
+    public void Release(ToolPointer p)
     {
         if (_drag is not { } drag) return;
         var (line, handle) = drag;
@@ -202,7 +203,7 @@ public sealed class FrontLineTool : Tool
     public override void PointerPressed(ToolPointer p)
     {
         if (!p.Left) return;
-        if (_handles.Press(p)) return;
+        if (_handles.TryPress(p)) return;
         if (p.Hit is TimingLineEntity hit && Vm.Doc!.Selection.Contains(hit.Id) && Vm.Project!.FindLayer(hit.LayerId) is not { Locked: true })
         {
             _moveDown = p;
@@ -235,7 +236,7 @@ public sealed class FrontLineTool : Tool
 
     public override void PointerReleased(ToolPointer p)
     {
-        if (_handles.Active) { _handles.Release(); Preview.Clear(); return; }
+        if (_handles.Active) { _handles.Release(p); Preview.Clear(); return; }
         if (_moveDown != null)
         {
             var delta = _moving ? _moveShown : null;

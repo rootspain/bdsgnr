@@ -12,6 +12,7 @@ public sealed partial class MainViewModel
     private bool P() => HasProject;
     private bool S() => HasSelection;
     private bool W() => HasProject && Doc?.IsReadOnly == false;
+    private bool HasPattern() => SelectedPattern != null;
 
     private static Action Run(Func<Task> f) => () => _ = RunSafe(f);
 
@@ -202,6 +203,11 @@ public sealed partial class MainViewModel
                 Item("Add at points", Run(AddHolesAtPoints), P),
                 Item("Add along selected polyline…", Run(AddHolesAlongPolyline), P),
                 Item("Fill selected polygon…", Run(FillSelectedPolygon), P),
+                Item("Rotate pattern…", Run(RotatePatternDialog), HasPattern),
+                Item("Rotate pattern with the mouse", PatternRotateTool, S),
+                Item("Rebuild pattern", Run(RebuildSelectedPattern), HasPattern),
+                Item("Detach from pattern", Run(DetachSelectedFromPattern), HasPattern),
+                Item("Dissolve pattern", Run(DissolveSelectedPattern), HasPattern),
                 Item("Move to selected points…", Run(MoveHolesToPoints), P),
                 Item("Create points at collar", () => CreatePointsAt("collar"), S),
                 Item("Create points at grade", () => CreatePointsAt("grade"), S),

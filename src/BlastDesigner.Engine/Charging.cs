@@ -261,13 +261,13 @@ public static class Charging
         return rule;
     }
 
+    /// <summary>Takes the column out of the holes; their state stays as it is, it is set by hand.</summary>
     public static void Empty(IEnumerable<Hole> holes)
     {
         foreach (var h in holes)
         {
             h.Decks.Clear();
             h.ManualLoading = false;
-            if (h.State == HoleState.Loaded) h.State = HoleState.Released;
         }
     }
 

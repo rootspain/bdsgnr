@@ -373,6 +373,8 @@ public sealed class PropertyGrid : Grid
         if (type == typeof(string) && !Choices.ContainsKey(p.Name))
         {
             var tb = new TextBox { Text = mixed ? "" : (string?)value ?? "", Watermark = mixed ? MixedText : null, AcceptsReturn = p.Name is "Description" or "Comment" or "Comments" or "Notes", TextWrapping = TextWrapping.Wrap };
+            // text even when it is digits (a hole number): the arrows do not step it
+            tb.Classes.Add(NumberStep.TextClass);
             tb.LostFocus += (_, _) =>
             {
                 if (mixed && string.IsNullOrEmpty(tb.Text) && !Changed.Contains(p.Name)) return;
@@ -384,8 +386,9 @@ public sealed class PropertyGrid : Grid
         {
             var isInt = (under ?? type) == typeof(int);
             var tb = new TextBox { Text = mixed ? "" : Format(value), Watermark = mixed ? MixedText : under != null ? "—" : null };
-            // the text taken: an edit can take the box away, which also takes its focus, and that is not a second edit
-            string? taken = null;
+            // the text taken, at first the one shown: a box left unchanged takes nothing (its number may be rounded), and an
+            // edit can take the box away, which also takes its focus, and that is not a second edit
+            string? taken = tb.Text;
             bool Commit()
             {
                 if (tb.Text == taken) return false;
@@ -501,9 +504,15 @@ public sealed class PropertyGrid : Grid
             var v = (Vec3)value!;
             // with several objects each axis is mixed on its own: an empty one keeps every object's value, a typed one is applied
             var axisMixed = mixed ? MixedAxes.GetValueOrDefault(p.Name) ?? new[] { true, true, true } : new bool[3];
-            var boxes = new[] { v.X, v.Y, v.Z }.Select((c, i) => new TextBox { Text = axisMixed[i] ? "" : c.ToString("0.###", CultureInfo.InvariantCulture), Watermark = axisMixed[i] ? MixedText : null, MinWidth = 60 }).ToArray();
+            // named by the axis, so the panel built anew after an edit puts the focus back in the same box
+            var boxes = new[] { v.X, v.Y, v.Z }.Select((c, i) => new TextBox { Text = axisMixed[i] ? "" : c.ToString("0.###", CultureInfo.InvariantCulture), Watermark = axisMixed[i] ? MixedText : null, MinWidth = 60, Name = $"prop{p.Name}{"XYZ"[i]}" }).ToArray();
+            // the texts shown (or last taken): an axis whose text was not changed keeps its exact value, not the rounded one
+            // shown, and with no axis changed nothing is taken (a box taken away with the panel built anew loses its focus,
+            // which is not an edit)
+            var shownTexts = boxes.Select(b => b.Text ?? "").ToArray();
             bool Commit()
             {
+                if (boxes.Select(b => b.Text ?? "").SequenceEqual(shownTexts)) return false;
                 var was = (Vec3)p.GetValue(target)!;
                 var old = new[] { was.X, was.Y, was.Z };
                 var parsed = new double[3];
@@ -511,7 +520,7 @@ public sealed class PropertyGrid : Grid
                 for (int i = 0; i < 3; i++)
                 {
                     var text = (boxes[i].Text ?? "").Trim();
-                    if (axisMixed[i] && text.Length == 0) { parsed[i] = old[i]; continue; }
+                    if ((boxes[i].Text ?? "") == shownTexts[i] || (axisMixed[i] && text.Length == 0)) { parsed[i] = old[i]; continue; }
                     if (!double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out parsed[i])) return false;
                     typed[i] = axisMixed[i];
                 }
@@ -520,6 +529,7 @@ public sealed class PropertyGrid : Grid
                 var newAxis = typed.Where((t, i) => t && edits?[i] != true).Any();
                 if (nv.Equals(was) && !newAxis) return false;
                 if (mixed) AxisEdits[p.Name] = Enumerable.Range(0, 3).Select(i => typed[i] || edits?[i] == true).ToArray();
+                shownTexts = boxes.Select(b => b.Text ?? "").ToArray();
                 Set(p, nv);
                 return true;
             }

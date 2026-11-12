@@ -286,6 +286,8 @@ public sealed class TimingLineForm : DockPanel
         }
         box.TextChanged += (_, _) => { if (Parse(box.Text) is double v && Math.Abs(v - current) > 1e-9 && v >= min && v <= max) Take(v, false); };
         box.LostFocus += (_, _) => box.Text = N(current);
+        // its own step by the arrows, not the 1 of the other number fields
+        box.Classes.Add(NumberStep.OwnStepsClass);
         box.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Up) { Take(current + step, true); e.Handled = true; }

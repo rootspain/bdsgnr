@@ -6,42 +6,25 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.3.1 — 2026-11-06
+## 0.3.2 — 2026-11-12
 
 ### New
-- **Arrow keys move the selected objects** with the Select tool: 1 m the way the arrow points on the screen, 0.1 m with
-  Shift; Ctrl+↑/↓ up and down (Z). In a section ↑/↓ move along Z. Each press is one undo step.
+- **The burden and spacing of a pattern are edited on the Properties tab** (the Pattern group of a hole). A new value
+  lays the grid out again in one undo step: the first row half a burden from the face side of the outline, the first hole
+  of a row half a spacing from its start, the rows taking the new burden and spacing. Holes still in the outline keep
+  their loading and times; a drilled, loaded or locked pattern is not laid out again. Burden and spacing are at least 0.1 m.
+- **↑/↓ in number fields** add and take away 1, keeping the number of decimals. The value is taken as typed text is: on
+  Enter or on leaving the field. Text fields (hole number, names) and the command line keep the arrows, the fields of a
+  timing front keep their own step. After Enter in a field of Properties the field keeps the focus, and the arrows do not
+  start moving the selection.
+- **Arrow keys move the selected objects** with the Select tool, by the same rules as a mouse drag: plain on the ground
+  (an arrow 1 m the way it points on the screen), with Shift up and down (Z), with Ctrl in 0.1 m steps, with Ctrl+Shift
+  along Z in 0.1 m steps. In a section ↑/↓ move along Z. Each press is one undo step. A drag with Ctrl works too (Ctrl on
+  a selected object used to stop it) and snaps to nothing.
 - **To level and To the surface on the Pattern tool panel.** A level typed in the field goes to every hole of the new
   pattern; with To the surface pressed each hole takes the elevation where its line meets the first surface. The length
   follows the level with the subdrill. Holes with the collar not above the level, or meeting no surface, keep the design length. The Direction field of this panel
   has a tip on how the rows lie and are numbered by it.
-- **Line vertices.** The vertices of selected polylines and polygons show round grips. Dragging a grip moves the vertex,
-  snapping to other objects; Esc cancels. The whole line still moves by the part between its vertices.
-  Shift and a click on a selected line add a vertex, Ctrl and a click on a grip delete it.
-- **Report preview window.** The report, the plan and the First movement sheet show on the screen before they are saved: pages,
-  zoom and the choices on the left. From there a report goes to a PDF file or through the print dialog of Windows, macOS or Linux.
-  The drawings of a report have no surface mesh. The text after the title at the top of the pages is a field with substitutions such as {name}. Sections have switches, and each can
-  start on a new page. PgUp, PgDn and the mouse wheel turn the pages, Ctrl and the wheel zoom.
-  The left panel is resized by dragging its edge, for each tab apart, and the program settings keep its width.
-  The Reports and Plan commands and the Print button of the First movement window open it. Pages are built in the background and do not change the blast.
-- **Report design.** A tab of the preview window: the frame of the sheet and stamps with their content, on all or given pages;
-  stamps of one place adjoin each other horizontally or vertically,
-  with fields such as {blast}, {date}, {page}.
-  The design is kept for the next reports, and the Save design… and Load design… buttons work with a *.bdreport file holding the choices of the report and the plan, the frame,
-  stamps and visibility. This tab replaces the
-  Report designer window.
-  Its Visibility section sets which kinds of object and whether the coordinate grid show on the drawings of the report. The boxes
-  are kept in the program settings apart from the main window; the very first time the objects are taken from it.
-  The Footer section switches on the date, with or without the time, and the page number on all, the first or given pages.
-  A column of a stamp of width 0 does not show. The caption and the text of each line of a stamp have their own alignment:
-  buttons on the line go through left, centre and right. Buttons on the line of the widths align a whole column vertically.
-  The plan and each section have these settings of their own: the check boxes and the ring act on the drawing of the page, named in the heading. A page without a drawing has no such section. On the sheets of a section the grid shows the elevations. In the report each section has a page of its own. Beside them a ring of arrows and zoom buttons move and scale the drawing on the sheet. The lock in the middle of the ring
-  holds the frame: the check boxes no longer change the scale and position of the drawing. With Shift the step of the arrows and the zoom is 4 times smaller.
-- Tie panel: a Continue after creating check box, off by default. The entry of ties goes on from the hole just tied, as with
-  Shift held; a click on that hole again or Esc finishes it.
-- **Section lines.** The Drawing list has a Section line tool: one segment, the entry ends with the second click, of the type Cross section.
-  The line is drawn thicker than a polyline. In the Section window arrows go to the previous and next line, the Print button opens the preview. The Properties tab of a line of that type has a Section along line button. A surface in a section and a horizontal slice is cut to the half width. A section goes along the first segment of the line. The colour of the line on the screen is set in the Viewport section of the program settings.
-  The preview has a Section chip and sheet, one sheet per line, and the report a Cross section section after the Plan.
 - **DeviTronic detonator** in the product catalogue: electronic, with its own family "DeviTronic". It also appears in projects
   from older files, and is offered wherever the Electronic detonator is: primers, loading rules, In-hole delay, BPD export.
 - **Electronic primers with times of their own.** A primer with an electronic detonator has the field "Offset from the hole time, ms"
@@ -72,15 +55,20 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The collar must be above the level, otherwise the value is refused. The field is in the Properties panel and the hole form.
 
 ### Changed
+- **A number field of Properties left unchanged takes nothing** when it loses the focus. Leaving a field used to write
+  the rounded value shown (X and Y of the position of a polygon when Z was edited, say) and add an undo step.
+- **The outline of a new pattern lies at one elevation:** all its points take one Z, the mean of the points of the drawn
+  polygon, the same as the centre of the pattern. In plan the outline is as drawn.
+- **The pattern arrow is yellow**, the turn circle at its tip green when the grid can be turned and red when it cannot.
+  The three colours are in the settings (Settings ▸ Viewport): Pattern arrow, Pattern turn circle and Pattern turn circle,
+  refused. The circle is on the plan and in 3D (not in a section).
+- **Loading no longer changes the state of a hole.** A column set in the loading window or the hole form no longer
+  puts it to Loaded, and Empty no longer puts it to Released: the state is set by hand only. A designed column used to
+  put the hole to Loaded, and its pattern could not be turned or laid out again.
+- **The product of a tie** in Properties is picked from the products of ties only: non-electric surface connectors,
+  detonating cord, relays on cord and harness wire, not from all the products. A product a tie already has stays in the
+  list whatever its kind.
 - **The Pattern tool**, once the pattern is built, closes its panel, switches to Select and selects the new holes.
-- **The timing line is drawn as two segments.** A press places the vertex, where two segments meet at 30°;
-  drag with the button held to set the direction and length, a click gives segments 60 px long. While the front is drawn or turned
-  a ray leaves the vertex: the times of the holes grow that way. On a selected front, in the tool and in Select (V), the accent circle
-  at the vertex turns it about its centre, the circles at the base change its angle and length, and dragging the line moves it. After
-  every change the holes of the front are reprogrammed, in one undo step. Timing lines from earlier files open and time as before.
-- The timing line keeps its English name; in Russian it is now «Фронт отбойки ЭСИ» throughout the program.
-- First movement window: the Show on plan switch is off by default.
-- The report preview always has the First movement chip, also when opened from the Reports command.
 - **The EBS timing front programs only holes with an electronic detonator.** Pyrotechnic holes are left out and fire by their tie-up;
   their count shows in the front window and the status bar. Times an older version gave them are cleared when the file is opened
   (manual ones stay). Holes out of the front's reach, for a chevron those behind its vertex, lose their time; their numbers are listed after Apply.
@@ -110,6 +98,47 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The last interval of the column follows the toe.** When the hole length changes — by hand, by "To level" or by a move
   of the collar — the last interval goes down to the new depth and its primers keep their distance from its bottom. Intervals
   below the new toe go, the one it cuts ends at the toe.
+
+## 0.3.1 — 2026-11-06
+
+### New
+- **Line vertices.** The vertices of selected polylines and polygons show round grips. Dragging a grip moves the vertex,
+  snapping to other objects; Esc cancels. The whole line still moves by the part between its vertices.
+  Shift and a click on a selected line add a vertex, Ctrl and a click on a grip delete it.
+- **Report preview window.** The report, the plan and the First movement sheet show on the screen before they are saved: pages,
+  zoom and the choices on the left. From there a report goes to a PDF file or through the print dialog of Windows, macOS or Linux.
+  The drawings of a report have no surface mesh. The text after the title at the top of the pages is a field with substitutions such as {name}. Sections have switches, and each can
+  start on a new page. PgUp, PgDn and the mouse wheel turn the pages, Ctrl and the wheel zoom.
+  The left panel is resized by dragging its edge, for each tab apart, and the program settings keep its width.
+  The Reports and Plan commands and the Print button of the First movement window open it. Pages are built in the background and do not change the blast.
+- **Report design.** A tab of the preview window: the frame of the sheet and stamps with their content, on all or given pages;
+  stamps of one place adjoin each other horizontally or vertically,
+  with fields such as {blast}, {date}, {page}.
+  The design is kept for the next reports, and the Save design… and Load design… buttons work with a *.bdreport file holding the choices of the report and the plan, the frame,
+  stamps and visibility. This tab replaces the
+  Report designer window.
+  Its Visibility section sets which kinds of object and whether the coordinate grid show on the drawings of the report. The boxes
+  are kept in the program settings apart from the main window; the very first time the objects are taken from it.
+  The Footer section switches on the date, with or without the time, and the page number on all, the first or given pages.
+  A column of a stamp of width 0 does not show. The caption and the text of each line of a stamp have their own alignment:
+  buttons on the line go through left, centre and right. Buttons on the line of the widths align a whole column vertically.
+  The plan and each section have these settings of their own: the check boxes and the ring act on the drawing of the page, named in the heading. A page without a drawing has no such section. On the sheets of a section the grid shows the elevations. In the report each section has a page of its own. Beside them a ring of arrows and zoom buttons move and scale the drawing on the sheet. The lock in the middle of the ring
+  holds the frame: the check boxes no longer change the scale and position of the drawing. With Shift the step of the arrows and the zoom is 4 times smaller.
+- Tie panel: a Continue after creating check box, off by default. The entry of ties goes on from the hole just tied, as with
+  Shift held; a click on that hole again or Esc finishes it.
+- **Section lines.** The Drawing list has a Section line tool: one segment, the entry ends with the second click, of the type Cross section.
+  The line is drawn thicker than a polyline. In the Section window arrows go to the previous and next line, the Print button opens the preview. The Properties tab of a line of that type has a Section along line button. A surface in a section and a horizontal slice is cut to the half width. A section goes along the first segment of the line. The colour of the line on the screen is set in the Viewport section of the program settings.
+  The preview has a Section chip and sheet, one sheet per line, and the report a Cross section section after the Plan.
+
+### Changed
+- **The timing line is drawn as two segments.** A press places the vertex, where two segments meet at 30°;
+  drag with the button held to set the direction and length, a click gives segments 60 px long. While the front is drawn or turned
+  a ray leaves the vertex: the times of the holes grow that way. On a selected front, in the tool and in Select (V), the accent circle
+  at the vertex turns it about its centre, the circles at the base change its angle and length, and dragging the line moves it. After
+  every change the holes of the front are reprogrammed, in one undo step. Timing lines from earlier files open and time as before.
+- The timing line keeps its English name; in Russian it is now «Фронт отбойки ЭСИ» throughout the program.
+- First movement window: the Show on plan switch is off by default.
+- The report preview always has the First movement chip, also when opened from the Reports command.
 
 ## 0.2.6 — 2026-11-06
 

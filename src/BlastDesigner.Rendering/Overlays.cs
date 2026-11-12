@@ -176,6 +176,73 @@ public sealed class FrontLineHandlesOverlay : IOverlay
     }
 }
 
+/// <summary>
+/// Circles at the tips of the burden arrows of the patterns of the selected holes, filled solid: green (by default) when a
+/// drag of the circle can turn its grid, red when the pattern cannot be laid out again. While one is dragged it is drawn where the turn
+/// puts it.
+/// </summary>
+public sealed class PatternRotateHandleOverlay : IOverlay
+{
+    private readonly Func<IReadOnlyList<HolePattern>> _patterns;
+    private readonly Func<HolePattern, bool> _refused;
+    private readonly Func<(SKColor Free, SKColor Refused)> _colours;
+
+    /// <param name="colours">The fills of a circle whose grid can be turned and of one whose grid cannot (Program settings ▸ Viewport).</param>
+    public PatternRotateHandleOverlay(Func<IReadOnlyList<HolePattern>> patterns, Func<HolePattern, bool> refused, Func<(SKColor Free, SKColor Refused)> colours)
+    {
+        _patterns = patterns;
+        _refused = refused;
+        _colours = colours;
+    }
+
+    /// <summary>The pattern whose circle is under the cursor, drawn larger.</summary>
+    public Guid? Hot { get; set; }
+
+    /// <summary>The pattern being turned, with the burden azimuth the turn gives it.</summary>
+    public (Guid Pattern, double Azimuth)? Dragged { get; set; }
+
+    /// <summary>
+    /// The tip of the burden arrow of a pattern pointing at <paramref name="azimuth"/>: two burdens from its centre, at least
+    /// 40 px on the screen.
+    /// </summary>
+    public static Vec3 ArrowTip(HolePattern pat, double azimuth, Camera cam)
+    {
+        var dir = GeoMath.HoleDirection(azimuth, 90);
+        var len = Math.Max(pat.Burden * 2, 40 / Math.Max(1e-9, cam.Scale));
+        return pat.Center + new Vec3(dir.X, dir.Y, 0) * len;
+    }
+
+    /// <summary>Radius of a circle on the screen, px: larger under the cursor and while dragged.</summary>
+    public static float RadiusPx(bool big) => (big ? VertexGripsOverlay.Radius + 2 : VertexGripsOverlay.Radius) + 1;
+
+    /// <summary>
+    /// Centre of the circle of a pattern pointing at <paramref name="azimuth"/>: beyond the tip of the burden arrow by the
+    /// radius, so that the arrow ends at its edge and stays seen.
+    /// </summary>
+    public static Vec3 CircleCentre(HolePattern pat, double azimuth, Camera cam, bool big = false)
+    {
+        var dir = GeoMath.HoleDirection(azimuth, 90);
+        return ArrowTip(pat, azimuth, cam) + new Vec3(dir.X, dir.Y, 0) * (RadiusPx(big) / Math.Max(1e-9, cam.Scale));
+    }
+
+    public void Draw(SKCanvas c, Camera cam, BlastProject project)
+    {
+        using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
+        using var edge = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.2f, Color = PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White };
+        var (free, refused) = _colours();
+        foreach (var pat in _patterns())
+        {
+            var az = Dragged is { } d && d.Pattern == pat.Id ? d.Azimuth : pat.Azimuth;
+            var big = Hot == pat.Id || Dragged?.Pattern == pat.Id;
+            var (x, y) = cam.ToScreen(CircleCentre(pat, az, cam, big));
+            var r = RadiusPx(big);
+            fill.Color = _refused(pat) ? refused : free;
+            c.DrawCircle(x, y, r, fill);
+            c.DrawCircle(x, y, r, edge);
+        }
+    }
+}
+
 /// <summary>Isochrones (firing-time contours) and colour-by-time of holes (Visualize timing).</summary>
 public sealed class TimingContourOverlay : IOverlay
 {

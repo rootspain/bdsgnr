@@ -39,10 +39,12 @@ public sealed class PatternParameters
     public double EdgeOffset { get; set; }
     public string LabelPrefix { get; set; } = string.Empty;
     public int StartNumber { get; set; } = 1;
+    /// <summary>Turning the grid of the pattern later turns the blast orientation with it.</summary>
+    public bool RotateOrientation { get; set; }
 }
 
 /// <summary>Hole layout operations: patterns, rows, along lines, numbering, draping to surfaces.</summary>
-public static class HoleDesign
+public static partial class HoleDesign
 {
     public static Hole CreateHole(Vec3 collar, HoleParameters p)
     {
@@ -85,49 +87,8 @@ public static class HoleDesign
     }
 
     /// <summary>Fills a polygon with a rectangular or staggered pattern.</summary>
-    public static List<Hole> FillPolygon(IReadOnlyList<Vec3> polygon, PatternParameters pp, HoleParameters hp, out List<HoleRow> rows)
-    {
-        rows = new List<HoleRow>();
-        var holes = new List<Hole>();
-        if (polygon.Count < 3 || pp.Burden <= 0 || pp.Spacing <= 0) return holes;
-
-        // Local frame: v points against movement (rows go backwards from the face), u along the rows.
-        var move = GeoMath.HoleDirection(pp.Orientation, 90);
-        var vDir = new Vec3(-move.X, -move.Y, 0);
-        var uDir = new Vec3(move.Y, -move.X, 0);
-        var origin = polygon[0];
-        double minU = double.MaxValue, maxU = double.MinValue, minV = double.MaxValue, maxV = double.MinValue;
-        foreach (var p in polygon)
-        {
-            var d = p - origin;
-            var u = d.X * uDir.X + d.Y * uDir.Y;
-            var v = d.X * vDir.X + d.Y * vDir.Y;
-            minU = Math.Min(minU, u); maxU = Math.Max(maxU, u);
-            minV = Math.Min(minV, v); maxV = Math.Max(maxV, v);
-        }
-        var avgZ = polygon.Average(p => p.Z);
-        int number = pp.StartNumber;
-        int rowIndex = 0;
-        for (double v = minV + pp.Burden / 2; v <= maxV; v += pp.Burden, rowIndex++)
-        {
-            var offset = pp.Pattern == PatternType.Staggered && rowIndex % 2 == 1 ? pp.Spacing / 2 : 0;
-            var row = new HoleRow { Name = $"Row {rowIndex + 1}", Burden = pp.Burden, Spacing = pp.Spacing };
-            for (double u = minU + pp.Spacing / 2 + offset; u <= maxU; u += pp.Spacing)
-            {
-                var pt = origin + uDir * u + vDir * v;
-                pt = pt.WithZ(avgZ);
-                if (!GeoMath.PointInPolygon(polygon, pt.X, pt.Y)) continue;
-                if (pp.EdgeOffset > 0 && GeoMath.DistanceToPolyline2D(polygon, pt, true) < pp.EdgeOffset) continue;
-                var h = CreateHole(pt, hp);
-                h.Label = pp.LabelPrefix + number++;
-                h.RowId = row.Id;
-                row.HoleIds.Add(h.Id);
-                holes.Add(h);
-            }
-            if (row.HoleIds.Count > 0) rows.Add(row);
-        }
-        return holes;
-    }
+    public static List<Hole> FillPolygon(IReadOnlyList<Vec3> polygon, PatternParameters pp, HoleParameters hp, out List<HoleRow> rows) =>
+        FillPolygon(polygon, pp, hp, out rows, out _);
 
     /// <summary>Places holes along a polyline at a fixed spacing (Row tool / "Add along selected polyline").</summary>
     public static List<Hole> AlongPolyline(IReadOnlyList<Vec3> line, double spacing, HoleParameters hp, bool includeEnd, out HoleRow row)

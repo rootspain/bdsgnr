@@ -348,6 +348,13 @@ Step("properties of ties: the delay is taken by Enter and when the focus leaves,
     Leave(box); Pump();
     if (vm.Doc.UndoNames.Count != mixedSteps + 1) throw new Exception("mixed delays by Enter should be one undo step");
     if (ids.Any(id => ((TieEntity)vm.Project!.FindEntity(id)!).DelayMs != 77)) throw new Exception("the delay was not set on all the ties");
+    // the product of a tie goes on a tie (connector, cord, relay, wire): no explosives, boosters or detonators (what a tie has stays)
+    var tieProducts = window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propProductId" && c.IsEffectivelyVisible).ItemsSource!.Cast<string>().ToList();
+    var now = ids.Select(id => ((TieEntity)vm.Project!.FindEntity(id)!).ProductId).ToHashSet();
+    var strangers = vm.Project!.Products.Where(pr => !pr.IsTieProduct && !now.Contains(pr.Id) && tieProducts.Contains(pr.Name)).Select(pr => pr.Name).ToList();
+    if (strangers.Count > 0) throw new Exception("the product list of a tie offers products that do not go on a tie: " + string.Join(", ", strangers));
+    if (!vm.Project.ActiveProducts.Where(pr => pr.IsTieProduct).All(pr => tieProducts.Contains(pr.Name))) throw new Exception("the product list of a tie lacks products of ties");
+    if (!vm.Project.ActiveProducts.Any(pr => pr.Kind == ProductKind.DetonatingCord)) throw new Exception("the smoke blast has no detonating cord to offer on a tie");
     while (vm.Doc.UndoNames.Count > steps) vm.Undo();
     Pump();
     if (Time() != was) throw new Exception("undo should bring the time back");
@@ -811,7 +818,7 @@ Step("pattern tool: To level on its panel, a level for all the holes or each its
         vm.SelectTool(); Pump();
     }
 });
-Step("arrows move the selection: a metre the way they point on the screen, 0.1 m with Shift, Ctrl+↑ up (Z)", () =>
+Step("arrows move the selection as a drag does: a metre the way they point on the screen, Shift up (Z), Ctrl 0.1 m", () =>
 {
     vm.SelectTool(); vm.PlanView(); Pump();
     var hole = vm.Project!.Holes.First(h => !h.IsDummy && !h.Locked);
@@ -825,17 +832,92 @@ Step("arrows move the selection: a metre the way they point on the screen, 0.1 m
     void Press(Avalonia.Input.Key key, Avalonia.Input.PhysicalKey physical, Avalonia.Input.RawInputModifiers mods = Avalonia.Input.RawInputModifiers.None) { window.KeyPress(key, mods, physical, null); Pump(); }
     Press(Avalonia.Input.Key.Right, Avalonia.Input.PhysicalKey.ArrowRight);
     if ((At() - (start + right)).Length > 1e-9) throw new Exception($"→ should move a metre to the right of the screen: {start} → {At()}");
-    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp, Avalonia.Input.RawInputModifiers.Shift);
-    if ((At() - (start + right + screenUp * 0.1)).Length > 1e-9) throw new Exception("Shift+↑ should move 0.1 m up the screen: " + At());
     Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp, Avalonia.Input.RawInputModifiers.Control);
-    if ((At() - (start + right + screenUp * 0.1 + new Vec3(0, 0, 1))).Length > 1e-9) throw new Exception("Ctrl+↑ should raise a metre: " + At());
-    vm.Undo(); vm.Undo(); vm.Undo(); Pump();
-    if ((At() - start).Length > 1e-9) throw new Exception("three undos should bring the hole back: " + At());
+    if ((At() - (start + right + screenUp * 0.1)).Length > 1e-9) throw new Exception("Ctrl+↑ should move 0.1 m up the screen: " + At());
+    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp, Avalonia.Input.RawInputModifiers.Shift);
+    if ((At() - (start + right + screenUp * 0.1 + new Vec3(0, 0, 1))).Length > 1e-9) throw new Exception("Shift+↑ should raise a metre: " + At());
+    Press(Avalonia.Input.Key.Down, Avalonia.Input.PhysicalKey.ArrowDown, Avalonia.Input.RawInputModifiers.Shift | Avalonia.Input.RawInputModifiers.Control);
+    if ((At() - (start + right + screenUp * 0.1 + new Vec3(0, 0, 0.9))).Length > 1e-9) throw new Exception("Ctrl+Shift+↓ should lower 0.1 m: " + At());
+    vm.Undo(); vm.Undo(); vm.Undo(); vm.Undo(); Pump();
+    if ((At() - start).Length > 1e-9) throw new Exception("four undos should bring the hole back: " + At());
     // typing in a field keeps the arrows for the text
     var box = window.GetLogicalDescendants().OfType<TextBox>().First(t => t.IsEffectivelyVisible && t.IsEnabled);
     box.Focus(); Pump();
     Press(Avalonia.Input.Key.Right, Avalonia.Input.PhysicalKey.ArrowRight);
     if ((At() - start).Length > 1e-9) throw new Exception("an arrow in a text field moved the selection");
+    vm.View.Focus(); vm.Doc.ClearSelection(); Pump();
+});
+Step("↑/↓ step a number field by 1 as typed (Enter takes it); a text field and the command line keep them", () =>
+{
+    if (BlastDesigner.App.Services.NumberStep.Step("12,5", 1) != "13,5" || BlastDesigner.App.Services.NumberStep.Step("0.25", -1) != "-0.75" || BlastDesigner.App.Services.NumberStep.Step("-1", 1) != "0"
+        || BlastDesigner.App.Services.NumberStep.Step("7 m", 1) != null || BlastDesigner.App.Services.NumberStep.Step("", 1) != null || BlastDesigner.App.Services.NumberStep.Step("1.5.2", 1) != null)
+        throw new Exception("the text of a stepped number is not written as it was");
+    vm.SelectTool(); Pump();
+    var hole = vm.Project!.Holes.First(h => !h.IsDummy && !h.Locked && h.Label.Length > 0);
+    vm.Doc!.Select(new[] { hole.Id }); window.ShowPropertiesTab(); Pump();
+    TextBox Box(string name) => window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == name && b.IsEffectivelyVisible);
+    void Press(Avalonia.Input.Key key, Avalonia.Input.PhysicalKey physical) { window.KeyPress(key, Avalonia.Input.RawInputModifiers.None, physical, null); Pump(); }
+    var length = Box("propLength");
+    var was = hole.Length;
+    var steps = vm.Doc.UndoNames.Count;
+    length.Focus(); Pump();
+    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp);
+    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp);
+    Press(Avalonia.Input.Key.Down, Avalonia.Input.PhysicalKey.ArrowDown);
+    if (double.Parse(length.Text!.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture) != was + 1) throw new Exception($"↑↑↓ should make the length {was + 1}: {length.Text}");
+    if (vm.Doc.UndoNames.Count != steps || ((Hole)vm.Project.FindEntity(hole.Id)!).Length != was) throw new Exception("the arrows took the number before Enter");
+    if (((Hole)vm.Project.FindEntity(hole.Id)!).Collar != hole.Collar) throw new Exception("the arrows in a field moved the hole too");
+    Press(Avalonia.Input.Key.Enter, Avalonia.Input.PhysicalKey.Enter);
+    if (((Hole)vm.Project.FindEntity(hole.Id)!).Length != was + 1 || vm.Doc.UndoNames.Count != steps + 1) throw new Exception("Enter did not take the stepped length in one step");
+    // the panel is built anew with the change, and the field keeps the focus: the arrows go on stepping it, the hole stays
+    for (int i = 0; i < 5; i++) Pump();
+    if (window.FocusManager?.GetFocusedElement() is not TextBox { Name: "propLength" } again) throw new Exception("Enter took the focus from the field: " + window.FocusManager?.GetFocusedElement());
+    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp);
+    if (((Hole)vm.Project.FindEntity(hole.Id)!).Collar != hole.Collar) throw new Exception("↑ after Enter moved the hole");
+    if (double.Parse(again.Text!.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture) != was + 2) throw new Exception("↑ after Enter did not step the field: " + again.Text);
+    Press(Avalonia.Input.Key.Enter, Avalonia.Input.PhysicalKey.Enter);
+    if (((Hole)vm.Project.FindEntity(hole.Id)!).Length != was + 2) throw new Exception("the second Enter did not take the length");
+    vm.Undo(); Pump();
+    vm.Undo(); Pump();
+    // the number of a hole is text, even when it is digits
+    vm.Change("Smoke label", p => ((Hole)p.FindEntity(hole.Id)!).Label = "7"); Pump();
+    var label = Box("propLabel");
+    label.Focus(); Pump();
+    Press(Avalonia.Input.Key.Up, Avalonia.Input.PhysicalKey.ArrowUp);
+    if (label.Text != "7") throw new Exception("↑ stepped the hole number: " + label.Text);
+    vm.Undo(); Pump();
+    vm.View.Focus(); vm.Doc.ClearSelection(); Pump();
+});
+Step("Z of a polygon by Enter on the properties tab: one step, X and Y kept exact, the focus kept, no edit when left unchanged", () =>
+{
+    vm.SelectTool(); Pump();
+    // near the blast of the smoke, with more decimals than the panel shows
+    var pts = new List<Vec3> { new(1195.123456, 2005.654321, 299.7), new(1215.2, 2005.3, 300.9), new(1215.4, 2025.1, 301.3), new(1195.6, 2025.8, 300.1) };
+    var poly = new PolylineEntity { Points = pts.ToList(), Closed = true };
+    vm.Change("Smoke polygon", p => p.Add(poly));
+    vm.Doc!.Select(new[] { poly.Id }); window.ShowPropertiesTab(); Pump();
+    PolylineEntity Line() => (PolylineEntity)vm.Project!.FindEntity(poly.Id)!;
+    TextBox Box(string name) => window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == name && b.IsEffectivelyVisible);
+    var before = Line().Position;
+    var steps = vm.Doc.UndoNames.Count;
+    // focused and left as it is: nothing is taken, though the numbers shown are rounded
+    var x = Box("propPositionX");
+    x.Focus(); Pump();
+    vm.View.Focus(); Pump();
+    if (vm.Doc.UndoNames.Count != steps || !Line().Points.SequenceEqual(pts)) throw new Exception("leaving the position unchanged moved the polygon");
+    var z = Box("propPositionZ");
+    z.Focus(); Pump();
+    z.Text = "320";
+    window.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Enter, null);
+    for (int i = 0; i < 5; i++) Pump();
+    var after = Line().Position;
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("the Z by Enter should be one undo step: " + (vm.Doc.UndoNames.Count - steps));
+    if (Math.Abs(after.Z - 320) > 1e-9 || after.X != before.X || after.Y != before.Y) throw new Exception($"the polygon should only go to Z 320: {before} → {after}");
+    if (window.FocusManager?.GetFocusedElement() is not TextBox { Name: "propPositionZ" }) throw new Exception("Enter took the focus from the Z field");
+    // the Z, the selection, the polygon
+    for (int i = 0; i < 5 && vm.Project!.FindEntity(poly.Id) != null; i++) vm.Undo();
+    Pump();
+    if (vm.Project!.FindEntity(poly.Id) != null) throw new Exception("the smoke polygon was not taken away");
     vm.View.Focus(); vm.Doc.ClearSelection(); Pump();
 });
 Step("dark plan zoomed", () => { vm.Doc!.Select(vm.Project!.Rows[2].HoleIds); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); });
@@ -1054,6 +1136,23 @@ Step("Shift adds a vertex to a selected line, Ctrl deletes one", () =>
     vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
     vm.ActiveTool.PointerReleased(At(openId, 250, 260, shift));
     if (!Line(openId).Points.SequenceEqual(lifted)) throw new Exception("Esc did not drop the Z move");
+    // Ctrl drags in 0.1 m steps on the ground, Ctrl+Shift in 0.1 m steps up or down; a Ctrl click still toggles (below)
+    static bool Tenths(double v) => Math.Abs(v * 10 - Math.Round(v * 10)) < 1e-9;
+    vm.ActiveTool.PointerPressed(At(openId, 250, 200, control));
+    vm.ActiveTool.PointerMoved(At(openId, 293, 211, control));
+    var fine = vm.View.Preview.MoveOffset;
+    if (vm.View.Preview.ScreenRect != null || fine.Length2D == 0 || !Tenths(fine.X) || !Tenths(fine.Y) || fine.Z != 0) throw new Exception("a Ctrl drag should move on the ground in 0.1 m steps: " + fine);
+    vm.ActiveTool.PointerReleased(At(openId, 293, 211, control)); Pump();
+    if (Line(openId).Points.Zip(lifted).Any(t => (t.First - t.Second - fine).Length > 1e-9)) throw new Exception("the Ctrl drag did not move the line by what it showed");
+    vm.Undo();
+    var both2 = shift | control;
+    vm.ActiveTool.PointerPressed(At(openId, 250, 200, both2));
+    vm.ActiveTool.PointerMoved(At(openId, 263, 163, both2));
+    var fineUp = vm.View.Preview.MoveOffset;
+    if (fineUp.Length2D != 0 || fineUp.Z <= 0 || !Tenths(fineUp.Z)) throw new Exception("a Ctrl+Shift drag should go up in 0.1 m steps: " + fineUp);
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, none);
+    vm.ActiveTool.PointerReleased(At(openId, 263, 163, both2));
+    if (!Line(openId).Points.SequenceEqual(lifted)) throw new Exception("Esc did not drop the fine Z move");
     Click(otherId, 650, 200, shift);
     if (Line(otherId).Points.Count != 2 || !vm.Doc.Selection.Contains(otherId)) throw new Exception("Shift on another line should select it");
     vm.Doc.Select(new[] { openId, polygonId }); Pump();
@@ -1072,6 +1171,166 @@ Step("Shift adds a vertex to a selected line, Ctrl deletes one", () =>
     vm.Doc.ClearSelection();
     for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == openId); i++) vm.Undo();
     Pump();
+});
+Step("the grid of a pattern is turned by the circle at the tip of its arrow", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var snapping = vm.View.SnapEnabled;
+    vm.View.SnapEnabled = false;
+    var none = Avalonia.Input.KeyModifiers.None;
+    var outline = new[] { new Vec3(1200, 2000, 300), new Vec3(1250, 2000, 300), new Vec3(1255, 2030, 300), new Vec3(1205, 2035, 300) };
+    var patId = Guid.Empty;
+    vm.Change("Smoke pattern", p =>
+    {
+        var made = HoleDesign.FillPolygon(outline, new PatternParameters { Burden = 4, Spacing = 4.5, Pattern = PatternType.Staggered, Orientation = 180, LabelPrefix = "R", StartNumber = 900 }, vm.NewHoleParameters(), out var rows, out var pattern);
+        foreach (var h in made) p.Add(h, vm.HoleLayer);
+        p.Rows.AddRange(rows);
+        p.Patterns.Add(pattern);
+        patId = pattern.Id;
+    });
+    HolePattern Pat() => vm.Project!.FindPattern(patId)!;
+    List<Hole> Holes() => vm.Project!.Holes.Where(h => h.PatternId == patId).ToList();
+    vm.Doc!.Select(Holes().Select(h => h.Id)); vm.ZoomSelection(); Pump();
+    var hole = Holes().OrderBy(h => Vec3.Distance2D(h.Collar, Pat().Center)).First();
+    vm.Doc.Select(new[] { hole.Id }); Pump();
+    var cam = vm.View.Camera;
+    ToolPointer At(double x, double y, Avalonia.Input.KeyModifiers mods, Entity? hit = null) =>
+        new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = hit ?? vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = mods };
+    var handles = vm.View.Overlays.OfType<BlastDesigner.Rendering.PatternRotateHandleOverlay>().SingleOrDefault() ?? throw new Exception("the select tool has no circles of the patterns");
+    var before = Pat().Azimuth;
+    (double X, double Y) Tip(double turn) { var (x, y) = cam.ToScreen(BlastDesigner.Rendering.PatternRotateHandleOverlay.CircleCentre(Pat(), before + turn, cam)); return (x, y); }
+    var (tx, ty) = Tip(0);
+    vm.ActiveTool!.PointerMoved(At(tx + 1, ty + 1, none));
+    if (handles.Hot != patId) throw new Exception("the circle under the cursor is not lit");
+    if (!vm.View.Preview.Labels.Any(l => l.Text == BlastDesigner.App.Services.Loc.T("Turn the pattern"))) throw new Exception("no word on what the circle does");
+    vm.View.Redraw(); Pump(); Shot("82_pattern_turn_handle");
+    // a drag of about 30° turns the grid on release, in one undo step; the holes stay where they are until then
+    var collars = Holes().ToDictionary(h => h.Id, h => h.Collar);
+    var steps = vm.Doc.UndoNames.Count;
+    vm.ActiveTool.PointerPressed(At(tx, ty, none));
+    foreach (var turn in new[] { 10.0, 20, 30 }) { var (x, y) = Tip(turn); vm.ActiveTool.PointerMoved(At(x, y, none)); }
+    if (handles.Dragged is not { } dragged || Math.Abs(BlastDesigner.App.ViewModels.MainViewModel.Turn(before, dragged.Azimuth) - 30) > 1e-6) throw new Exception("the circle does not follow the drag: " + handles.Dragged);
+    if (vm.View.Preview.Markers.Count == 0 || vm.View.Preview.Labels.Count == 0) throw new Exception("no preview of where the holes go");
+    if (vm.PatternGrid.HiddenArrow != patId) throw new Exception("the arrow as it was is still drawn while turning");
+    if (Pat().Azimuth != before || Holes().Any(h => !h.Collar.Equals(collars[h.Id]))) throw new Exception("the grid turned before the release");
+    vm.View.Redraw(); Pump(); Shot("82_pattern_turn_drag");
+    var (ex, ey) = Tip(30);
+    vm.ActiveTool.PointerReleased(At(ex, ey, none)); Pump();
+    if (Math.Abs(BlastDesigner.App.ViewModels.MainViewModel.Turn(before, Pat().Azimuth) - 30) > 1e-6) throw new Exception($"the grid did not turn by the drag: {before} → {Pat().Azimuth}");
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("the turn should be one undo step: " + string.Join(", ", vm.Doc.UndoNames.Take(3)));
+    if (handles.Dragged != null || vm.PatternGrid.HiddenArrow != null || vm.View.Preview.Markers.Count != 0) throw new Exception("the preview of the turn stayed after the release");
+    if (vm.Doc.Selection.Any(id => vm.Project!.FindEntity(id) == null)) throw new Exception("a deleted hole stayed selected");
+    vm.Undo(); Pump();
+    if (Math.Abs(Pat().Azimuth - before) > 1e-9 || Holes().Count != collars.Count || Holes().Any(h => !collars.TryGetValue(h.Id, out var c) || Vec3.Distance2D(c, h.Collar) > 1e-9)) throw new Exception("undo did not bring the grid back");
+    if (!vm.Doc.Selection.SetEquals(new[] { hole.Id })) throw new Exception("undo did not bring the selection back");
+    // a click on the circle without a drag changes nothing
+    steps = vm.Doc.UndoNames.Count;
+    vm.ActiveTool.PointerPressed(At(tx, ty, none));
+    vm.ActiveTool.PointerReleased(At(tx, ty, none)); Pump();
+    if (Pat().Azimuth != before || vm.Doc.UndoNames.Count != steps || !vm.Doc.Selection.SetEquals(new[] { hole.Id })) throw new Exception("a click on the circle changed something");
+    // Esc in the middle of the turn drops it and keeps the selection
+    vm.ActiveTool.PointerPressed(At(tx, ty, none));
+    var (mx, my) = Tip(20);
+    vm.ActiveTool.PointerMoved(At(mx, my, none));
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, none);
+    vm.ActiveTool.PointerReleased(At(mx, my, none)); Pump();
+    if (Pat().Azimuth != before || vm.Doc.UndoNames.Count != steps) throw new Exception("Esc did not drop the turn");
+    if (!vm.Doc.Selection.SetEquals(new[] { hole.Id })) throw new Exception("Esc in the middle of the turn changed the selection");
+    if (handles.Dragged != null || vm.PatternGrid.HiddenArrow != null || vm.View.Preview.Markers.Count != 0) throw new Exception("Esc left the preview of the turn");
+    // with Shift the circle is no circle: the click selects as anywhere else
+    var hit = vm.View.HitTest(tx, ty);
+    vm.ActiveTool.PointerPressed(At(tx, ty, Avalonia.Input.KeyModifiers.Shift));
+    vm.ActiveTool.PointerReleased(At(tx, ty, Avalonia.Input.KeyModifiers.Shift)); Pump();
+    var expected = hit != null ? new[] { hole.Id, hit.Id } : new[] { hole.Id };
+    if (Pat().Azimuth != before || !vm.Doc.Selection.SetEquals(expected)) throw new Exception("a Shift click on the circle should select as anywhere else");
+    vm.Doc.Select(new[] { hole.Id }); Pump();
+    // the right-click menu of the circle turns by a quarter
+    var menu = vm.ActiveTool.ContextMenu(At(tx, ty, none)).ToList();
+    foreach (var header in new[] { "Turn by +90°", "Turn by −90°", "Turn by…", "Along a line" })
+        if (!menu.Any(e => e.Header == header)) throw new Exception("the menu of the circle has no " + header + ": " + string.Join(", ", menu.Select(e => e.Header)));
+    menu.First(e => e.Header == "Turn by +90°").Action!(); Pump();
+    if (Math.Abs(BlastDesigner.App.ViewModels.MainViewModel.Turn(before, Pat().Azimuth) - 90) > 1e-6) throw new Exception("Turn by +90° did not turn the grid");
+    vm.Undo(); Pump();
+    if (Math.Abs(Pat().Azimuth - before) > 1e-9) throw new Exception("undo did not take the quarter turn back");
+    // a pattern that cannot be laid out again: a red circle that says why, and no turn
+    var lockedId = Holes().First(h => h.Id != hole.Id).Id;
+    vm.Change("Lock hole", p => ((Hole)p.FindEntity(lockedId)!).Locked = true); Pump();
+    vm.ActiveTool.PointerMoved(At(tx + 1, ty + 1, none));
+    var locked = (Hole)vm.Project!.FindEntity(lockedId)!;
+    string Refused(string reason) => BlastDesigner.App.Services.Loc.T("The pattern cannot be turned:") + " " + BlastDesigner.App.Services.Loc.F(reason, locked.Label);
+    if (!vm.View.Preview.Labels.Any(l => l.Text == Refused("Hole {0} is locked."))) throw new Exception("the circle does not say why the grid cannot be turned");
+    vm.ActiveTool.PointerPressed(At(tx, ty, none));
+    vm.ActiveTool.PointerMoved(At(mx, my, none));
+    if (handles.Dragged != null) throw new Exception("a grid that cannot be laid out again was turned");
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, none);
+    vm.ActiveTool.PointerReleased(At(mx, my, none)); Pump();
+    vm.Undo(); Pump();
+    // a hole released for loading says so, not that it is drilled
+    vm.Change("Release hole", p => ((Hole)p.FindEntity(lockedId)!).State = HoleState.Released); Pump();
+    vm.ActiveTool.PointerMoved(At(tx + 1, ty + 1, none));
+    if (!vm.View.Preview.Labels.Any(l => l.Text == Refused("Hole {0} is released for loading."))) throw new Exception("the circle should say the hole is released for loading: " + string.Join(" | ", vm.View.Preview.Labels.Select(l => l.Text)));
+    vm.Undo(); Pump();
+    vm.Doc.Select(new[] { hole.Id }); Pump();
+    // dragging a selected hole elsewhere still moves it
+    var (hx, hy) = cam.ToScreen(hole.Collar);
+    var at = ((Hole)vm.Project!.FindEntity(hole.Id)!).Collar;
+    vm.ActiveTool.PointerPressed(At(hx, hy, none, vm.Project.FindEntity(hole.Id)));
+    for (int k = 1; k <= 4; k++) vm.ActiveTool.PointerMoved(At(hx + 10 * k, hy + 5 * k, none, vm.Project.FindEntity(hole.Id)));
+    vm.ActiveTool.PointerReleased(At(hx + 40, hy + 20, none, vm.Project.FindEntity(hole.Id))); Pump();
+    var moved = ((Hole)vm.Project.FindEntity(hole.Id)!).Collar;
+    if ((moved - (at + cam.ToWorld(hx + 40, hy + 20, at.Z) - cam.ToWorld(hx, hy, at.Z))).Length2D > 1e-6) throw new Exception($"the hole did not follow the drag: {at} → {moved}");
+    vm.Undo(); Pump();
+    // the burden and the spacing are typed in the group of the pattern on the properties tab: the grid is laid out again
+    vm.Doc.Select(new[] { hole.Id }); window.ShowPropertiesTab(); Pump();
+    TextBox PatBox(string name) => window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == name && b.IsEffectivelyVisible);
+    var (burdenWas, spacingWas, holesWas) = (Pat().Burden, Pat().Spacing, Holes().Count);
+    steps = vm.Doc.UndoNames.Count;
+    var burdenBox = PatBox("patternBurden");
+    burdenBox.Text = "6";
+    burdenBox.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    if (Pat().Burden != 6 || Pat().Spacing != spacingWas) throw new Exception($"the burden typed did not go to the pattern: {Pat().Burden} × {Pat().Spacing}");
+    if (Holes().Count >= holesWas) throw new Exception($"a wider burden should leave fewer holes: {holesWas} → {Holes().Count}");
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception("the new burden should be one undo step");
+    if (vm.Project!.Rows.Where(r => Pat().RowIds.ContainsValue(r.Id)).Any(r => r.Burden != 6)) throw new Exception("the rows did not take the new burden");
+    var spacingBox = PatBox("patternSpacing");
+    spacingBox.Text = "0";
+    spacingBox.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    var said = BlastDesigner.App.Services.Dialogs.LastMessage;
+    if (said is not { IsVisible: true } || said.Title != BlastDesigner.App.Services.Loc.T("Pattern size")) throw new Exception("a spacing of 0 should say why it is not taken: " + said?.Title);
+    said.Close();
+    // the message ends on the thread pool, the panel comes back on the UI thread after it
+    var shownSpacing = spacingWas.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture);
+    for (int i = 0; i < 200 && PatBox("patternSpacing").Text != shownSpacing; i++) { Thread.Sleep(5); Pump(); }
+    if (Pat().Spacing != spacingWas || vm.Doc.UndoNames.Count != steps + 1) throw new Exception("a spacing of 0 was taken");
+    if (PatBox("patternSpacing").Text != spacingWas.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture)) throw new Exception("the refused spacing stayed in the field: " + PatBox("patternSpacing").Text);
+    vm.Undo(); Pump();
+    if (Pat().Burden != burdenWas || Holes().Count != holesWas) throw new Exception("undo did not bring the burden and the holes back");
+    hole = Holes().OrderBy(h => Vec3.Distance2D(h.Collar, Pat().Center)).First();
+    // in 3D the circle is there too, and a drag about the centre turns the grid as on the plan
+    vm.View3D(); Pump();
+    vm.Doc.Select(new[] { hole.Id }); Pump();
+    var cam3 = vm.View.Camera;
+    if (cam3.IsPlan) throw new Exception("the 3D view is still the plan");
+    (double X, double Y) Tip3(double turn) { var (x, y) = cam3.ToScreen(BlastDesigner.Rendering.PatternRotateHandleOverlay.CircleCentre(Pat(), before + turn, cam3)); return (x, y); }
+    ToolPointer At3(double x, double y) => new() { X = x, Y = y, World = cam3.ToWorld(x, y), Snapped = cam3.ToWorld(x, y), Hit = vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = none };
+    var (t3x, t3y) = Tip3(0);
+    vm.ActiveTool.PointerMoved(At3(t3x + 1, t3y + 1));
+    if (handles.Hot != patId) throw new Exception("no circle of the pattern in 3D");
+    vm.View.Redraw(); Pump(); Shot("82_pattern_turn_handle_3d");
+    steps = vm.Doc.UndoNames.Count;
+    vm.ActiveTool.PointerPressed(At3(t3x, t3y));
+    foreach (var turn in new[] { 10.0, 20, 30 }) { var (x, y) = Tip3(turn); vm.ActiveTool.PointerMoved(At3(x, y)); }
+    var (e3x, e3y) = Tip3(30);
+    vm.ActiveTool.PointerReleased(At3(e3x, e3y)); Pump();
+    if (Math.Abs(BlastDesigner.App.ViewModels.MainViewModel.Turn(before, Pat().Azimuth) - 30) > 1e-6 || vm.Doc.UndoNames.Count != steps + 1) throw new Exception($"the drag in 3D did not turn the grid by 30°: {before} → {Pat().Azimuth}");
+    vm.Undo(); Pump();
+    if (Math.Abs(Pat().Azimuth - before) > 1e-9) throw new Exception("undo did not take the turn in 3D back");
+    vm.PlanView(); Pump();
+    vm.View.SnapEnabled = snapping;
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 30 && vm.Project!.FindPattern(patId) != null; i++) vm.Undo();
+    Pump();
+    if (vm.Project!.FindPattern(patId) != null) throw new Exception("the smoke pattern was not taken away");
 });
 Step("analysis maps toggle and clear", () =>
 {
@@ -1893,6 +2152,12 @@ Step("section line colour in the settings", () =>
     var boxes = dlg.GetLogicalDescendants().OfType<TextBox>().Select(b => b.Name).ToList();
     int geometry = boxes.IndexOf("geometry"), section = boxes.IndexOf("sectionLine"), selection = boxes.IndexOf("selection");
     if (geometry < 0 || section != geometry + 1 || selection != section + 1) throw new Exception($"the section line colour is not after the geometry colour: {geometry}, {section}, {selection}");
+    // the circle that turns a pattern: green when it can, red when it cannot, both under the selection colour
+    int arrowBox = boxes.IndexOf("patternArrow"), turn = boxes.IndexOf("patternTurn"), refusedTurn = boxes.IndexOf("patternTurnRefused");
+    if (arrowBox != selection + 1 || turn != arrowBox + 1 || refusedTurn != turn + 1) throw new Exception($"the colours of the pattern arrow and turn circle are not after the selection colour: {selection}, {arrowBox}, {turn}, {refusedTurn}");
+    if (dlg.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "patternArrow").Text != $"#{ProgramSettings.DefaultPatternArrow & 0xFFFFFF:X6}") throw new Exception("the pattern arrow should start yellow");
+    var turnBoxes = dlg.GetLogicalDescendants().OfType<TextBox>().Where(b => b.Name is "patternTurn" or "patternTurnRefused").Select(b => b.Text).ToList();
+    if (turnBoxes[0] != $"#{ProgramSettings.DefaultPatternTurn & 0xFFFFFF:X6}" || turnBoxes[1] != $"#{ProgramSettings.DefaultPatternTurnRefused & 0xFFFFFF:X6}") throw new Exception("the pattern turn circle should start green and red: " + string.Join(", ", turnBoxes));
     dlg.GetLogicalDescendants().OfType<Button>().First(b => b.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Viewport"))).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     WindowShot("82_settings_section_line");
     Pump();
@@ -4306,6 +4571,18 @@ Step("hole properties: the group of calculations, one hole and several", () =>
     vm.Doc.Select(loaded); Pump();
     panel.Refresh(); Pump();
     if (loaded.Count > 1 && panel.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "explain:hole.chargeMass")) throw new Exception("explain is for one hole");
+});
+Step("a colour of the pattern turn circle picked in the settings is taken on OK", () =>
+{
+    var was = vm.Settings.PatternTurnRefusedColor;
+    var task = vm.EditProgramSettings(); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag is uint c && c == 0xFFF87171u).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    for (int i = 0; i < 40 && !task.IsCompleted; i++) Pump();
+    if (vm.Settings.PatternTurnRefusedColor != 0xFFF87171u) throw new Exception($"OK did not take the colour of the refused circle: #{vm.Settings.PatternTurnRefusedColor:X8}");
+    vm.Settings.PatternTurnRefusedColor = was;
+    vm.Settings.Save();
 });
 Step("a new language builds the window again on Apply and on OK, and the blast goes on in it", () =>
 {
