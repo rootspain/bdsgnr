@@ -12,12 +12,12 @@ public sealed record HoleValueSummary(string Text, bool Different, string? Aggre
 
 /// <summary>
 /// Движок вычислений для Engine и окон: встроенные алгоритмы (ячейки Вороного, сетка, МВЗ, время, расстояние до
-/// линии, прогноз сейсмики) регистрируются в <see cref="CalcRegistry.Default"/>, встроенный профиль «SHOTPlus 6»
+/// линии, прогноз сейсмики) регистрируются в <see cref="CalcRegistry.Default"/>, встроенный профиль «Formulas»
 /// читается из ресурса. Профиль проекта — копия из <see cref="BlastProject.Calc"/>, без неё — встроенный.
 /// </summary>
 public static class CalcService
 {
-    public const string BuiltInName = "SHOTPlus 6";
+    public const string BuiltInName = "Formulas";
 
     private static readonly ConcurrentDictionary<string, CalcModel> Models = new();
     private static readonly object Gate = new();
@@ -26,14 +26,14 @@ public static class CalcService
     static CalcService()
     {
         Register(CalcRegistry.Default);
-        using var s = typeof(CalcService).Assembly.GetManifestResourceStream("ShotPlus6.bdcalc")
-                      ?? throw new InvalidOperationException("Нет ресурса ShotPlus6.bdcalc");
+        using var s = typeof(CalcService).Assembly.GetManifestResourceStream("Formulas.bdcalc")
+                      ?? throw new InvalidOperationException("Нет ресурса Formulas.bdcalc");
         using var r = new StreamReader(s);
         BuiltIn = CalcProfile.FromJson(r.ReadToEnd());
         Library.Add(BuiltIn);
     }
 
-    /// <summary>Встроенный профиль «SHOTPlus 6» (только для чтения).</summary>
+    /// <summary>Встроенный профиль «Formulas» (только для чтения).</summary>
     public static CalcProfile BuiltIn { get; }
 
     /// <summary>Профили по имени: встроенный и загруженные из папки настроек (<see cref="CalcProfileLibrary.LoadFolder"/>).</summary>

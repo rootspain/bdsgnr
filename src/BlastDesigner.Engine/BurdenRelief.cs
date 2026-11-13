@@ -4,7 +4,7 @@ using BlastDesigner.Domain.Model;
 namespace BlastDesigner.Engine;
 
 /// <summary>
-/// Burden relief over the timing triangulation (SHOTPlus <c>EVIETimingDelaunay.SetupZvalues</c>): in each triangle of the
+/// Burden relief over the timing triangulation: in each triangle of the
 /// firing points the steepness of the time, |∇t| in ms/m; triangles too thin to tell are left out.
 /// </summary>
 public static class BurdenRelief

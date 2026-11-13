@@ -113,7 +113,7 @@ public static class Timing
     /// <summary>
     /// The charges of a hole (<see cref="Charging.ExplosiveRuns"/>), each at the time of its earliest primer: an electronic one
     /// at the base time plus its programmed time (<see cref="Charging.PrimerTimes"/>), a pyrotechnic one when the surface signal
-    /// gets to the hole plus its delay and the run of the signal down its tube (SHOTPlus <c>BaseHole.CalcInholeTiming</c>).
+    /// gets to the hole plus its delay and the run of the signal down its tube.
     /// </summary>
     public static List<HoleCharge> Charges(BlastProject project, Hole h)
     {
@@ -282,8 +282,7 @@ public static class Timing
     // ---- electronic programming -------------------------------------------
 
     /// <summary>
-    /// A programmed time as the detonators take it: whole milliseconds, or tenths with <see cref="ElectronicSettings.AllowSubMs"/>
-    /// (as SHOTPlus rounds a delay, <c>InitiationPoint.RoundDelayTime</c>).
+    /// A programmed time as the detonators take it: whole milliseconds, or tenths of a millisecond when allowed; negative times are clamped to 0.
     /// </summary>
     public static double RoundTime(double ms, bool allowSubMs) => Math.Round(ms, allowSubMs ? 1 : 0, MidpointRounding.AwayFromZero);
 

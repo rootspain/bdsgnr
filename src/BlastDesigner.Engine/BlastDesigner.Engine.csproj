@@ -4,6 +4,6 @@
     <ProjectReference Include="..\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Calc\ShotPlus6.bdcalc" LogicalName="ShotPlus6.bdcalc" />
+    <EmbeddedResource Include="Calc\Formulas.bdcalc" LogicalName="Formulas.bdcalc" />
   </ItemGroup>
 </Project>

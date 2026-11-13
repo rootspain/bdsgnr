@@ -4,8 +4,8 @@ using BlastDesigner.Domain.Model;
 namespace BlastDesigner.Engine;
 
 /// <summary>
-/// Times of an EBS opening point (SHOTPlus <c>SPEBSOpeningPoint.ProgramBlast</c>). With d from the reference point to the hole's
-/// firing point (<see cref="EbsTimingLine.TimingPoint"/>), t = (d·b̂)/burden · burden delay + (d·ŝ)/spacing · spacing delay. Opened
+/// Times of an EBS opening point. With d from the reference point to the hole's
+/// firing point, t = (d·b̂)/burden · burden delay + (d·ŝ)/spacing · spacing delay. Opened
 /// at the point, both terms are taken as they are, either way, and the reference becomes the hole with the least time, which
 /// fires at the offset. Not opened at the point, the times count from the point itself plus the offset, and the holes behind it
 /// (time below 0) are not programmed. An offset below 0 counts as 0. The largest delay, the holes out of reach and the manual

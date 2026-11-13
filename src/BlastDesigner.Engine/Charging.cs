@@ -7,7 +7,7 @@ public static class Charging
 {
     /// <summary>
     /// Mass of a deck in kg (bulk: column volume × density; packaged: whole cartridges): the property <c>deck.mass</c>
-    /// of the project's calculation profile (built-in «SHOTPlus 6» unless the project has its own).
+    /// of the project's calculation profile (built-in «Formulas» unless the project has its own).
     /// </summary>
     public static double DeckMass(BlastProject project, Hole hole, Deck deck)
     {
@@ -73,7 +73,7 @@ public static class Charging
     }
 
     /// <summary>
-    /// The largest offset of the hole's electronic primers, ms, never below 0 (SHOTPlus <c>HoleLoading.MaxOffset</c>): taken
+    /// The largest offset of the hole's electronic primers, ms, never below 0: taken
     /// whether or not <see cref="ElectronicSettings.UseOffsets"/> is on, the deck delays not counted. A programmed time plus
     /// this must stay within the largest delay of the detonators.
     /// </summary>
@@ -93,7 +93,7 @@ public static class Charging
     }
 
     /// <summary>
-    /// Depth of the middle of the charge that fires first in a hole (SHOTPlus <c>GetFiringCharge</c>): the charge of the
+    /// Depth of the middle of the charge that fires first in a hole: the charge of the
     /// earliest primer, the deeper of two at once. Null when no explosive deck of the hole has a primer.
     /// </summary>
     public static double? FiringChargeMidDepth(BlastProject project, Hole hole)
@@ -125,8 +125,7 @@ public static class Charging
     }
 
     /// <summary>
-    /// Programmed time of each electronic primer of a hole whose time is <paramref name="holeTime"/> (SHOTPlus
-    /// <c>HoleLoading.SetEBSTimes</c>), rounded as the detonators take it. With <see cref="ElectronicSettings.UseOffsets"/> a
+    /// Programmed time of each electronic primer of a hole whose time is <paramref name="holeTime"/>, rounded as the detonators take it. With <see cref="ElectronicSettings.UseOffsets"/> a
     /// primer fires at the hole's time plus its offset; one that would fire before 0 is not programmed and is left out. Otherwise the charges (<see cref="ExplosiveRuns"/>) with
     /// an electronic primer fire in the deck order: the first at the hole's time, each next one <see cref="ElectronicSettings.InterDeckDelayMs"/>
     /// later (all at once when simultaneous); within a charge the primers follow one another by <see cref="ElectronicSettings.IntraDeckDelayMs"/>.
@@ -149,7 +148,7 @@ public static class Charging
             {
                 if (!IsElectronic(project, p)) continue;
                 var t = p.OffsetMs == 0 ? holeTime : Timing.RoundTime(holeTime + p.OffsetMs, e.AllowSubMs);
-                // SHOTPlus SetEBSTimes: a detonator before 0 stays unprogrammed
+                // a detonator before 0 stays unprogrammed
                 if (relative || t > -0.001) times[p] = relative ? t : Math.Max(0, t);
             }
             return times;
