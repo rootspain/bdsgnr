@@ -36,7 +36,7 @@ public sealed partial class MainViewModel : ObservableObject
         View.TargetRadius = settings.TargetRadiusPixels;
         View.ShowFps = settings.ShowFps;
         View.SurfaceWireframe = settings.SurfaceWireframe;
-        View.PointerWorldMoved += p => Coordinates = $"X {p.X:0.00}   Y {p.Y:0.00}   Z {p.Z:0.00}";
+        View.PointerWorldMoved += p => Coordinates = $"X {p.X:0.00}  Y {p.Y:0.00}  Z {p.Z:0.00}";
         _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(Math.Max(1, settings.AutosaveMinutes)) };
         _autosave.Tick += (_, _) => _ = WriteRecovery();
         _autosave.Start();

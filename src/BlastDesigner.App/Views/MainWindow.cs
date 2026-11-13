@@ -47,13 +47,14 @@ public sealed class MainWindow : Window
     };
     private double _inspectorWidth = 320;
     private readonly Grid _center = new();
-    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Look.TextSoft, Margin = new Thickness(10, 0) };
-    private readonly TextBlock _coords = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 300, FontFamily = Look.Mono, Foreground = Look.Muted, Margin = new Thickness(10, 0) };
-    private readonly TextBlock _modified = new() { VerticalAlignment = VerticalAlignment.Center, Foreground = Look.Accent, Margin = new Thickness(10, 0) };
-    private readonly TextBlock _blastName = new() { FontWeight = FontWeight.SemiBold, Foreground = Look.Text };
-    private readonly TextBlock _blastInfo = new() { Foreground = Look.Muted };
-    private readonly ComboBox _defaultLayer = new() { MinWidth = 140, Height = 24, MinHeight = 24, FontSize = 11.5, Padding = new Thickness(6, 0) };
-    private readonly NumericUpDown _targetRadius = new() { Minimum = 2, Maximum = 40, Increment = 1, Width = 100, Height = 24, MinHeight = 24, FormatString = "0", FontSize = 11.5 };
+    /// <summary>Type size of the status bar: small, the bar takes little of the height of the plan.</summary>
+    private const double StatusFont = 11;
+    private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Look.TextSoft, Margin = new Thickness(10, 0), FontSize = StatusFont };
+    // wide enough for the coordinates of a mine grid, so the filters after it do not jump as the cursor moves
+    private readonly TextBlock _coords = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 215, FontFamily = Look.Mono, Foreground = Look.Muted, Margin = new Thickness(10, 0, 6, 0), FontSize = StatusFont };
+    private readonly ComboBox _defaultLayer = new() { MinWidth = 130, Height = 20, MinHeight = 20, FontSize = StatusFont, Padding = new Thickness(6, 0) };
+    // no spinner buttons: ↑ and ↓ change it
+    private readonly NumericUpDown _targetRadius = new() { Name = "pickRadius", Minimum = 2, Maximum = 40, Increment = 1, Width = 44, Height = 20, MinHeight = 20, FormatString = "0", FontSize = StatusFont, ShowButtonSpinner = false, HorizontalContentAlignment = HorizontalAlignment.Center };
     private readonly StackPanel _filters = new() { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
     private readonly StackPanel _chips = new() { Orientation = Orientation.Horizontal, Spacing = 4 };
     private readonly StackPanel _modes = new() { Orientation = Orientation.Horizontal };
@@ -275,22 +276,24 @@ public sealed class MainWindow : Window
             _settings.TargetRadiusPixels = (double)(_targetRadius.Value ?? 8);
             _viewport.TargetRadius = _settings.TargetRadiusPixels;
         };
-        ToolTip.SetTip(_targetRadius, Loc.T("Target radius:"));
+        ToolTip.SetTip(_targetRadius, Loc.Ui("Pick radius in pixels of the screen; ↑ and ↓ change it"));
         _defaultLayer.SelectionChanged += (_, _) =>
         {
             if (_refreshingLayerCombo || _vm.Project == null || _defaultLayer.SelectedIndex < 0) return;
             var layer = _vm.Project.Layers[_defaultLayer.SelectedIndex];
             if (layer.Id != _vm.Project.DefaultLayerId) _vm.MakeDefaultLayer(layer);
         };
-        var status = new DockPanel { Background = Look.Field, Height = 28 };
-        var right = Ui.Row(8, new TextBlock { Text = Loc.T("Layer:"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, FontSize = 11.5 }, _defaultLayer,
-            new TextBlock { Text = Loc.Ui("Pick radius, px"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, FontSize = 11.5 }, _targetRadius);
+        var status = new DockPanel { Background = Look.Field, Height = 24 };
+        var right = Ui.Row(8, new TextBlock { Text = Loc.T("Layer:"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, FontSize = StatusFont }, _defaultLayer,
+            new TextBlock { Text = Loc.Ui("Pick radius"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, FontSize = StatusFont }, _targetRadius);
         right.Margin = new Thickness(0, 0, 8, 0);
-        DockPanel.SetDock(_modified, Dock.Left);
+        // one line: the coordinates, the quick filters, the hint; the layer and the pick radius on the right. Whether the blast
+        // is saved shows in the title of the window.
         DockPanel.SetDock(_coords, Dock.Left);
+        DockPanel.SetDock(_filters, Dock.Left);
         DockPanel.SetDock(right, Dock.Right);
-        status.Children.Add(_modified);
         status.Children.Add(_coords);
+        status.Children.Add(_filters);
         status.Children.Add(right);
         status.Children.Add(_status);
         var statusBorder = new Border { Child = status, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 1, 0, 0) };
@@ -300,71 +303,104 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(header, Dock.Top);
         DockPanel.SetDock(_ribbon, Dock.Top);
         DockPanel.SetDock(statusBorder, Dock.Bottom);
-        var filterBar = BuildFilterBar();
-        DockPanel.SetDock(filterBar, Dock.Bottom);
         root.Children.Add(header);
         root.Children.Add(_ribbon);
         root.Children.Add(statusBorder);
-        root.Children.Add(filterBar);
         root.Children.Add(_body);
         Content = root;
         OnToolChanged();
     }
 
+    /// <summary>The search of the header, folded into a magnifier when the window is narrow, and the one over the plan it opens.</summary>
+    private Button? _searchButton;
+    private CommandPalette? _searchOver;
+    private Popup? _searchPopup;
+
+    /// <summary>
+    /// One line: the menu, Undo and Redo, the stage tabs; on the right the search, the settings and help. New, Open, Save
+    /// and Print are on the File tab and on their keys; the name of the blast is in the title of the window. When the tabs
+    /// leave no room for the search field it folds into a magnifier, which opens the field on the same line, left of it.
+    /// </summary>
     private Control BuildHeader()
     {
         // the classic menu opens from the top left corner, where menus are looked for
         var logo = Ui.Row(6, Look.Icon("menu", 16, Look.TextSoft), new TextBlock { Text = Loc.Ui("Menu"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center });
-        var quick = Ui.Row(2);
-        foreach (var (icon, tip, action) in new (string, string, Action)[]
-                 {
-                     ("new", "New (Ctrl+N)", () => _ = _vm.New()), ("open", "Open (Ctrl+O)", () => _ = _vm.Open()), ("save", "Save (Ctrl+S)", () => _ = _vm.Save()),
-                     ("undo", "Undo (Ctrl+Z)", _vm.Undo), ("redo", "Redo (Ctrl+Y)", _vm.Redo), ("print", "Print plan (Ctrl+P)", () => _ = _vm.PrintPlan())
-                 })
-            quick.Children.Add(Ui.Flat(Look.Icon(icon, 18, Look.TextSoft), Loc.Ui(tip), action, 34));
-        var quickBorder = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1, 0, 0, 0), Padding = new Thickness(8, 0, 0, 0), Child = quick };
-
-        var blast = new Button
-        {
-            Content = Ui.Row(8, new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Background = Look.Accent }, _blastName, _blastInfo, Look.Icon("down", 12, Look.Muted, 2)),
-            Height = 34,
-            Padding = new Thickness(12, 0),
-            Background = Brushes.Transparent,
-            BorderBrush = Look.Line,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6)
-        };
-        ToolTip.SetTip(blast, Loc.Ui("Blast properties, design data, resources"));
-        Ui.DropDown(blast, () => new[]
-        {
-            MenuEntry.Item("Blast properties…", () => _ = _vm.EditBlastProperties(), () => _vm.HasProject),
-            MenuEntry.Item("Design data…", () => _ = _vm.EditDesignData(), () => _vm.HasProject),
-            MenuEntry.Item("Available resources…", () => _ = _vm.EditResources(), () => _vm.HasProject),
-            MenuEntry.Item("Hole and material types…", () => _ = _vm.EditHoleTypes(), () => _vm.HasProject),
-            MenuEntry.Item("Blast outcomes…", () => _ = _vm.EditOutcomes(), () => _vm.HasProject),
-            MenuEntry.Item("Site coordinate system…", () => _ = _vm.EditCoordinates(), () => _vm.HasProject)
-        });
-
         var allMenu = Ui.Flat(logo, Loc.Ui("All commands in the classic menu"), height: 40);
         allMenu.Name = "mainMenu";
         allMenu.Padding = new Thickness(8, 0, 10, 0);
         Ui.DropDown(allMenu, _vm.BuildMenu, PlacementMode.BottomEdgeAlignedLeft);
+        var undo = Ui.Flat(Look.Icon("undo", 18, Look.TextSoft), Loc.Ui("Undo (Ctrl+Z)"), _vm.Undo, 34);
+        undo.Name = "headerUndo";
+        var redo = Ui.Flat(Look.Icon("redo", 18, Look.TextSoft), Loc.Ui("Redo (Ctrl+Y)"), _vm.Redo, 34);
+        redo.Name = "headerRedo";
+        var history = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1, 0, 1, 0), Padding = new Thickness(6, 0), Margin = new Thickness(6, 0, 4, 0), Child = Ui.Row(2, undo, redo) };
+        var left = Ui.Row(0, allMenu, history);
+        left.Margin = new Thickness(4, 0, 0, 0);
+
         var settings = Ui.Flat(Look.Icon("gear", 18, Look.TextSoft), Loc.T("Program settings…"), () => _ = _vm.EditProgramSettings(), 34);
         var help = Ui.Flat(Look.Icon("help", 18, Look.TextSoft), Loc.Ui("Help (F1)"), () => AnalysisWindows.Help(), 34);
+        _searchButton = Ui.Flat(Look.Icon("search", 18, Look.TextSoft), Loc.Ui("Search: command, hole, setting (Ctrl+K)"), OpenSearch, 34);
+        _searchButton.Name = "searchButton";
+        _searchButton.IsVisible = false;
+        _palette.Margin = new Thickness(8, 0);
+        _palette.Width = SearchMax;
+        var right = Ui.Row(2, _palette, _searchButton, settings, help);
+        right.Margin = new Thickness(0, 0, 12, 0);
 
+        // the search for a narrow window: the field on the line of the header, left of the magnifier, over the tabs
+        _searchOver = new CommandPalette(_vm) { Width = 560, Name = "searchOver", BoxShadow = BoxShadows.Parse("0 8 24 0 #73000000") };
+        _searchPopup = new Popup
+        {
+            Child = _searchOver,
+            IsLightDismissEnabled = true,
+            Placement = PlacementMode.Left,
+            HorizontalOffset = -4
+        };
+        _searchOver.Done += () => _searchPopup.IsOpen = false;
+
+        var tabs = _ribbon.TabStrip;
         var bar = new DockPanel { Background = Look.Panel, Height = 48 };
-        var left = Ui.Row(12, allMenu, quickBorder, blast);
-        left.Margin = new Thickness(4, 0, 12, 0);
-        var rightSide = Ui.Row(2, settings, help);
-        rightSide.Margin = new Thickness(0, 0, 12, 0);
         DockPanel.SetDock(left, Dock.Left);
-        DockPanel.SetDock(rightSide, Dock.Right);
+        DockPanel.SetDock(right, Dock.Right);
         bar.Children.Add(left);
-        bar.Children.Add(rightSide);
-        _palette.MaxWidth = 560;
-        _palette.Margin = new Thickness(12, 0);
-        bar.Children.Add(_palette);
+        bar.Children.Add(right);
+        bar.Children.Add(tabs);
+        bar.Children.Add(_searchPopup);
+        _searchPopup.PlacementTarget = _searchButton;
+        bar.SizeChanged += (_, _) => FitSearch(bar, left, settings, help);
+        bar.LayoutUpdated += (_, _) => FitSearch(bar, left, settings, help);
         return new Border { Child = bar, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1) };
+    }
+
+    /// <summary>Widths of the search field in the header: as wide as this when there is room, no narrower than the least.</summary>
+    public const double SearchMax = 360, SearchMin = 220;
+
+    /// <summary>
+    /// The search field takes the room the tabs leave, between <see cref="SearchMin"/> and <see cref="SearchMax"/>; with
+    /// less than the least it folds into the magnifier.
+    /// </summary>
+    private void FitSearch(Control bar, Control left, Control settings, Control help)
+    {
+        if (_searchButton == null) return;
+        var room = bar.Bounds.Width - left.Bounds.Width - settings.Bounds.Width - help.Bounds.Width - 12 - 4 - _ribbon.TabsWidth - 16 - 4;
+        var fold = room < SearchMin;
+        var width = Math.Clamp(room, SearchMin, SearchMax);
+        if (_palette.IsVisible == !fold && Math.Abs(_palette.Width - width) < 0.5) return;
+        _palette.IsVisible = !fold;
+        _searchButton.IsVisible = fold;
+        if (!fold) { _palette.Width = width; _searchPopup!.IsOpen = false; }
+    }
+
+    /// <summary>Whether the search is folded into the magnifier (the window too narrow for the field).</summary>
+    public bool SearchFolded => _searchButton?.IsVisible == true;
+
+    /// <summary>Ctrl+K and the magnifier: the field of the header, or, folded, the search over the plan.</summary>
+    public void OpenSearch()
+    {
+        if (!SearchFolded) { _palette.Focus2(); return; }
+        if (_searchPopup == null || _searchOver == null) return;
+        _searchPopup.IsOpen = true;
+        Dispatcher.UIThread.Post(_searchOver.Focus2, DispatcherPriority.Input);
     }
 
     private Control BuildRail()
@@ -555,15 +591,6 @@ public sealed class MainWindow : Window
         }
     }
 
-    private Control BuildFilterBar()
-    {
-        var table = Ui.Flat(Ui.Row(6, Look.Icon("table", 15, Look.Text), new TextBlock { Text = Loc.Ui("Hole table"), FontWeight = FontWeight.SemiBold, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center }, Look.Kbd("Ctrl T"), Look.Icon("up", 12, Look.Muted, 2)),
-            Loc.Ui("Hole table (Ctrl+T)"), ToggleTable, height: 28);
-        var bar = Ui.Row(8, table, new TextBlock { Text = Loc.Ui("Quick filters:"), Foreground = Look.Faint, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) }, _filters);
-        bar.Margin = new Thickness(12, 0);
-        return new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 1, 0, 0), MinHeight = 34, Child = Ui.HScroll(bar) };
-    }
-
     private void RefreshFilters()
     {
         _filters.Children.Clear();
@@ -573,10 +600,11 @@ public sealed class MainWindow : Window
             var holes = p == null ? new List<Hole>() : f.Holes(p).ToList();
             var b = new Button
             {
-                Content = Ui.Row(6, new TextBlock { Text = Loc.Ui(f.Label), FontSize = 12, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center },
-                    new TextBlock { Text = holes.Count.ToString(), FontFamily = Look.Mono, FontSize = 11, Foreground = Look.Accent, VerticalAlignment = VerticalAlignment.Center }),
-                Height = 24,
-                Padding = new Thickness(10, 0),
+                Content = Ui.Row(5, new TextBlock { Text = Loc.Ui(f.Label), FontSize = StatusFont, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock { Text = holes.Count.ToString(), FontFamily = Look.Mono, FontSize = StatusFont, Foreground = Look.Accent, VerticalAlignment = VerticalAlignment.Center }),
+                Height = 18,
+                MinHeight = 18,
+                Padding = new Thickness(8, 0),
                 CornerRadius = new CornerRadius(12),
                 Background = Brushes.Transparent,
                 BorderBrush = Look.LineStrong,
@@ -627,7 +655,7 @@ public sealed class MainWindow : Window
         else if (m == KeyModifiers.Alt && e.Key >= Key.D1 && e.Key <= Key.D7) a = () => _ribbon.Select(e.Key - Key.D1);
         else if (m == KeyModifiers.Control) a = e.Key switch
         {
-            Key.K => _palette.Focus2,
+            Key.K => OpenSearch,
             Key.G => _vm.GroupSelected,
             Key.T => ToggleTable,
             Key.E => () => _ = _vm.FindHole("empty"),
@@ -761,22 +789,15 @@ public sealed class MainWindow : Window
 
     private void OnModelRefreshed()
     {
-        _modified.Text = _vm.Doc?.IsModified == true ? "● " + Loc.Ui("Not saved") : "";
         _refreshingLayerCombo = true;
         if (_vm.Project != null)
         {
             _defaultLayer.ItemsSource = _vm.Project.Layers.Select(l => Loc.Name(l.Name)).ToList();
             _defaultLayer.SelectedIndex = _vm.Project.Layers.FindIndex(l => l.Id == _vm.Project.DefaultLayerId);
-            var h = _vm.Project.Header;
-            _blastName.Text = string.IsNullOrWhiteSpace(h.Name) ? Loc.T("New blast") : h.Name;
-            var info = new[] { h.Bench.Length > 0 ? Loc.Ui("Bench") + " " + h.Bench : null, _vm.Doc?.IsModified == true ? Loc.Ui("not saved") : null }.Where(x => x != null);
-            _blastInfo.Text = string.Join(" · ", info);
         }
         else
         {
             _defaultLayer.ItemsSource = null;
-            _blastName.Text = Loc.Ui("No blast open");
-            _blastInfo.Text = "";
         }
         _refreshingLayerCombo = false;
         RefreshFilters();

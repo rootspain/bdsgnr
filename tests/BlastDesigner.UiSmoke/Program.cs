@@ -1039,6 +1039,79 @@ Step("dark timing", () => { vm.PlanView(); vm.ZoomAll(); vm.VisualizeTiming(); }
 Shot("34_dark_timing");
 Step("clear timing", vm.ClearOverlays);
 
+Step("the header: the menu, Undo and Redo, the stage tabs, the search; New, Open, Save, Print and the blast list are gone", () =>
+{
+    window.Width = 1400; Pump();
+    var header = window.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "mainMenu").TranslatePoint(default, window)!.Value;
+    double X(Control c) => c.TranslatePoint(default, window)!.Value.X;
+    // a button of a closed menu is not on the window: it is nowhere on it
+    double Y(Control c) => c.TranslatePoint(default, window)?.Y ?? double.MaxValue;
+    Button Named(string name) => window.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == name);
+    var tabs = window.Ribbon.TabStrip;
+    var undo = Named("headerUndo");
+    var redo = Named("headerRedo");
+    var menu = Named("mainMenu");
+    if (!(X(menu) < X(undo) && X(undo) < X(redo) && X(redo) < X(tabs))) throw new Exception("the header is not Menu, Undo, Redo, tabs");
+    if (Math.Abs(Y(tabs) - Y(menu)) > 10 || Y(tabs) > 10) throw new Exception("the stage tabs are not on the line of the menu");
+    string Tip(Button b) => ToolTip.GetTip(b) as string ?? "";
+    var gone = new[] { "New (Ctrl+N)", "Open (Ctrl+O)", "Save (Ctrl+S)", "Print plan (Ctrl+P)", "Blast properties, design data, resources" }.Select(BlastDesigner.App.Services.Loc.Ui).ToHashSet();
+    var left = window.GetLogicalDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible && Y(b) < 48 && gone.Contains(Tip(b))).Select(Tip).ToList();
+    if (left.Count > 0) throw new Exception("still in the header: " + string.Join(", ", left));
+    // wide: the search field; narrow: the magnifier, and its search over the plan
+    if (window.SearchFolded) throw new Exception("the search is folded on a wide window");
+    Shot("90_header_wide");
+    window.Width = 1000; Pump(); Pump();
+    if (!window.SearchFolded) throw new Exception("the search is not folded on a narrow window");
+    var tabsRight = X(tabs) + tabs.Bounds.Width;
+    if (tabsRight > X(Named("searchButton")) + 1) throw new Exception("the tabs go under the magnifier");
+    Shot("90b_header_narrow");
+    Named("searchButton").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    var over = window.GetLogicalDescendants().OfType<CommandPalette>().Single(c => c.Name == "searchOver");
+    var popup = over.FindLogicalAncestorOfType<Avalonia.Controls.Primitives.Popup>()!;
+    if (!popup.IsOpen) throw new Exception("the magnifier did not open the search");
+    // on the line of the magnifier, left of it
+    var glass = Named("searchButton");
+    var (o, g) = (over.PointToScreen(new Avalonia.Point(over.Bounds.Width, over.Bounds.Height / 2)), glass.PointToScreen(new Avalonia.Point(0, glass.Bounds.Height / 2)));
+    if (Math.Abs(o.Y - g.Y) > 2 || o.X > g.X || g.X - o.X > 20) throw new Exception($"the search is not on the line of the magnifier, left of it: field ends at {o}, magnifier at {g}");
+    Shot("90c_header_narrow_search");
+    var box = over.GetLogicalDescendants().OfType<TextBox>().Single();
+    box.Text = BlastDesigner.App.Services.Loc.T("Zoom all"); Pump();
+    box.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    if (popup.IsOpen) throw new Exception("the search over the plan stayed open after the command");
+    // Ctrl+K opens it too, Esc closes it
+    vm.View.Focus();
+    window.KeyPress(Avalonia.Input.Key.K, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.K, "k"); Pump(); Pump();
+    if (!popup.IsOpen) throw new Exception("Ctrl+K did not open the search on a narrow window");
+    box.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape }); Pump();
+    if (popup.IsOpen) throw new Exception("Esc did not close the search");
+    window.Width = 1400; Pump(); Pump();
+    if (window.SearchFolded) throw new Exception("the search field did not come back on a wide window");
+});
+Step("the pick radius in the status bar: no spinner buttons, the arrows change it", () =>
+{
+    var box = window.GetLogicalDescendants().OfType<NumericUpDown>().Single(n => n.Name == "pickRadius");
+    if (box.ShowButtonSpinner) throw new Exception("the pick radius still has its spinner buttons");
+    var was = box.Value;
+    var text = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(box).OfType<TextBox>().First();
+    text.Focus(); Pump();
+    window.KeyPress(Avalonia.Input.Key.Up, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.ArrowUp, null); Pump();
+    if (box.Value != was + 1) throw new Exception($"↑ made the pick radius {box.Value}, {was + 1} expected");
+    window.KeyPress(Avalonia.Input.Key.Down, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.ArrowDown, null); Pump();
+    if (box.Value != was) throw new Exception("↓ did not take it back");
+    if (window.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Pick radius, px"))) throw new Exception("the caption still says px");
+    vm.View.Focus(); Pump();
+});
+Step("the bottom of the window is one line: the coordinates, then the quick filters Empty and Not programmed", () =>
+{
+    var coords = window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Text?.StartsWith("X ") == true && t.Text.Contains("  Y "));
+    if (coords.Text!.Contains("   ")) throw new Exception("the coordinates are spread: " + coords.Text);
+    var labels = vm.QuickFilters().Select(f => f.Label).ToList();
+    if (!labels.SequenceEqual(new[] { "Empty", "Not programmed" })) throw new Exception("quick filters: " + string.Join(", ", labels));
+    var filter = window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Empty"));
+    var (c, f) = (coords.TranslatePoint(default, window)!.Value, filter.TranslatePoint(default, window)!.Value);
+    if (f.X <= c.X || Math.Abs(f.Y - c.Y) > 6) throw new Exception($"the filters are not after the coordinates on their line: {c} {f}");
+    if (window.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains(BlastDesigner.App.Services.Loc.Ui("Not saved")) == true)) throw new Exception("the Not saved mark is still there");
+});
 Step("dropdown buttons open menus", () =>
 {
     var buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
@@ -1061,7 +1134,6 @@ Step("dropdown buttons open menus", () =>
         if (at.X > 20 || at.Y > 20) throw new Exception($"the menu is at {at}, not in the top left corner");
         if (window.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Any(t => t.Text is "Blast Designer" or "BD6")) throw new Exception("the name of the program is still in the header");
     }
-    Click(BlastDesigner.App.Services.Loc.Ui("Blast properties, design data, resources"), 6);
     window.Ribbon.Select(0); Pump();
     buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
     Click(BlastDesigner.App.Services.Loc.Ui("Import"), 5);
@@ -2897,8 +2969,9 @@ Step("ribbon drags with the left button", () =>
     Pump();
     if (groups.Offset.X < 150) throw new Exception($"drag did not scroll the ribbon (offset {groups.Offset.X})");
     if (window.Ribbon.Current != stage) throw new Exception("drag changed the stage");
-    var tabs = strips.First();
-    var tab = tabs.TranslatePoint(new Avalonia.Point(60, 19), window)!.Value;
+    // the stage tabs are in the header of the window, on the line of the menu
+    var tabs = window.Ribbon.TabStrip;
+    var tab = tabs.TranslatePoint(new Avalonia.Point(60, tabs.Bounds.Height - 15), window)!.Value;
     window.MouseDown(tab, Avalonia.Input.MouseButton.Left); window.MouseUp(tab, Avalonia.Input.MouseButton.Left); Pump();
     if (window.Ribbon.Current == stage) throw new Exception("a plain click on a stage tab no longer works");
     window.Width = 1400; Pump();
@@ -4912,7 +4985,7 @@ Step("a new language builds the window again on Apply and on OK, and the blast g
     var (language, doc, undo) = (vm.Settings.Language, vm.Doc, vm.Doc!.UndoNames.Count);
     var stages = vm.BuildStages().Select(s => s.Name).ToList();
     // the ribbon only: names in the blast itself (layers, groups) stay in the language they were made in
-    string[] Texts() => window.Ribbon.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
+    string[] Texts() => window.Ribbon.GetLogicalDescendants().Concat(window.Ribbon.TabStrip.GetLogicalDescendants()).OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
     void Press(Window w, Func<Button, bool> which) => w.GetLogicalDescendants().OfType<Button>().First(which).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
     foreach (var (lang, button) in new[] { (language == "ru" ? "en" : "ru", "apply"), (language, "ok") })
     {

@@ -97,6 +97,13 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The collar must be above the level, otherwise the value is refused. The field is in the Properties panel and the hole form.
 
 ### Changed
+- **A shorter bottom line:** the Hole table button and the "Quick filters:" caption are gone, the filters themselves
+  stay. The hole table opens by Ctrl+T and from View ▸ Table view. The status bar has smaller type and is lower.
+- **The ribbon tabs are in the header of the window**, on one line with Menu, Undo and Redo; on the right the search,
+  settings and help. The ribbon is a line lower. New, Open, Save and Print plan are gone from the header (they are on
+  the File tab and on Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+P), and so is the New blast list (the blast's name is in the title
+  of the window, its properties on the File tab and in the menu). On a narrow window the search field folds into a
+  magnifier: a click on it or Ctrl+K opens the search over the window.
 - **On the first start the program's window opens on the whole screen**; after that maximized or not, as it was left.
 - **The To the surface button** on the Properties tab of holes is in the accent colour: it stands out among the fields.
 - **The menu is in the top left corner**, in place of the program's name "BD6 Blast Designer", which is gone from the

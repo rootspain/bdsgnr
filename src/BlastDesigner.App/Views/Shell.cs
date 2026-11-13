@@ -184,7 +184,7 @@ public static class Ui
         Loc.Ui(it.Label) + (it.Key != null ? $" ({it.Key})" : "") + (it.Lock != null ? " — " + Loc.T(it.Lock) : "");
 }
 
-/// <summary>Stage tabs and the ribbon of the selected stage.</summary>
+/// <summary>The ribbon of the selected stage; its stage tabs (<see cref="TabStrip"/>) are shown in the header of the window.</summary>
 public sealed class RibbonBar : DockPanel
 {
     private readonly MainViewModel _vm;
@@ -197,15 +197,10 @@ public sealed class RibbonBar : DockPanel
     {
         _vm = vm;
         _stages = vm.BuildStages();
-        var nav = new DockPanel { Background = Look.Panel, Height = 30 };
-        var hint = new TextBlock { Text = Loc.Ui("Alt+1…7 — switch stage"), Foreground = Look.Faint, FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0) };
-        DockPanel.SetDock(hint, Dock.Right);
-        nav.Children.Add(hint);
-        var tabsScroll = Ui.HScroll(_tabs);
-        tabsScroll.Padding = new Thickness(12, 0, 0, 0);
-        nav.Children.Add(tabsScroll);
-        SetDock(nav, Dock.Top);
-        Children.Add(nav);
+        // the tabs go in the header of the window, on the line of the menu; a narrow window scrolls them sideways
+        _tabs.VerticalAlignment = VerticalAlignment.Bottom;
+        _tabs.Name = "stageTabs";
+        TabStrip = Ui.HScroll(_tabs);
         Children.Add(new Border
         {
             Background = Look.Ribbon,
@@ -216,6 +211,12 @@ public sealed class RibbonBar : DockPanel
         });
         Select(2);
     }
+
+    /// <summary>The stage tabs, for the header of the window.</summary>
+    public Control TabStrip { get; }
+
+    /// <summary>The width the tabs take, all of them shown.</summary>
+    public double TabsWidth => _tabs.DesiredSize.Width;
 
     public int Current { get; private set; } = -1;
     public IReadOnlyList<Stage> Stages => _stages;
@@ -233,13 +234,16 @@ public sealed class RibbonBar : DockPanel
             {
                 Content = Ui.Row(6, new TextBlock { Text = (i + 1).ToString(), FontFamily = Look.Mono, FontSize = 10, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
                     new TextBlock { Text = Loc.Ui(_stages[i].Name), FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal, Foreground = active ? Look.Accent : Look.Muted }),
-                Height = 30,
-                Padding = new Thickness(14, 0),
+                // from the bottom of the header: the active one runs on into its ribbon below
+                Height = 36,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Padding = new Thickness(12, 0),
                 CornerRadius = new CornerRadius(6, 6, 0, 0),
                 Background = active ? Look.Ribbon : Brushes.Transparent,
                 BorderBrush = Look.Accent,
                 BorderThickness = new Thickness(0, active ? 2 : 0, 0, 0)
             };
+            ToolTip.SetTip(b, Loc.Ui("Alt+1…7 — switch stage"));
             b.Click += (_, _) => { if (idx != Current) IO.UsageLog.Track(IO.UsageLog.Tab, _stages[idx].Name, "ribbon"); Select(idx); };
             _tabs.Children.Add(b);
         }
@@ -395,6 +399,9 @@ public sealed class CommandPalette : Border
 
     public void Focus2() { _box.Focus(); _box.SelectAll(); }
 
+    /// <summary>A command was run or the search was left with Esc: the search window over the plan closes.</summary>
+    public event Action? Done;
+
     /// <summary>Every command of the classic menu and the ribbon, with a localised title.</summary>
     private void Index()
     {
@@ -438,7 +445,7 @@ public sealed class CommandPalette : Border
             case Key.Down: _list.SelectedIndex = Math.Min(_shown.Count - 1, _list.SelectedIndex + 1); e.Handled = true; break;
             case Key.Up: _list.SelectedIndex = Math.Max(0, _list.SelectedIndex - 1); e.Handled = true; break;
             case Key.Enter: Run(); e.Handled = true; break;
-            case Key.Escape: _box.Text = ""; _popup.IsOpen = false; _vm.View.Focus(); e.Handled = true; break;
+            case Key.Escape: _box.Text = ""; _popup.IsOpen = false; _vm.View.Focus(); e.Handled = true; Done?.Invoke(); break;
         }
     }
 
@@ -449,6 +456,7 @@ public sealed class CommandPalette : Border
         _box.Text = "";
         _popup.IsOpen = false;
         _vm.View.Focus();
+        Done?.Invoke();
         Ui.Safe(action);
     }
 }

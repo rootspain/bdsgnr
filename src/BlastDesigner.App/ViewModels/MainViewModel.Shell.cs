@@ -231,8 +231,6 @@ public sealed partial class MainViewModel
     {
         // with blocks shown, the holes inside them
         new("Empty", "Ctrl+E", p => ShownHoles(p).Where(h => !h.IsDummy && h.Decks.Count == 0)),
-        new("Dipped", "Ctrl+L", p => ShownHoles(p).Where(h => h.ActualLength.HasValue)),
-        new("Misfires", "Ctrl+M", p => ShownHoles(p).Where(h => h.Exceptions.HasFlag(HoleException.Misfire))),
         new("Not programmed", "Ctrl+U", p => ShownHoles(p).Where(h => !h.IsDummy && !h.ElectronicTimeMs.HasValue))
     };
 

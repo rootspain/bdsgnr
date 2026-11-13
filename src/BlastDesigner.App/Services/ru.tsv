@@ -3151,3 +3151,5 @@ the lines on {0} make no block	линии слоёв {0} не образуют �
 ui:Hidden paler: what is behind a surface is drawn at a quarter of its opacity; holes stay as they are (Shift+H)	Скрытое бледнее: то, что за поверхностью, рисуется с четвертью её непрозрачности; скважины — как есть (Shift+H)
 Hidden paler: what is behind a surface is drawn paler	Скрытое бледнее: то, что за поверхностью, рисуется бледнее
 Everything drawn far to near	Всё рисуется от дальнего к ближнему
+ui:Search: command, hole, setting (Ctrl+K)	Поиск: команда, скважина, настройка (Ctrl+K)
+ui:Pick radius in pixels of the screen; ↑ and ↓ change it	Радиус захвата в пикселях экрана; ↑ и ↓ меняют его
