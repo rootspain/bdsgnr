@@ -21,8 +21,12 @@ internal sealed class TextBatch
         list.Add((text, x, y));
     }
 
-    /// <summary>Draws everything collected with the typeface and antialiasing of <paramref name="paint"/>, then empties the batch.</summary>
-    public void Flush(SKCanvas c, SKPaint paint)
+    /// <summary>
+    /// Draws everything collected with the typeface and antialiasing of <paramref name="paint"/>, then empties the batch.
+    /// With <paramref name="halo"/> each text is first outlined in a colour against its own (dark round light text, light
+    /// round dark), so it reads over a surface of any colour.
+    /// </summary>
+    public void Flush(SKCanvas c, SKPaint paint, bool halo = false)
     {
         if (_groups.Count == 0) return;
         var color = paint.Color;
@@ -54,6 +58,16 @@ internal sealed class TextBatch
             }
             using var blob = builder.Build();
             if (blob == null) continue;
+            if (halo)
+            {
+                var light = (0.2126 * col.Red + 0.7152 * col.Green + 0.0722 * col.Blue) / 255 > 0.45;
+                using var outline = paint.Clone();
+                outline.Style = SKPaintStyle.Stroke;
+                outline.StrokeJoin = SKStrokeJoin.Round;
+                outline.StrokeWidth = Math.Max(2.5f, sz * 0.24f);
+                outline.Color = light ? new SKColor(0, 0, 0, 200) : new SKColor(255, 255, 255, 215);
+                c.DrawText(blob, 0, 0, outline);
+            }
             paint.Color = col;
             c.DrawText(blob, 0, 0, paint);
         }

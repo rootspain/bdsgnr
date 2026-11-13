@@ -29,6 +29,8 @@ public sealed class FrontLineHandles : ISelectGesture
     private ToolPointer? _down;
     private bool _dragging;
     private List<Vec3>? _shown;
+    /// <summary>The delays of a chevron while one of its ends is dragged: its segment's delay follows its length.</summary>
+    private List<TimingLineSegment>? _segments;
 
     public FrontLineHandles(MainViewModel vm, Func<bool> visible)
     {
@@ -107,10 +109,15 @@ public sealed class FrontLineHandles : ISelectGesture
         }
         else
         {
-            _shown = Chevron.Reshape(pts, cam.ToWorld(p.X, p.Y, pts[1].Z));
-            preview.Labels.Add((_shown[handle], $"{Chevron.AngleDeg(_shown):0.0}° · {Chevron.Length(_shown):0.00} m"));
+            // one end on its own: the vertex and the other end stay, the delay of the segment goes with its length
+            _shown = Chevron.MoveEnd(pts, handle, cam.ToWorld(p.X, p.Y, pts[1].Z));
+            _segments = ChevronDelays(line, _shown, handle);
+            var seg = handle == 0 ? 0 : 1;
+            preview.Labels.Add((_shown[handle], $"{_segments[seg].ReliefMsPerM:0.0} ms/m · {Vec3.Distance2D(_shown[handle], _shown[1]):0.00} m"));
         }
-        Overlay.Dragged = (line, _shown, line.Front == TimingFrontShape.Chevron && handle == 1);
+        var shownLine = line;
+        if (_segments != null) { shownLine = line.WithPoints(line.Points); shownLine.Segments = _segments; }
+        Overlay.Dragged = (shownLine, _shown, line.Front == TimingFrontShape.Chevron && handle == 1);
     }
 
     /// <summary>Applies the drag (with undo, reprogramming the front's holes); a press without a drag changes nothing.</summary>
@@ -119,8 +126,9 @@ public sealed class FrontLineHandles : ISelectGesture
         if (_drag is not { } drag) return;
         var (line, handle) = drag;
         var shown = _dragging ? _shown : null;
+        var segments = _segments;
         Reset();
-        if (shown != null) _vm.SetTimingLinePoints(line.Id, shown, line.Front == TimingFrontShape.Chevron && handle == 1 ? "Rotate timing line" : "Reshape timing line");
+        if (shown != null) _vm.SetTimingLinePoints(line.Id, shown, line.Front == TimingFrontShape.Chevron && handle == 1 ? "Rotate timing line" : "Reshape timing line", segments);
     }
 
     public void Cancel() => Reset();
@@ -132,7 +140,20 @@ public sealed class FrontLineHandles : ISelectGesture
         _down = null;
         _dragging = false;
         _shown = null;
+        _segments = null;
         Overlay.Dragged = null;
+    }
+
+    /// <summary>The delays of a chevron's segments with end <paramref name="end"/> moved: that segment's delay grows with its length.</summary>
+    public static List<TimingLineSegment> ChevronDelays(TimingLineEntity line, IReadOnlyList<Vec3> shown, int end)
+    {
+        var segments = line.Segments.ToList();
+        var seg = end == 0 ? 0 : 1;
+        if (segments.Count <= seg) return segments;
+        var was = Vec3.Distance2D(line.Points[end], line.Points[1]);
+        var now = Vec3.Distance2D(shown[end], shown[1]);
+        if (was > 1e-9) segments[seg] = segments[seg] with { ReliefMsPerM = Math.Round(segments[seg].ReliefMsPerM * now / was, 2) };
+        return segments;
     }
 }
 
@@ -174,7 +195,7 @@ public sealed class FrontLineTool : Tool
     public override string Name => "Timing line";
     public override string Hint => Vm.FrontShape == TimingFrontShape.Line
         ? "Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line to the side of most holes, the arrow shows it. On a selected line drag a circle to move its end, the line to move it."
-        : "Press to place the vertex of the front and drag to set its direction and length (a click gives 60 px); the ray shows where the times grow. On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.";
+        : "Press to place the vertex of the front and drag the way the times are to grow: the ray follows the cursor, the sides open behind it (a click gives 60 px, upwards). On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.";
 
     /// <summary>The end of a segment from <paramref name="from"/> turned to the nearest step of 15°, its length kept.</summary>
     public static Vec3 Stepped(Vec3 from, Vec3 to)
@@ -277,8 +298,8 @@ public sealed class FrontLineTool : Tool
         double length;
         if (_stretching)
         {
-            // the base follows the cursor: the ray points from it through the vertex
-            var v = (_apex - cam.ToWorld(p.X, p.Y, _apex.Z)).WithZ(0);
+            // the ray follows the cursor: dragged up, the front points up and its sides open below the vertex
+            var v = (cam.ToWorld(p.X, p.Y, _apex.Z) - _apex).WithZ(0);
             length = v.Length2D;
             dir = v.Normalized();
             if (p.Modifiers.HasFlag(KeyModifiers.Shift) && dir != Vec3.Zero)

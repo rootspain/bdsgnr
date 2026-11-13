@@ -6,7 +6,7 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.3.2 — 2026-11-12
+## 0.3.3 — 2026-11-13
 
 ### New
 - **An eye button next to Plan | 3D (Shift+H)** switches two ways of drawing. The usual one (the default): surfaces are
@@ -51,6 +51,55 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   visible face, edge or corner shows the project from there: from above, from a side (north, south, east, west) or at
   an angle. The Section button is gone from the view buttons: a section still opens by X, from the View menu and from
   the toolbar.
+
+### Changed
+- **Chevron: independent segments and an oval of delays.** Each end of a chevron is dragged on its own: the vertex and
+  the other end stay. A segment's delay changes with its length and shows on the plan and in the front window; a delay
+  typed in the window moves the end. A hole's time is its straight distance from the vertex × the delay toward it, given
+  by an oval centred at the vertex through the ends of both segments (dashed on a selected chevron). The oval is closed,
+  so times grow from the vertex every way, and the holes behind the vertex get times too.
+- **A chevron is drawn the way the mouse goes:** dragged up, its ray and its times grow upwards, its sides open behind
+  the vertex. A chevron pointing up had to be dragged down before.
+- **Hole labels read on any background:** each label has a contrasting outline (dark round light text, light round
+  dark), so times, sequence and numbers show over a coloured surface too.
+- **The bottom of the window is one line:** the coordinates (closer together), the quick filters Empty and Not
+  programmed, the hint; on the right the layer and the pick radius (no "px" and no buttons — the arrows ↑/↓ change it).
+  Smaller type, a lower line. Gone: the Hole table button (Ctrl+T and View ▸ Table view open it), the "Quick filters:"
+  caption, the Dipped and Misfires filters, the Not saved mark (the title of the window shows it).
+- **The ribbon tabs are in the header of the window**, on one line with Menu, Undo and Redo; on the right the search,
+  settings and help. The ribbon is a line lower. New, Open, Save and Print plan are gone from the header (they are on
+  the File tab and on Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+P), and so is the New blast list (the blast's name is in the title
+  of the window, its properties on the File tab and in the menu). On a narrow window the search field folds into a
+  magnifier: a click on it or Ctrl+K opens the search over the window.
+- **On the first start the program's window opens on the whole screen**; after that maximized or not, as it was left.
+- **The To the surface button** on the Properties tab of holes is in the accent colour: it stands out among the fields.
+- **The menu is in the top left corner**, in place of the program's name "BD6 Blast Designer", which is gone from the
+  header.
+
+### Fixed
+- **A white flash on opening a window.** Until the program's window or a dialog had drawn itself, Windows filled it
+  white. A window is now black at first, then takes the colour of the theme.
+- **Picking a surface under the cursor.** The first surface in the list that the point fell in, in plan, was picked:
+  with a grade under a face over the whole blast, the face could not be picked. The surface seen under the cursor is
+  picked now: the highest in the plan, the first on the line of sight in 3D, so a steep face is picked where it is seen.
+- **To the surface takes holes down to the grade.** The button took the first surface on the hole's line, whatever it
+  was: a face or a bench lying under the collars gave a level near zero, and the holes were cut down to 1–2 m. It now
+  takes a surface of kind Grade, and the first one met only when there is no grade in the way. The status bar names the
+  surfaces the holes went down to.
+- **A level of 0 is a level.** To level = 0 meant no level, while a level measured on a surface at zero came out as
+  0.00000000000000006 and counted as one: some holes were worked out again and some were not. Now only an empty field
+  means no level, and a measured level drops such traces of the arithmetic. In files of earlier versions a level of 0 and such
+  traces of zero are taken off on opening; the lengths stay as saved.
+- **Full screen on laptops with two video cards.** On going full screen Windows could hand the screen to the other
+  video card, and the program moved over to it, with artefacts on the screen. The program now stays on the video card
+  it started on; the card is written to the program's log.
+- **The window's title bar on small screens.** On a laptop, or with large text set in Windows, the program's window
+  opened larger than the screen and its title bar was above the top edge until the window was resized. On such a
+  screen the window now opens maximized, and its normal size fits the screen.
+
+## 0.3.2 — 2026-11-12
+
+### New
 - **The burden and spacing of a pattern are edited on the Properties tab** (the Pattern group of a hole). A new value
   lays the grid out again in one undo step: the first row half a burden from the face side of the outline, the first hole
   of a row half a spacing from its start, the rows taking the new burden and spacing. Holes still in the outline keep
@@ -97,17 +146,6 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The collar must be above the level, otherwise the value is refused. The field is in the Properties panel and the hole form.
 
 ### Changed
-- **A shorter bottom line:** the Hole table button and the "Quick filters:" caption are gone, the filters themselves
-  stay. The hole table opens by Ctrl+T and from View ▸ Table view. The status bar has smaller type and is lower.
-- **The ribbon tabs are in the header of the window**, on one line with Menu, Undo and Redo; on the right the search,
-  settings and help. The ribbon is a line lower. New, Open, Save and Print plan are gone from the header (they are on
-  the File tab and on Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+P), and so is the New blast list (the blast's name is in the title
-  of the window, its properties on the File tab and in the menu). On a narrow window the search field folds into a
-  magnifier: a click on it or Ctrl+K opens the search over the window.
-- **On the first start the program's window opens on the whole screen**; after that maximized or not, as it was left.
-- **The To the surface button** on the Properties tab of holes is in the accent colour: it stands out among the fields.
-- **The menu is in the top left corner**, in place of the program's name "BD6 Blast Designer", which is gone from the
-  header.
 - **A number field of Properties left unchanged takes nothing** when it loses the focus. Leaving a field used to write
   the rounded value shown (X and Y of the position of a polygon when Z was edited, say) and add an undo step.
 - **The outline of a new pattern lies at one elevation:** all its points take one Z, the mean of the points of the drawn
@@ -151,28 +189,6 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The last interval of the column follows the toe.** When the hole length changes — by hand, by "To level" or by a move
   of the collar — the last interval goes down to the new depth and its primers keep their distance from its bottom. Intervals
   below the new toe go, the one it cuts ends at the toe.
-
-### Fixed
-- **A white flash on opening a window.** Until the program's window or a dialog had drawn itself, Windows filled it
-  white. A window is now black at first, then takes the colour of the theme.
-- **Picking a surface under the cursor.** The first surface in the list that the point fell in, in plan, was picked:
-  with a grade under a face over the whole blast, the face could not be picked. The surface seen under the cursor is
-  picked now: the highest in the plan, the first on the line of sight in 3D, so a steep face is picked where it is seen.
-- **To the surface takes holes down to the grade.** The button took the first surface on the hole's line, whatever it
-  was: a face or a bench lying under the collars gave a level near zero, and the holes were cut down to 1–2 m. It now
-  takes a surface of kind Grade, and the first one met only when there is no grade in the way. The status bar names the
-  surfaces the holes went down to.
-- **A level of 0 is a level.** To level = 0 meant no level, while a level measured on a surface at zero came out as
-  0.00000000000000006 and counted as one: some holes were worked out again and some were not. Now only an empty field
-  means no level, and a measured level drops such traces of the arithmetic. In files of earlier versions a level of 0 and such
-  traces of zero are taken off on opening; the lengths stay as saved.
-- **Full screen on laptops with two video cards.** On going full screen Windows could hand the screen to the other
-  video card, and the program moved over to it, with artefacts on the screen. The program now stays on the video card
-  it started on; the card is written to the program's log.
-- **The window's title bar on small screens.** On a laptop, or with large text set in Windows, the program's window
-  opened larger than the screen and its title bar was above the top edge until the window was resized. On such a
-  screen the window now opens maximized, and its normal size fits the screen.
-
 ## 0.3.1 — 2026-11-06
 
 ### New

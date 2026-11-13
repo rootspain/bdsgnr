@@ -774,7 +774,8 @@ public sealed partial class MainViewModel
             // It remembers its holes (those with an electronic detonator), so editing it later reprograms exactly those.
             Change("Timing line", p =>
             {
-                var line = EbsTimingLine.CreateEntity(pts, setup.Segments, setup.Options);
+                // the delays typed in the window move a chevron's ends (each segment's length goes with its delay)
+                var line = EbsTimingLine.CreateEntity(setup.Points ?? pts, setup.Segments, setup.Options);
                 line.Front = front;
                 line.HoleIds = ids.ToList();
                 TakeHoles(p, line.Id, ids);
@@ -882,13 +883,16 @@ public sealed partial class MainViewModel
     /// New points of a timing line (a front turned or reshaped by its circles): the line and the times of its holes change
     /// in one undo step, as when it is moved.
     /// </summary>
-    public void SetTimingLinePoints(Guid lineId, IReadOnlyList<Vec3> points, string undoName)
+    public void SetTimingLinePoints(Guid lineId, IReadOnlyList<Vec3> points, string undoName, IReadOnlyList<TimingLineSegment>? segments = null)
     {
         var timed = 0;
         var list = points.ToList();
         Change(undoName, p => timed = ReprogramTimingLines(p, new HashSet<Guid> { lineId }, () =>
         {
-            if (p.FindEntity(lineId) is TimingLineEntity l) l.Points = list.ToList();
+            if (p.FindEntity(lineId) is not TimingLineEntity l) return;
+            l.Points = list.ToList();
+            // a chevron's end dragged: the delay of its segment went with its length
+            if (segments != null) l.Segments = segments.ToList();
         }));
         if (timed > 0) SetStatus(Loc.F("Timing line changed: {0} holes reprogrammed", timed));
     }
@@ -914,6 +918,7 @@ public sealed partial class MainViewModel
             l.Style = o.Style; l.StartOffsetMs = o.StartOffsetMs; l.UseProgressive = o.UseProgressive; l.ProgressRate = o.ProgressRate;
             l.ReverseOrder = o.ReverseOrder; l.BurdenReliefMsPerM = o.BurdenReliefMsPerM; l.Angle1Deg = o.Angle1Deg; l.Angle2Deg = o.Angle2Deg;
             l.Segments = setup.Segments.ToList();
+            if (setup.Points != null) l.Points = setup.Points.ToList();
             if (setup.LayerId is Guid layer) l.LayerId = layer;
             if (setup.Reprogram)
             {

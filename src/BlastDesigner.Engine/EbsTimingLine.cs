@@ -80,7 +80,25 @@ public static class EbsTimingLine
             var br = o.BurdenReliefMsPerM;
             return AdvancedTimes(line, br, br, br * Math.Tan(o.Angle1Deg * GeoMath.Deg), br * Math.Tan(o.Angle2Deg * GeoMath.Deg), 0, false, true, advPoints ?? points);
         }
+        if (o.Front == TimingFrontShape.Chevron && line.Count == 3 && o.Style == TimingLineStyle.TimeLine) return ChevronTimes(line, data, points);
         return LineTimes(line, data, o, points);
+    }
+
+    /// <summary>
+    /// A chevron: a hole's time is its distance in plan from the vertex times the delay the oval of the chevron gives in its
+    /// direction (<see cref="Chevron.DelayAlong"/>). The oval is closed, so the times grow from the vertex every way.
+    /// </summary>
+    static double[] ChevronTimes(IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, IReadOnlyList<Vec3> points)
+    {
+        var apex = line[1];
+        var result = new double[points.Count];
+        for (int i = 0; i < points.Count; i++)
+        {
+            var d = Flat(points[i] - apex);
+            var dist = d.Length;
+            result[i] = dist < 1e-9 ? 0 : dist * Chevron.DelayAlong(line, data[0].ReliefMsPerM, data[1].ReliefMsPerM, d * (1 / dist));
+        }
+        return result;
     }
 
     /// <summary>

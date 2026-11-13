@@ -434,7 +434,11 @@ public static class PlanRenderer
                 case TimingLineEntity tl:
                     DrawTimingLine(canvas, cam, tl, selected || e.Color != null ? color : (SKColor?)null, text);
                     // a selected chevron of the front tool shows its ray, as long as its sides
-                    if (selected && tl.Front == TimingFrontShape.Chevron && tl.Points.Count == 3) DrawChevronRay(canvas, cam, tl.Points, color, Chevron.Length(tl.Points));
+                    if (selected && tl.Front == TimingFrontShape.Chevron && tl.Points.Count == 3)
+                    {
+                        DrawChevronRay(canvas, cam, tl.Points, color, Chevron.Length(tl.Points));
+                        DrawChevronOval(canvas, cam, tl.Points, color);
+                    }
                     break;
             }
         }
@@ -483,10 +487,11 @@ public static class PlanRenderer
         foreach (var h in holes)
         {
             // labels of dragged holes follow them at once, the rest go into one batch
-            if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(cam, project, h, view, labelSides, opt, text, own); own.Flush(canvas, text); EndMove(mc); }
+            if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(cam, project, h, view, labelSides, opt, text, own); own.Flush(canvas, text, halo: true); EndMove(mc); }
             else DrawHoleLabels(cam, project, h, view, labelSides, opt, text, holeLabels);
         }
-        holeLabels.Flush(canvas, text);
+        // outlined: the labels read over the surfaces, whatever their colour
+        holeLabels.Flush(canvas, text, halo: true);
         var productsKey = ProductsKey(project);
         foreach (var h in holes)
         {
@@ -890,6 +895,17 @@ public static class PlanRenderer
     /// Ray of a two-segment front (<see cref="Chevron"/>): dashed, from the vertex outwards along the axis. On a selected front it
     /// is as long as the sides, while the front is created or turned as long as the view is wide; an unselected one has none.
     /// </summary>
+    /// <summary>
+    /// The oval of a chevron's delays, thin and dashed: its centre at the vertex, through both ends (its segments are its
+    /// semi-diameters). The delay a hole gets is the oval's radius toward it, in the chevron's scale.
+    /// </summary>
+    public static void DrawChevronOval(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color)
+    {
+        if (points.Count != 3) return;
+        using var dashed = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = color.WithAlpha(170), PathEffect = SKPathEffect.CreateDash(new[] { 4f, 4f }, 0) };
+        DrawPolyline(c, cam, Chevron.Oval(points), true, dashed);
+    }
+
     public static void DrawChevronRay(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color, double? length = null)
     {
         if (points.Count != 3) return;

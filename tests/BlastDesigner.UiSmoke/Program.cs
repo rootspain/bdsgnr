@@ -1103,7 +1103,10 @@ Step("the pick radius in the status bar: no spinner buttons, the arrows change i
 });
 Step("the bottom of the window is one line: the coordinates, then the quick filters Empty and Not programmed", () =>
 {
-    var coords = window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Text?.StartsWith("X ") == true && t.Text.Contains("  Y "));
+    var at = vm.View.TranslatePoint(new Avalonia.Point(vm.View.Bounds.Width / 2, vm.View.Bounds.Height / 2), window)!.Value;
+    window.MouseMove(at); Pump();
+    var coords = window.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "coordinates");
+    if (coords.Text?.StartsWith("X ") != true) throw new Exception("no coordinates in the status bar: " + coords.Text);
     if (coords.Text!.Contains("   ")) throw new Exception("the coordinates are spread: " + coords.Text);
     var labels = vm.QuickFilters().Select(f => f.Label).ToList();
     if (!labels.SequenceEqual(new[] { "Empty", "Not programmed" })) throw new Exception("quick filters: " + string.Join(", ", labels));
@@ -2674,6 +2677,45 @@ Step("edit a timing line: its values, layer and reprogramming in one step", () =
     if (Math.Abs(((TimingLineEntity)vm.Project.FindEntity(line.Id)!).Segments[0].ReliefMsPerM - 8) > 1e-9) throw new Exception("one undo should restore the line");
     vm.Undo();
 });
+Step("a chevron's ends move on their own, each segment's delay with its length, and a delay typed in moves its end", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var steps = vm.Doc!.UndoNames.Count;
+    var apex = vm.Project!.Holes.First().Collar + new Vec3(0, 40, 0);
+    var shape = BlastDesigner.Domain.Geometry.Chevron.Build(apex, new Vec3(0, 1, 0), 60, 10);
+    var line = new TimingLineEntity { Points = shape, Front = BlastDesigner.Domain.Model.TimingFrontShape.Chevron, Segments = { new(0, 8, 0), new(0, 8, 0) } };
+    vm.Change("Smoke chevron", pr => pr.Add(line)); Pump();
+    vm.Doc.Select(new[] { line.Id }); vm.ZoomSelection(); Pump();
+    var cam = vm.View.Camera;
+    var origin = vm.View.TranslatePoint(default, window)!.Value;
+    // end 0 dragged twice as far from the vertex
+    var target = apex + (shape[0] - apex) * 2;
+    var (fx, fy) = cam.ToScreen(shape[0]);
+    var (tx, ty) = cam.ToScreen(target);
+    var tool = vm.ActiveTool!;
+    tool.PointerMoved(new ToolPointer { X = fx, Y = fy, World = shape[0], Snapped = shape[0] });
+    tool.PointerPressed(new ToolPointer { X = fx, Y = fy, World = shape[0], Snapped = shape[0], Left = true, ClickCount = 1 });
+    tool.PointerMoved(new ToolPointer { X = tx, Y = ty, World = target, Snapped = target, Left = true });
+    tool.PointerReleased(new ToolPointer { X = tx, Y = ty, World = target, Snapped = target, Left = true }); Pump();
+    var made = (TimingLineEntity)vm.Project.FindEntity(line.Id)!;
+    if (Vec3.Distance2D(made.Points[2], shape[2]) > 1e-6 || Vec3.Distance2D(made.Points[1], apex) > 1e-6) throw new Exception("the other end or the vertex moved with the dragged end");
+    if (Vec3.Distance2D(made.Points[0], target) > 0.5) throw new Exception("the dragged end is not where it was dragged");
+    if (Math.Abs(made.Segments[0].ReliefMsPerM - 16) > 0.5 || Math.Abs(made.Segments[1].ReliefMsPerM - 8) > 1e-9) throw new Exception($"the delays are {made.Segments[0].ReliefMsPerM} and {made.Segments[1].ReliefMsPerM}, 16 and 8 expected");
+    // the window: a delay typed in moves the end of its segment to the length it gives
+    var preview = new BlastDesigner.Rendering.TimingLinePreviewOverlay();
+    var form = new TimingLineForm(vm, made.Points, new List<Hole>(), BlastDesigner.Engine.EbsTimingLine.OptionsOf(made), made.Segments.ToList(), false, preview, made, BlastDesigner.Domain.Model.TimingFrontShape.Chevron);
+    var host = new Window { Content = form, Width = 700, Height = 600 };
+    host.Show(); Pump();
+    var relief = form.GetLogicalDescendants().OfType<TextBox>().Single(b => b.Name == "relief1");
+    relief.Text = "24"; Pump();
+    var points = form.ChevronPoints ?? throw new Exception("the window gives no points of the chevron");
+    var length1 = Vec3.Distance2D(points[2], points[1]);
+    if (Math.Abs(length1 - Vec3.Distance2D(shape[2], apex) * 3) > 0.05) throw new Exception($"a delay of 24 should make segment 2 three times as long: {length1:0.00}");
+    if (Vec3.Distance2D(points[0], made.Points[0]) > 1e-6) throw new Exception("the other end moved with the delay of segment 2");
+    host.Close(); Pump();
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+});
 Step("timing front tool: the panel chooses a line or a chevron, the window offers no type, a line times to the side of its holes", () =>
 {
     var shape = vm.FrontShape;
@@ -2717,7 +2759,8 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
         Chip(BlastDesigner.Domain.Model.TimingFrontShape.Chevron);
         if (vm.FrontShape != BlastDesigner.Domain.Model.TimingFrontShape.Chevron) throw new Exception("the Chevron chip did not choose the chevron");
         var x = holes.Average(h => h.Collar.X);
-        var chevron = Draw(x, x, y + 10);
+        // dragged south, into the holes: the ray follows the cursor, the times grow that way
+        var chevron = Draw(x, x, y - 10);
         if (chevron.Options.ReverseOrder) throw new Exception("a new chevron should go A → B, its times along its ray");
         chevron.Closing!(true); Pump();
         // its ray is drawn while it is selected (it is, made), and not once it is not

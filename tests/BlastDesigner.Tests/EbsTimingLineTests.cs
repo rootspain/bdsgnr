@@ -306,9 +306,9 @@ public class EbsTimingLineTests
     }
 
     [Fact]
-    public void AChevronLeavesTheHolesBehindItsVertexWithoutATime()
+    public void AChevronTimesTheHolesEveryWayFromItsVertex_ByItsOval()
     {
-        // ray to the north: the times grow from the vertex northwards, the holes inside the angle are behind it
+        // ray to the north; the oval of delays is closed: behind the vertex the holes get times as well
         var pts = Chevron.Build(new Vec3(0, 0, 100), new Vec3(0, 1, 0), 30, 10);
         var ahead = H(0, 6);
         var near = H(0, 1);
@@ -321,8 +321,9 @@ public class EbsTimingLineTests
             new TimingLineOptions { Style = TimingLineStyle.TimeLine, Front = TimingFrontShape.Chevron, StartOffsetMs = 10 }, 20000, true);
         Assert.Equal(10, near.ElectronicTimeMs!.Value, 6);
         Assert.True(ahead.ElectronicTimeMs > near.ElectronicTimeMs);
-        Assert.Null(behind.ElectronicTimeMs);
-        Assert.Contains(behind, r.Unreached);
+        // the oval is symmetric about the vertex: as far behind, as late as ahead
+        Assert.Equal(ahead.ElectronicTimeMs!.Value, behind.ElectronicTimeMs!.Value, 6);
+        Assert.DoesNotContain(behind, r.Unreached);
         // a time set by hand stays
         Assert.Equal(77, manual.ElectronicTimeMs);
     }

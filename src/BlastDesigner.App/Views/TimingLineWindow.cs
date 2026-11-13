@@ -81,12 +81,12 @@ public static class TimingLineWindow
             if (result.Count > 0) _lastSegment = result[0];
             _sameForAll = form.SameForAll;
         }
-        return new TimingLineSetup(form.Options, result, form.LayerId, form.Reprogram);
+        return new TimingLineSetup(form.Options, result, form.LayerId, form.Reprogram, form.ChevronPoints);
     }
 }
 
 /// <summary>What the timing line window returns: the values, the layer (edit only) and whether to reprogram the holes.</summary>
-public sealed record TimingLineSetup(TimingLineOptions Options, List<TimingLineSegment> Segments, Guid? LayerId, bool Reprogram);
+public sealed record TimingLineSetup(TimingLineOptions Options, List<TimingLineSegment> Segments, Guid? LayerId, bool Reprogram, List<Vec3>? Points = null);
 
 /// <summary>Content of the timing line window. Public so the UI smoke test can reach it.</summary>
 public sealed class TimingLineForm : DockPanel
@@ -97,7 +97,10 @@ public sealed class TimingLineForm : DockPanel
     private static readonly string[] Exponents = { "1.1", "1.2", "1.4", "1.6", "2.0" };
 
     private readonly MainViewModel _vm;
-    private readonly IReadOnlyList<Vec3> _points;
+    private readonly List<Vec3> _points;
+    /// <summary>A chevron's delay per metre of segment: a delay typed in moves the end of its segment to the length it gives.</summary>
+    private readonly double _chevronScale;
+    private readonly List<TextBlock> _lengths = new();
     private readonly IReadOnlyList<Hole> _holes;
     private readonly TimingLinePreviewOverlay _preview;
     private readonly List<TimingLineSegment> _segments;
@@ -109,7 +112,7 @@ public sealed class TimingLineForm : DockPanel
     {
         _vm = vm;
         _front = front;
-        _points = points;
+        _points = points.ToList();
         _holes = holes;
         _preview = preview;
         _existing = existing;
@@ -117,6 +120,12 @@ public sealed class TimingLineForm : DockPanel
         SameForAll = sameForAll;
         _segments = segments;
         LayerId = existing?.LayerId;
+        if (IsChevron)
+        {
+            var given = Segments();
+            _chevronScale = new[] { (Seg: 0, End: 0), (Seg: 1, End: 2) }
+                .Select(x => given[x.Seg].ReliefMsPerM / Math.Max(Vec3.Distance2D(_points[x.End], _points[1]), Chevron.MinLength)).Average();
+        }
 
         var header = Header();
         SetDock(header, Dock.Top);
@@ -166,6 +175,29 @@ public sealed class TimingLineForm : DockPanel
 
     /// <summary>The values of every segment, the first row copied to all when "same for all segments" is on.</summary>
     public List<TimingLineSegment> Segments() => SameForAll ? _segments.Select(_ => _segments[0]).ToList() : _segments.ToList();
+
+    /// <summary>A chevron drawn by the front tool: three points, its two segments independent.</summary>
+    private bool IsChevron => _front == TimingFrontShape.Chevron && _points.Count == 3 && _segments.Count >= 2;
+
+    /// <summary>The points of a chevron as its delays put its ends; null for any other line, whose points the window does not change.</summary>
+    public List<Vec3>? ChevronPoints => IsChevron ? _points.ToList() : null;
+
+    /// <summary>A chevron's ends where its delays put them: each segment as long as its delay over the chevron's scale, in its own direction.</summary>
+    private void FitChevronEnds()
+    {
+        if (!IsChevron || _chevronScale <= 0) return;
+        var delays = Segments();
+        foreach (var (seg, end) in new[] { (0, 0), (1, 2) })
+        {
+            var dir = (_points[end] - _points[1]).WithZ(0);
+            if (dir.Length2D < 1e-12) continue;
+            var length = Math.Max(delays[seg].ReliefMsPerM / _chevronScale, Chevron.MinLength);
+            var to = dir.Normalized() * length;
+            _points[end] = new Vec3(_points[1].X + to.X, _points[1].Y + to.Y, _points[end].Z);
+        }
+        for (int i = 0; i < _lengths.Count; i++)
+            _lengths[i].Text = N(SameForAll ? Enumerable.Range(0, SegmentCount).Sum(j => Vec3.Distance2D(_points[j], _points[j + 1])) : Vec3.Distance2D(_points[i], _points[i + 1]), "0.#") + " " + L("m");
+    }
 
     // ---------- frame ----------
 
@@ -479,11 +511,15 @@ public sealed class TimingLineForm : DockPanel
                 : Vec3.Distance2D(_points[k], _points[k + 1]);
             var stripe = new Border { Width = 4, Height = 22, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(Color.FromUInt32(SameForAll ? 0xFF8A929D : SegmentColours[k % SegmentColours.Length])), VerticalAlignment = VerticalAlignment.Center };
             Put(Ui.Row(8, stripe, new TextBlock { Text = SameForAll && SegmentCount > 1 ? L("All") : $"{k + 1}", Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }), k + 1, 0);
-            Put(new TextBlock { Text = N(length, "0.#") + " " + L("m"), FontFamily = Look.Mono, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center }, k + 1, 1);
+            var lengthText = new TextBlock { Text = N(length, "0.#") + " " + L("m"), FontFamily = Look.Mono, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, Name = $"length{k}" };
+            if (k == 0) _lengths.Clear();
+            _lengths.Add(lengthText);
+            Put(lengthText, k + 1, 1);
             var s = _segments[k];
             col = 2;
             if (burn) Put(Number($"burn{k}", s.BurnRateMsPerM, "ms/m", 0.5, 0, 1000, v => _segments[k] = _segments[k] with { BurnRateMsPerM = v }), k + 1, col++);
-            Put(Number($"relief{k}", s.ReliefMsPerM, "ms/m", 0.5, 0, 1000, v => _segments[k] = _segments[k] with { ReliefMsPerM = v }), k + 1, col++);
+            // a chevron's end goes where its delay puts it
+            Put(Number($"relief{k}", s.ReliefMsPerM, "ms/m", 0.5, 0, 1000, v => { _segments[k] = _segments[k] with { ReliefMsPerM = v }; FitChevronEnds(); }), k + 1, col++);
             if (progress) Put(Number($"progress{k}", s.ProgressMs, "ms/10 m", 1, 0, 10000, v => _segments[k] = _segments[k] with { ProgressMs = v }), k + 1, col);
         }
         stack.Children.Add(grid);

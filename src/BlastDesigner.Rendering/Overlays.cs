@@ -157,6 +157,8 @@ public sealed class FrontLineHandlesOverlay : IOverlay
             var shown = line.WithPoints(pts);
             PlanRenderer.DrawTimingLine(c, cam, shown, null, text);
             if (ray) PlanRenderer.DrawChevronRay(c, cam, pts, _accent());
+            // the oval of delays follows the ends dragged
+            if (line.Front == TimingFrontShape.Chevron && pts.Count == 3) PlanRenderer.DrawChevronOval(c, cam, pts, PlanRenderer.TimingLineColor(line));
         }
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var edge = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.2f, Color = PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White };

@@ -51,7 +51,7 @@ public sealed class MainWindow : Window
     private const double StatusFont = 11;
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Look.TextSoft, Margin = new Thickness(10, 0), FontSize = StatusFont };
     // wide enough for the coordinates of a mine grid, so the filters after it do not jump as the cursor moves
-    private readonly TextBlock _coords = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 215, FontFamily = Look.Mono, Foreground = Look.Muted, Margin = new Thickness(10, 0, 6, 0), FontSize = StatusFont };
+    private readonly TextBlock _coords = new() { Name = "coordinates", VerticalAlignment = VerticalAlignment.Center, MinWidth = 215, FontFamily = Look.Mono, Foreground = Look.Muted, Margin = new Thickness(10, 0, 6, 0), FontSize = StatusFont };
     private readonly ComboBox _defaultLayer = new() { MinWidth = 130, Height = 20, MinHeight = 20, FontSize = StatusFont, Padding = new Thickness(6, 0) };
     // no spinner buttons: ↑ and ↓ change it
     private readonly NumericUpDown _targetRadius = new() { Name = "pickRadius", Minimum = 2, Maximum = 40, Increment = 1, Width = 44, Height = 20, MinHeight = 20, FormatString = "0", FontSize = StatusFont, ShowButtonSpinner = false, HorizontalContentAlignment = HorizontalAlignment.Center };
