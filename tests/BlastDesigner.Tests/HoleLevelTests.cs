@@ -42,8 +42,8 @@ public class HoleLevelTests
         Assert.Equal(85 + Math.Cos(Math.PI / 6), H().Toe.Z, 9);
         doc.Execute("Subdrill", pr => { var x = (Hole)pr.FindEntity(h.Id)!; x.Bearing = 0; x.Subdrill = 0; });
 
-        // empty or 0: no level, the length stays as it is and is edited by hand again
-        doc.Execute("To level", pr => ((Hole)pr.FindEntity(h.Id)!).ToLevel = 0);
+        // empty: no level, the length stays as it is and is edited by hand again
+        doc.Execute("To level", pr => ((Hole)pr.FindEntity(h.Id)!).ToLevel = null);
         doc.Execute("Length", pr => ((Hole)pr.FindEntity(h.Id)!).Length = 12);
         Assert.Equal(12, H().Length);
         Assert.Null(HoleLevel.Of(H()));
@@ -150,5 +150,81 @@ public class HoleLevelTests
         var column = H().Decks.Select(d => (d.Top, d.Bottom)).ToList();
         doc.Execute("Diameter", pr => ((Hole)pr.FindEntity(h.Id)!).Diameter = 115);
         Assert.Equal(column, H().Decks.Select(d => (d.Top, d.Bottom)));
+    }
+
+    /// <summary>A bench as in a real blast: the collars stand on the bench top, a face surface runs flat at 0 under them, the grade is at −10.</summary>
+    private static (BlastProject P, Hole H) Bench(bool grade = true)
+    {
+        var p = BlastProject.CreateNew();
+        SurfaceEntity Flat(string name, SurfaceKind kind, double z) => new()
+        {
+            Name = name, Kind = kind,
+            Vertices = { new Vec3(-50, -50, z), new Vec3(50, -50, z), new Vec3(50, 50, z), new Vec3(-50, 50, z) },
+            Triangles = { 0, 1, 2, 0, 2, 3 }
+        };
+        p.Add(Flat("Face", SurfaceKind.Face, 0));
+        if (grade) p.Add(Flat("Grade", SurfaceKind.Grade, -10));
+        var h = p.Add(new Hole { Label = "18", Collar = new Vec3(1.3, 2.7, 0.253), Length = 11.253, Subdrill = 1 });
+        return (p, h);
+    }
+
+    [Fact]
+    public void ToTheSurfaceGoesDownToTheGrade_NotToAFaceOnTheWay()
+    {
+        var (p, h) = Bench();
+        Assert.Equal(-10, HoleLevel.SurfaceLevel(p, h));
+        Assert.Equal("Grade", HoleLevel.SurfaceHit(p, h)!.Value.Surface.Name);
+        h.ToLevel = HoleLevel.SurfaceLevel(p, h);
+        Assert.Equal(11.253, HoleLevel.Length(h)!.Value, 9);
+    }
+
+    [Fact]
+    public void WithNoGradeTheFirstSurfaceIsTaken_AndItsLevelOfZeroIsALevel()
+    {
+        var (p, h) = Bench(grade: false);
+        var z = HoleLevel.SurfaceLevel(p, h);
+        // measured to the millimetre: exactly 0, not a trace of a number
+        Assert.Equal(0.0, z);
+        Assert.Equal(0, BitConverter.DoubleToInt64Bits(z!.Value));
+        h.ToLevel = z;
+        // 0 is a level like any other: every hole with it has the same length rule
+        Assert.Equal(0.0, HoleLevel.Of(h));
+        Assert.Equal(1.253, HoleLevel.Length(h)!.Value, 9);
+    }
+
+    [Fact]
+    public void AFileOfSchema2TakesALevelOf0OrATraceOfOneAsNoLevel()
+    {
+        var p = BlastProject.CreateNew("old");
+        var a = p.Add(new Hole { Label = "1", Collar = new Vec3(0, 0, 0.25), Length = 11.25, ToLevel = 0 });
+        var b = p.Add(new Hole { Label = "2", Collar = new Vec3(5, 0, 0.25), Length = 1.25, ToLevel = 5.551115123125783e-17 });
+        var c = p.Add(new Hole { Label = "3", Collar = new Vec3(9, 0, 0.25), Length = 10.25, ToLevel = -9 });
+        var path = Path.Combine(Path.GetTempPath(), "bd-schema2-" + Guid.NewGuid().ToString("N") + ".bdp");
+        try
+        {
+            BlastDesigner.IO.ProjectFile.Save(p, path, 0);
+            // written as an older version wrote it
+            using (var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Update))
+            {
+                var entry = zip.GetEntry("manifest.json")!;
+                string text;
+                using (var r = new StreamReader(entry.Open())) text = r.ReadToEnd();
+                entry.Delete();
+                var e = zip.CreateEntry("manifest.json");
+                using var w = new StreamWriter(e.Open());
+                w.Write(System.Text.RegularExpressions.Regex.Replace(text, @"""schemaVersion""\s*:\s*\d+", "\"schemaVersion\": 2"));
+            }
+            var back = BlastDesigner.IO.ProjectFile.Load(path);
+            Assert.Null(((Hole)back.FindEntity(a.Id)!).ToLevel);
+            Assert.Null(((Hole)back.FindEntity(b.Id)!).ToLevel);
+            Assert.Equal(-9, ((Hole)back.FindEntity(c.Id)!).ToLevel);
+            // the lengths stay as saved
+            Assert.Equal(1.25, ((Hole)back.FindEntity(b.Id)!).Length);
+            // saved now, a level of 0 stays a level
+            ((Hole)back.FindEntity(a.Id)!).ToLevel = 0;
+            BlastDesigner.IO.ProjectFile.Save(back, path, 0);
+            Assert.Equal(0.0, ((Hole)BlastDesigner.IO.ProjectFile.Load(path).FindEntity(a.Id)!).ToLevel);
+        }
+        finally { File.Delete(path); }
     }
 }

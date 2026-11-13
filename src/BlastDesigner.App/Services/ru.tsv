@@ -804,7 +804,7 @@ Select none	Снять выделение
 Select objects	Выбрать объекты
 Select objects of one kind to edit them together.	Для совместной правки выберите объекты одного типа.
 Select one polygon and the polylines to clip.	Выберите один полигон и полилинии для обрезки.
-Select points, lines or holes to build the surface from.	Выберите точки, линии или скважины для построения поверхности.
+Select points, lines or polygons to build the surface from.	Выберите точки, линии или полигоны для построения поверхности.
 Select polylines and a surface.	Выберите полилинии и поверхность.
 Select product	Выбрать продукт
 Select the crest polyline first.	Сначала выберите полилинию бровки.
@@ -3032,15 +3032,15 @@ ui:The bearing does not change the length: at any angle the hole reaches the lev
 ui:A negative subdrill is an underdrill: the hole ends that far above the level along its axis.	Отрицательный перебур работает как недобур: скважина заканчивается выше уровня на эту величину вдоль оси.
 ui:The length follows the collar, the angle, the subdrill and the level; the last interval of the column goes down to the new toe.	Длина пересчитывается при изменении устья, угла, перебура и самого уровня; последний интервал колонки доходит до нового забоя.
 ui:If the underdrill is as long as the whole way to the level, the length stays as it is.	Если недобур не меньше всего пути до уровня, длина не меняется.
-ui:Empty or 0: no level, the length is entered by hand.	Пусто или 0 — уровня нет, длина вводится вручную.
-ui:To the surface: the selected holes go down to the first surface their line meets from the collar, plus the subdrill	До поверхности: в «До уровня» каждой выделенной скважины ставится отметка Z, где её ось от устья пересекает первую поверхность; длина считается до неё с перебуром
+ui:Empty: no level, the length is entered by hand. 0 is a level like any other.	Пусто — уровня нет, длина вводится вручную. 0 — такая же отметка, как любая другая.
+ui:To the surface: the selected holes go down to the grade surface their line meets from the collar (or the first surface when they meet no grade), plus the subdrill	До поверхности: в «До уровня» каждой выделенной скважины ставится отметка Z, где её ось от устья пересекает поверхность подошвы (если подошвы на пути нет — первую поверхность); длина считается до неё с перебуром
 ui:To the surface	До поверхности
 The project has no surface to drill the holes down to.	В проекте нет поверхности, до которой можно пересчитать скважины.
 Holes to the surface	Скважины до поверхности
 {0} holes down to the surface	Скважин до поверхности: {0}
 {0} holes meet no surface and keep their length	Скважин без пересечения с поверхностью: {0}, их длина не изменилась
-ui:To the surface: the holes take as their level the elevation where their line from the collar meets the first surface	До поверхности: в «До уровня» каждой скважины ставится отметка Z, где её ось от устья пересекает первую поверхность
-ui:To the surface: each hole of the pattern takes as its level the elevation where its line from the collar meets the first surface	До поверхности: в «До уровня» каждой скважины сетки ставится отметка Z, где её ось от устья пересекает первую поверхность
+ui:To the surface: the holes take as their level the elevation where their line from the collar meets the grade surface, or the first surface when they meet no grade	До поверхности: в «До уровня» каждой скважины ставится отметка Z, где её ось от устья пересекает поверхность подошвы, а если подошвы на пути нет — первую поверхность
+ui:To the surface: each hole of the pattern takes as its level the elevation where its line from the collar meets the grade surface, or the first surface when it meets no grade	До поверхности: в «До уровня» каждой скважины сетки ставится отметка Z, где её ось от устья пересекает поверхность подошвы, а если подошвы на пути нет — первую поверхность
 ui:by the surface	по поверхности
 {0} holes have the collar not above the level and keep their length	Скважин с устьем не выше уровня: {0}, их длина не изменилась
 ui:The rows lie across this direction. At 0° the rows run west to east, at 90° north to south.	Ряды ложатся перпендикулярно этому направлению. При 0° ряды идут с запада на восток, при 90° — с севера на юг.
@@ -3109,3 +3109,30 @@ ui:Spacing, m: the distance between the holes of a row; a new value lays the gri
 Pattern size	Размеры сетки
 The burden and the spacing are at least {0} m.	ЛНС и шаг — не меньше {0} м.
 The pattern is too dense for its outline.	Сетка слишком частая для своего контура.
+ui:N	С
+ui:S	Ю
+ui:E	В
+ui:W	З
+ui:View from above	Вид сверху
+ui:View from the north	Вид с севера
+ui:View from the south	Вид с юга
+ui:View from the east	Вид с востока
+ui:View from the west	Вид с запада
+ui:View from the north-east	Вид с северо-востока
+ui:View from the north-west	Вид с северо-запада
+ui:View from the south-east	Вид с юго-востока
+ui:View from the south-west	Вид с юго-запада
+ui:{0}, from above	{0} и сверху
+ui:Surface transparency	Прозрачность поверхностей
+ui:The fill of the surfaces: 0 — opaque, 100 — not seen	Заливка поверхностей: 0 — непрозрачная, 100 — не видна
+ui:Wireframe transparency	Прозрачность каркаса
+ui:The edges of the surface triangles	Рёбра треугольников поверхностей
+ui:Point cloud transparency	Прозрачность облака точек
+ui:The points of a point cloud	Точки облака точек
+ui:With the same warning	С аналогичным предупреждением
+ui:No explosive, no primer, uncharged gap, short stemming, deck below the toe, overlapping decks, non-water-resistant explosive	нет ВВ, нет боевика, незаряженный промежуток, короткая забойка, заряд ниже забоя, перекрытие интервалов, неводоустойчивое ВВ
+Select holes with a warning first.	Сначала выделите скважины с предупреждением.
+The selected holes have no loading warning.	У выделенных скважин нет предупреждений по зарядке.
+{0} holes with the same warning in {1}	Скважин с аналогичным предупреждением в «{1}»: {0}
+{0} holes with the same warning	Скважин с аналогичным предупреждением: {0}
+The selected objects have fewer than three points apart in plan.	У выбранных объектов меньше трёх точек, не совпадающих в плане.

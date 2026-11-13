@@ -21,6 +21,8 @@ internal static class EngineModule
         Document.Followers.Add(HoleLevel.Follow);
         Document.Followers.Add(Charging.FollowLength);
         Document.Followers.Add(EbsTimingLine.Follow);
+        // a surface built from objects keeps with them
+        Document.Followers.Add(SurfaceSources.Follow);
     }
 }
 

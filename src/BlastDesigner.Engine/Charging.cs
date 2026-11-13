@@ -373,12 +373,31 @@ public static class Charging
     /// explosive deck, the column covering the whole depth, stemming of at least <see cref="MinStemmingDiameters"/> diameters, and <see cref="Validate"/>.
     /// An uncharged hole has nothing to warn about.
     /// </summary>
-    public static bool HasLoadingWarning(BlastProject project, Hole h)
+    public static bool HasLoadingWarning(BlastProject project, Hole h) => LoadingWarnings(project, h).Count > 0;
+
+    /// <summary>
+    /// The loading warnings of a hole by kind, the ones <see cref="HasLoadingWarning"/> marks it for: two holes with a warning
+    /// of the same kind have the same trouble, whichever deck it is in. None for an uncharged hole.
+    /// </summary>
+    public static IReadOnlySet<LoadingWarning> LoadingWarnings(BlastProject project, Hole h)
     {
-        if (h.Decks.Count == 0) return false;
+        var kinds = new HashSet<LoadingWarning>();
+        if (h.Decks.Count == 0) return kinds;
         var expl = h.Decks.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).ToList();
-        return expl.Count == 0 || expl.Any(d => d.Primers.Count == 0) || ColumnGap(h) >= 0.05
-            || TopStemming(project, h) < MinStemming(h) - 1e-6 || Validate(project, h).Count > 0;
+        if (expl.Count == 0) kinds.Add(LoadingWarning.NoExplosive);
+        if (expl.Any(d => d.Primers.Count == 0)) kinds.Add(LoadingWarning.NoPrimer);
+        if (ColumnGap(h) >= 0.05) kinds.Add(LoadingWarning.ColumnGap);
+        if (TopStemming(project, h) < MinStemming(h) - 1e-6) kinds.Add(LoadingWarning.ShortStemming);
+        var sorted = h.Decks.OrderBy(d => d.Top).ToList();
+        for (int i = 0; i < sorted.Count; i++)
+        {
+            var d = sorted[i];
+            if (d.Bottom > h.EffectiveLength + 1e-6) kinds.Add(LoadingWarning.BelowToe);
+            if (i > 0 && d.Top < sorted[i - 1].Bottom - 1e-6) kinds.Add(LoadingWarning.Overlap);
+            if (project.FindProduct(d.ProductId) is { IsExplosive: true, WaterResistant: false } && h.WaterDepth > 0 && d.Bottom > h.EffectiveLength - h.WaterDepth)
+                kinds.Add(LoadingWarning.NotWaterResistant);
+        }
+        return kinds;
     }
 
     /// <summary>Validates a charge column; returns human-readable problems.</summary>
@@ -398,4 +417,23 @@ public static class Charging
         }
         return issues;
     }
+}
+
+/// <summary>A kind of loading warning of a hole (<see cref="Charging.LoadingWarnings"/>).</summary>
+public enum LoadingWarning
+{
+    /// <summary>Charged with no explosive deck.</summary>
+    NoExplosive,
+    /// <summary>An explosive deck without a primer.</summary>
+    NoPrimer,
+    /// <summary>The column leaves part of the depth uncovered.</summary>
+    ColumnGap,
+    /// <summary>The top stemming is shorter than the minimum.</summary>
+    ShortStemming,
+    /// <summary>A deck goes on below the toe.</summary>
+    BelowToe,
+    /// <summary>Two decks overlap.</summary>
+    Overlap,
+    /// <summary>A deck under water is not water resistant.</summary>
+    NotWaterResistant
 }

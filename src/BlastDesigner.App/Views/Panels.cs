@@ -147,7 +147,7 @@ public sealed class PropertiesPanel : DockPanel
         "A negative subdrill is an underdrill: the hole ends that far above the level along its axis.",
         "The length follows the collar, the angle, the subdrill and the level; the last interval of the column goes down to the new toe.",
         "If the underdrill is as long as the whole way to the level, the length stays as it is.",
-        "Empty or 0: no level, the length is entered by hand."
+        "Empty: no level, the length is entered by hand. 0 is a level like any other."
     };
 
     public static string LengthTip() => string.Join("\n\n", LengthTipParagraphs.Select(Loc.Ui));
@@ -241,7 +241,7 @@ public sealed class PropertiesPanel : DockPanel
         _header.Text = sel.Count == 1 ? Loc.T(first.KindName) : $"{Loc.T(first.KindName)} × {sel.Count}";
         var template = first.EditCopy();
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
-        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset" }, ReadOnly = doc.IsReadOnly };
+        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid, first is TieEntity ? sel.OfType<TieEntity>().ToList() : null);
         if (first is Hole)
         {
@@ -255,7 +255,7 @@ public sealed class PropertiesPanel : DockPanel
             grid.Tips[nameof(Hole.Length)] = grid.Tips[nameof(Hole.ToLevel)] = LengthTip();
             if (!doc.IsReadOnly)
             {
-                var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), Loc.Ui("To the surface: the selected holes go down to the first surface their line meets from the collar, plus the subdrill"), () => _ = _vm.HolesToSurface(), 30, 30);
+                var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), Loc.Ui("To the surface: the selected holes go down to the grade surface their line meets from the collar (or the first surface when they meet no grade), plus the subdrill"), () => _ = _vm.HolesToSurface(), 30, 30);
                 toSurface.Name = "holesToSurface";
                 Avalonia.Automation.AutomationProperties.SetName(toSurface, Loc.Ui("To the surface"));
                 grid.After[nameof(Hole.ToLevel)] = toSurface;

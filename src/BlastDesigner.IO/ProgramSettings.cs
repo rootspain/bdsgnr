@@ -49,6 +49,15 @@ public sealed class ProgramSettings
     /// or <see cref="WireframeNever"/>.
     /// </summary>
     public string SurfaceWireframe { get; set; } = WireframeWhileStill;
+    /// <summary>Transparency of the surface fill, per cent: 0 opaque, 100 not seen.</summary>
+    public int SurfaceTransparency { get; set; } = DefaultSurfaceTransparency;
+    /// <summary>Transparency of the surface wireframe (the triangle edges), per cent.</summary>
+    public int WireframeTransparency { get; set; } = DefaultWireframeTransparency;
+    /// <summary>Transparency of the points of a point cloud, per cent.</summary>
+    public int PointCloudTransparency { get; set; } = DefaultPointCloudTransparency;
+    public const int DefaultSurfaceTransparency = 10, DefaultWireframeTransparency = 57, DefaultPointCloudTransparency = 22;
+    /// <summary>The alpha of a colour drawn with a transparency of <paramref name="percent"/>.</summary>
+    public static byte Alpha(int percent) => (byte)Math.Round(255 * (100 - Math.Clamp(percent, 0, 100)) / 100.0);
     public const string WireframeAlways = "Always", WireframeWhileStill = "WhileStill", WireframeSelected = "Selected", WireframeNever = "Never";
     /// <summary>Fill colour per surface kind (SurfaceKind names); kinds missing here use <see cref="DefaultSurfaceColors"/>.</summary>
     public Dictionary<string, uint> SurfaceColors { get; set; } = new();

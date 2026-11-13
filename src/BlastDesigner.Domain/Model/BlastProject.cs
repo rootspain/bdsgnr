@@ -6,7 +6,7 @@ namespace BlastDesigner.Domain.Model;
 /// <summary>The whole blast design document.</summary>
 public sealed class BlastProject
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public Guid Id { get; set; } = Guid.NewGuid();

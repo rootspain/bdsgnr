@@ -11,8 +11,11 @@ namespace BlastDesigner.Engine;
 /// </summary>
 public static class HoleLevel
 {
-    /// <summary>The level of a hole, null when it has none (empty or 0).</summary>
-    public static double? Of(Hole h) => h.ToLevel is double z && z != 0 ? z : null;
+    /// <summary>The level of a hole, null when it has none. 0 is a level like any other (a bench top at elevation 0).</summary>
+    public static double? Of(Hole h) => h.ToLevel;
+
+    /// <summary>A level found by measuring, to the micrometre: a level of 0 does not come out as 5.6e-17 (and −0 is 0).</summary>
+    public static double Round(double level) => Math.Round(level, 6) + 0.0;
 
     /// <summary>Whether the collar of the hole is above a level: a hole can be drilled down to it only then.</summary>
     public static bool Reaches(Hole h, double level) => h.Collar.Z > level;
@@ -32,23 +35,31 @@ public static class HoleLevel
     }
 
     /// <summary>
-    /// Distance along the hole from its collar to the first surface of the project the hole meets, going from the collar
-    /// towards the toe and on past it; null when no surface is in its way. A surface the collar stands on (closer than a
-    /// few centimetres) is not one the hole goes down to.
+    /// Distance along the hole from its collar to the surface it is drilled down to, going from the collar towards the toe
+    /// and on past it; null when no surface is in its way. That is the first grade surface (kind Grade) the hole meets;
+    /// only when it meets none, the first surface of any kind: a bench, a face or a survey lying between the collar and
+    /// the grade is not where a hole ends. A surface the collar stands on (closer than a few centimetres) is not one the
+    /// hole goes down to.
     /// </summary>
-    public static double? SurfaceDistance(BlastProject project, Hole h)
+    public static double? SurfaceDistance(BlastProject project, Hole h) => SurfaceHit(project, h)?.Distance;
+
+    /// <summary>The surface the hole goes down to (<see cref="SurfaceDistance"/>) and how far along the hole it is.</summary>
+    public static (double Distance, SurfaceEntity Surface)? SurfaceHit(BlastProject project, Hole h)
     {
         const double onCollar = 0.05;
         Vec3 o = h.Collar, dir = h.Direction;
-        double? best = null;
+        (double Distance, SurfaceEntity Surface)? grade = null, any = null;
         foreach (var s in project.Entities.OfType<SurfaceEntity>())
         {
             var v = s.Vertices;
             for (int i = 0; i + 2 < s.Triangles.Count; i += 3)
-                if (RayTriangle(o, dir, v[s.Triangles[i]], v[s.Triangles[i + 1]], v[s.Triangles[i + 2]]) is double t && t > onCollar && (best == null || t < best))
-                    best = t;
+            {
+                if (RayTriangle(o, dir, v[s.Triangles[i]], v[s.Triangles[i + 1]], v[s.Triangles[i + 2]]) is not double t || t <= onCollar) continue;
+                if (any == null || t < any.Value.Distance) any = (t, s);
+                if (s.Kind == SurfaceKind.Grade && (grade == null || t < grade.Value.Distance)) grade = (t, s);
+            }
         }
-        return best;
+        return grade ?? any;
     }
 
     /// <summary>Length of a hole drilled down to the first surface in its way: the distance to it plus the subdrill; null without one.</summary>
@@ -60,7 +71,7 @@ public static class HoleLevel
     /// (the length then follows it, <see cref="Length"/>); null when the hole meets none.
     /// </summary>
     public static double? SurfaceLevel(BlastProject project, Hole h) =>
-        SurfaceDistance(project, h) is double d ? h.Collar.Z + h.Direction.Z * d : null;
+        SurfaceDistance(project, h) is double d ? Round(h.Collar.Z + h.Direction.Z * d) : null;
 
     /// <summary>Möller–Trumbore: the distance along the ray (unit direction) to the triangle, null when it misses.</summary>
     private static double? RayTriangle(Vec3 o, Vec3 d, Vec3 a, Vec3 b, Vec3 c)

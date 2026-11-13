@@ -277,6 +277,9 @@ public sealed partial class MainViewModel : ObservableObject
             GeometryColor = Settings.GeometryColor is uint g ? new SKColor(g) : null,
             SectionLineColor = new SKColor(Settings.SectionLineColor),
             SurfaceColors = Settings.SurfacesByType ? Enum.GetValues<SurfaceKind>().ToDictionary(k => k, k => new SKColor(Settings.SurfaceColor(k.ToString()))) : null,
+            SurfaceAlpha = ProgramSettings.Alpha(Settings.SurfaceTransparency),
+            WireframeAlpha = ProgramSettings.Alpha(Settings.WireframeTransparency),
+            PointCloudAlpha = ProgramSettings.Alpha(Settings.PointCloudTransparency),
             TopInset = 56
         };
     }

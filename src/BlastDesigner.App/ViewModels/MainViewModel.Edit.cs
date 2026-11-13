@@ -54,6 +54,9 @@ public sealed partial class MainViewModel
             {
                 e.Id = newIds[e.Id];
                 if (e is InitiationPoint { HoleId: Guid hole } ip) ip.HoleId = newIds[hole];
+                // a surface pasted with all its objects is bound to the pasted ones, otherwise to none
+                if (e is SurfaceEntity { SourceIds.Count: > 0 } ps)
+                    ps.SourceIds = ps.SourceIds.All(newIds.ContainsKey) ? ps.SourceIds.Select(id => newIds[id]).ToList() : new();
                 e.Translate(offset);
                 if (p.FindLayer(e.LayerId) == null) e.LayerId = p.DefaultLayer.Id;
                 if (e is Hole h) { h.Label = NextHoleLabel(); h.RowId = null; }
@@ -174,6 +177,25 @@ public sealed partial class MainViewModel
         Doc.Select(Project!.Holes.Where(h => IsSelectable(h) && keys.Contains(Key(h))).Select(h => h.Id));
     }
 
+    /// <summary>
+    /// Properties ▸ With the same warning: the holes marked with a loading warning (the exclamation mark over the collar)
+    /// that has a kind the selected holes have. With all the selected holes in one pattern, only the holes of that pattern.
+    /// </summary>
+    public void SelectSameWarning()
+    {
+        if (Doc == null) return;
+        var sel = Doc.SelectedHoles.ToList();
+        if (sel.Count == 0) { SetStatus(Loc.T("Select holes with a warning first.")); return; }
+        var kinds = sel.SelectMany(h => Charging.LoadingWarnings(Project!, h)).ToHashSet();
+        if (kinds.Count == 0) { SetStatus(Loc.T("The selected holes have no loading warning.")); return; }
+        var patterns = sel.Select(h => h.PatternId).Distinct().ToList();
+        var pattern = patterns is [Guid one] ? Project!.Patterns.FirstOrDefault(x => x.Id == one) : null;
+        var found = Project!.Holes.Where(h => IsSelectable(h) && (pattern == null || h.PatternId == pattern.Id)
+            && Charging.LoadingWarnings(Project, h).Overlaps(kinds)).Select(h => h.Id).ToList();
+        Doc.Select(found);
+        SetStatus(pattern != null ? Loc.F("{0} holes with the same warning in {1}", found.Count, pattern.Name) : Loc.F("{0} holes with the same warning", found.Count));
+    }
+
     public void InvertSelection()
     {
         if (Doc == null) return;
@@ -225,7 +247,7 @@ public sealed partial class MainViewModel
             return;
         }
         var template = first.EditCopy();
-        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "Triangles", "Vertices", "Points", "KindName" } };
+        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "Triangles", "Vertices", "Points", "KindName", "SourceIds", "SourceBreaklines" } };
         AddProductChoices(grid);
         FormLayouts.Apply(grid, first.GetType());
         grid.SetTargets(template, sel);
@@ -363,6 +385,9 @@ public sealed partial class MainViewModel
         s.SectionLineColor = edited.SectionLineColor;
         s.SurfaceColoring = edited.SurfaceColoring;
         s.SurfaceWireframe = edited.SurfaceWireframe;
+        s.SurfaceTransparency = edited.SurfaceTransparency;
+        s.WireframeTransparency = edited.WireframeTransparency;
+        s.PointCloudTransparency = edited.PointCloudTransparency;
         // a copy: the window keeps editing its own after Apply, and Cancel must not leave those edits here
         s.SurfaceColors = new Dictionary<string, uint>(edited.SurfaceColors);
         s.SelectionColor = edited.SelectionColor;

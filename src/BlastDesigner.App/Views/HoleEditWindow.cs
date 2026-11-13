@@ -513,12 +513,12 @@ public sealed class HoleEditForm : DockPanel
     /// </summary>
     private Control ToLevel()
     {
-        var box = Number(nameof(Hole.ToLevel), h => h.ToLevel, (h, v) => h.ToLevel = v is 0 ? null : v, "m", "0.0##", L("not set"), v =>
-            v is double z && z != 0 && _holes.FirstOrDefault(h => !HoleLevel.Reaches(h, z)) is { } low
+        var box = Number(nameof(Hole.ToLevel), h => h.ToLevel, (h, v) => h.ToLevel = v, "m", "0.0##", L("not set"), v =>
+            v is double z && _holes.FirstOrDefault(h => !HoleLevel.Reaches(h, z)) is { } low
                 ? Loc.F("The collar of hole {0} ({1:0.###} m) is not above the level {2:0.###} m.", low.Label, low.Collar.Z, z)
                 : null);
         ToolTip.SetTip(box, PropertiesPanel.LengthTip());
-        var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), L("To the surface: the holes take as their level the elevation where their line from the collar meets the first surface"), () => _ = ToSurface(), 32, 32);
+        var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), L("To the surface: the holes take as their level the elevation where their line from the collar meets the grade surface, or the first surface when they meet no grade"), () => _ = ToSurface(), 32, 32);
         toSurface.Name = "holeToSurface";
         toSurface.Margin = new Thickness(4, 0, 0, 0);
         Avalonia.Automation.AutomationProperties.SetName(toSurface, L("To the surface"));

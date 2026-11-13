@@ -99,6 +99,40 @@ public class RenderTests
         Assert.True(Ink(Slope(SurfaceKind.PointCloud), 20, 0, colors) > 2 * narrow);
     }
 
+    /// <summary>The colour in the middle of the slope seen from above, with the fill and the points drawn at the alphas given.</summary>
+    private static SKColor Middle(SurfaceKind kind, byte? fill, byte? points)
+    {
+        var cam = new Camera { Width = 400, Height = 300, Pitch = 90, Scale = 2, Target = new Vec3(30, 50, 50) };
+        var colors = new Dictionary<SurfaceKind, SKColor> { [kind] = SKColors.Red };
+        var options = new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false, SurfaceColors = colors, Background = SKColors.Black, SurfaceAlpha = fill, PointCloudAlpha = points };
+        using var bitmap = new SKBitmap(400, 300);
+        using var canvas = new SKCanvas(bitmap);
+        PlanRenderer.Render(canvas, cam, Slope(kind), options);
+        // a point of the cloud lies on x = 50: 20 m to the right of the middle, 40 px
+        return kind == SurfaceKind.PointCloud ? bitmap.GetPixel(240, 150) : bitmap.GetPixel(200, 150);
+    }
+
+    [Fact]
+    public void TheSurfaceFillTakesTheTransparencyOfTheSettings()
+    {
+        var opaque = Middle(SurfaceKind.Topography, 255, null);
+        var half = Middle(SurfaceKind.Topography, 128, null);
+        var none = Middle(SurfaceKind.Topography, 0, null);
+        Assert.Equal(SKColors.Black, none);
+        Assert.True(opaque.Red > half.Red && half.Red > 0, $"{opaque} {half}");
+        Assert.Equal(0, BlastDesigner.IO.ProgramSettings.Alpha(100));
+        Assert.Equal(255, BlastDesigner.IO.ProgramSettings.Alpha(0));
+        Assert.InRange(BlastDesigner.IO.ProgramSettings.Alpha(BlastDesigner.IO.ProgramSettings.DefaultSurfaceTransparency), 228, 232);
+    }
+
+    [Fact]
+    public void ThePointsOfACloudTakeTheirTransparency()
+    {
+        var opaque = Middle(SurfaceKind.PointCloud, null, 255);
+        var faint = Middle(SurfaceKind.PointCloud, null, 60);
+        Assert.True(opaque.Red > faint.Red && faint.Red > 0, $"{opaque} {faint}");
+    }
+
     [Fact]
     public void ABandCutsTheWireframeOfASurface()
     {

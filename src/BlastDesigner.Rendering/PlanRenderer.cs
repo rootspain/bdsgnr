@@ -58,6 +58,12 @@ public sealed class SceneOptions
     public SKColor? SectionLineColor { get; init; }
     /// <summary>Surface fill by kind; null fills every surface with the elevation ramp.</summary>
     public IReadOnlyDictionary<SurfaceKind, SKColor>? SurfaceColors { get; init; }
+    /// <summary>Alpha of the surface fill; null takes the one for the background (light or dark).</summary>
+    public byte? SurfaceAlpha { get; init; }
+    /// <summary>Alpha of the surface wireframe; null takes the default.</summary>
+    public byte? WireframeAlpha { get; init; }
+    /// <summary>Alpha of the points of a point cloud; null takes the one for the background.</summary>
+    public byte? PointCloudAlpha { get; init; }
 }
 
 /// <summary>Draws a blast project with SkiaSharp. Used by the interactive viewport, image copy, printing and reports.</summary>
@@ -181,7 +187,7 @@ public static class PlanRenderer
             foreach (var s in entities.OfType<SurfaceEntity>())
             {
                 var mc = BeginMove(s);
-                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes || (opt.WireframesOnSelected && !opt.Selection.Contains(s.Id)), opt.SliceHalfWidth);
+                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes || (opt.WireframesOnSelected && !opt.Selection.Contains(s.Id)), opt.SliceHalfWidth, opt);
                 EndMove(mc);
             }
 
@@ -678,6 +684,8 @@ public static class PlanRenderer
         public int Fingerprint;
         public int TriCount = -1;
         public bool Dark;
+        /// <summary>Alpha the fill colours were made with.</summary>
+        public byte Alpha;
         /// <summary>Fill the colours were computed with; 0 = elevation ramp.</summary>
         public uint Fill;
         /// <summary>Shared elevation range the ramp was stretched over (NaN when it used the surface's own range).</summary>
@@ -733,22 +741,23 @@ public static class PlanRenderer
     private static SKColor Shade(SKColor c, double f) =>
         new((byte)Math.Clamp(c.Red * f, 0, 255), (byte)Math.Clamp(c.Green * f, 0, 255), (byte)Math.Clamp(c.Blue * f, 0, 255), c.Alpha);
 
-    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null, bool hideWireframe = false, double? slice = null)
+    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null, bool hideWireframe = false, double? slice = null, SceneOptions? opt = null)
     {
+        var alphas = (Fill: opt?.SurfaceAlpha ?? (byte)(_dark ? 70 : 150), Wire: opt?.WireframeAlpha ?? (byte)110, Points: opt?.PointCloudAlpha ?? (_dark ? (byte)200 : (byte)220));
         // A point cloud coloured by kind shows its measured points, not a mesh made up between them.
         if (fill is SKColor pc && s.Kind == SurfaceKind.PointCloud)
         {
-            DrawPointCloud(c, cam, s, selected ?? pc, slice);
+            DrawPointCloud(c, cam, s, selected ?? pc, slice, alphas.Points);
             return;
         }
         int tri = s.TriangleCount;
         if (tri == 0) return;
 
         var mesh = _surfaceMeshes.GetValue(s, _ => new SurfaceMesh());
-        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe, slice);
+        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe, slice, alphas.Fill, alphas.Wire);
     }
 
-    private static void DrawPointCloud(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, double? slice)
+    private static void DrawPointCloud(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, double? slice, byte alpha)
     {
         var shown = slice is double band ? s.Vertices.Where(v => Math.Abs(cam.Depth(v)) <= band).ToList() : s.Vertices;
         if (shown.Count == 0) return;
@@ -758,11 +767,11 @@ public static class PlanRenderer
             var (x, y) = cam.ToScreen(shown[i]);
             pts[i] = new SKPoint(x, y);
         }
-        using var paint = new SKPaint { IsAntialias = true, Color = color.WithAlpha(_dark ? (byte)200 : (byte)220), StrokeWidth = pts.Length > 50_000 ? 1.5f : 2.5f, StrokeCap = SKStrokeCap.Round };
+        using var paint = new SKPaint { IsAntialias = true, Color = color.WithAlpha(alpha), StrokeWidth = pts.Length > 50_000 ? 1.5f : 2.5f, StrokeCap = SKStrokeCap.Round };
         c.DrawPoints(SKPointMode.Points, pts, paint);
     }
 
-    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe, double? slice)
+    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe, double? slice, byte alpha, byte wireAlpha)
     {
         // The per-triangle fill colour depends only on the geometry, the theme, the fill and the shared elevation range,
         // so compute the expensive normal shading and colouring once and reuse it; only the projection runs per frame.
@@ -770,12 +779,13 @@ public static class PlanRenderer
         var fillKey = fill is SKColor fk ? (uint)fk | 1u : 0u;
         var rMin = range?.Min ?? double.NaN;
         var rMax = range?.Max ?? double.NaN;
-        if (mesh.TriCount != tri || mesh.Dark != _dark || mesh.Fingerprint != fingerprint || mesh.Fill != fillKey
+        if (mesh.TriCount != tri || mesh.Dark != _dark || mesh.Alpha != alpha || mesh.Fingerprint != fingerprint || mesh.Fill != fillKey
             || !mesh.RangeMin.Equals(rMin) || !mesh.RangeMax.Equals(rMax))
         {
             mesh.Fingerprint = fingerprint;
             mesh.TriCount = tri;
             mesh.Dark = _dark;
+            mesh.Alpha = alpha;
             mesh.Fill = fillKey;
             mesh.RangeMin = rMin;
             mesh.RangeMax = rMax;
@@ -790,7 +800,6 @@ public static class PlanRenderer
             if (range is { } shared) (minZ, maxZ) = shared;
             else foreach (var v in s.Vertices) { if (v.Z < minZ) minZ = v.Z; if (v.Z > maxZ) maxZ = v.Z; }
             var light = new Vec3(-0.4, 0.5, 0.75).Normalized();
-            byte alpha = (byte)(_dark ? 70 : 150);
             for (int t = 0; t < tri; t++)
             {
                 var a = s.Vertices[s.Triangles[3 * t]];
@@ -882,7 +891,7 @@ public static class PlanRenderer
             float w = (float)cam.Width, hgt = (float)cam.Height;
             if (mesh.Edges.Length == 0) mesh.Edges = UniqueEdges(s.Triangles, tri);
             var edges = mesh.Edges;
-            using var wire = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 0.5f, Color = (selected ?? color).WithAlpha(110) };
+            using var wire = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 0.5f, Color = (selected ?? color).WithAlpha(wireAlpha) };
             using var path = new SKPath();
             for (int k = 0; k < edges.Length; k += 2)
             {

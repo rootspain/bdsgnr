@@ -92,14 +92,25 @@ public static class GeneralOps
     public static List<Entity> Copy(IEnumerable<Entity> entities, Vec3 offset, int copies)
     {
         var result = new List<Entity>();
+        var list = entities.ToList();
         for (int k = 1; k <= copies; k++)
-            foreach (var e in entities)
+        {
+            var copied = new Dictionary<Guid, Guid>();
+            var pairs = new List<(Entity From, Entity Copy)>();
+            foreach (var e in list)
             {
                 if (e is TieEntity) continue;
                 var c = e.CloneWithNewId();
                 c.Translate(offset * k);
+                copied[e.Id] = c.Id;
+                pairs.Add((e, c));
                 result.Add(c);
             }
+            // a surface copied with all its objects is bound to their copies
+            foreach (var (from, c) in pairs)
+                if (from is SurfaceEntity { SourceIds.Count: > 0 } s && c is SurfaceEntity sc && s.SourceIds.All(copied.ContainsKey))
+                    sc.SourceIds = s.SourceIds.Select(id => copied[id]).ToList();
+        }
         return result;
     }
 

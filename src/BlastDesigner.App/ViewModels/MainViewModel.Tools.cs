@@ -42,16 +42,20 @@ public sealed partial class MainViewModel
         if (ids.Count == 0) return;
         if (!Project!.Entities.OfType<SurfaceEntity>().Any()) { await Dialogs.Info(Loc.T("The project has no surface to drill the holes down to.")); return; }
         int done = 0, missed = 0;
+        var names = new SortedSet<string>();
         Change("Holes to the surface", p =>
         {
             foreach (var h in HolesById(p, ids))
             {
                 if (HoleLevel.SurfaceLevel(p, h) is not double z || !HoleLevel.Reaches(h, z)) { missed++; continue; }
                 h.ToLevel = z;
+                names.Add(HoleLevel.SurfaceHit(p, h)!.Value.Surface.Name);
                 done++;
             }
         });
-        SetStatus(Loc.F("{0} holes down to the surface", done) + (missed > 0 ? "; " + Loc.F("{0} holes meet no surface and keep their length", missed) : ""));
+        // the surfaces the holes went down to: a wrong one is seen at once
+        SetStatus(Loc.F("{0} holes down to the surface", done) + (names.Count > 0 ? ": " + string.Join(", ", names.Select(n => "«" + n + "»")) : "")
+            + (missed > 0 ? "; " + Loc.F("{0} holes meet no surface and keep their length", missed) : ""));
         if (missed > 0 && done == 0) await Dialogs.Info(Loc.F("{0} holes meet no surface and keep their length", missed));
     }
 
@@ -1151,13 +1155,16 @@ public sealed partial class MainViewModel
 
     public async Task CreateSurface(bool breaklines)
     {
-        var sel = Doc!.SelectedEntities.Where(e => e is not TieEntity).ToList();
-        if (sel.Count == 0) { await Dialogs.Info(Loc.T("Select points, lines or holes to build the surface from.")); return; }
+        // holes and surfaces are not built from: the surface is bound to its objects and follows them
+        var sel = Doc!.SelectedEntities.Where(SurfaceSources.CanBeSource).ToList();
+        if (sel.Count == 0) { await Dialogs.Info(Loc.T("Select points, lines or polygons to build the surface from.")); return; }
+        if (SurfaceSources.Build(sel, breaklines) == null) { await Dialogs.Info(Loc.T("The selected objects have fewer than three points apart in plan.")); return; }
         var kind = await Dialogs.Choose("Create surface", Loc.T("Surface kind"), Enum.GetValues<SurfaceKind>().Select(k => Loc.Enum(k)).ToList(), 1);
         if (kind is not int k) return;
+        var ids = sel.Select(e => e.Id).ToHashSet();
         Change("Create surface", p =>
         {
-            var s = Surfaces.FromEntities(sel, breaklines);
+            var s = SurfaceSources.Build(p.Entities.Where(e => ids.Contains(e.Id)), breaklines)!;
             s.Kind = (SurfaceKind)k;
             s.Name = Loc.Enum(s.Kind);
             p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces, 0xFF64748B, StandardLayers.TopographyGroup));

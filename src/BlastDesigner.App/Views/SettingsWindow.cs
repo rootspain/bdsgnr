@@ -482,6 +482,9 @@ public sealed class SettingsForm : DockPanel
             wireframe.Children.Add(chip);
         }
         yield return Row("Surface wireframe", wireframe, "Edges of the surface triangles; with the whole surface in view they slow the plan down the most");
+        yield return Row("Surface transparency", Number("surfaceTransparency", Edited.SurfaceTransparency, v => Edited.SurfaceTransparency = (int)Math.Round(v), "%", 0, 100, "0"), "The fill of the surfaces: 0 — opaque, 100 — not seen");
+        yield return Row("Wireframe transparency", Number("wireframeTransparency", Edited.WireframeTransparency, v => Edited.WireframeTransparency = (int)Math.Round(v), "%", 0, 100, "0"), "The edges of the surface triangles");
+        yield return Row("Point cloud transparency", Number("pointCloudTransparency", Edited.PointCloudTransparency, v => Edited.PointCloudTransparency = (int)Math.Round(v), "%", 0, 100, "0"), "The points of a point cloud");
         yield return Row("Collar size", Number("collar", Edited.CollarSizePixels, v => Edited.CollarSizePixels = v, "px", 2, 40, "0.#"));
         yield return Row("Coordinates box", Toggle(Edited.ShowCoordinatesBox, v => Edited.ShowCoordinatesBox = v), "Cursor coordinates in the status bar");
         yield return Row("FPS", Toggle(Edited.ShowFps, v => Edited.ShowFps = v, "showFps"), "Frames per second");

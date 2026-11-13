@@ -127,6 +127,9 @@ public sealed class Viewport : Control
             GeometryColor = opt.GeometryColor,
             SectionLineColor = opt.SectionLineColor,
             SurfaceColors = opt.SurfaceColors,
+            SurfaceAlpha = opt.SurfaceAlpha,
+            WireframeAlpha = opt.WireframeAlpha,
+            PointCloudAlpha = opt.PointCloudAlpha,
             AnimationTimeMs = opt.AnimationTimeMs,
             HiddenEntities = opt.HiddenEntities,
             HideGeometry = opt.HideGeometry,
@@ -257,12 +260,57 @@ public sealed class Viewport : Control
             if (d < bestD) { bestD = d; best = e; }
         }
         if (best == null)
+            best = SurfaceAt(sx, sy, project.Entities.OfType<SurfaceEntity>().Where(s =>
+                layers.TryGetValue(s.LayerId, out var l) && l.Visible && (includeLocked || !l.Frozen) && Shown(project, s, hidden) && (accept == null || accept(s))));
+        return best;
+    }
+
+    /// <summary>
+    /// The surface seen under a screen point: of the surfaces there, the one nearest the viewer. In the plan that is the
+    /// highest one at the point (a face over the grade, a bench over both); in a view at an angle it is the first one the
+    /// line of sight through the point meets, so a steep face is picked where it is seen, not where the point would fall
+    /// on a level plane. The order of the surfaces in the project does not count.
+    /// </summary>
+    public SurfaceEntity? SurfaceAt(double sx, double sy, IEnumerable<SurfaceEntity> surfaces)
+    {
+        SurfaceEntity? best = null;
+        if (Camera.IsPlan)
         {
-            // Surfaces are picked by containment.
             var w = Camera.ToWorld(sx, sy);
-            best = project.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => layers.TryGetValue(s.LayerId, out var l) && l.Visible && Shown(project, s, hidden) && (accept == null || accept(s)) && s.ElevationAt(w.X, w.Y).HasValue);
+            double top = double.NegativeInfinity;
+            foreach (var s in surfaces)
+                if (s.ElevationAt(w.X, w.Y) is double z && z > top) { top = z; best = s; }
+            return best;
+        }
+        // the line of sight through the point: the camera is orthographic, every line runs along the view direction
+        var o = Camera.Target + Camera.Right * ((sx - Camera.Width / 2) / Camera.Scale) + Camera.Up * ((Camera.Height / 2 - sy) / Camera.Scale);
+        var d = -Camera.ToViewer;
+        double nearest = double.PositiveInfinity;
+        foreach (var s in surfaces)
+        {
+            var v = s.Vertices;
+            var t = s.Triangles;
+            for (int i = 0; i + 2 < t.Count; i += 3)
+                if (Along(o, d, v[t[i]], v[t[i + 1]], v[t[i + 2]]) is double at && at < nearest) { nearest = at; best = s; }
         }
         return best;
+    }
+
+    /// <summary>Möller–Trumbore on the whole line: where along it (either way from <paramref name="o"/>) it crosses the triangle.</summary>
+    private static double? Along(Vec3 o, Vec3 d, Vec3 a, Vec3 b, Vec3 c)
+    {
+        Vec3 e1 = b - a, e2 = c - a;
+        var p = Vec3.Cross(d, e2);
+        var det = Vec3.Dot(e1, p);
+        if (Math.Abs(det) < 1e-12) return null;
+        var inv = 1 / det;
+        var s = o - a;
+        var u = Vec3.Dot(s, p) * inv;
+        if (u < 0 || u > 1) return null;
+        var q = Vec3.Cross(s, e1);
+        var w = Vec3.Dot(d, q) * inv;
+        if (w < 0 || u + w > 1) return null;
+        return Vec3.Dot(e2, q) * inv;
     }
 
     private double ScreenDistance(Entity e, double sx, double sy)

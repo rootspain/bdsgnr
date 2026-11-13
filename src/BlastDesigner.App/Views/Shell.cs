@@ -645,7 +645,7 @@ public sealed class ToolPanel : Border
 
     /// <summary>
     /// To level of the holes of the pattern, as the field of a hole: a level for all of them, or with To the surface on, each
-    /// its own where its line meets the first surface. Empty or 0: none, the holes keep the design length.
+    /// its own where its line meets the grade surface. Empty: none, the holes keep the design length; 0 is a level.
     /// </summary>
     private Control PatternLevel()
     {
@@ -659,7 +659,7 @@ public sealed class ToolPanel : Border
             Name = "patternToSurface", Content = Look.Icon("surface", 14, Look.TextSoft), Width = 26, Height = 26, MinWidth = 0, MinHeight = 0,
             Padding = new Thickness(0), Margin = new Thickness(4, 0, 0, 0), IsChecked = _vm.PatternToSurface
         };
-        ToolTip.SetTip(surface, Loc.Ui("To the surface: each hole of the pattern takes as its level the elevation where its line from the collar meets the first surface"));
+        ToolTip.SetTip(surface, Loc.Ui("To the surface: each hole of the pattern takes as its level the elevation where its line from the collar meets the grade surface, or the first surface when it meets no grade"));
         AutomationProperties.SetName(surface, Loc.Ui("To the surface"));
         void Show()
         {
@@ -674,7 +674,7 @@ public sealed class ToolPanel : Border
             if (text.Length > 0)
             {
                 if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out var v)) { Show(); return; }
-                level = v == 0 ? null : v;
+                level = v;
             }
             // a level typed in takes over from the surface; an empty field leaves the surface on
             if (level != null) { _vm.PatternToSurface = false; surface.IsChecked = false; }
@@ -745,6 +745,15 @@ public sealed class Inspector : DockPanel
             chip.Margin = new Thickness(0, 0, 4, 4);
             wrap.Children.Add(chip);
         }
+        // for holes only: shown while holes are selected
+        var sameWarning = Ui.Chip(Loc.Ui("With the same warning"), vm.SelectSameWarning, false,
+            Loc.Ui("No explosive, no primer, uncharged gap, short stemming, deck below the toe, overlapping decks, non-water-resistant explosive"));
+        sameWarning.Name = "selectSameWarning";
+        sameWarning.Margin = new Thickness(0, 0, 4, 4);
+        void ShowSameWarning() => sameWarning.IsVisible = vm.Doc?.SelectedHoles.Any() == true;
+        ShowSameWarning();
+        vm.SelectionRefreshed += ShowSameWarning;
+        wrap.Children.Insert(2, sameWarning);
         var props = new DockPanel();
         DockPanel.SetDock(wrap, Dock.Top);
         props.Children.Add(wrap);

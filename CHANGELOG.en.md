@@ -9,6 +9,22 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.2 — 2026-11-12
 
 ### New
+- **A surface is bound to the objects it was built from** (Create surface and Create surface without breaklines). A
+  polygon, polyline or point moved or edited builds the surface again; the surface moved or turned takes its objects
+  along; an object deleted leaves the surface of the others, and with fewer than three points left the surface is
+  deleted too. All of it is one undo step; hidden objects and objects on frozen layers follow too. Holes and surfaces are
+  no longer built from. A command that changes the mesh of the surface itself (a cut and so on) unbinds it. A copy of a
+  surface is bound to the copies of its objects when they are copied with it.
+- **A With the same warning chip** on the Properties tab while holes are selected: it selects the holes with an
+  exclamation mark over the collar that have among their loading warnings one the selected holes have (no primer, short
+  stemming, an uncharged gap and so on). With all the selected holes in one pattern, only within it.
+- **Surface transparency in the settings** (Settings ▸ Viewport): for the surface fill, its wireframe and point clouds
+  apart, in per cent from 0 (opaque) to 100. By default the fill is nearly opaque (10 %), the wireframe 57 % and point
+  clouds 22 %.
+- **A view cube under the Plan and 3D buttons.** The see-through cube turns with the view's azimuth; a click on a
+  visible face, edge or corner shows the project from there: from above, from a side (north, south, east, west) or at
+  an angle. The Section button is gone from the view buttons: a section still opens by X, from the View menu and from
+  the toolbar.
 - **The burden and spacing of a pattern are edited on the Properties tab** (the Pattern group of a hole). A new value
   lays the grid out again in one undo step: the first row half a burden from the face side of the outline, the first hole
   of a row half a spacing from its start, the rows taking the new burden and spacing. Holes still in the outline keep
@@ -55,6 +71,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The collar must be above the level, otherwise the value is refused. The field is in the Properties panel and the hole form.
 
 ### Changed
+- **The menu is in the top left corner**, in place of the program's name "BD6 Blast Designer", which is gone from the
+  header.
 - **A number field of Properties left unchanged takes nothing** when it loses the focus. Leaving a field used to write
   the rounded value shown (X and Y of the position of a polygon when Z was edited, say) and add an undo step.
 - **The outline of a new pattern lies at one elevation:** all its points take one Z, the mean of the points of the drawn
@@ -98,6 +116,25 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The last interval of the column follows the toe.** When the hole length changes — by hand, by "To level" or by a move
   of the collar — the last interval goes down to the new depth and its primers keep their distance from its bottom. Intervals
   below the new toe go, the one it cuts ends at the toe.
+
+### Fixed
+- **Picking a surface under the cursor.** The first surface in the list that the point fell in, in plan, was picked:
+  with a grade under a face over the whole blast, the face could not be picked. The surface seen under the cursor is
+  picked now: the highest in the plan, the first on the line of sight in 3D, so a steep face is picked where it is seen.
+- **To the surface takes holes down to the grade.** The button took the first surface on the hole's line, whatever it
+  was: a face or a bench lying under the collars gave a level near zero, and the holes were cut down to 1–2 m. It now
+  takes a surface of kind Grade, and the first one met only when there is no grade in the way. The status bar names the
+  surfaces the holes went down to.
+- **A level of 0 is a level.** To level = 0 meant no level, while a level measured on a surface at zero came out as
+  0.00000000000000006 and counted as one: some holes were worked out again and some were not. Now only an empty field
+  means no level, and a measured level drops such traces of the arithmetic. In files of earlier versions a level of 0 and such
+  traces of zero are taken off on opening; the lengths stay as saved.
+- **Full screen on laptops with two video cards.** On going full screen Windows could hand the screen to the other
+  video card, and the program moved over to it, with artefacts on the screen. The program now stays on the video card
+  it started on; the card is written to the program's log.
+- **The window's title bar on small screens.** On a laptop, or with large text set in Windows, the program's window
+  opened larger than the screen and its title bar was above the top edge until the window was resized. On such a
+  screen the window now opens maximized, and its normal size fits the screen.
 
 ## 0.3.1 — 2026-11-06
 

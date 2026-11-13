@@ -56,7 +56,7 @@ public static class ProjectFile
         var projectEntry = zip.GetEntry("project.json") ?? throw new InvalidDataException("Project data missing.");
         var data = ReadEntry(projectEntry);
         var project = ProjectJson.Deserialize(data);
-        Migrate(project);
+        Migrate(project, manifest.SchemaVersion);
         // before 0.3.1 the times were rounded to a step; a step under a millisecond now allows tenths
         if (LegacyTimeStep(data) is double step && step < 1) project.Electronic.AllowSubMs = true;
         foreach (var a in project.Attachments)
@@ -75,8 +75,17 @@ public static class ProjectFile
     }
 
     /// <summary>Upgrades older schema versions in place. Version 1 is the first released schema.</summary>
-    private static void Migrate(BlastProject p)
+    private static void Migrate(BlastProject p, int schema)
     {
+        // before schema 3 a level of 0 meant no level, and a level measured on a surface at 0 came out as ±1e-16, which
+        // counted as one: those holes are taken as having none (their lengths stay as saved)
+        if (schema < 3)
+        {
+            foreach (var h in p.Holes)
+                if (h.ToLevel is double z && Math.Abs(z) < 1e-6) h.ToLevel = null;
+            foreach (var pat in p.Patterns)
+                if (pat.ToLevel is double z && Math.Abs(z) < 1e-6) pat.ToLevel = null;
+        }
         if (p.Layers.Count == 0) p.DefaultLayerId = p.GetOrCreateLayer("Default").Id;
         foreach (var e in p.Entities)
             if (p.FindLayer(e.LayerId) == null) e.LayerId = p.DefaultLayer.Id;

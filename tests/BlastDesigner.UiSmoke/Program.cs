@@ -304,7 +304,7 @@ Step("properties of holes: loading on top, fields in folding groups inside the p
     if (expected.Values.Any(v => v == null)) throw new Exception("a hole meets no surface over the floor");
     Press("holesToSurface"); Pump();
     foreach (var h in vm.Project!.Holes.Where(h => reached.Contains(h.Id)))
-        // the level where it meets the surface is in To level, the length follows it with the subdrill
+        // the level where it meets the surface is in To level (to the micrometre), the length follows it with the subdrill
         if (h.ToLevel is not double z || Math.Abs(z - levels[h.Id]!.Value) > 1e-9 || Math.Abs(h.Length - expected[h.Id]!.Value) > 1e-6 || h.Length > (h.Collar.Z - floor) / Math.Cos(h.Angle * Math.PI / 180) + h.Subdrill + 1e-6) throw new Exception($"hole {h.Label}: length {h.Length} to the surface, {expected[h.Id]} expected, floor {floor} from {h.Collar.Z}");
     if (vm.Project.Holes.First(h => h.Id == far) is { } off && (off.ToLevel != null || off.Length != farLength)) throw new Exception($"the hole off the surfaces changed: level {off.ToLevel}, length {off.Length}");
     if (vm.Doc.UndoNames[0] != BlastDesigner.App.Services.Loc.T("Holes to the surface")) throw new Exception("To the surface should be one undo step: " + vm.Doc.UndoNames[0]);
@@ -854,6 +854,9 @@ Step("↑/↓ step a number field by 1 as typed (Enter takes it); a text field a
         throw new Exception("the text of a stepped number is not written as it was");
     vm.SelectTool(); Pump();
     var hole = vm.Project!.Holes.First(h => !h.IsDummy && !h.Locked && h.Label.Length > 0);
+    // a length the field shows as it is, with no level to follow
+    vm.Change("Smoke length", pr => { var x = (Hole)pr.FindEntity(hole.Id)!; x.ToLevel = null; x.Length = 11.5; });
+    hole = (Hole)vm.Project.FindEntity(hole.Id)!;
     vm.Doc!.Select(new[] { hole.Id }); window.ShowPropertiesTab(); Pump();
     TextBox Box(string name) => window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == name && b.IsEffectivelyVisible);
     void Press(Avalonia.Input.Key key, Avalonia.Input.PhysicalKey physical) { window.KeyPress(key, Avalonia.Input.RawInputModifiers.None, physical, null); Pump(); }
@@ -924,6 +927,110 @@ Step("dark plan zoomed", () => { vm.Doc!.Select(vm.Project!.Rows[2].HoleIds); vm
 Shot("32_dark_plan");
 Step("dark 3d", () => { vm.ZoomAll(); vm.View3D(); });
 Shot("33_dark_3d");
+Step("the main window opens inside a small screen, with its title bar on it", () =>
+{
+    // a 1920×1080 screen at 100% takes the full size; at 150% (1280×720 DIPs less the task bar) and a 1366×768 laptop it
+    // does not: the window opens maximized, and its normal size fits the screen
+    if (MainWindow.StartSize(1920, 1040) != (MainWindow.StartWidth, MainWindow.StartHeight, false)) throw new Exception("a large screen should take the full size");
+    foreach (var (w, h) in new[] { (1280.0, 680.0), (1366.0, 728.0), (1536.0, 824.0) })
+    {
+        var (sw, sh, max) = MainWindow.StartSize(w, h);
+        if (!max || sw + 16 > w || sh + 48 > h) throw new Exception($"on a screen of {w}x{h} the window is {sw}x{sh}, maximized {max}");
+    }
+});
+Step("the drawing stays on the video card it started on", () =>
+{
+    byte[] igpu = { 1, 0, 0, 0, 0, 0, 0, 0 }, dgpu = { 2, 0, 0, 0, 0, 0, 0, 0 }, basic = { 3, 0, 0, 0, 0, 0, 0, 0 };
+    var choose = BlastDesigner.App.Services.GraphicsAdapter.Choose;
+    if (choose(new[] { igpu, dgpu }, null) != 0) throw new Exception("at the start the card Windows puts first is taken");
+    // the other card now comes first: the program stays where it was
+    if (choose(new[] { dgpu, igpu, basic }, igpu) != 1) throw new Exception("the program moved to the other video card");
+    if (choose(new[] { dgpu, basic }, igpu) != 0) throw new Exception("with the card gone the first one is taken");
+    if (choose(new byte[]?[] { null, igpu }, igpu) != 1) throw new Exception("a card with no identifier is not the kept one");
+});
+Step("a surface built from a polygon and a point follows them, and they follow it", () =>
+{
+    var steps = vm.Doc!.UndoNames.Count;
+    var polygon = new PolylineEntity { Closed = true, Points = { new(5000, 5000, 0), new(5020, 5000, 0), new(5020, 5020, 0), new(5000, 5020, 0) } };
+    var point = new PointEntity { Position = new Vec3(5010, 5010, 4) };
+    var hole = new Hole { Label = "S1", Collar = new Vec3(5005, 5005, 9), Length = 10 };
+    vm.Change("Smoke sources", pr => { pr.Add(polygon); pr.Add(point); pr.Add(hole); }); Pump();
+    vm.Doc.Select(new[] { polygon.Id, point.Id, hole.Id }); Pump();
+    var before = vm.Project!.Entities.OfType<SurfaceEntity>().Select(x => x.Id).ToHashSet();
+    var task = vm.CreateSurface(false); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("no surface kind asked");
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.IsDefault).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    for (int i = 0; i < 40 && !task.IsCompleted; i++) Pump();
+    var s = vm.Project.Entities.OfType<SurfaceEntity>().SingleOrDefault(x => !before.Contains(x.Id)) ?? throw new Exception("no surface was built");
+    // the hole is not built from
+    if (!s.SourceIds.SequenceEqual(new[] { polygon.Id, point.Id }) || s.Vertices.Any(v => v.Z == 9)) throw new Exception("the surface is built from " + s.SourceIds.Count + " objects");
+    // the polygon moved: the surface goes with it
+    vm.Change("Smoke move polygon", pr => pr.FindEntity(polygon.Id)!.Translate(new Vec3(0, 0, -3))); Pump();
+    s = (SurfaceEntity)vm.Project.FindEntity(s.Id)!;
+    if (!s.Vertices.Contains(new Vec3(5000, 5000, -3))) throw new Exception("the surface did not follow its polygon");
+    // the surface moved: the polygon and the point go with it
+    vm.Change("Smoke move surface", pr => pr.FindEntity(s.Id)!.Translate(new Vec3(10, 0, 0))); Pump();
+    if (((PolylineEntity)vm.Project.FindEntity(polygon.Id)!).Points[0] != new Vec3(5010, 5000, -3) || ((PointEntity)vm.Project.FindEntity(point.Id)!).Position != new Vec3(5020, 5010, 4))
+        throw new Exception("the objects did not follow their surface");
+    // the point deleted: the surface of the polygon alone
+    vm.Change("Smoke delete point", pr => pr.Entities.Remove(pr.FindEntity(point.Id)!)); Pump();
+    s = (SurfaceEntity)vm.Project.FindEntity(s.Id)!;
+    if (!s.SourceIds.SequenceEqual(new[] { polygon.Id }) || s.TriangleCount != 2) throw new Exception("the surface was not built again without the point");
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+    if (vm.Project!.FindEntity(polygon.Id) != null) throw new Exception("the smoke objects were not taken away");
+});
+Step("the surface seen under the cursor is picked, whatever the order of the surfaces", () =>
+{
+    // as in a real file: the grade first and over the whole blast at −10, then a face falling from 0 at y = 0 to −12 at y = −4
+    var grade = new SurfaceEntity { Name = "Grade", Kind = SurfaceKind.Grade, Vertices = { new(-50, -50, -10), new(50, -50, -10), new(50, 50, -10), new(-50, 50, -10) }, Triangles = { 0, 1, 2, 0, 2, 3 } };
+    var face = new SurfaceEntity { Name = "Face", Kind = SurfaceKind.Face, Vertices = { new(-20, 0, 0), new(20, 0, 0), new(20, -4, -12), new(-20, -4, -12) }, Triangles = { 0, 1, 2, 0, 2, 3 } };
+    var both = new[] { grade, face };
+    var cam = vm.View.Camera;
+    var keep = (cam.Target, cam.Yaw, cam.Pitch, cam.Scale);
+    try
+    {
+        // the plan: the face lies over the grade
+        (cam.Target, cam.Yaw, cam.Pitch, cam.Scale) = (new Vec3(0, -2, -6), 0, 90, 5);
+        var (px, py) = cam.ToScreen(new Vec3(0, -2, -6));
+        if (vm.View.SurfaceAt(px, py, both) != face) throw new Exception("in the plan the grade was picked under the face");
+        // off the face only the grade is there
+        var (gx, gy) = cam.ToScreen(new Vec3(30, 30, -10));
+        if (vm.View.SurfaceAt(gx, gy, both) != grade) throw new Exception("in the plan the grade off the face was not picked");
+        // from the south, looking at the face: the point seen on the face, which a level plane would put elsewhere
+        (cam.Target, cam.Yaw, cam.Pitch) = (new Vec3(0, 0, 0), 0, 20);
+        var (fx, fy) = cam.ToScreen(new Vec3(5, -3, -9));
+        if (vm.View.SurfaceAt(fx, fy, both) != face) throw new Exception("in 3D the face seen under the cursor was not picked");
+        if (vm.View.SurfaceAt(fx, fy, new[] { face, grade }) != face) throw new Exception("the order of the surfaces decided");
+    }
+    finally { (cam.Target, cam.Yaw, cam.Pitch, cam.Scale) = keep; vm.View.Redraw(); }
+});
+Step("view cube", () =>
+{
+    var cube = window.ViewCube ?? throw new Exception("no view cube under the view buttons");
+    if (!cube.IsEffectivelyVisible) throw new Exception("the view cube is hidden");
+    var size = cube.Width;
+    // the cube is turned with the view: a click in the middle of its top gives the plan
+    var cam = BlastDesigner.Rendering.ViewCube.CubeCamera(vm.View.Camera.Yaw, size);
+    var (tx, ty) = cam.ToScreen(new Vec3(0, 0, 1));
+    if (!cube.ClickAt(new Avalonia.Point(tx, ty)) || !vm.View.Camera.IsPlan) throw new Exception("the top of the cube did not give the plan");
+    // north up, the south face is seen: its middle looks north from the side
+    cam = BlastDesigner.Rendering.ViewCube.CubeCamera(vm.View.Camera.Yaw, size);
+    var (sx, sy) = cam.ToScreen(new Vec3(0, -1, 0));
+    if (!cube.ClickAt(new Avalonia.Point(sx, sy)) || Math.Abs(vm.View.Camera.Pitch) > 1e-6 || Math.Abs(vm.View.Camera.Yaw) > 1e-6)
+        throw new Exception($"the south face gave pitch {vm.View.Camera.Pitch}, yaw {vm.View.Camera.Yaw}");
+    // the cube turned with the view; the corner of the top over the south-east gives the isometric view from there
+    vm.View.Camera.Yaw = -45; vm.View.Redraw(); Pump();
+    cam = BlastDesigner.Rendering.ViewCube.CubeCamera(vm.View.Camera.Yaw, size);
+    var (kx, ky) = cam.ToScreen(new Vec3(0.9, -0.9, 1));
+    if (!cube.ClickAt(new Avalonia.Point(kx, ky)) || Math.Abs(vm.View.Camera.Pitch - 35.264390) > 1e-3 || Math.Abs(vm.View.Camera.Yaw + 45) > 1e-6)
+        throw new Exception($"the corner gave pitch {vm.View.Camera.Pitch}, yaw {vm.View.Camera.Yaw}");
+    if (cube.PartAt(new Avalonia.Point(1, size - 1)) != null) throw new Exception("a corner of the box past the cube is a part");
+    var tip = BlastDesigner.App.Controls.ViewCubeControl.Describe(new Vec3(1, -1, 1));
+    if (tip.Contains("{0}")) throw new Exception("the tip of a corner: " + tip);
+});
+Shot("33b_view_cube");
+Step("back to the plan", () => { vm.PlanView(); vm.ZoomAll(); });
 Step("dark timing", () => { vm.PlanView(); vm.ZoomAll(); vm.VisualizeTiming(); });
 Shot("34_dark_timing");
 Step("clear timing", vm.ClearOverlays);
@@ -943,6 +1050,13 @@ Step("dropdown buttons open menus", () =>
         m.Close(); Pump();
     }
     Click(BlastDesigner.App.Services.Loc.Ui("All commands in the classic menu"), 6);
+    {
+        // the menu opens from the top left corner, and the name of the program is not in the header
+        var menu = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().Single(x => x.Name == "mainMenu");
+        var at = menu.TranslatePoint(new Avalonia.Point(0, 0), window) ?? default;
+        if (at.X > 20 || at.Y > 20) throw new Exception($"the menu is at {at}, not in the top left corner");
+        if (window.GetLogicalDescendants().OfType<Avalonia.Controls.TextBlock>().Any(t => t.Text is "Blast Designer" or "BD6")) throw new Exception("the name of the program is still in the header");
+    }
     Click(BlastDesigner.App.Services.Loc.Ui("Blast properties, design data, resources"), 6);
     window.Ribbon.Select(0); Pump();
     buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
@@ -4582,6 +4696,90 @@ Step("a colour of the pattern turn circle picked in the settings is taken on OK"
     for (int i = 0; i < 40 && !task.IsCompleted; i++) Pump();
     if (vm.Settings.PatternTurnRefusedColor != 0xFFF87171u) throw new Exception($"OK did not take the colour of the refused circle: #{vm.Settings.PatternTurnRefusedColor:X8}");
     vm.Settings.PatternTurnRefusedColor = was;
+    vm.Settings.Save();
+});
+Step("With the same warning selects the holes with a warning of the same kind, within the pattern of the selection", () =>
+{
+    vm.SelectTool(); window.ShowPropertiesTab(); Pump();
+    Button[] Chips() => window.GetLogicalDescendants().OfType<Button>().Where(b => b.Name == "selectSameWarning").ToArray();
+    vm.Doc!.ClearSelection(); Pump();
+    if (Chips().Length == 0 || Chips().Any(b => b.IsEffectivelyVisible)) throw new Exception("the chip is there with no hole selected");
+    var tip = ToolTip.GetTip(Chips()[0]) as string ?? "";
+    if (BlastDesigner.App.Services.Loc.Language == "ru" && !tip.StartsWith("нет ВВ, нет боевика")) throw new Exception("the tip of the chip: " + tip);
+    var free = new List<Guid>();
+    var pattern = new HolePattern { Name = "Smoke warnings" };
+    var steps = vm.Doc.UndoNames.Count;
+    // A and B in the pattern without a primer, C the same off the pattern, D in the pattern with a gap under the column;
+    // every other hole is charged without a warning
+    vm.Change("Smoke warnings", pr =>
+    {
+        pr.Patterns.Add(pattern);
+        var near = pr.Holes.FirstOrDefault()?.Collar ?? new BlastDesigner.Domain.Geometry.Vec3(0, 0, 0);
+        for (int k = 0; k < 4; k++)
+            free.Add(pr.Add(new Hole { Label = "W" + (k + 1), Collar = near + new BlastDesigner.Domain.Geometry.Vec3(3 + 3 * k, 3, 0), Length = 10, Diameter = 102 }).Id);
+        var anfo = pr.Products.First(x => x.Name == "ANFO");
+        var stem = pr.Products.First(x => x.Kind == BlastDesigner.Domain.Model.ProductKind.Stemming);
+        var booster = pr.Products.First(x => x.Kind == BlastDesigner.Domain.Model.ProductKind.Booster);
+        foreach (var h in pr.Holes)
+        {
+            var i = free.IndexOf(h.Id);
+            h.ManualLoading = true;
+            h.Decks.Clear();
+            var top = Math.Min(h.EffectiveLength / 2, 0.5 + 30 * h.Diameter / 1000);
+            var bottom = i == 3 ? h.EffectiveLength - 1 : h.EffectiveLength;
+            h.Decks.Add(new Deck { Top = 0, Bottom = top, ProductId = stem.Id });
+            var d = new Deck { Top = top, Bottom = bottom, ProductId = anfo.Id };
+            if (i is not (0 or 1 or 2)) d.Primers.Add(new Primer { Depth = bottom - 0.3, BoosterId = booster.Id });
+            h.Decks.Add(d);
+            if (i is 0 or 1 or 3) h.PatternId = pattern.Id;
+        }
+    }); Pump();
+    var p = vm.Project!;
+    var kinds = free.Select(id => BlastDesigner.Engine.Charging.LoadingWarnings(p, (Hole)p.FindEntity(id)!)).ToList();
+    if (!kinds[0].SequenceEqual(new[] { BlastDesigner.Engine.LoadingWarning.NoPrimer }) || !kinds[3].Contains(BlastDesigner.Engine.LoadingWarning.ColumnGap) || kinds[3].Contains(BlastDesigner.Engine.LoadingWarning.NoPrimer))
+        throw new Exception("the smoke holes do not have the warnings meant for them: " + string.Join(" | ", kinds.Select(k => string.Join(",", k))));
+    var others = p.Holes.Where(h => !free.Contains(h.Id) && BlastDesigner.Engine.Charging.HasLoadingWarning(p, h)).Select(h => h.Label).ToList();
+    if (others.Count > 0) throw new Exception("holes with a warning besides the smoke ones: " + string.Join(", ", others.Take(5)));
+    void Pick(params int[] which) { vm.Doc!.Select(which.Select(i => free[i])); Pump(); }
+    HashSet<Guid> Picked() => vm.Doc!.SelectedHoles.Select(h => h.Id).ToHashSet();
+    // A in the pattern: B, not C off it, nor D with another warning
+    Pick(0);
+    var chip = Chips().FirstOrDefault(b => b.IsEffectivelyVisible) ?? throw new Exception("the chip is not there with a hole selected");
+    chip.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!Picked().SetEquals(new[] { free[0], free[1] })) throw new Exception("within the pattern: " + string.Join(", ", vm.Doc.SelectedHoles.Select(h => h.Label)));
+    if (!vm.Status.Contains("Smoke warnings")) throw new Exception("the status does not name the pattern: " + vm.Status);
+    // A and C, in two patterns: every hole with a primer missing
+    Pick(0, 2);
+    chip.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!Picked().SetEquals(new[] { free[0], free[1], free[2] })) throw new Exception("over the blast: " + string.Join(", ", vm.Doc.SelectedHoles.Select(h => h.Label)));
+    // D: the gap is its own, in its pattern
+    Pick(3);
+    chip.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!Picked().SetEquals(new[] { free[3] })) throw new Exception("the gap: " + string.Join(", ", vm.Doc.SelectedHoles.Select(h => h.Label)));
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+    if (vm.Project!.Patterns.Any(x => x.Name == "Smoke warnings")) throw new Exception("the smoke pattern was not taken away");
+});
+Step("the three transparencies of surfaces are set in the settings and reach the plan", () =>
+{
+    var was = (vm.Settings.SurfaceTransparency, vm.Settings.WireframeTransparency, vm.Settings.PointCloudTransparency);
+    var task = vm.EditProgramSettings(); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    foreach (var (name, text) in new[] { ("surfaceTransparency", "40"), ("wireframeTransparency", "150"), ("pointCloudTransparency", "5") })
+    {
+        var box = dlg.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(b => b.Name == name) ?? throw new Exception("no box " + name + " in the settings");
+        box.Text = text;
+        box.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter });
+    }
+    Pump();
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    for (int i = 0; i < 40 && !task.IsCompleted; i++) Pump();
+    // above 100 it is taken as 100
+    if ((vm.Settings.SurfaceTransparency, vm.Settings.WireframeTransparency, vm.Settings.PointCloudTransparency) != (40, 100, 5))
+        throw new Exception($"OK took {vm.Settings.SurfaceTransparency}, {vm.Settings.WireframeTransparency}, {vm.Settings.PointCloudTransparency}");
+    var o = vm.BuildSceneOptions();
+    if (o.SurfaceAlpha != 153 || o.WireframeAlpha != 0 || o.PointCloudAlpha != 242) throw new Exception($"the plan draws with {o.SurfaceAlpha}, {o.WireframeAlpha}, {o.PointCloudAlpha}");
+    (vm.Settings.SurfaceTransparency, vm.Settings.WireframeTransparency, vm.Settings.PointCloudTransparency) = was;
     vm.Settings.Save();
 });
 Step("a new language builds the window again on Apply and on OK, and the blast goes on in it", () =>

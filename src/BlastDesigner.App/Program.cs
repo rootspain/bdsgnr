@@ -21,7 +21,9 @@ internal static class Program
             // has no transparent windows, which the swap chain cannot show. The other modes are fallbacks, in order.
             .With(new Win32PlatformOptions
             {
-                CompositionMode = new[] { Win32CompositionMode.LowLatencyDxgiSwapChain, Win32CompositionMode.WinUIComposition, Win32CompositionMode.RedirectionSurface }
+                CompositionMode = new[] { Win32CompositionMode.LowLatencyDxgiSwapChain, Win32CompositionMode.WinUIComposition, Win32CompositionMode.RedirectionSurface },
+                // the drawing stays on the video card it started on, also when Windows hands the screen to the other card
+                GraphicsAdapterSelectionCallback = Services.GraphicsAdapter.Pick
             })
             .WithInterFont()
             .LogToTrace();

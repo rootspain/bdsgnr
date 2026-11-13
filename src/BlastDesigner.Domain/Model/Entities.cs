@@ -48,6 +48,8 @@ public abstract class Entity
     {
         var c = ProjectJson.DeepClone<Entity>(this);
         c.Id = Guid.NewGuid();
+        // a copy of a surface is not built from the objects of the original
+        if (c is SurfaceEntity s) s.SourceIds = new();
         return c;
     }
 
@@ -206,6 +208,14 @@ public sealed class SurfaceEntity : Entity
     public List<Vec3> Vertices { get; set; } = new();
     public List<int> Triangles { get; set; } = new();
     public bool ShowWireframe { get; set; } = true;
+    /// <summary>
+    /// The points, lines and polygons the surface was built from (Create surface): it is built again from them when they
+    /// change, and they move with it when it moves (the engine's SurfaceSources). Empty for a surface not built from
+    /// objects (imported, drawn, cut). The list is replaced, never changed in place: copies of the surface share it.
+    /// </summary>
+    public List<Guid> SourceIds { get; set; } = new();
+    /// <summary>Built from its <see cref="SourceIds"/> with the lines as breaklines.</summary>
+    public bool SourceBreaklines { get; set; }
 
     public override string KindName => "Surface";
     [JsonIgnore] public int TriangleCount => Triangles.Count / 3;

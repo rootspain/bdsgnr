@@ -93,6 +93,16 @@ public sealed partial class MainViewModel
         View.ZoomAll();
     }
 
+    /// <summary>Looks at the blast from a direction picked on the view cube: a face, an edge or a corner.</summary>
+    public void ViewFrom(Vec3 from)
+    {
+        var (pitch, yaw) = ViewCube.ViewFrom(from);
+        PushZoomHistory();
+        View.Camera.Pitch = pitch;
+        View.Camera.Yaw = yaw;
+        View.ZoomAll();
+    }
+
     public void View3D()
     {
         PushZoomHistory();

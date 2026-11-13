@@ -72,10 +72,9 @@ public sealed class MainWindow : Window
         Dialogs.Owner = this;
         BlastDesigner.Rendering.PlanRenderer.Translate = Loc.T;
         Title = "Blast Designer";
-        Width = 1440;
-        Height = 900;
         Background = Look.Ground;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        FitToScreen();
         _vm = new MainViewModel(this, _viewport, settings);
         _layers = new LayersPanel(_vm);
         _properties = new PropertiesPanel(_vm);
@@ -132,6 +131,34 @@ public sealed class MainWindow : Window
         _activity.Start();
     }
 
+    /// <summary>The size the window opens with on a screen of the program's own size.</summary>
+    public const double StartWidth = 1440, StartHeight = 900;
+    /// <summary>What the system adds round the content of a window: its title bar and borders, in DIPs.</summary>
+    private const double FrameWidth = 16, FrameHeight = 48;
+
+    /// <summary>
+    /// The size of the window's content on a screen whose working area is <paramref name="areaWidth"/> × <paramref name="areaHeight"/>
+    /// DIPs, and whether it opens maximized. A window larger than the screen would be centred with its title bar above the
+    /// top of the screen, out of reach until it is resized: on a small screen, or a large one with large text, the window
+    /// opens maximized instead, and its normal size fits the screen.
+    /// </summary>
+    public static (double Width, double Height, bool Maximized) StartSize(double areaWidth, double areaHeight)
+    {
+        if (StartWidth + FrameWidth <= areaWidth && StartHeight + FrameHeight <= areaHeight) return (StartWidth, StartHeight, false);
+        return (Math.Max(640, Math.Min(StartWidth, areaWidth * 0.9 - FrameWidth)), Math.Max(480, Math.Min(StartHeight, areaHeight * 0.9 - FrameHeight)), true);
+    }
+
+    private void FitToScreen()
+    {
+        Width = StartWidth;
+        Height = StartHeight;
+        if (Screens.Primary is not { } screen) return;
+        var (w, h, max) = StartSize(screen.WorkingArea.Width / screen.Scaling, screen.WorkingArea.Height / screen.Scaling);
+        (Width, Height) = (w, h);
+        if (max) WindowState = WindowState.Maximized;
+        Log.Info($"Main window {w:0}x{h:0}{(max ? ", maximized" : "")} on a screen of {screen.WorkingArea.Width}x{screen.WorkingArea.Height} px at {screen.Scaling:0.##}");
+    }
+
     /// <summary>
     /// Builds the window again in the language of the settings, as every label is taken when its control is made. The
     /// open blast goes on in the new window with its undo history; the view and the size and place of the window stay.
@@ -142,7 +169,8 @@ public sealed class MainWindow : Window
         Loc.Language = _settings.Language;
         var next = new MainWindow(_settings, this) { Width = Width, Height = Height, WindowStartupLocation = WindowStartupLocation.Manual, Position = Position };
         // full screen is taken from the settings by the new window itself
-        if (WindowState == WindowState.Maximized) next.WindowState = WindowState.Maximized;
+        // maximized or not as this one, whatever the new window chose for the screen
+        next.WindowState = WindowState == WindowState.Maximized ? WindowState.Maximized : WindowState.Normal;
         if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop) desktop.MainWindow = next;
         next.Show();
         _vm.Release();
@@ -259,9 +287,8 @@ public sealed class MainWindow : Window
 
     private Control BuildHeader()
     {
-        var logo = Ui.Row(8,
-            new Border { Width = 28, Height = 28, CornerRadius = new CornerRadius(6), Background = Look.Accent, Child = new TextBlock { Text = "BD6", FontSize = 11, FontWeight = FontWeight.Bold, Foreground = Look.OnAccent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } },
-            new TextBlock { Text = "Blast Designer", FontWeight = FontWeight.Bold, FontSize = 14, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center });
+        // the classic menu opens from the top left corner, where menus are looked for
+        var logo = Ui.Row(6, Look.Icon("menu", 16, Look.TextSoft), new TextBlock { Text = Loc.Ui("Menu"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center });
         var quick = Ui.Row(2);
         foreach (var (icon, tip, action) in new (string, string, Action)[]
                  {
@@ -292,15 +319,17 @@ public sealed class MainWindow : Window
             MenuEntry.Item("Site coordinate system…", () => _ = _vm.EditCoordinates(), () => _vm.HasProject)
         });
 
-        var allMenu = Ui.Flat(Ui.Row(6, Look.Icon("menu", 16, Look.TextSoft), new TextBlock { Text = Loc.Ui("Menu"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }), Loc.Ui("All commands in the classic menu"));
-        Ui.DropDown(allMenu, _vm.BuildMenu, PlacementMode.BottomEdgeAlignedRight);
+        var allMenu = Ui.Flat(logo, Loc.Ui("All commands in the classic menu"), height: 40);
+        allMenu.Name = "mainMenu";
+        allMenu.Padding = new Thickness(8, 0, 10, 0);
+        Ui.DropDown(allMenu, _vm.BuildMenu, PlacementMode.BottomEdgeAlignedLeft);
         var settings = Ui.Flat(Look.Icon("gear", 18, Look.TextSoft), Loc.T("Program settings…"), () => _ = _vm.EditProgramSettings(), 34);
         var help = Ui.Flat(Look.Icon("help", 18, Look.TextSoft), Loc.Ui("Help (F1)"), () => AnalysisWindows.Help(), 34);
 
         var bar = new DockPanel { Background = Look.Panel, Height = 48 };
-        var left = Ui.Row(12, logo, quickBorder, blast);
-        left.Margin = new Thickness(12, 0);
-        var rightSide = Ui.Row(2, allMenu, settings, help);
+        var left = Ui.Row(12, allMenu, quickBorder, blast);
+        left.Margin = new Thickness(4, 0, 12, 0);
+        var rightSide = Ui.Row(2, settings, help);
         rightSide.Margin = new Thickness(0, 0, 12, 0);
         DockPanel.SetDock(left, Dock.Left);
         DockPanel.SetDock(rightSide, Dock.Right);
@@ -404,9 +433,13 @@ public sealed class MainWindow : Window
         if (i >= 0) _railButtons[i] = (_drawButton, t.Tool);
     }
 
+    private ViewCubeControl? _viewCube;
+    /// <summary>The view cube under the Plan and 3D buttons; for tests.</summary>
+    public ViewCubeControl? ViewCube => _viewCube;
+
     private Control BuildPlanOverlay()
     {
-        foreach (var (label, action) in new (string, Action)[] { ("Plan", _vm.PlanView), ("3D", _vm.View3D), ("Section", () => AnalysisWindows.SectionTool(_vm)) })
+        foreach (var (label, action) in new (string, Action)[] { ("Plan", _vm.PlanView), ("3D", _vm.View3D) })
         {
             var b = new Button { Content = Loc.Ui(label), Padding = new Thickness(10, 4), CornerRadius = new CornerRadius(6), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = Look.Muted };
             b.Click += (_, _) => { UsageLog.Track(UsageLog.Button, label, "view"); Ui.Safe(action); RefreshChips(); };
@@ -431,7 +464,11 @@ public sealed class MainWindow : Window
         var top = new DockPanel { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12) };
         DockPanel.SetDock(compass, Dock.Right);
         top.Children.Add(compass);
-        top.Children.Add(Ui.Row(8, modes, _chips));
+        _viewCube = new ViewCubeControl(_viewport, from => { _vm.ViewFrom(from); RefreshChips(); }) { Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+        var row = Ui.Row(8, modes, _chips);
+        row.VerticalAlignment = VerticalAlignment.Top;
+        modes.VerticalAlignment = VerticalAlignment.Top;
+        top.Children.Add(new StackPanel { Children = { row, _viewCube } });
         RefreshChips();
         return top;
     }
