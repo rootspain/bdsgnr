@@ -287,6 +287,7 @@ Step("properties of holes: loading on top, fields in folding groups inside the p
     if (((TextBox)Named("propToLevel")).Text is { Length: > 0 } left) throw new Exception("the refused level stays in the field: " + left);
     // To the surface, the small button right of To level: the holes go down to a floor under them, with their subdrill
     var button = Named("holesToSurface");
+    if (((Button)button).BorderBrush != BlastDesigner.App.Services.Look.Accent) throw new Exception("To the surface should be in the accent colour");
     var field = Named("propToLevel");
     var (b0, f0) = (button.TranslatePoint(new Point(), window)!.Value, field.TranslatePoint(new Point(), window)!.Value);
     if (b0.X <= f0.X + field.Bounds.Width - 1 || Math.Abs(b0.Y + button.Bounds.Height / 2 - f0.Y - field.Bounds.Height / 2) > 2) throw new Exception($"To the surface is not right of To level: {b0} {f0}");
@@ -929,6 +930,9 @@ Step("dark 3d", () => { vm.ZoomAll(); vm.View3D(); });
 Shot("33_dark_3d");
 Step("the main window opens inside a small screen, with its title bar on it", () =>
 {
+    // the first start (nothing kept) opens on the whole screen, later ones as the window was left
+    if (!MainWindow.StartsMaximized(false, null) || !MainWindow.StartsMaximized(false, "1") || MainWindow.StartsMaximized(false, "0") || !MainWindow.StartsMaximized(true, "0"))
+        throw new Exception("the window should open maximized on the first start and as it was left after");
     // a 1920×1080 screen at 100% takes the full size; at 150% (1280×720 DIPs less the task bar) and a 1366×768 laptop it
     // does not: the window opens maximized, and its normal size fits the screen
     if (MainWindow.StartSize(1920, 1040) != (MainWindow.StartWidth, MainWindow.StartHeight, false)) throw new Exception("a large screen should take the full size");
@@ -1099,7 +1103,7 @@ Step("dropdown buttons open menus", () =>
         held.Close(); Pump();
     }
     var order = string.Join(",", vm.DrawingTools().Select(e => e.Header));
-    if (order != "Point,Polyline,Section line,Polygon,Circle,Arrow,Text,Dimension,North point") throw new Exception("drawing tools order: " + order);
+    if (order != "Point,Polyline,Section line,Polygon,Circle,Block,Arrow,Text,Dimension,North point") throw new Exception("drawing tools order: " + order);
     vm.DrawingTools().First(e => e.Header == "Circle").Action!(); Pump();
     if (vm.ActiveTool?.Name != "Circle" || vm.DrawingTool != "Circle") throw new Exception("picking Circle did not start it");
     buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
@@ -2332,6 +2336,20 @@ Step("surfaces coloured by kind", () =>
     vm.View3D(); vm.ZoomAll();
 });
 Shot("44_surfaces_by_kind");
+Step("the eye by Plan and 3D: what is behind a surface paler, by the button and by Shift+H", () =>
+{
+    var eye = window.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "fadeHidden");
+    if (vm.Project!.View.FadeHidden) throw new Exception("a new blast should start with everything drawn far to near");
+    eye.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!vm.Project.View.FadeHidden || eye.BorderBrush != BlastDesigner.App.Services.Look.Accent) throw new Exception("the eye did not turn hidden paler on");
+});
+Shot("44c_surfaces_hidden_paler");
+Step("Shift+H turns hidden paler off", () =>
+{
+    vm.View.Focus();
+    window.KeyPress(Avalonia.Input.Key.H, Avalonia.Input.RawInputModifiers.Shift, Avalonia.Input.PhysicalKey.H, "H"); Pump();
+    if (vm.Project!.View.FadeHidden) throw new Exception("Shift+H did not turn hidden paler off");
+});
 Step("surfaces coloured by elevation", () => { vm.Settings.SurfaceColoring = ProgramSettings.SurfaceByElevation; vm.View.Redraw(); });
 Shot("44b_surfaces_by_elevation");
 Step("surface key on the visibility tab", () =>
@@ -3250,6 +3268,113 @@ Step("polyline tool: no label by the cursor before the first point, the distance
     if (made.Count != 1 || made[0].Points.Count != 2) throw new Exception($"a click on the last point should finish the line: {made.Count} lines, {made.FirstOrDefault()?.Points.Count} points");
     vm.Undo();
     vm.ActiveTool?.Cancel(); vm.SelectTool();
+});
+Step("a block of three clicks shows only what is inside it, has a layer of its own and is sized by its grips", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var steps = vm.Doc!.UndoNames.Count;
+    var holes = vm.Project!.Holes.Where(h => vm.IsSelectable(h)).ToList();
+    var inside = holes[0];
+    var far = holes.OrderByDescending(h => Vec3.Distance2D(h.Collar, inside.Collar)).First();
+    vm.Doc.Select(new[] { inside.Id }); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
+    // three clicks: a corner, the length to the north, the width to the east
+    var a = inside.Collar + new Vec3(-2, -2, 0);
+    vm.DrawBlockTool(); Pump();
+    var tool = vm.ActiveTool!;
+    foreach (var at in new[] { a, a + new Vec3(0, 4, 0), a + new Vec3(4, 1, 0) })
+    {
+        var (sx, sy) = vm.View.Camera.ToScreen(at);
+        tool.PointerMoved(new ToolPointer { X = sx, Y = sy, World = at, Snapped = at });
+        tool.PointerPressed(new ToolPointer { X = sx, Y = sy, World = at, Snapped = at, Left = true, ClickCount = 1 });
+    }
+    Pump();
+    var block = vm.Project.Entities.OfType<BlockEntity>().SingleOrDefault() ?? throw new Exception("no block was made");
+    var layerName = vm.Project.FindLayer(block.LayerId)!.Name;
+    if (layerName != BlastDesigner.App.Services.Loc.T("Block")) throw new Exception("the block is on the layer " + layerName);
+    if (Math.Abs(block.Length - 4) > 1e-6 || Math.Abs(block.Width - 4) > 1e-6 || Math.Abs(block.Height - BlockEntity.DefaultHeight) > 1e-9 || Math.Abs(block.Bottom - (a.Z - 15)) > 1e-6)
+        throw new Exception($"the block is {block.Length} × {block.Width} × {block.Height} from {block.Bottom}");
+    if (!vm.Doc.Selection.Contains(block.Id) || vm.ActiveTool is not SelectTool) throw new Exception("the new block should be selected, with the select tool");
+    // only what is inside: the far hole is neither picked, nor selected by Invert, nor in the table
+    if (!vm.IsSelectable(inside) || vm.IsSelectable(far)) throw new Exception("the holes inside and outside the block");
+    var (fx, fy) = vm.View.Camera.ToScreen(far.Collar);
+    if (vm.View.HitTest(fx, fy)?.Id == far.Id) throw new Exception("a hole outside the block was picked");
+    var shown = vm.ShownHoles(vm.Project).Select(h => h.Id).ToHashSet();
+    if (!shown.Contains(inside.Id) || shown.Contains(far.Id)) throw new Exception("the hole table goes beyond the block");
+    if (vm.QuickFilters().Any(f => f.Holes(vm.Project).Any(h => !shown.Contains(h.Id)))) throw new Exception("a quick filter goes beyond the block");
+    // the volume on the Properties tab
+    window.ShowPropertiesTab(); Pump();
+    var volumeLabel = BlastDesigner.App.Services.Loc.Property(nameof(BlockEntity.Volume));
+    var texts = window.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
+    if (!texts.Contains(volumeLabel) || !texts.Contains("480")) throw new Exception("no volume of the block on the Properties tab");
+    // not selected, it shows only its corners and is taken by them, after anything else there; the cursor on a corner lights it whole
+    vm.Doc.ClearSelection(); Pump();
+    var (mx, my) = vm.View.Camera.ToScreen(block.At(block.Length / 2, 0, block.Height));
+    if (vm.View.HitTest(mx, my)?.Id == block.Id) throw new Exception("the middle of an edge of a block not selected took the block");
+    var stub = BlastDesigner.Rendering.PlanRenderer.BlockStubs(vm.View.Camera, block).First(s => vm.View.HitTest((s.A.X + s.B.X) / 2, (s.A.Y + s.B.Y) / 2)?.Id == block.Id);
+    var (hx, hy) = ((stub.A.X + stub.B.X) / 2.0, (stub.A.Y + stub.B.Y) / 2.0);
+    var onStub = vm.View.Camera.ToWorld(hx, hy);
+    var selectTool = vm.ActiveTool!;
+    selectTool.PointerMoved(new ToolPointer { X = hx, Y = hy, World = onStub, Snapped = onStub, Hit = block }); Pump();
+    if (vm.View.HotBlock != block.Id) throw new Exception("the cursor on a corner of the block did not light it");
+    if (vm.Doc.Selection.Contains(block.Id)) throw new Exception("the cursor alone selected the block");
+    if (!vm.View.Preview.Labels.Any(l => l.Text == layerName)) throw new Exception("no name of the block by the cursor");
+    selectTool.PointerMoved(new ToolPointer { X = 5, Y = 5, World = onStub, Snapped = onStub }); Pump();
+    if (vm.View.HotBlock != null) throw new Exception("the block stayed lit with the cursor gone");
+    // the hole inside, at the collar: the hole, not the block
+    var (ix, iy) = vm.View.Camera.ToScreen(inside.Collar);
+    if (vm.View.HitTest(ix, iy)?.Id != inside.Id) throw new Exception("the hole in the block was not picked");
+    // a click on the corner selects it
+    selectTool.PointerPressed(new ToolPointer { X = hx, Y = hy, World = onStub, Snapped = onStub, Hit = block, Left = true, ClickCount = 1 });
+    selectTool.PointerReleased(new ToolPointer { X = hx, Y = hy, World = onStub, Snapped = onStub, Hit = block, Left = true }); Pump();
+    if (!vm.Doc.Selection.Contains(block.Id)) throw new Exception("a click on a corner of the block did not select it");
+    // a corner grip dragged 2 m to the east and 1 m north: the length and the width, the opposite corner stays
+    var corner = block.Corner(3);
+    var stays = block.Corner(0);
+    var (cx, cy) = vm.View.Camera.ToScreen(corner);
+    var to = corner + new Vec3(2, 1, 0);
+    var (tx, ty) = vm.View.Camera.ToScreen(to);
+    var select = vm.ActiveTool!;
+    select.PointerMoved(new ToolPointer { X = cx, Y = cy, World = corner, Snapped = corner });
+    select.PointerPressed(new ToolPointer { X = cx, Y = cy, World = corner, Snapped = corner, Left = true, ClickCount = 1 });
+    select.PointerMoved(new ToolPointer { X = tx, Y = ty, World = to, Snapped = to, Left = true });
+    select.PointerReleased(new ToolPointer { X = tx, Y = ty, World = to, Snapped = to, Left = true }); Pump();
+    block = (BlockEntity)vm.Project.FindEntity(block.Id)!;
+    if (Math.Abs(block.Length - 5) > 0.05 || Math.Abs(block.Width - 6) > 0.05 || Vec3.Distance(block.Corner(0), stays) > 1e-6)
+        throw new Exception($"the corner grip made it {block.Length:0.00} × {block.Width:0.00}");
+    if (vm.Doc.UndoNames[0] != BlastDesigner.App.Services.Loc.T("Block size")) throw new Exception("the grip should be one undo step: " + vm.Doc.UndoNames[0]);
+    // the top face dragged up with the mouse in the plan: the height
+    var top = block.Grip(8 + 2 * 2 + 1);
+    var (ux, uy) = vm.View.Camera.ToScreen(top);
+    var height = block.Height;
+    select.PointerMoved(new ToolPointer { X = ux, Y = uy, World = top, Snapped = top });
+    select.PointerPressed(new ToolPointer { X = ux, Y = uy, World = top, Snapped = top, Left = true, ClickCount = 1 });
+    select.PointerMoved(new ToolPointer { X = ux, Y = uy - 5 * vm.View.Camera.Scale, World = top, Snapped = top, Left = true, Modifiers = Avalonia.Input.KeyModifiers.Control });
+    select.PointerReleased(new ToolPointer { X = ux, Y = uy - 5 * vm.View.Camera.Scale, World = top, Snapped = top, Left = true }); Pump();
+    block = (BlockEntity)vm.Project.FindEntity(block.Id)!;
+    if (Math.Abs(block.Height - (height + 5)) > 1e-6) throw new Exception($"the top face made the height {block.Height}, {height + 5} expected");
+    // a second block on a layer of its own
+    vm.DrawBlockTool(); Pump();
+    tool = vm.ActiveTool!;
+    foreach (var at in new[] { far.Collar + new Vec3(-1, -1, 0), far.Collar + new Vec3(-1, 1, 0), far.Collar + new Vec3(1, 0, 0) })
+        tool.PointerPressed(new ToolPointer { World = at, Snapped = at, Left = true, ClickCount = 1 });
+    Pump();
+    var second = vm.Project.Entities.OfType<BlockEntity>().SingleOrDefault(b => b.Id != block.Id) ?? throw new Exception("no second block");
+    if (vm.Project.FindLayer(second.LayerId)!.Name != BlastDesigner.App.Services.Loc.T("Block") + " 2") throw new Exception("the second block is on " + vm.Project.FindLayer(second.LayerId)!.Name);
+    if (!vm.IsSelectable(far) || !vm.IsSelectable(inside)) throw new Exception("with two blocks, what is in either is shown");
+    vm.View3D(); vm.Doc.Select(new[] { block.Id }); vm.ZoomSelection(); vm.View.Camera.Target = block.Center; vm.View.Camera.Scale = 600 / (block.Height + block.Length); vm.View.Redraw(); Pump();
+    Shot("86_block_3d");
+    vm.PlanView(); vm.Doc.Select(new[] { block.Id }); vm.ZoomSelection(); Pump();
+    Shot("86b_block_plan");
+    vm.Doc.ClearSelection(); vm.View3D(); vm.View.Camera.Target = block.Center; vm.View.Camera.Scale = 600 / (block.Height + block.Length); vm.View.Redraw(); Pump();
+    Shot("86c_block_corners_3d");
+    // the layers hidden: everything is shown again
+    vm.ToggleView(_ => { foreach (var l in vm.Project.Layers.Where(l => l.Group == BlockLayers.Group)) l.Visible = false; }); Pump();
+    var other = holes.First(h => h.Id != inside.Id && h.Id != far.Id && !block.Contains(h.Collar) && !second.Contains(h.Collar));
+    if (!vm.IsSelectable(other)) throw new Exception("with the block layers hidden a hole outside them is not shown");
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    foreach (var l in vm.Project!.Layers) if (l.Group == BlockLayers.Group) l.Visible = true;
+    vm.Doc.ClearSelection(); vm.SelectTool(); Pump();
+    if (vm.Project.Entities.OfType<BlockEntity>().Any() || vm.Project.Layers.Any(l => l.Group == BlockLayers.Group)) throw new Exception("the smoke blocks were not taken away");
 });
 Step("an initiation point on a hole is picked by its star's rays, the hole by its middle", () =>
 {

@@ -57,6 +57,9 @@ public static class ProjectFile
         var data = ReadEntry(projectEntry);
         var project = ProjectJson.Deserialize(data);
         Migrate(project, manifest.SchemaVersion);
+        // lines on a layer of blocks that make a box are its block
+        var loose = Engine.BlockAssembly.Assemble(project);
+        if (loose.Count > 0) Log.Info("Block layers whose lines make no block: " + string.Join(", ", loose));
         // before 0.3.1 the times were rounded to a step; a step under a millisecond now allows tenths
         if (LegacyTimeStep(data) is double step && step < 1) project.Electronic.AllowSubMs = true;
         foreach (var a in project.Attachments)

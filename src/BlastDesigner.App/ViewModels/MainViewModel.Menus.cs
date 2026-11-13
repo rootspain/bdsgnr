@@ -369,7 +369,7 @@ public sealed partial class MainViewModel
         {
             ("·", "Point", () => DrawPointTool(PointKind.General), "Point"), ("T", "Text", DrawTextTool, "Text"), ("➝", "Arrow", DrawArrowTool, "Arrow"),
             ("〰", "Polyline", () => DrawPolylineTool(false), "Polyline"), ("⟋", "Section line", DrawSectionLineTool, "Section line"), ("⬠", "Polygon", () => DrawPolylineTool(true), "Polygon"),
-            ("📏", "Measure", MeasureTool, "Measure"), ("↔", "Dimension", DrawDimensionTool, "Dimension"), ("◯", "Circle", DrawCircleTool, "Circle"),
+            ("📏", "Measure", MeasureTool, "Measure"), ("↔", "Dimension", DrawDimensionTool, "Dimension"), ("◯", "Circle", DrawCircleTool, "Circle"), ("▣", "Block", DrawBlockTool, "Block"),
             ("⇧", "North point", () => DrawPointTool(PointKind.NorthPoint), "North point")
         })
     };

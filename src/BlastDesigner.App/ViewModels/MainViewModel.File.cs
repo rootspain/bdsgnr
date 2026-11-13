@@ -289,6 +289,8 @@ public sealed partial class MainViewModel
         var drawing = CadFiles.ReadCad(path, opt);
         AddImported(Loc.T("Import DXF"), drawing.Items, false, drawing.Layers);
         var status = Loc.F("{0} objects imported", drawing.Items.Count);
+        if (_blocksMade > 0) status += "; " + Loc.F("blocks put together from lines: {0}", _blocksMade);
+        if (_looseBlocks.Count > 0) status += "; " + Loc.F("the lines on {0} make no block", string.Join(", ", _looseBlocks));
         if (drawing.SkippedHidden > 0) status += "; " + Loc.F("{0} on hidden layers skipped", drawing.SkippedHidden);
         if (drawing.FlatLines > 0) status += "; " + Loc.F("{0} flat lines moved to 2D layers", drawing.FlatLines);
         SetStatus(status);
@@ -321,14 +323,28 @@ public sealed partial class MainViewModel
         AddImported(Loc.T("Import drill plan"), holes.Select(h => (StandardLayers.Holes, (Entity)h)), true);
     }
 
+    /// <summary>Blocks the last import put together from lines, and the block layers whose lines made none.</summary>
+    private int _blocksMade;
+    private List<string> _looseBlocks = new();
+
     /// <param name="layers">Colour and visibility of the source layers (drawings); applied to layers this import creates.</param>
     private void AddImported(string undoName, IEnumerable<(string Layer, Entity Entity)> items, bool holesToHoleLayer, IReadOnlyDictionary<string, CadLayerInfo>? layers = null)
     {
         var list = items.ToList();
+        _blocksMade = 0;
+        _looseBlocks = new();
         Change(undoName, p =>
         {
-            foreach (var (layerName, e) in list)
+            var blocksBefore = p.Entities.OfType<BlockEntity>().Count();
+            // a block layer of the drawing whose name a block of the project already has goes on a layer of its own
+            var renamed = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (sourceLayer, e) in list)
             {
+                var layerName = sourceLayer;
+                if (renamed.TryGetValue(layerName, out var to)) layerName = to;
+                else if (p.Layers.FirstOrDefault(l => string.Equals(l.Name, layerName, StringComparison.OrdinalIgnoreCase)) is { } same
+                         && BlockLayers.IsBlockLayer(same) && p.Entities.Any(x => x is BlockEntity && x.LayerId == same.Id))
+                    layerName = renamed[layerName] = BlockLayers.NextName(p, layerName);
                 var existed = p.Layers.Any(l => string.Equals(l.Name, layerName, StringComparison.OrdinalIgnoreCase));
                 var layer = e is Hole && holesToHoleLayer ? p.GetOrCreateLayer(StandardLayers.Holes, 0xFF1E3A8A, "Design")
                     : e is SurfaceEntity ? p.GetOrCreateLayer(layerName == StandardLayers.Surfaces ? layerName : layerName, 0xFF64748B, "Imported")
@@ -342,6 +358,9 @@ public sealed partial class MainViewModel
             }
             if (list.Any(x => x.Entity is Hole) && p.Rows.Count == 0)
                 p.Rows.AddRange(HoleDesign.AutoRows(p.Holes, p.Header.BlastOrientation, p.Design.Burden / 2));
+            // the edges of a block, on a block layer, make the block
+            _looseBlocks = BlockAssembly.Assemble(p);
+            _blocksMade = p.Entities.OfType<BlockEntity>().Count() - blocksBefore;
         });
         View.ZoomAll();
     }

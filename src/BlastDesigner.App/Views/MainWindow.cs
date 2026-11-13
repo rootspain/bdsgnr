@@ -71,10 +71,15 @@ public sealed class MainWindow : Window
         _settings = settings;
         Dialogs.Owner = this;
         BlastDesigner.Rendering.PlanRenderer.Translate = Loc.T;
+        // the layer of a new block: "Блок", "Блок 2"…
+        BlockLayers.BaseName = Loc.T("Block");
         Title = "Blast Designer";
-        Background = Look.Ground;
+        // black until the first frame is drawn, then the colour of the theme: no white flash on starting
+        DarkStart.Attach(this, Look.Ground);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         FitToScreen();
+        // once the window is shown its state is the user's: kept for the next start
+        Opened += (_, _) => { KeepWindowState(); PropertyChanged += (_, e) => { if (e.Property == WindowStateProperty) KeepWindowState(); }; };
         _vm = new MainViewModel(this, _viewport, settings);
         _layers = new LayersPanel(_vm);
         _properties = new PropertiesPanel(_vm);
@@ -155,8 +160,29 @@ public sealed class MainWindow : Window
         if (Screens.Primary is not { } screen) return;
         var (w, h, max) = StartSize(screen.WorkingArea.Width / screen.Scaling, screen.WorkingArea.Height / screen.Scaling);
         (Width, Height) = (w, h);
-        if (max) WindowState = WindowState.Maximized;
-        Log.Info($"Main window {w:0}x{h:0}{(max ? ", maximized" : "")} on a screen of {screen.WorkingArea.Width}x{screen.WorkingArea.Height} px at {screen.Scaling:0.##}");
+        // the first start opens on the whole screen; later ones as the window was left
+        var first = !_settings.Window.TryGetValue(MaximizedKey, out var was);
+        if (StartsMaximized(max, first ? null : was)) WindowState = WindowState.Maximized;
+        Log.Info($"Main window {w:0}x{h:0}{(WindowState == WindowState.Maximized ? ", maximized" : "")}{(first ? " (first start)" : "")} on a screen of {screen.WorkingArea.Width}x{screen.WorkingArea.Height} px at {screen.Scaling:0.##}");
+    }
+
+    /// <summary>
+    /// Whether the window opens maximized: on a screen too small for it, on the first start (nothing kept yet), or when it
+    /// was left maximized (<paramref name="kept"/> "1").
+    /// </summary>
+    public static bool StartsMaximized(bool screenTooSmall, string? kept) => screenTooSmall || kept == null || kept == "1";
+
+    /// <summary>Settings key of whether the window was left maximized ("1") or not ("0"); none before the first start.</summary>
+    public const string MaximizedKey = "Maximized";
+
+    /// <summary>Keeps whether the window is maximized for the next start; full screen and minimized leave it as it was.</summary>
+    private void KeepWindowState()
+    {
+        if (WindowState is not (WindowState.Maximized or WindowState.Normal)) return;
+        var value = WindowState == WindowState.Maximized ? "1" : "0";
+        if (_settings.Window.TryGetValue(MaximizedKey, out var old) && old == value) return;
+        _settings.Window[MaximizedKey] = value;
+        try { _settings.Save(); } catch { }
     }
 
     /// <summary>
@@ -434,6 +460,7 @@ public sealed class MainWindow : Window
     }
 
     private ViewCubeControl? _viewCube;
+    private Button? _eye;
     /// <summary>The view cube under the Plan and 3D buttons; for tests.</summary>
     public ViewCubeControl? ViewCube => _viewCube;
 
@@ -465,7 +492,21 @@ public sealed class MainWindow : Window
         DockPanel.SetDock(compass, Dock.Right);
         top.Children.Add(compass);
         _viewCube = new ViewCubeControl(_viewport, from => { _vm.ViewFrom(from); RefreshChips(); }) { Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
-        var row = Ui.Row(8, modes, _chips);
+        // the eye: what is behind a surface paler (Shift+H)
+        _eye = new Button
+        {
+            Name = "fadeHidden",
+            Content = Look.Icon("eye", 16, Look.Muted),
+            Width = 36, Height = 34,
+            Padding = new Thickness(0),
+            CornerRadius = new CornerRadius(8),
+            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1),
+            HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top
+        };
+        ToolTip.SetTip(_eye, Loc.Ui("Hidden paler: what is behind a surface is drawn at a quarter of its opacity; holes stay as they are (Shift+H)"));
+        _eye.Click += (_, _) => { UsageLog.Track(UsageLog.Button, "Hidden paler", "view"); Ui.Safe(_vm.ToggleFadeHidden); RefreshChips(); };
+        var row = Ui.Row(8, modes, _eye, _chips);
         row.VerticalAlignment = VerticalAlignment.Top;
         modes.VerticalAlignment = VerticalAlignment.Top;
         top.Children.Add(new StackPanel { Children = { row, _viewCube } });
@@ -494,6 +535,14 @@ public sealed class MainWindow : Window
         {
             var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan (Esc)"));
             _chips.Children.Add(clear);
+        }
+        if (_eye != null)
+        {
+            var on = v?.FadeHidden == true;
+            _eye.IsEnabled = p != null;
+            _eye.Background = on ? Look.AccentSoft : Look.Panel;
+            _eye.BorderBrush = on ? Look.Accent : Look.Line;
+            _eye.Content = Look.Icon("eye", 16, on ? Look.Accent : Look.Muted);
         }
         var plan = _viewport.Camera.IsPlan;
         for (int i = 0; i < _modes.Children.Count; i++)
@@ -603,6 +652,7 @@ public sealed class MainWindow : Window
             _ => null
         };
         else if (m == KeyModifiers.Shift && e.Key == Key.Z && !typing) a = _vm.UndoZoom;
+        else if (m == KeyModifiers.Shift && e.Key == Key.H && !typing) a = () => { _vm.ToggleFadeHidden(); RefreshChips(); };
         // the plus of the main keys comes with Shift
         else if (m is KeyModifiers.None or KeyModifiers.Shift && !typing && _vm.ActiveTool is TieTool && e.Key is Key.Add or Key.OemPlus or Key.Subtract or Key.OemMinus)
             a = () => StepTargetRadius(e.Key is Key.Add or Key.OemPlus ? 1 : -1);

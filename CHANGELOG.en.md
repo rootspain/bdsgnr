@@ -9,6 +9,32 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.2 — 2026-11-12
 
 ### New
+- **An eye button next to Plan | 3D (Shift+H)** switches two ways of drawing. The usual one (the default): surfaces are
+  drawn far to near, each whole, and the part of a surface behind another is not drawn at all, also while turning and zooming — a
+  large far surface does not cover a nearer one, whatever their order in the project; lines far to near over the
+  surfaces, and in 3D the part of a line behind or under a surface is not drawn (a line on a surface shows).
+  Hidden paler: what is behind a surface is drawn at a quarter of its opacity — the parts of other surfaces (pixel by
+  pixel, inside large triangles too), and in 3D lines, points and texts. Holes, charges and labels always stay as they
+  are; in the plan lines and points are not hidden (a 2D drawing at 0 does not go under the surfaces). The hidden is
+  worked out from a depth map every frame (coarser, four times quicker, while the camera moves); the drawing order is worked out again only when the camera turns or
+  the lines and surfaces change. The mode is kept in the project and holds for printing and copying the image.
+- **A Block tool** (the drawing menu, next to Circle). Three clicks — a corner, the end of the length (its direction is
+  the azimuth), the width; 30 m high, the work plane through its middle. While the block's layer is visible only what is
+  inside it is on the screen: a hole whole when its collar is inside; points, texts and initiation points by their
+  position; lines and surfaces cut exactly at the faces; analysis maps at the block's outline. The plan prints and copies
+  the same way; the hole table, quick filters, picking, the box and snapping take only what is shown. The calculations
+  go over the whole project. With several blocks visible what is inside any of them is shown; the layer hidden, all is.
+- **A block not selected keeps out of the way**: only short edges at its corners are drawn (10 px, 80 % transparent).
+  The cursor on one of them or on a corner lights all its edges and names its layer; a click selects it, its edges
+  then in the selection colour. A block is taken only where no other object is.
+- **Each block on a layer of its own**: Block, Block 2, Block 3… with the first number free. The block deleted, its layer
+  goes, and the other way round; other objects do not go onto a block layer, nor does the block leave it.
+- **Block grips**: 8 corners and 6 face middles. A corner drags the length and width (the opposite one stays), with Shift
+  the top or bottom; a face middle its own side only. Ctrl: steps of 0.1 m. Dragged past the opposite face, the block
+  turns over. The Properties tab has the origin, azimuth, length, width, height, bottom, top and volume.
+- **Blocks in exchange files**: a block goes to DXF as twelve edges on its own layer. On opening a project or importing
+  DXF/DWG, twelve lines making a box with vertical walls on a block layer become a block; lines that make no box stay
+  lines, and the status bar says so.
 - **A surface is bound to the objects it was built from** (Create surface and Create surface without breaklines). A
   polygon, polyline or point moved or edited builds the surface again; the surface moved or turned takes its objects
   along; an object deleted leaves the surface of the others, and with fewer than three points left the surface is
@@ -71,6 +97,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   The collar must be above the level, otherwise the value is refused. The field is in the Properties panel and the hole form.
 
 ### Changed
+- **On the first start the program's window opens on the whole screen**; after that maximized or not, as it was left.
+- **The To the surface button** on the Properties tab of holes is in the accent colour: it stands out among the fields.
 - **The menu is in the top left corner**, in place of the program's name "BD6 Blast Designer", which is gone from the
   header.
 - **A number field of Properties left unchanged takes nothing** when it loses the focus. Leaving a field used to write
@@ -118,6 +146,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   below the new toe go, the one it cuts ends at the toe.
 
 ### Fixed
+- **A white flash on opening a window.** Until the program's window or a dialog had drawn itself, Windows filled it
+  white. A window is now black at first, then takes the colour of the theme.
 - **Picking a surface under the cursor.** The first surface in the list that the point fell in, in plan, was picked:
   with a grade under a face over the whole blast, the face could not be picked. The surface seen under the cursor is
   picked now: the highest in the plan, the first on the line of sight in 3D, so a steep face is picked where it is seen.

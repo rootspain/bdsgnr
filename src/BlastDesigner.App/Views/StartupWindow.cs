@@ -39,6 +39,8 @@ public static class StartupWindow
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Content = form
         };
+        // black until drawn, then the theme: no white flash on opening
+        DarkStart.Attach(w, w.Background ?? Look.Ground);
         form.Attach(w);
         form.Done = (c, path) =>
         {

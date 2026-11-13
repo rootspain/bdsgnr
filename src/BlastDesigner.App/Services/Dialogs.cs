@@ -105,6 +105,8 @@ public static class Dialogs
             CanResize = false,
             Background = Look.Ground
         };
+        // black until drawn, then the theme: no white flash on opening
+        DarkStart.Attach(w, w.Background ?? Look.Ground);
         int result = -1;
         // the main answer is the accented one, at the right end as in the input windows
         var shown = new Button[buttons.Length];
@@ -163,6 +165,8 @@ public static class Dialogs
             MinWidth = 380,
             Background = Look.Ground
         };
+        // black until drawn, then the theme: no white flash on opening
+        DarkStart.Attach(w, w.Background ?? Look.Ground);
         if (width != null) w.Width = width.Value;
         if (height != null) w.Height = height.Value;
         bool ok = false;
@@ -284,6 +288,8 @@ public static class Dialogs
             Height = height,
             WindowStartupLocation = alignBottomToOwner || at != null ? WindowStartupLocation.Manual : WindowStartupLocation.CenterOwner
         };
+        // black until drawn, then the theme: no white flash on opening
+        DarkStart.Attach(w, w.Background ?? Look.Ground);
         if (at is PixelPoint p) w.Position = p;
         LastShown = w;
         if (!MultiInstance.Contains(title))

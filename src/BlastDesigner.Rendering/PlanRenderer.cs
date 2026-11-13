@@ -33,6 +33,8 @@ public sealed class SceneOptions
     public bool DrawNorthArrow { get; init; } = true;
     public bool DrawScaleBar { get; init; } = true;
     public IReadOnlyList<IOverlay> Overlays { get; init; } = Array.Empty<IOverlay>();
+    /// <summary>Maps and lines of an analysis: drawn under <see cref="Overlays"/>, and cut to the visible blocks like the blast.</summary>
+    public IReadOnlyList<IOverlay> AnalysisOverlays { get; init; } = Array.Empty<IOverlay>();
     /// <summary>When set, only holes fired at or before this time are drawn as fired (timing animation).</summary>
     public double? AnimationTimeMs { get; init; }
     /// <summary>Holes in this set are hidden (visibility manager / isolate).</summary>
@@ -52,6 +54,10 @@ public sealed class SceneOptions
     /// <summary>Objects drawn shifted by <see cref="MoveOffset"/> (live preview while they are dragged).</summary>
     public ISet<Guid>? MovedEntities { get; init; }
     public Vec3 MoveOffset { get; init; }
+    /// <summary>The block under the cursor: drawn with all its edges, not only the short ones at its corners.</summary>
+    public Guid? HotBlock { get; init; }
+    /// <summary>The camera is moving: what is behind a surface is not worked out until it stops (<see cref="ViewState.FadeHidden"/>).</summary>
+    public bool CameraMoving { get; init; }
     /// <summary>Colour of drawing objects (lines, points, polygons, text…) without their own colour; null uses the layer colours.</summary>
     public SKColor? GeometryColor { get; init; }
     /// <summary>Colour of section lines without their own colour, before <see cref="GeometryColor"/>; null treats them as other lines.</summary>
@@ -131,7 +137,10 @@ public static class PlanRenderer
         var view = project.View;
         var visibleLayers = project.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
         var layerById = project.Layers.ToDictionary(l => l.Id);
-        bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && InSlice(e);
+        // the visible blocks: only what is inside them is drawn (lines and surfaces are cut below)
+        var clip = BlockClip.Of(project);
+        bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && InSlice(e)
+            && (clip == null || e is PolylineEntity or CircleEntity or SurfaceEntity || clip.Shows(e));
         bool InSlice(Entity e)
         {
             // a surface is cut to the band when it is drawn: its triangles can cross the band with no vertex in it
@@ -169,6 +178,7 @@ public static class PlanRenderer
         if (opt.ShowGrid == true && opt.SliceHalfWidth != null && cam.Pitch == 0) DrawSectionGrid(canvas, cam, stroke, text);
 
         var entities = project.Entities.Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity)).ToList();
+        if (clip != null) entities = entities.SelectMany(e => CutByBlocks(clip, e)).ToList();
         if (view.ReverseDrawOrder) entities.Reverse();
 
         // Every surface shares one height scale, from the lowest point of any shown surface to the highest: by elevation
@@ -182,14 +192,20 @@ public static class PlanRenderer
             if (lo <= hi) range = (lo, hi);
         }
 
-        // Surfaces first, sorted far-to-near when viewed obliquely.
-        if (view.ShowSurfaces)
-            foreach (var s in entities.OfType<SurfaceEntity>())
-            {
-                var mc = BeginMove(s);
-                DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes || (opt.WireframesOnSelected && !opt.Selection.Contains(s.Id)), opt.SliceHalfWidth, opt);
-                EndMove(mc);
-            }
+        // The depth of the surfaces on the screen (a z-buffer) tells what is behind a surface. In 3D a line behind one is
+        // not drawn, or with the eye (View ▸ hidden paler) drawn at a quarter of the opacity of the surfaces, which then
+        // also go paler behind each other. In the plan lines and points stay as they are (a 2D drawing at 0 would go under
+        // every surface): only the surfaces go paler with the eye. Worked out for every frame, coarser while the camera moves.
+        var shownSurfaces = view.ShowSurfaces ? entities.OfType<SurfaceEntity>().ToList() : new List<SurfaceEntity>();
+        var hiddenAlpha = (byte)((opt.SurfaceAlpha ?? (byte)(_dark ? 70 : 150)) / 4);
+        // while the camera turns or zooms the map is coarser (quicker), and fine again once it stops
+        var depth = (view.FadeHidden || !cam.IsPlan || shownSurfaces.Count > 1) && shownSurfaces.Count > 0
+            ? DepthMap.Of(cam, shownSurfaces, GeometryFingerprint, opt.CameraMoving ? DepthMap.MovingCell : DepthMap.Cell) : null;
+        var lineDepth = cam.IsPlan ? null : depth;
+        var paleLines = view.FadeHidden;
+        // Surfaces whole, far to near by their nearest point; then the lines by their segments, far to near.
+        var batched = new HashSet<Entity>();
+        DrawSurfacesAndLines();
 
         // Plain point crosses go into one batch per colour and width: thousands of survey points as two lines each would
         // be thousands of draw calls a frame, the batch is one.
@@ -203,7 +219,9 @@ public static class PlanRenderer
                 var (x, y) = cam.ToScreen(pe.Position);
                 if (x < -10 || y < -10 || x > viewW + 10 || y > viewH + 10) continue;
                 var selected = opt.Selection.Contains(e.Id);
-                var key = (selected ? opt.SelectionColor : ColorOf(e), (float)((layerById.TryGetValue(e.LayerId, out var pl) ? pl.LineWidth : 1) * (selected ? 2 : 1)));
+                var crossColor = selected ? opt.SelectionColor : ColorOf(e);
+                if (lineDepth != null && paleLines && !selected && lineDepth.Hidden(x, y, (float)cam.Depth(pe.Position))) crossColor = crossColor.WithAlpha(Math.Min(crossColor.Alpha, hiddenAlpha));
+                var key = (crossColor, (float)((layerById.TryGetValue(e.LayerId, out var pl) ? pl.LineWidth : 1) * (selected ? 2 : 1)));
                 if (!crosses.TryGetValue(key, out var list)) crosses[key] = list = new List<SKPoint>();
                 // on pixel centres: the crosses are drawn without antialiasing and stay sharp
                 float cx = MathF.Floor(x) + 0.5f, cy = MathF.Floor(y) + 0.5f;
@@ -229,10 +247,130 @@ public static class PlanRenderer
         stroke.IsAntialias = true;
         pointLabels.Flush(canvas, text);
 
+        void DrawSurfacesAndLines()
+        {
+            var tv = cam.ToViewer;
+            var tg = cam.Target;
+            float DepthOf(Vec3 p) => (float)((p.X - tg.X) * tv.X + (p.Y - tg.Y) * tv.Y + (p.Z - tg.Z) * tv.Z);
+            var lines = new List<Entity>();
+            foreach (var e in entities)
+                // a dragged line goes with the canvas moved under it: drawn whole with the other objects
+                if (e is PolylineEntity { Points.Count: >= 2 } or CircleEntity && moved?.Contains(e.Id) != true) lines.Add(e);
+            foreach (var e in lines) batched.Add(e);
+            // the order is kept while the lines and the surfaces stay and the camera turns by less than a couple of degrees:
+            // moving and zooming do not change it
+            var (items, circles) = DrawOrder(cam, shownSurfaces, lines, () =>
+            {
+                var list = new List<(float Key, Entity E, int Seg)>();
+                var polys = new Dictionary<CircleEntity, List<Vec3>>();
+                foreach (var s in shownSurfaces)
+                {
+                    var near = float.NegativeInfinity;
+                    foreach (var v in s.Vertices) { var d = DepthOf(v); if (d > near) near = d; }
+                    list.Add((near, s, -1));
+                }
+                foreach (var e in lines)
+                {
+                    IReadOnlyList<Vec3> pts;
+                    var closed = true;
+                    if (e is PolylineEntity pl) { pts = pl.Points; closed = pl.Closed; }
+                    else { var poly = ((CircleEntity)e).ToPolygon(48); polys[(CircleEntity)e] = poly; pts = poly; }
+                    if (e is PolylineEntity { Closed: true, Kind: LineKind.ClearanceZone } zone)
+                        list.Add((zone.Points.Select(DepthOf).Average(), e, -2));
+                    var n = closed ? pts.Count : pts.Count - 1;
+                    for (int i = 0; i < n; i++)
+                        list.Add(((DepthOf(pts[i]) + DepthOf(pts[(i + 1) % pts.Count])) / 2, e, i));
+                }
+                // the surfaces first, the lines over them (what of a line is behind a surface the depth map tells)
+                list.Sort((a, b) => (a.Seg == -1) != (b.Seg == -1) ? (a.Seg == -1 ? -1 : 1) : a.Key.CompareTo(b.Key));
+                return (list, polys);
+            });
+
+            // consecutive segments of one look go into one path: a survey is a few draws, not one a segment
+            using var shown = new SKPath();
+            using var hidden = new SKPath();
+            (SKColor Color, float Width)? look = null;
+            void Flush()
+            {
+                if (look is not { } l) return;
+                stroke.StrokeWidth = l.Width;
+                if (!shown.IsEmpty) { stroke.Color = l.Color; canvas.DrawPath(shown, stroke); shown.Reset(); }
+                // behind a surface: paler with the eye, else not drawn
+                if (!hidden.IsEmpty) { if (paleLines) { stroke.Color = l.Color.WithAlpha(Math.Min(l.Color.Alpha, hiddenAlpha)); canvas.DrawPath(hidden, stroke); } hidden.Reset(); }
+            }
+            float w = (float)cam.Width, h = (float)cam.Height;
+            foreach (var (_, e, seg) in items)
+            {
+                if (seg == -1)
+                {
+                    Flush();
+                    var s = (SurfaceEntity)e;
+                    var mc = BeginMove(s);
+                    // behind another surface it goes paler cell by cell: drawn on a layer of its own, then masked
+                    // behind another surface: a quarter with the eye, else not drawn there at all (a large surface whole in the
+                    // far-to-near order would otherwise cover a nearer one)
+                    var mask = shownSurfaces.Count > 1 ? depth?.MaskFor(s, view.FadeHidden ? (byte)64 : (byte)0) : null;
+                    if (mask != null) canvas.SaveLayer();
+                    DrawSurface(canvas, cam, s, ColorOf(s), opt.Selection.Contains(s.Id) ? opt.SelectionColor : (SKColor?)null, SurfaceFill(s, opt), range, opt.HideWireframes || (opt.WireframesOnSelected && !opt.Selection.Contains(s.Id)), opt.SliceHalfWidth, opt);
+                    if (mask != null)
+                    {
+                        using var dstIn = new SKPaint { BlendMode = SKBlendMode.DstIn, FilterQuality = SKFilterQuality.Low };
+                        canvas.DrawImage(mask, depth!.ScreenRect, dstIn);
+                        canvas.Restore();
+                    }
+                    EndMove(mc);
+                    continue;
+                }
+                var selected = opt.Selection.Contains(e.Id);
+                var color = selected ? opt.SelectionColor : ColorOf(e);
+                if (seg == -2)
+                {
+                    Flush();
+                    fill.Color = color.WithAlpha(30);
+                    DrawPolygonFill(canvas, cam, ((PolylineEntity)e).Points, fill);
+                    continue;
+                }
+                var width = (float)((layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1) * (selected ? 2 : 1) * (e is PolylineEntity { Kind: LineKind.CrossSection } ? 2 : 1));
+                if (look != (color, width)) { Flush(); look = (color, width); }
+                IReadOnlyList<Vec3> pts = e is CircleEntity c ? circles[c] : ((PolylineEntity)e).Points;
+                Vec3 a = pts[seg], b = pts[(seg + 1) % pts.Count];
+                var (ax, ay) = cam.ToScreen(a);
+                var (bx, by) = cam.ToScreen(b);
+                if ((ax < -4 && bx < -4) || (ay < -4 && by < -4) || (ax > w + 4 && bx > w + 4) || (ay > h + 4 && by > h + 4)) continue;
+                if (lineDepth == null || selected) { shown.MoveTo(ax, ay); shown.LineTo(bx, by); continue; }
+                // behind a surface the segment goes paler: cut where it goes behind and comes out again
+                float da = DepthOf(a), db = DepthOf(b);
+                var steps = Math.Clamp((int)(MathF.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) / 4), 1, 128);
+                bool? was = null;
+                for (int k = 0; k <= steps; k++)
+                {
+                    float t = (float)k / steps;
+                    float x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+                    var behind = lineDepth.Hidden(x, y, da + (db - da) * t);
+                    if (was == null) (behind ? hidden : shown).MoveTo(x, y);
+                    else if (behind == was) (behind ? hidden : shown).LineTo(x, y);
+                    else
+                    {
+                        // the change halfway between the samples
+                        float tm = (k - 0.5f) / steps, mx = ax + (bx - ax) * tm, my = ay + (by - ay) * tm;
+                        (was.Value ? hidden : shown).LineTo(mx, my);
+                        (behind ? hidden : shown).MoveTo(mx, my);
+                        (behind ? hidden : shown).LineTo(x, y);
+                    }
+                    was = behind;
+                }
+            }
+            Flush();
+            stroke.StrokeWidth = 1;
+        }
+
         void DrawEntity(Entity e)
         {
             var selected = opt.Selection.Contains(e.Id);
             var color = selected ? opt.SelectionColor : ColorOf(e);
+            // an object behind a surface goes paler with it
+            if (lineDepth != null && paleLines && !selected && e is PointEntity or TextEntity or ArrowEntity or DimensionEntity && lineDepth.Hidden(cam, e.GetVertices().First()))
+                color = color.WithAlpha(Math.Min(color.Alpha, hiddenAlpha));
             stroke.Color = color;
             stroke.StrokeWidth = (float)((layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1) * (selected ? 2 : 1));
             fill.Color = color;
@@ -241,12 +379,16 @@ public static class PlanRenderer
             switch (e)
             {
                 case PolylineEntity pl:
-                    if (pl.Kind == LineKind.CrossSection) stroke.StrokeWidth *= 2;
-                    DrawPolyline(canvas, cam, pl.Points, pl.Closed, stroke);
-                    if (pl.Closed && pl.Kind == LineKind.ClearanceZone)
+                    // drawn with the surfaces, far to near; here only a dragged one, and the label of a contour
+                    if (!batched.Contains(pl))
                     {
-                        fill.Color = color.WithAlpha(30);
-                        DrawPolygonFill(canvas, cam, pl.Points, fill);
+                        if (pl.Kind == LineKind.CrossSection) stroke.StrokeWidth *= 2;
+                        DrawPolyline(canvas, cam, pl.Points, pl.Closed, stroke);
+                        if (pl.Closed && pl.Kind == LineKind.ClearanceZone)
+                        {
+                            fill.Color = color.WithAlpha(30);
+                            DrawPolygonFill(canvas, cam, pl.Points, fill);
+                        }
                     }
                     if (showText && pl.Kind == LineKind.Contour && pl.Points.Count > 1)
                     {
@@ -272,7 +414,10 @@ public static class PlanRenderer
                     break;
                 }
                 case CircleEntity c:
-                    DrawPolyline(canvas, cam, c.ToPolygon(48), true, stroke);
+                    if (!batched.Contains(c)) DrawPolyline(canvas, cam, c.ToPolygon(48), true, stroke);
+                    break;
+                case BlockEntity b:
+                    DrawBlock(canvas, cam, b, stroke, selected, opt.HotBlock == b.Id);
                     break;
                 case ArrowEntity a:
                     DrawArrow(canvas, cam, a.Start, a.End, stroke, fill, 10);
@@ -302,7 +447,8 @@ public static class PlanRenderer
         if (showTies || showRows)
         {
             byId = new Dictionary<Guid, Entity>(project.Entities.Count);
-            foreach (var e in project.Entities) byId.TryAdd(e.Id, e);
+            // with blocks the rows run through the holes shown only
+            foreach (var e in clip == null ? project.Entities : entities) byId.TryAdd(e.Id, e);
         }
         if (showTies) DrawTies(canvas, cam, project, entities.OfType<TieEntity>(), byId!, opt, text);
         if (showRows) DrawRows(canvas, cam, project, byId!, stroke);
@@ -350,6 +496,14 @@ public static class PlanRenderer
             EndMove(mc);
         }
 
+        if (opt.AnalysisOverlays.Count > 0)
+        {
+            // the maps of an analysis are cut to the outline the blocks take on the screen
+            var save = canvas.Save();
+            if (clip != null) canvas.ClipPath(BlockOutline(cam, clip));
+            foreach (var o in opt.AnalysisOverlays) o.Draw(canvas, cam, project);
+            canvas.RestoreToCount(save);
+        }
         foreach (var o in opt.Overlays)
             if (o is IMovePreviewOverlay mp) mp.Draw(canvas, cam, project, opt.MovedEntities, opt.MoveOffset);
             else o.Draw(canvas, cam, project);
@@ -365,6 +519,188 @@ public static class PlanRenderer
         if (view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, project, holes, fill, text);
         if (view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, fill, text);
         if (opt.DrawSummaryBlock && project.Summary.Visible) DrawSummary(canvas, cam, project, fill, stroke, text);
+    }
+
+    /// <summary>What of an entity is drawn inside the blocks: itself, the parts of a line, the cut part of a surface, or nothing.</summary>
+    private static IEnumerable<Entity> CutByBlocks(BlockClip clip, Entity e)
+    {
+        switch (e)
+        {
+            case PolylineEntity pl:
+                foreach (var piece in clip.Pieces(pl.Points, pl.Closed)) yield return pl.Piece(piece);
+                break;
+            case CircleEntity c:
+                foreach (var piece in clip.Pieces(c.ToPolygon(48), true))
+                    yield return new PolylineEntity { Id = c.Id, LayerId = c.LayerId, Color = c.Color, GroupId = c.GroupId, Points = piece };
+                break;
+            case SurfaceEntity s:
+                if (CutSurface(clip, s) is { } cut) yield return cut;
+                break;
+            default:
+                yield return e;
+                break;
+        }
+    }
+
+    private sealed class OrderCache
+    {
+        public int Key;
+        public double Yaw, Pitch;
+        public bool Plan;
+        public List<(float Key, Entity E, int Seg)> Items = new();
+        public Dictionary<CircleEntity, List<Vec3>> Circles = new();
+    }
+    private static readonly object OrderGate = new();
+    private static OrderCache? _order;
+
+    /// <summary>
+    /// The far-to-near order of the surfaces and the line segments: worked out again only when a line or a surface changes
+    /// (its vertices, their count) or the camera turns by more than <see cref="SortTolerance"/> degrees; between, the order
+    /// of the last frame. Panning and zooming keep it: depth along the line of sight does not change its order with them.
+    /// </summary>
+    private static (List<(float Key, Entity E, int Seg)> Items, Dictionary<CircleEntity, List<Vec3>> Circles) DrawOrder(
+        Camera cam, IReadOnlyList<SurfaceEntity> surfaces, IReadOnlyList<Entity> lines,
+        Func<(List<(float, Entity, int)>, Dictionary<CircleEntity, List<Vec3>>)> sort)
+    {
+        var key = new HashCode();
+        foreach (var s in surfaces) { key.Add(s.Id); key.Add(GeometryFingerprint(s)); }
+        foreach (var e in lines)
+        {
+            key.Add(e.Id);
+            if (e is PolylineEntity pl)
+            {
+                key.Add(pl.Points.Count); key.Add(pl.Closed);
+                // the ends and the middle: an edited or moved line changes one of them
+                key.Add(pl.Points[0]); key.Add(pl.Points[^1]); key.Add(pl.Points[pl.Points.Count / 2]);
+            }
+            else if (e is CircleEntity c) { key.Add(c.Center); key.Add(c.Radius); }
+        }
+        var k = key.ToHashCode();
+        lock (OrderGate)
+        {
+            if (_order is { } o && o.Key == k && o.Plan == cam.IsPlan
+                && (cam.IsPlan || (Math.Abs(o.Yaw - cam.Yaw) < SortTolerance && Math.Abs(o.Pitch - cam.Pitch) < SortTolerance)))
+                return (o.Items, o.Circles);
+            var (items, circles) = sort();
+            _order = new OrderCache { Key = k, Yaw = cam.Yaw, Pitch = cam.Pitch, Plan = cam.IsPlan, Items = items, Circles = circles };
+            return (items, circles);
+        }
+    }
+
+    private sealed class CutCache { public int Key; public SurfaceEntity? Cut; }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SurfaceEntity, CutCache> _cuts = new();
+
+    /// <summary>
+    /// The part of a surface inside the blocks, the same object to the renderer (same id) for as long as neither the
+    /// blocks nor the surface change; null when nothing of it is inside.
+    /// </summary>
+    public static SurfaceEntity? CutSurface(BlockClip clip, SurfaceEntity s)
+    {
+        if (!clip.Overlaps(s.GetBounds())) return null;
+        var key = HashCode.Combine(clip.Key, GeometryFingerprint(s));
+        var cache = _cuts.GetValue(s, _ => new CutCache { Key = ~key });
+        lock (cache)
+        {
+            if (cache.Key != key)
+            {
+                var (v, t) = clip.Cut(s.Vertices, s.Triangles);
+                cache.Cut = t.Count == 0 ? null : s.WithMesh(v, t);
+                cache.Key = key;
+            }
+            return cache.Cut;
+        }
+    }
+
+    /// <summary>Length of the short edges at a corner of a block that is neither selected nor under the cursor, px.</summary>
+    public const float BlockStubPx = 10;
+    /// <summary>Opacity of the short edges at the corners of a block (80 % transparent), and of all its edges under the cursor.</summary>
+    public const byte BlockStubAlpha = 51, BlockHotAlpha = 180;
+
+    /// <summary>
+    /// The short edges at the corners of a block on the screen: from each corner along each of its three edges,
+    /// <see cref="BlockStubPx"/> long, and no longer than a quarter of the edge (a block small on the screen keeps its
+    /// corners apart). Picking goes by the same segments.
+    /// </summary>
+    public static List<(SKPoint A, SKPoint B)> BlockStubs(Camera cam, BlockEntity b)
+    {
+        var corners = b.Corners().Select(v => { var (x, y) = cam.ToScreen(v); return new SKPoint(x, y); }).ToArray();
+        var stubs = new List<(SKPoint, SKPoint)>(24);
+        foreach (var (i, j) in BlockEntity.Edges)
+        {
+            var d = corners[j] - corners[i];
+            var len = d.Length;
+            if (len < 0.5f) continue;
+            var k = Math.Min(BlockStubPx, len / 4) / len;
+            var step = new SKPoint(d.X * k, d.Y * k);
+            stubs.Add((corners[i], corners[i] + step));
+            stubs.Add((corners[j], corners[j] - step));
+        }
+        return stubs;
+    }
+
+    /// <summary>
+    /// A block: selected, its twelve edges in the selection colour; under the cursor, its twelve edges see-through; else
+    /// only the short edges at its corners, so it shows where it is without crossing what it shows.
+    /// </summary>
+    private static void DrawBlock(SKCanvas c, Camera cam, BlockEntity b, SKPaint stroke, bool selected, bool hot)
+    {
+        var width = stroke.StrokeWidth;
+        var color = stroke.Color;
+        using var path = new SKPath();
+        if (selected || hot)
+        {
+            var corners = b.Corners();
+            foreach (var (i, j) in BlockEntity.Edges)
+            {
+                var (x0, y0) = cam.ToScreen(corners[i]);
+                var (x1, y1) = cam.ToScreen(corners[j]);
+                path.MoveTo(x0, y0);
+                path.LineTo(x1, y1);
+            }
+            if (!selected) stroke.Color = color.WithAlpha(BlockHotAlpha);
+        }
+        else
+        {
+            foreach (var (a, e) in BlockStubs(cam, b)) { path.MoveTo(a); path.LineTo(e); }
+            stroke.Color = color.WithAlpha(BlockStubAlpha);
+            stroke.StrokeWidth = 1.5f;
+        }
+        c.DrawPath(path, stroke);
+        stroke.Color = color;
+        stroke.StrokeWidth = width;
+    }
+
+    /// <summary>The screen outline of the visible blocks (each block's silhouette, the hull of its corners).</summary>
+    private static SKPath BlockOutline(Camera cam, BlockClip clip)
+    {
+        var path = new SKPath { FillType = SKPathFillType.Winding };
+        foreach (var b in clip.Blocks)
+        {
+            var hull = Hull(b.Corners().Select(v => { var (x, y) = cam.ToScreen(v); return new SKPoint(x, y); }).ToList());
+            if (hull.Count < 3) continue;
+            path.AddPoly(hull.ToArray(), true);
+        }
+        return path;
+    }
+
+    /// <summary>Convex hull of screen points (monotone chain).</summary>
+    private static List<SKPoint> Hull(List<SKPoint> pts)
+    {
+        pts = pts.Distinct().OrderBy(p => p.X).ThenBy(p => p.Y).ToList();
+        if (pts.Count < 3) return pts;
+        static float Cross(SKPoint o, SKPoint a, SKPoint b) => (a.X - o.X) * (b.Y - o.Y) - (a.Y - o.Y) * (b.X - o.X);
+        var h = new List<SKPoint>();
+        foreach (var pass in new[] { pts, Enumerable.Reverse(pts).ToList() })
+        {
+            var start = h.Count;
+            foreach (var p in pass)
+            {
+                while (h.Count >= start + 2 && Cross(h[^2], h[^1], p) <= 0) h.RemoveAt(h.Count - 1);
+                h.Add(p);
+            }
+            h.RemoveAt(h.Count - 1);
+        }
+        return h;
     }
 
     private sealed class WarningCache { public int Key; public bool Warning; }
@@ -741,7 +1077,7 @@ public static class PlanRenderer
     private static SKColor Shade(SKColor c, double f) =>
         new((byte)Math.Clamp(c.Red * f, 0, 255), (byte)Math.Clamp(c.Green * f, 0, 255), (byte)Math.Clamp(c.Blue * f, 0, 255), c.Alpha);
 
-    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null, bool hideWireframe = false, double? slice = null, SceneOptions? opt = null)
+    private static void DrawSurface(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range = null, bool hideWireframe = false, double? slice = null, SceneOptions? opt = null, DepthMap? depth = null)
     {
         var alphas = (Fill: opt?.SurfaceAlpha ?? (byte)(_dark ? 70 : 150), Wire: opt?.WireframeAlpha ?? (byte)110, Points: opt?.PointCloudAlpha ?? (_dark ? (byte)200 : (byte)220));
         // A point cloud coloured by kind shows its measured points, not a mesh made up between them.
@@ -754,7 +1090,7 @@ public static class PlanRenderer
         if (tri == 0) return;
 
         var mesh = _surfaceMeshes.GetValue(s, _ => new SurfaceMesh());
-        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe, slice, alphas.Fill, alphas.Wire);
+        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe, slice, alphas.Fill, alphas.Wire, depth);
     }
 
     private static void DrawPointCloud(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, double? slice, byte alpha)
@@ -771,7 +1107,7 @@ public static class PlanRenderer
         c.DrawPoints(SKPointMode.Points, pts, paint);
     }
 
-    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe, double? slice, byte alpha, byte wireAlpha)
+    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe, double? slice, byte alpha, byte wireAlpha, DepthMap? depth = null)
     {
         // The per-triangle fill colour depends only on the geometry, the theme, the fill and the shared elevation range,
         // so compute the expensive normal shading and colouring once and reuse it; only the projection runs per frame.
@@ -834,7 +1170,7 @@ public static class PlanRenderer
             double dx = v.X - target.X, dy = v.Y - target.Y, dz = v.Z - target.Z;
             vs[i] = new SKPoint((float)(hw + (dx * right.X + dy * right.Y + dz * right.Z) * scale),
                                 (float)(hh - (dx * up.X + dy * up.Y + dz * up.Z) * scale));
-            if (!plan || slice != null) vd[i] = (float)(dx * toViewer.X + dy * toViewer.Y + dz * toViewer.Z);
+            if (!plan || slice != null || depth != null) vd[i] = (float)(dx * toViewer.X + dy * toViewer.Y + dz * toViewer.Z);
         }
         var pts = mesh.Points;
         var tris = s.Triangles;
@@ -875,6 +1211,25 @@ public static class PlanRenderer
             soupCols = mesh.OrderedColors;
         }
 
+        // behind another surface (or a fold of its own) a corner goes paler: a quarter of the opacity of the fill
+        bool[]? behind = null;
+        if (depth != null)
+        {
+            behind = new bool[vc];
+            for (int i = 0; i < vc; i++) behind[i] = depth.Hidden(vs[i].X, vs[i].Y, vd[i]);
+            var faded = new SKColor[soupCols.Length];
+            var pale = (byte)(alpha / 4);
+            for (int i = 0; i < tri; i++)
+            {
+                var t = plan ? i : mesh.Order[i];
+                for (int j = 0; j < 3; j++)
+                {
+                    var col = soupCols[3 * i + j];
+                    faded[3 * i + j] = behind[tris[3 * t + j]] ? col.WithAlpha(pale) : col;
+                }
+            }
+            soupCols = faded;
+        }
         if (slice is double band) (soupPts, soupCols) = CutToSlice(mesh, tris, tri, plan, (float)band);
         if (soupPts.Length > 0)
         {
@@ -893,14 +1248,22 @@ public static class PlanRenderer
             var edges = mesh.Edges;
             using var wire = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 0.5f, Color = (selected ?? color).WithAlpha(wireAlpha) };
             using var path = new SKPath();
+            using var behindPath = new SKPath();
             for (int k = 0; k < edges.Length; k += 2)
             {
                 var p0 = vs[edges[k]]; var p1 = vs[edges[k + 1]];
                 if (slice is double edgeBand && !CutToSlice(ref p0, ref p1, vd[edges[k]], vd[edges[k + 1]], (float)edgeBand)) continue;
                 if ((p0.X < 0 && p1.X < 0) || (p0.X > w && p1.X > w) || (p0.Y < 0 && p1.Y < 0) || (p0.Y > hgt && p1.Y > hgt)) continue;
-                path.MoveTo(p0); path.LineTo(p1);
+                // an edge with both ends behind a surface goes paler with the fill
+                var into = behind != null && behind[edges[k]] && behind[edges[k + 1]] ? behindPath : path;
+                into.MoveTo(p0); into.LineTo(p1);
             }
             c.DrawPath(path, wire);
+            if (!behindPath.IsEmpty)
+            {
+                wire.Color = wire.Color.WithAlpha((byte)(wireAlpha / 4));
+                c.DrawPath(behindPath, wire);
+            }
         }
     }
 

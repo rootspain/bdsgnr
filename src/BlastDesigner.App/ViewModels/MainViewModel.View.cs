@@ -75,6 +75,14 @@ public sealed partial class MainViewModel
         View.ZoomAll();
     }
 
+    /// <summary>The eye by Plan and 3D (Shift+H): what is behind a surface paler, or everything drawn far to near as it comes.</summary>
+    public void ToggleFadeHidden()
+    {
+        if (Doc == null) return;
+        ToggleView(v => v.FadeHidden = !v.FadeHidden);
+        SetStatus(ViewSettings.FadeHidden ? Loc.T("Hidden paler: what is behind a surface is drawn paler") : Loc.T("Everything drawn far to near"));
+    }
+
     public void PlanView()
     {
         PushZoomHistory();

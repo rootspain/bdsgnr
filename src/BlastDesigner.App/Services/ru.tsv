@@ -3101,7 +3101,7 @@ ui:Burden azimuth, °	Азимут ЛНС, °
 ui:Direction of the burden, degrees from north; a new value turns the grid about its centre	Направление ЛНС, градусы от севера; новое значение поворачивает сетку вокруг её центра
 ui:Turned since made	Поворот от исходного
 ui:Off its node	Смещение от узла
-Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное или нажимайте стрелки (1 м за нажатие), чтобы сдвинуть его по горизонтали, с зажатым Shift — вверх или вниз (по Z), с зажатым Ctrl — шагом 0,1 м. Круглая ручка выделенной линии перемещает её вершину. Щелчок с Shift добавляет, с Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину. Кружок на конце стрелки сетки, у которой выделена скважина, поворачивает сетку (с Shift — шагом 5°, с Ctrl — 0,1°), его контекстное меню поворачивает на четверть оборота, на заданный угол или по линии.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное или нажимайте стрелки (1 м за нажатие), чтобы сдвинуть его по горизонтали, с зажатым Shift — вверх или вниз (по Z), с зажатым Ctrl — шагом 0,1 м. Круглая ручка выделенной линии перемещает её вершину. Щелчок с Shift добавляет, с Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину. Кружок на конце стрелки сетки, у которой выделена скважина, поворачивает сетку (с Shift — шагом 5°, с Ctrl — 0,1°), его контекстное меню поворачивает на четверть оборота, на заданный угол или по линии. Круглые ручки выделенного блока меняют его размер: вершина — длину и ширину (с Shift — верх или низ), середина грани — только эту сторону.
 Turn the pattern	Повернуть сетку
 Turn by…	Повернуть на…
 ui:Burden, m: the distance between the rows; a new value lays the grid out again	ЛНС, м: расстояние между рядами; новое значение перестраивает сетку
@@ -3136,3 +3136,18 @@ The selected holes have no loading warning.	У выделенных скважи
 {0} holes with the same warning in {1}	Скважин с аналогичным предупреждением в «{1}»: {0}
 {0} holes with the same warning	Скважин с аналогичным предупреждением: {0}
 The selected objects have fewer than three points apart in plan.	У выбранных объектов меньше трёх точек, не совпадающих в плане.
+Block	Блок
+Click a corner of the block, then the end of its length, then its width. Ctrl: steps of 0.1 m.	Щёлкните угол блока, затем конец его длины, затем ширину. Ctrl — шаг 0,1 м.
+The length of the block is too short.	Слишком короткая длина блока.
+{0:0.0} × {1:0.0} × {2:0.0} m	{0:0.0} × {1:0.0} × {2:0.0} м
+Block {0}	Блок {0}
+Add block	Добавить блок
+Block size	Размер блока
+Origin	Начало
+Azimuth	Азимут
+ui:The corner of the base the length, width and height go from	Угол основания, от которого отложены длина, ширина и высота
+blocks put together from lines: {0}	блоков собрано из линий: {0}
+the lines on {0} make no block	линии слоёв {0} не образуют блок
+ui:Hidden paler: what is behind a surface is drawn at a quarter of its opacity; holes stay as they are (Shift+H)	Скрытое бледнее: то, что за поверхностью, рисуется с четвертью её непрозрачности; скважины — как есть (Shift+H)
+Hidden paler: what is behind a surface is drawn paler	Скрытое бледнее: то, что за поверхностью, рисуется бледнее
+Everything drawn far to near	Всё рисуется от дальнего к ближнему

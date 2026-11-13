@@ -207,6 +207,7 @@ public sealed partial class MainViewModel
         ("Section line", "sectionline", "Section line", DrawSectionLineTool),
         ("Polygon", "polygon", "Polygon", () => DrawPolylineTool(true)),
         ("Circle", "circle", "Circle", DrawCircleTool),
+        ("Block", "cube", "Block", DrawBlockTool),
         ("Arrow", "arrow", "Arrow", DrawArrowTool),
         ("Text", "text", "Text", DrawTextTool),
         ("Dimension", "dimension", "Dimension", DrawDimensionTool),
@@ -228,10 +229,11 @@ public sealed partial class MainViewModel
 
     public List<QuickFilter> QuickFilters() => new()
     {
-        new("Empty", "Ctrl+E", p => p.Holes.Where(h => !h.IsDummy && h.Decks.Count == 0)),
-        new("Dipped", "Ctrl+L", p => p.Holes.Where(h => h.ActualLength.HasValue)),
-        new("Misfires", "Ctrl+M", p => p.Holes.Where(h => h.Exceptions.HasFlag(HoleException.Misfire))),
-        new("Not programmed", "Ctrl+U", p => p.Holes.Where(h => !h.IsDummy && !h.ElectronicTimeMs.HasValue))
+        // with blocks shown, the holes inside them
+        new("Empty", "Ctrl+E", p => ShownHoles(p).Where(h => !h.IsDummy && h.Decks.Count == 0)),
+        new("Dipped", "Ctrl+L", p => ShownHoles(p).Where(h => h.ActualLength.HasValue)),
+        new("Misfires", "Ctrl+M", p => ShownHoles(p).Where(h => h.Exceptions.HasFlag(HoleException.Misfire))),
+        new("Not programmed", "Ctrl+U", p => ShownHoles(p).Where(h => !h.IsDummy && !h.ElectronicTimeMs.HasValue))
     };
 
     public void SelectHoles(IEnumerable<Hole> holes)

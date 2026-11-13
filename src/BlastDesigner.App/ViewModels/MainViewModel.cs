@@ -129,6 +129,7 @@ public sealed partial class MainViewModel : ObservableObject
         HiddenEntities.Clear();
         Highlight.Ids.Clear();
         AnalysisOverlays.Clear();
+        ForgetBlocks();
         doc.Changed += OnDocChanged;
         doc.SelectionChanged += OnSelectionChanged;
         var mine = UserCatalogue.Load();
@@ -166,6 +167,7 @@ public sealed partial class MainViewModel : ObservableObject
         ActiveConnector = before.ActiveConnector;
         if (Doc != null)
         {
+            ForgetBlocks();
             Doc.Changed += OnDocChanged;
             Doc.SelectionChanged += OnSelectionChanged;
         }
@@ -185,6 +187,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void OnDocChanged(object? sender, EventArgs e)
     {
+        ForgetBlocks();
         if (Doc == null) return;
         // an undo can bring back another minimum stemming
         UseMinStemming();
@@ -257,7 +260,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public SceneOptions BuildSceneOptions()
     {
-        var overlays = new List<IOverlay>(AnalysisOverlays) { Highlight, PatternGrid };
+        var overlays = new List<IOverlay> { Highlight, PatternGrid };
         return new SceneOptions
         {
             Selection = Doc?.Selection ?? new HashSet<Guid>(),
@@ -265,6 +268,8 @@ public sealed partial class MainViewModel : ObservableObject
             SelectionColor = new SKColor(Settings.SelectionColor),
             CollarPixels = (float)Settings.CollarSizePixels,
             Overlays = overlays,
+            // cut to the visible blocks with the blast
+            AnalysisOverlays = AnalysisOverlays.ToList(),
             HiddenEntities = HiddenEntities,
             AnimationTimeMs = AnimationTime,
             // the summary box stays on printed plans only; on screen the inspector already shows the totals

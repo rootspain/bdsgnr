@@ -17,6 +17,7 @@ namespace BlastDesigner.Domain.Model;
 [JsonDerivedType(typeof(InitiationPoint), "initiation")]
 [JsonDerivedType(typeof(TimingLineEntity), "timingline")]
 [JsonDerivedType(typeof(EbsOpeningPoint), "ebsopening")]
+[JsonDerivedType(typeof(BlockEntity), "block")]
 public abstract class Entity
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -129,6 +130,15 @@ public sealed class PolylineEntity : Entity
     public override void Transform(Func<Vec3, Vec3> f) { for (int i = 0; i < Points.Count; i++) Points[i] = f(Points[i]); }
     public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(Points, p, Closed);
 
+    /// <summary>A part of the line to show (cut by a block): the same object, same id, with these points, open.</summary>
+    public PolylineEntity Piece(List<Vec3> points)
+    {
+        var c = (PolylineEntity)MemberwiseClone();
+        c.Points = points;
+        c.Closed = false;
+        return c;
+    }
+
     [JsonIgnore] public double Length => GeoMath.Length(Points, Closed);
     [JsonIgnore] public double Area => Closed ? GeoMath.Area(Points) : 0;
 }
@@ -227,6 +237,17 @@ public sealed class SurfaceEntity : Entity
 
     /// <summary>Shares the mesh, which property editors leave out: copied through JSON it took longer than all the rest of a click.</summary>
     public override Entity EditCopy() => (Entity)MemberwiseClone();
+
+    /// <summary>The same surface, same id, with another mesh (a part cut by a block, to show); the original stays as it is.</summary>
+    public SurfaceEntity WithMesh(List<Vec3> vertices, List<int> triangles)
+    {
+        var c = (SurfaceEntity)MemberwiseClone();
+        c.Vertices = vertices;
+        c.Triangles = triangles;
+        c._index = null;
+        c._indexedTriangles = -1;
+        return c;
+    }
 
     /// <summary>The same surface with no mesh, for storing it apart; the original stays as it is.</summary>
     public SurfaceEntity WithoutMesh()

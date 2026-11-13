@@ -23,6 +23,8 @@ internal static class EngineModule
         Document.Followers.Add(EbsTimingLine.Follow);
         // a surface built from objects keeps with them
         Document.Followers.Add(SurfaceSources.Follow);
+        // one block a layer, and a block layer goes with its block
+        Document.Followers.Add(BlockLayers.Follow);
     }
 }
 

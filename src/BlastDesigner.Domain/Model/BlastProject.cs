@@ -375,6 +375,11 @@ public sealed class ViewState
     public HashSet<HoleState> HiddenStates { get; set; } = new();
     public bool ShowGrid { get; set; } = true;
     public bool ShowAxes { get; set; } = true;
+    /// <summary>
+    /// What lies behind a surface (under it in the plan) is drawn paler: a quarter of the opacity of the surface in front.
+    /// Holes, their charges and labels stay as they are. Off: surfaces and lines are drawn far to near, as they come.
+    /// </summary>
+    public bool FadeHidden { get; set; }
     public bool ShowHoleLegend { get; set; }
     public bool ShowTieLegend { get; set; }
     // new projects show collars with their charge columns, the hole number and the firing order (no plain hole tracks)

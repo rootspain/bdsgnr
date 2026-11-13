@@ -241,7 +241,7 @@ public sealed class PropertiesPanel : DockPanel
         _header.Text = sel.Count == 1 ? Loc.T(first.KindName) : $"{Loc.T(first.KindName)} × {sel.Count}";
         var template = first.EditCopy();
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
-        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset" }, ReadOnly = doc.IsReadOnly };
+        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset", "U", "V", "Center", "Current", "KindName" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid, first is TieEntity ? sel.OfType<TieEntity>().ToList() : null);
         if (first is Hole)
         {
@@ -255,11 +255,24 @@ public sealed class PropertiesPanel : DockPanel
             grid.Tips[nameof(Hole.Length)] = grid.Tips[nameof(Hole.ToLevel)] = LengthTip();
             if (!doc.IsReadOnly)
             {
-                var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), Loc.Ui("To the surface: the selected holes go down to the grade surface their line meets from the collar (or the first surface when they meet no grade), plus the subdrill"), () => _ = _vm.HolesToSurface(), 30, 30);
+                // in the accent colour: the one button among the fields, it is to be seen
+                var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.Accent), Loc.Ui("To the surface: the selected holes go down to the grade surface their line meets from the collar (or the first surface when they meet no grade), plus the subdrill"), () => _ = _vm.HolesToSurface(), 30, 30);
                 toSurface.Name = "holesToSurface";
+                toSurface.Background = Look.AccentSoft;
+                toSurface.BorderBrush = Look.Accent;
+                toSurface.BorderThickness = new Thickness(1);
                 Avalonia.Automation.AutomationProperties.SetName(toSurface, Loc.Ui("To the surface"));
                 grid.After[nameof(Hole.ToLevel)] = toSurface;
             }
+        }
+        if (first is BlockEntity)
+        {
+            string m = Loc.Ui("m");
+            foreach (var name in new[] { nameof(BlockEntity.Origin), nameof(BlockEntity.Length), nameof(BlockEntity.Width), nameof(BlockEntity.Height), nameof(BlockEntity.Bottom), nameof(BlockEntity.Top) })
+                grid.Units[name] = m;
+            grid.Units[nameof(BlockEntity.Azimuth)] = "°";
+            grid.Tips[nameof(BlockEntity.Origin)] = Loc.Ui("The corner of the base the length, width and height go from");
+            // the volume is worked out: the grid shows it as a value, not a field
         }
         grid.SetTargets(template, sel);
         var ids = sel.Select(e => e.Id).ToHashSet();
@@ -801,7 +814,8 @@ public sealed class HoleTable : DockPanel
         if (p == null) { _grid.ItemsSource = null; return; }
         CalcColumns(p);
         var f = _filter.Text?.Trim();
-        var rows = p.Holes.Where(h => string.IsNullOrEmpty(f) || h.Label.Contains(f, StringComparison.OrdinalIgnoreCase))
+        // with blocks shown, the holes inside them
+        var rows = _vm.ShownHoles(p).Where(h => string.IsNullOrEmpty(f) || h.Label.Contains(f, StringComparison.OrdinalIgnoreCase))
             .Select(h => new HoleRowVm(_vm, h)).ToList();
         _syncing = true;
         _grid.ItemsSource = new ObservableCollection<HoleRowVm>(rows);

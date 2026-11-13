@@ -289,4 +289,118 @@ public class RenderTests
             Assert.True(Math.Sqrt((cx - ox) * (cx - ox) + (cy - oy) * (cy - oy)) > Math.Sqrt((tx - ox) * (tx - ox) + (ty - oy) * (ty - oy)));
         }
     }
+
+    /// <summary>A flat square surface of a kind at an elevation, over the square 0…40.</summary>
+    private static SurfaceEntity Flat(SurfaceKind kind, double z) => new()
+    {
+        Kind = kind, ShowWireframe = false,
+        Vertices = { new(0, 0, z), new(40, 0, z), new(40, 40, z), new(0, 40, z) }, Triangles = { 0, 1, 2, 0, 2, 3 }
+    };
+
+    private static SKColor Pixel(BlastProject p, Camera cam, Vec3 at, byte? alpha = 255)
+    {
+        var colors = new Dictionary<SurfaceKind, SKColor> { [SurfaceKind.Bench] = SKColors.Red, [SurfaceKind.Grade] = SKColors.Blue };
+        var options = new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false, SurfaceColors = colors, Background = SKColors.Black, SurfaceAlpha = alpha };
+        using var bitmap = new SKBitmap(400, 300);
+        using var canvas = new SKCanvas(bitmap);
+        PlanRenderer.Render(canvas, cam, p, options);
+        var (x, y) = cam.ToScreen(at);
+        return bitmap.GetPixel((int)x, (int)y);
+    }
+
+    [Fact]
+    public void TheUpperSurfaceCoversTheLower_WhicheverComesFirst()
+    {
+        var cam = new Camera { Width = 400, Height = 300, Pitch = 90, Scale = 5, Target = new Vec3(20, 20, 0) };
+        foreach (var upperFirst in new[] { true, false })
+        {
+            var p = BlastProject.CreateNew("order");
+            if (upperFirst) { p.Add(Flat(SurfaceKind.Bench, 10)); p.Add(Flat(SurfaceKind.Grade, 0)); }
+            else { p.Add(Flat(SurfaceKind.Grade, 0)); p.Add(Flat(SurfaceKind.Bench, 10)); }
+            var c = Pixel(p, cam, new Vec3(20, 20, 10));
+            Assert.True(c.Red > c.Blue, $"upper first {upperFirst}: {c}");
+        }
+    }
+
+    [Fact]
+    public void ALineUnderASurfaceGoesUnderItIn3D_OneAboveOverIt_InThePlanBothShow()
+    {
+        var oblique = new Camera { Width = 400, Height = 300, Pitch = 60, Yaw = 0, Scale = 5, Target = new Vec3(20, 20, 0) };
+        var plan = new Camera { Width = 400, Height = 300, Pitch = 90, Scale = 5, Target = new Vec3(20, 20, 0) };
+        foreach (var (z, seen) in new[] { (-5.0, false), (5.0, true) })
+        {
+            var p = BlastProject.CreateNew("line");
+            var line = p.Add(new PolylineEntity { Points = { new(5, 20, z), new(35, 20, z) }, Color = 0xFF00FF00 });
+            p.FindLayer(line.LayerId)!.LineWidth = 4;
+            p.Add(Flat(SurfaceKind.Bench, 0));
+            var c = Pixel(p, oblique, new Vec3(20, 20, z));
+            Assert.True(seen == c.Green > c.Red, $"3D, z {z}: {c}");
+            // a 2D drawing does not go under the surfaces in the plan
+            var top = Pixel(p, plan, new Vec3(20, 20, z));
+            Assert.True(top.Green > top.Red, $"plan, z {z}: {top}");
+        }
+    }
+
+    [Fact]
+    public void ALargeSurfaceBehindIsNotDrawnOverANearerOne()
+    {
+        // from the south, low: a small bench near the camera at 5 m, a large grade far and wide at 0 whose nearest point is
+        // nearer than the bench's: whole in the order it would be drawn over the bench
+        var cam = new Camera { Width = 400, Height = 300, Pitch = 20, Yaw = 0, Scale = 4, Target = new Vec3(20, 20, 0) };
+        var p = BlastProject.CreateNew("large");
+        var bench = Flat(SurfaceKind.Bench, 5);
+        bench.Vertices = new() { new(10, 15, 5), new(30, 15, 5), new(30, 25, 5), new(10, 25, 5) };
+        p.Add(bench);
+        var grade = Flat(SurfaceKind.Grade, 0);
+        grade.Vertices = new() { new(-200, -60, 0), new(200, -60, 0), new(200, 400, 0), new(-200, 400, 0) };
+        p.Add(grade);
+        var c = Pixel(p, cam, new Vec3(20, 20, 5));
+        Assert.True(c.Red > c.Blue, c.ToString());
+    }
+
+    [Fact]
+    public void TheKeptOrderGoesWhenALineMoves()
+    {
+        // two crossing lines, the red one above; then the green one is lifted over it: the order of the last frame is not kept
+        var cam = new Camera { Width = 400, Height = 300, Pitch = 90, Scale = 5, Target = new Vec3(20, 20, 0) };
+        var p = BlastProject.CreateNew("kept");
+        var red = p.Add(new PolylineEntity { Points = { new(5, 20, 5), new(35, 20, 5) }, Color = 0xFFFF0000 });
+        var green = p.Add(new PolylineEntity { Points = { new(20, 5, 0), new(20, 35, 0) }, Color = 0xFF00FF00 });
+        var layer = p.FindLayer(red.LayerId)!;
+        layer.LineWidth = 4;
+        var cross = new Vec3(20, 20, 0);
+        var first = Pixel(p, cam, cross);
+        Assert.True(first.Red > first.Green, first.ToString());
+        green.Translate(new Vec3(0, 0, 10));
+        var after = Pixel(p, cam, cross);
+        Assert.True(after.Green > after.Red, after.ToString());
+    }
+
+    [Fact]
+    public void WithHiddenPalerWhatIsBehindASurfaceGoesPaler()
+    {
+        var cam = new Camera { Width = 400, Height = 300, Pitch = 90, Scale = 5, Target = new Vec3(20, 20, 0) };
+        // the bench half over the grade: x 0…20
+        var p = BlastProject.CreateNew("pale");
+        var bench = Flat(SurfaceKind.Bench, 10);
+        bench.Vertices = new() { new(0, 0, 10), new(20, 0, 10), new(20, 40, 10), new(0, 40, 10) };
+        p.Add(bench);
+        p.Add(Flat(SurfaceKind.Grade, 0));
+        var map = DepthMap.Of(cam, p.Entities.OfType<SurfaceEntity>().ToList(), s => s.Vertices.Count);
+        Assert.True(map.Hidden(cam, new Vec3(10, 20, 0)));
+        Assert.False(map.Hidden(cam, new Vec3(30, 20, 0)));
+        Assert.False(map.Hidden(cam, new Vec3(10, 20, 10)));
+        // half see-through bench: under it the grade is not drawn without the eye, a quarter with it; off the bench the same
+        var under = new Vec3(10, 20, 10);
+        var off = new Vec3(30, 20, 0);
+        var plainUnder = Pixel(p, cam, under, 128);
+        var plainOff = Pixel(p, cam, off, 128);
+        Assert.Equal(0, plainUnder.Blue);
+        p.View.FadeHidden = true;
+        var paleUnder = Pixel(p, cam, under, 128);
+        Assert.True(paleUnder.Blue > 0 && paleUnder.Blue < plainOff.Blue / 2, $"{paleUnder} {plainOff}");
+        Assert.Equal(plainOff, Pixel(p, cam, off, 128));
+        // kept in the file
+        Assert.True(BlastDesigner.Domain.ProjectJson.Deserialize(BlastDesigner.Domain.ProjectJson.Serialize(p)).View.FadeHidden);
+    }
 }

@@ -59,6 +59,8 @@ public sealed class Viewport : Control
     /// <summary>Raised with the world position under the cursor (status bar coordinates).</summary>
     public event Action<Vec3>? PointerWorldMoved;
     public event Action? CameraChanged;
+    /// <summary>The block under the cursor, drawn whole (the Select tool sets it).</summary>
+    public Guid? HotBlock { get; set; }
     /// <summary>Raised at the start of every frame, after the camera size is updated (tools refresh their preview, the window moves anchored buttons).</summary>
     public event Action? Rendering;
 
@@ -139,8 +141,12 @@ public sealed class Viewport : Control
                 || (SurfaceWireframe == IO.ProgramSettings.WireframeWhileStill && System.Diagnostics.Stopwatch.GetElapsedTime(_cameraMovedAt).TotalMilliseconds < SettleMs),
             WireframesOnSelected = SurfaceWireframe == IO.ProgramSettings.WireframeSelected,
             Overlays = all,
+            AnalysisOverlays = opt.AnalysisOverlays,
             MovedEntities = Preview.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null,
-            MoveOffset = Preview.MoveOffset
+            MoveOffset = Preview.MoveOffset,
+            HotBlock = HotBlock,
+            // what is behind a surface is worked out once the camera stops
+            CameraMoving = System.Diagnostics.Stopwatch.GetElapsedTime(_cameraMovedAt).TotalMilliseconds < SettleMs
         };
         // The frame is recorded here on the UI thread and the render thread only plays it back: it never reads the model
         // or the camera, which the UI thread goes on changing. Drawn from the live lists a frame could fail or mix two states.
@@ -235,8 +241,8 @@ public sealed class Viewport : Control
     // ---- picking ------------------------------------------------------------
 
     /// <summary>True when the entity is drawn: display switches, hole filters and objects hidden with "Show only selected".</summary>
-    private static bool Shown(BlastProject project, Entity e, ISet<Guid>? hidden) =>
-        PlanRenderer.EntityShown(project.View, e) && hidden?.Contains(e.Id) != true;
+    private static bool Shown(BlastProject project, Entity e, ISet<Guid>? hidden, BlockClip? clip) =>
+        PlanRenderer.EntityShown(project.View, e) && hidden?.Contains(e.Id) != true && (clip == null || clip.Shows(e));
 
     /// <summary>
     /// Entity nearest to a screen point within the target radius, preferring holes and editable layers. With
@@ -248,20 +254,39 @@ public sealed class Viewport : Control
         if (project == null) return null;
         var layers = project.Layers.ToDictionary(l => l.Id);
         var hidden = OptionsSource?.Invoke().HiddenEntities;
+        // the visible blocks: what is outside them is not drawn, nor picked
+        var clip = BlockClip.Of(project);
         Entity? best = null;
         double bestD = TargetRadius;
+        Entity? block = null;
+        double blockD = TargetRadius;
+        var selection = OptionsSource?.Invoke().Selection;
         foreach (var e in project.Entities)
         {
-            if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden)) continue;
+            if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
             if (!includeLocked && (layer.Frozen)) continue;
             if (accept != null && !accept(e)) continue;
-            var d = ScreenDistance(e, sx, sy);
+            var d = ScreenDistance(e, sx, sy, clip, selection);
             if (e is Hole) d -= 2;
+            // a block gives way to anything else on the spot: it is taken only where nothing else is
+            if (e is BlockEntity) { if (d < blockD) { blockD = d; block = e; } continue; }
             if (d < bestD) { bestD = d; best = e; }
         }
+        best ??= block;
         if (best == null)
-            best = SurfaceAt(sx, sy, project.Entities.OfType<SurfaceEntity>().Where(s =>
-                layers.TryGetValue(s.LayerId, out var l) && l.Visible && (includeLocked || !l.Frozen) && Shown(project, s, hidden) && (accept == null || accept(s))));
+        {
+            var shown = project.Entities.OfType<SurfaceEntity>().Where(s =>
+                layers.TryGetValue(s.LayerId, out var l) && l.Visible && (includeLocked || !l.Frozen) && Shown(project, s, hidden, clip) && (accept == null || accept(s)));
+            if (clip == null) best = SurfaceAt(sx, sy, shown);
+            else
+            {
+                // the part of each surface inside the blocks is what is seen and picked; the surface itself is returned
+                var cut = new Dictionary<SurfaceEntity, SurfaceEntity>();
+                foreach (var s in shown)
+                    if (PlanRenderer.CutSurface(clip, s) is { } part) cut[part] = s;
+                if (SurfaceAt(sx, sy, cut.Keys) is { } hit) best = cut[hit];
+            }
+        }
         return best;
     }
 
@@ -313,7 +338,15 @@ public sealed class Viewport : Control
         return Vec3.Dot(e2, q) * inv;
     }
 
-    private double ScreenDistance(Entity e, double sx, double sy)
+    private static double SegmentDistance(double ax, double ay, double bx, double by, double sx, double sy)
+    {
+        double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+        double t = len2 > 0 ? Math.Clamp(((sx - ax) * dx + (sy - ay) * dy) / len2, 0, 1) : 0;
+        double cx = ax + t * dx - sx, cy = ay + t * dy - sy;
+        return Math.Sqrt(cx * cx + cy * cy);
+    }
+
+    private double ScreenDistance(Entity e, double sx, double sy, BlockClip? clip = null, ISet<Guid>? selection = null)
     {
         switch (e)
         {
@@ -327,8 +360,21 @@ public sealed class Viewport : Control
                 var (x, y) = Camera.ToScreen(pt.Position);
                 return Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
             }
+            case PolylineEntity pl when clip != null:
+                return clip.Pieces(pl.Points, pl.Closed).Select(piece => SegmentsDistance(piece, false, sx, sy)).DefaultIfEmpty(double.MaxValue).Min();
             case PolylineEntity pl:
                 return SegmentsDistance(pl.Points, pl.Closed, sx, sy);
+            case CircleEntity c when clip != null:
+                return clip.Pieces(c.ToPolygon(36), true).Select(piece => SegmentsDistance(piece, false, sx, sy)).DefaultIfEmpty(double.MaxValue).Min();
+            case BlockEntity bl when selection?.Contains(bl.Id) == true:
+            {
+                // selected, it shows all its edges, and is taken by them
+                var corners = bl.Corners();
+                return BlockEntity.Edges.Min(edge => SegmentsDistance(new[] { corners[edge.A], corners[edge.B] }, false, sx, sy));
+            }
+            case BlockEntity bl:
+                // else only by the short edges at its corners: what is drawn of it
+                return PlanRenderer.BlockStubs(Camera, bl).Min(s => SegmentDistance(s.A.X, s.A.Y, s.B.X, s.B.Y, sx, sy));
             case TieEntity t:
                 return SegmentsDistance(new[] { t.FromPos, t.ToPos }, false, sx, sy);
             case ArrowEntity a:
@@ -388,12 +434,17 @@ public sealed class Viewport : Control
         if (project == null) yield break;
         var layers = project.Layers.ToDictionary(l => l.Id);
         var hidden = OptionsSource?.Invoke().HiddenEntities;
+        // the visible blocks: what is outside them is not drawn, nor picked
+        var clip = BlockClip.Of(project);
         var (minX, maxX, minY, maxY) = (Math.Min(x0, x1), Math.Max(x0, x1), Math.Min(y0, y1), Math.Max(y0, y1));
         foreach (var e in project.Entities)
         {
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || layer.Frozen) continue;
-            if (!Shown(project, e, hidden)) continue;
-            var verts = e is Hole hh ? new[] { hh.Collar } : e is TieEntity t ? new[] { t.FromPos, t.ToPos } : e.GetVertices().ToArray();
+            if (!Shown(project, e, hidden, clip)) continue;
+            var verts = e is Hole hh ? new[] { hh.Collar } : e is TieEntity t ? new[] { t.FromPos, t.ToPos }
+                : clip != null && e is PolylineEntity pl ? clip.Pieces(pl.Points, pl.Closed).SelectMany(x => x).ToArray()
+                : clip != null && e is SurfaceEntity se ? PlanRenderer.CutSurface(clip, se)?.Vertices.ToArray() ?? Array.Empty<Vec3>()
+                : e.GetVertices().ToArray();
             if (verts.Length == 0) continue;
             bool Inside(Vec3 v) { var (x, y) = Camera.ToScreen(v); return x >= minX && x <= maxX && y >= minY && y <= maxY; }
             if (crossing ? verts.Any(Inside) : verts.All(Inside)) yield return e;
@@ -406,6 +457,8 @@ public sealed class Viewport : Control
         if (!SnapEnabled || project == null) return (world, false);
         var layers = project.Layers.ToDictionary(l => l.Id);
         var hidden = OptionsSource?.Invoke().HiddenEntities;
+        // the visible blocks: what is outside them is not drawn, nor picked
+        var clip = BlockClip.Of(project);
         Vec3? best = null;
         double bestD = TargetRadius * 1.5;
         foreach (var e in project.Entities)
@@ -413,8 +466,8 @@ public sealed class Viewport : Control
             if (e is SurfaceEntity or TieEntity) continue;
             // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
             if (e is Hole && !project.View.ShowCollars) continue;
-            if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden)) continue;
-            var verts = e is Hole h ? new[] { h.Collar } : e.GetVertices();
+            if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
+            var verts = e is Hole h ? new[] { h.Collar } : e is BlockEntity || clip == null ? e.GetVertices() : e.GetVertices().Where(clip.Contains);
             foreach (var v in verts)
             {
                 var (x, y) = Camera.ToScreen(v);
@@ -435,6 +488,8 @@ public sealed class Viewport : Control
         if (!SnapEnabled || project == null) return null;
         var layers = project.Layers.ToDictionary(l => l.Id);
         var hidden = OptionsSource?.Invoke().HiddenEntities;
+        // the visible blocks: what is outside them is not drawn, nor picked
+        var clip = BlockClip.Of(project);
         Vec3? best = null;
         double bestD = TargetRadius * 1.5;
         foreach (var e in project.Entities)
@@ -442,8 +497,8 @@ public sealed class Viewport : Control
             if (e is SurfaceEntity or TieEntity || dragged.Contains(e.Id)) continue;
             // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
             if (e is Hole && !project.View.ShowCollars) continue;
-            if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden)) continue;
-            var verts = e is Hole h ? new[] { h.Collar } : e.GetVertices();
+            if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
+            var verts = e is Hole h ? new[] { h.Collar } : e is BlockEntity || clip == null ? e.GetVertices() : e.GetVertices().Where(clip.Contains);
             foreach (var v in verts)
             {
                 var (x, y) = Camera.ToScreen(v);
@@ -530,6 +585,8 @@ public sealed class Viewport : Control
         if (project == null) return null;
         var layers = project.Layers.ToDictionary(l => l.Id);
         var hidden = OptionsSource?.Invoke().HiddenEntities;
+        // the visible blocks: what is outside them is not drawn, nor picked
+        var clip = BlockClip.Of(project);
         var (right, up, toViewer, target) = (Camera.Right, Camera.Up, Camera.ToViewer, Camera.Target);
         var (halfW, halfH) = (Camera.Width / 2 / Camera.Scale, Camera.Height / 2 / Camera.Scale);
         var nearRadius = TargetRadius * 5 / Camera.Scale;
@@ -539,7 +596,7 @@ public sealed class Viewport : Control
         var all = Bounds3.Empty;
         foreach (var e in project.Entities)
         {
-            if (e is TieEntity || !layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden)) continue;
+            if (e is TieEntity || !layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
             all.Add(e.GetBounds());
             if (e is SurfaceEntity s)
             {
@@ -694,9 +751,13 @@ public sealed class Viewport : Control
         var visibleLayers = project.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
         var options = OptionsSource?.Invoke();
         var hidden = options?.HiddenEntities;
+        var clip = BlockClip.Of(project);
         var b = Bounds3.Empty;
-        foreach (var e in project.Entities)
-            if (e is not TieEntity && (options?.HideGeometry != true || e is Hole or InitiationPoint) && visibleLayers.Contains(e.LayerId) && Shown(project, e, hidden)) b.Add(e.GetBounds());
+        // with blocks shown, what is shown is inside them
+        if (clip != null) foreach (var block in clip.Blocks) b.Add(block.GetBounds());
+        else
+            foreach (var e in project.Entities)
+                if (e is not TieEntity && (options?.HideGeometry != true || e is Hole or InitiationPoint) && visibleLayers.Contains(e.LayerId) && Shown(project, e, hidden, clip)) b.Add(e.GetBounds());
         if (b.IsEmpty) { Camera.Target = Vec3.Zero; Camera.Scale = 5; }
         else Camera.Fit(b);
         CameraChanged?.Invoke();

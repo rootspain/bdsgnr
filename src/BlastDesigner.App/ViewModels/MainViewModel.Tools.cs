@@ -120,6 +120,9 @@ public sealed partial class MainViewModel
             Change("Add text", p => p.Add(new TextEntity { Position = pts[0], Text = text, Height = Math.Max(0.5, 12 / View.Camera.Scale) }, p.GetOrCreateLayer(StandardLayers.Annotation)));
         }));
 
+    /// <summary>Block: three clicks make a box that shows only what is inside it (<see cref="BlockTool"/>).</summary>
+    public void DrawBlockTool() => SetTool(new BlockTool(this));
+
     public void DrawCircleTool() =>
         SetTool(new PickPointsTool(this, "Circle", "Click the centre, then a point on the circle.", 2, 2, false, pts =>
             Change("Add circle", p => p.Add(new CircleEntity { Center = pts[0], Radius = Vec3.Distance2D(pts[0], pts[1]) })))

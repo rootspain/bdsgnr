@@ -28,6 +28,8 @@ public sealed class SelectTool : Tool
     private readonly RowPick _rows;
     private readonly SelectionDrag _move;
     private readonly BoxSelect _box;
+    /// <summary>The grips of a selected block: its size dragged by a corner or a face.</summary>
+    private readonly BlockGrips _blocks;
     /// <summary>Gestures that take a press for themselves: nothing else happens with it.</summary>
     private readonly ISelectGesture[] _handles;
     /// <summary>The gestures that share a press: the tool decides between them on the drag and the release.</summary>
@@ -39,17 +41,18 @@ public sealed class SelectTool : Tool
     {
         _front = new FrontLineHandles(vm, () => Preview.Moving == null);
         _pattern = new PatternRotateHandle(vm, () => Preview.Moving == null);
+        _blocks = new BlockGrips(vm, () => Preview.Moving == null);
         _vertices = new VertexGrips(vm, () => Preview.Moving == null);
         _move = new SelectionDrag(vm);
         _rows = new RowPick(vm, _move);
         _box = new BoxSelect(vm);
-        _handles = new ISelectGesture[] { _front, _pattern };
+        _handles = new ISelectGesture[] { _front, _blocks, _pattern };
         _shared = new ISelectGesture[] { _vertices, _rows, _move, _box };
         _gestures = _handles.Concat(_shared).ToArray();
     }
 
     public override string Name => "Select";
-    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line.";
+    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.";
 
     /// <summary>Fine drag step, the same as an arrow press with Ctrl.</summary>
     public const double FineStep = SelectionDrag.FineStep;
@@ -72,6 +75,8 @@ public sealed class SelectTool : Tool
     public override void Deactivate()
     {
         base.Deactivate();
+        // no block stays lit by a cursor of a tool that is gone
+        if (View.HotBlock != null) { View.HotBlock = null; View.Redraw(); }
         _pattern.Detach();
         foreach (var g in _gestures)
         {
@@ -87,7 +92,7 @@ public sealed class SelectTool : Tool
     {
         if (!p.Left) return;
         // a circle of a selected front (turned or reshaped) or of a pattern (its grid turned): nothing else happens with this press
-        if ((!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.TryPress(p)) || _pattern.TryPress(p)) { _down = null; return; }
+        if ((!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.TryPress(p)) || _blocks.TryPress(p) || _pattern.TryPress(p)) { _down = null; return; }
         _down = p;
         _dragging = false;
         // the selection before the row: a selected row hands its drag to the selection
@@ -113,8 +118,13 @@ public sealed class SelectTool : Tool
         {
             _vertices.Hover(p);
             _front.Hover(p);
+            _blocks.Hover(p);
             _pattern.Hover(p);
-            if (p.Hit != null && !_pattern.Hot) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m" : Loc.T(p.Hit.KindName)));
+            // a block under the cursor shows all its edges, and is named by its layer
+            var hot = p.Hit is BlockEntity ? p.Hit.Id : (Guid?)null;
+            if (View.HotBlock != hot) { View.HotBlock = hot; View.Redraw(); }
+            if (p.Hit != null && !_pattern.Hot) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m"
+                : p.Hit is BlockEntity b ? Vm.Project?.FindLayer(b.LayerId)?.Name ?? Loc.T(b.KindName) : Loc.T(p.Hit.KindName)));
             return;
         }
         if (Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > 4) _dragging = true;

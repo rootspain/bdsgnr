@@ -104,9 +104,32 @@ public sealed partial class MainViewModel
 
     // ---- selection ------------------------------------------------------------------
 
-    /// <summary>Objects that can be selected: on a visible, unfrozen layer and drawn under the current display switches.</summary>
+    /// <summary>
+    /// Objects that can be selected: on a visible, unfrozen layer, drawn under the current display switches and, with
+    /// blocks shown, inside them.
+    /// </summary>
     public bool IsSelectable(Entity e) =>
-        Project!.FindLayer(e.LayerId) is { Visible: true, Frozen: false } && !HiddenEntities.Contains(e.Id) && Rendering.PlanRenderer.EntityShown(Project.View, e);
+        Project!.FindLayer(e.LayerId) is { Visible: true, Frozen: false } && !HiddenEntities.Contains(e.Id) && Rendering.PlanRenderer.EntityShown(Project.View, e)
+        && (Blocks is not { } blocks || blocks.Shows(e));
+
+    private BlockClip? _blocks;
+    private bool _blocksTaken;
+
+    /// <summary>The visible blocks (only what is inside them is shown); null without any. Taken again after every change of the blast or the view.</summary>
+    public BlockClip? Blocks
+    {
+        get
+        {
+            if (!_blocksTaken && Project != null) { _blocks = BlockClip.Of(Project); _blocksTaken = true; }
+            return Project == null ? null : _blocks;
+        }
+    }
+
+    /// <summary>The blocks are taken again on their next use.</summary>
+    private void ForgetBlocks() => _blocksTaken = false;
+
+    /// <summary>The holes shown: with blocks shown, those with the collar inside one; the hole table and its quick filters go by them.</summary>
+    public IEnumerable<Hole> ShownHoles(BlastProject p) => Blocks is { } blocks && p == Project ? p.Holes.Where(blocks.Shows) : p.Holes;
 
     /// <summary>More points than this in the selection and the lines show no grips: they would only cover the lines, and cost every frame.</summary>
     private const int MaxGrips = 5000;

@@ -127,7 +127,8 @@ public static class CadFiles
         for (int i = 0; i < result.Items.Count; i++)
         {
             var (layer, e) = result.Items[i];
-            if (!Flat(e)) continue;
+            // the edges of a block at 0 stay with the others of its box
+            if (!Flat(e) || BlockLayers.IsBlockLayerName(layer)) continue;
             var flat = layer + " (2D)";
             if (!result.Layers.ContainsKey(flat) && result.Layers.TryGetValue(layer, out var info)) result.Layers[flat] = info;
             result.Items[i] = (flat, e);
@@ -286,6 +287,11 @@ public static class CadFiles
                     break;
                 case TieEntity tie:
                     G(0, "LINE"); G(8, layer); Pt(tie.FromPos); Pt(tie.ToPos, 11);
+                    break;
+                case BlockEntity b:
+                    // twelve edges on the block's own layer: opened again, they make the block (BlockAssembly)
+                    var corners = b.Corners();
+                    foreach (var (i, j) in BlockEntity.Edges) { G(0, "LINE"); G(8, layer); Pt(corners[i]); Pt(corners[j], 11); }
                     break;
                 case SurfaceEntity s:
                     for (int i = 0; i < s.Triangles.Count; i += 3)
