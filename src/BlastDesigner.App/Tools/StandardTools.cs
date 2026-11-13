@@ -27,7 +27,9 @@ public sealed class SelectTool : Tool
     private readonly VertexGrips _vertices;
     private readonly RowPick _rows;
     private readonly SelectionDrag _move;
-    private readonly BoxSelect _box;
+    /// <summary>What a drag over nothing selects with: the box, or the lasso of the Lasso tool.</summary>
+    private readonly ISelectGesture _box;
+    private readonly bool _lasso;
     /// <summary>The grips of a selected block: its size dragged by a corner or a face.</summary>
     private readonly BlockGrips _blocks;
     /// <summary>Gestures that take a press for themselves: nothing else happens with it.</summary>
@@ -37,22 +39,27 @@ public sealed class SelectTool : Tool
     /// <summary>All the gestures in the order they are asked.</summary>
     private readonly ISelectGesture[] _gestures;
 
-    public SelectTool(MainViewModel vm) : base(vm)
+    /// <param name="lasso">A drag over nothing draws a curve (the Lasso tool), not a box; all else is the same.</param>
+    public SelectTool(MainViewModel vm, bool lasso = false) : base(vm)
     {
+        _lasso = lasso;
         _front = new FrontLineHandles(vm, () => Preview.Moving == null);
         _pattern = new PatternRotateHandle(vm, () => Preview.Moving == null);
         _blocks = new BlockGrips(vm, () => Preview.Moving == null);
         _vertices = new VertexGrips(vm, () => Preview.Moving == null);
         _move = new SelectionDrag(vm);
         _rows = new RowPick(vm, _move);
-        _box = new BoxSelect(vm);
+        _box = lasso ? new LassoSelect(vm) : new BoxSelect(vm);
         _handles = new ISelectGesture[] { _front, _blocks, _pattern };
         _shared = new ISelectGesture[] { _vertices, _rows, _move, _box };
         _gestures = _handles.Concat(_shared).ToArray();
     }
 
-    public override string Name => "Select";
-    public override string Hint => "Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.";
+    public override string Name => _lasso ? "Lasso" : "Select";
+    public override string Hint => _lasso ? LassoHint : BoxHint;
+
+    private const string LassoHint = "Hold the left button and draw a curve round the objects: let go, it closes and selects what it rings. The first move to the right selects what is fully inside (window), to the left what it touches too (crossing). A click selects, with Shift adds, with Ctrl toggles. Drag a selected object to move it; the grips work as in the Select tool.";
+    private const string BoxHint = "Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.";
 
     /// <summary>Fine drag step, the same as an arrow press with Ctrl.</summary>
     public const double FineStep = SelectionDrag.FineStep;

@@ -23,13 +23,7 @@ public sealed partial class MainViewModel
     public HolePattern? SelectedPattern =>
         Doc is { } doc ? doc.SelectedHoles.Select(h => doc.Project.FindPattern(h.PatternId)).FirstOrDefault(p => p != null) : null;
 
-    private PatternRebuildOptions PatternOptions(BlastProject p) => new()
-    {
-        Bearing = PatternBearing,
-        CollarSurface = p.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench),
-        GradeSurface = p.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Grade),
-        Layer = p.GetOrCreateLayer(StandardLayers.Holes, 0xFF1E3A8A, "Design")
-    };
+    private PatternRebuildOptions PatternOptions(BlastProject p) => PatternRebuildOptions.For(p, PatternBearing);
 
     public void PatternRotateTool() => SetTool(new PatternRotateTool(this));
 

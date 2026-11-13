@@ -434,6 +434,12 @@ public sealed class SettingsForm : DockPanel
         yield return Row("Section line", ColourPicker("sectionLine", Edited.SectionLineColor, SectionLines, c => Edited.SectionLineColor = c), "Section lines without their own colour");
 
         yield return Row("Selected objects colour", ColourPicker("selection", Edited.SelectionColor, Highlights, c => Edited.SelectionColor = c));
+        yield return Row("Selected objects thicker", Toggle(Edited.SelectionThick, v => Edited.SelectionThick = v, "selectionThick"),
+            "Lines and points of selected objects are drawn 2 pixels thicker than their line, the collar of a hole 1 pixel");
+        var halo = new ComboBox { ItemsSource = new[] { L("Off"), L("1 px"), L("2 px") }.ToList(), SelectedIndex = Math.Clamp(Edited.SelectionHaloPx, 0, 2), Width = 120, Height = 32, Name = "selectionHalo" };
+        halo.SelectionChanged += (_, _) => { if (halo.SelectedIndex >= 0) Edited.SelectionHaloPx = halo.SelectedIndex; };
+        yield return Row("Halo of selected objects", halo,
+            "A band of a dark or light colour round selected objects, as round the hole labels: they read over a surface of any colour");
 
         yield return Row("Pattern arrow", ColourPicker("patternArrow", Edited.PatternArrowColor, Arrows, c => Edited.PatternArrowColor = c), "The burden arrow of a selected pattern");
         yield return Row("Pattern turn circle", ColourPicker("patternTurn", Edited.PatternTurnColor, TurnFree, c => Edited.PatternTurnColor = c), "The circle at the tip of the burden arrow of a selected pattern, when the grid can be turned");

@@ -3153,3 +3153,25 @@ Hidden paler: what is behind a surface is drawn paler	Скрытое бледн�
 Everything drawn far to near	Всё рисуется от дальнего к ближнему
 ui:Search: command, hole, setting (Ctrl+K)	Поиск: команда, скважина, настройка (Ctrl+K)
 ui:Pick radius in pixels of the screen; ↑ and ↓ change it	Радиус захвата в пикселях экрана; ↑ и ↓ меняют его
+Lasso	Лассо
+ui:Lasso	Лассо
+ui:Lasso selection	Выделение лассо
+Lasso selection	Выделение лассо
+Hold the left button and draw a curve round the objects: let go, it closes and selects what it rings. The first move to the right selects what is fully inside (window), to the left what it touches too (crossing). A click selects, with Shift adds, with Ctrl toggles. Drag a selected object to move it; the grips work as in the Select tool.	Удерживая левую кнопку, обведите объекты кривой: при отпускании она замкнётся и выделит всё, что внутри. Первое движение вправо выделяет только то, что целиком внутри (окно), влево — и то, что она задевает (пересечение). Щелчок выделяет, с Shift добавляет, с Ctrl переключает. Выделенный объект перетаскивается; ручки работают как в инструменте «Выбор».
+Lasso (Q): hold the left button and draw a curve round the objects; let go and it closes. The first move to the right is a window, to the left a crossing, as with a box.	Лассо (Q): удерживая левую кнопку, обведите объекты кривой; при отпускании она замкнётся. Первое движение вправо — окно, влево — пересечение, как у рамки.
+Pattern from polygon	Сетка из полигона
+ui:Pattern from polygon	Сетка из полигона
+The polygon becomes a pattern of holes. The first row runs along the side in colour, half a burden inside it, and the blast goes out across it; click another side to take it. Done makes the pattern; editing the polygon later lays the pattern out on it again.	Полигон превращается в сетку скважин. Первый ряд идёт вдоль выделенной цветом стороны, на половине ЛНС внутрь, взрыв направлен наружу через неё; щелчок по другой стороне выбирает её. «Готово» создаёт сетку; правка полигона потом перестраивает сетку по нему.
+{0} holes in {1} rows	Скважин: {0}, рядов: {1}
+{0} holes in {1} patterns	Создано скважин: {0}, сеток: {1}
+The pattern stays as it was.	Сетка оставлена как была.
+ui:Centre	По центру
+ui:Along the row	Вдоль ряда
+ui:Where the holes of a row start, looking along the blast direction: half a spacing from the left end of the outline, from its right end, or with the same room at both ends	Откуда начинаются скважины ряда, если смотреть по направлению взрыва: на половине расстояния от левого края контура, от правого или с одинаковым запасом с обеих сторон
+ui:Selected objects thicker	Выделенные толще на 2 пкс
+ui:Lines and points of selected objects are drawn 2 pixels thicker than their line, the collar of a hole 1 pixel	Линии и точки выделенных объектов рисуются на 2 пикселя толще своей линии, устье скважины — на 1 пиксель
+ui:Halo of selected objects	Кайма выделенных объектов
+ui:A band of a dark or light colour round selected objects, as round the hole labels: they read over a surface of any colour	Полоса тёмного или светлого цвета вокруг выделенных объектов, как у подписей скважин: они видны поверх поверхности любого цвета
+ui:Off	выкл
+ui:1 px	1 пкс
+ui:2 px	2 пкс

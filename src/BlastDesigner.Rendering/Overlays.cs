@@ -16,6 +16,18 @@ public sealed class PreviewOverlay : IOverlay
     /// <summary>Square markers for holes that a tool is about to create.</summary>
     public List<(Vec3 Point, SKColor Color)> Markers { get; } = new();
     public (float X0, float Y0, float X1, float Y1)? ScreenRect { get; set; }
+    /// <summary>A lasso being drawn, on the screen: it closes from its end back to its start.</summary>
+    public IReadOnlyList<(float X, float Y)>? ScreenPath { get; set; }
+    /// <summary>Where the cursor is while the lasso is drawn: a thin dash from it to the start shows how it will close.</summary>
+    public (float X, float Y)? ScreenCursor { get; set; }
+    /// <summary>
+    /// A selection box or lasso: false a window (blue, solid), true a crossing (green, dashed); null a box that selects
+    /// nothing (the zoom box), drawn as before.
+    /// </summary>
+    public bool? Crossing { get; set; }
+
+    public static readonly SKColor WindowColor = new(0xFF2563EB);
+    public static readonly SKColor CrossingColor = new(0xFF16A34A);
     public Vec3? Snap { get; set; }
     /// <summary>Objects being dragged: the scene draws them shifted by <see cref="MoveOffset"/> until the move is applied.</summary>
     public IReadOnlyCollection<Guid>? Moving { get; set; }
@@ -31,7 +43,20 @@ public sealed class PreviewOverlay : IOverlay
         Labels.Clear();
         Markers.Clear();
         ScreenRect = null;
+        ScreenPath = null;
+        ScreenCursor = null;
+        Crossing = null;
         Snap = null;
+    }
+
+    /// <summary>The fill and the line of a selection outline: blue and solid for a window, green and dashed for a crossing.</summary>
+    private (SKPaint Fill, SKPaint Line) SelectionPaints()
+    {
+        var color = Crossing == true ? CrossingColor : WindowColor;
+        var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = color.WithAlpha(0x30) };
+        var line = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, Color = color };
+        if (Crossing != false) line.PathEffect = SKPathEffect.CreateDash(new[] { 5f, 3f }, 0);
+        return (fill, line);
     }
 
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
@@ -75,11 +100,33 @@ public sealed class PreviewOverlay : IOverlay
         }
         if (ScreenRect is var (x0, y0, x1, y1))
         {
-            fill.Color = new SKColor(0x302563EB);
-            var r = new SKRect(Math.Min(x0, x1), Math.Min(y0, y1), Math.Max(x0, x1), Math.Max(y0, y1));
-            c.DrawRect(r, fill);
-            stroke.Color = new SKColor(0xFF2563EB);
-            c.DrawRect(r, stroke);
+            var (f, l) = SelectionPaints();
+            using (f)
+            using (l)
+            {
+                var r = new SKRect(Math.Min(x0, x1), Math.Min(y0, y1), Math.Max(x0, x1), Math.Max(y0, y1));
+                c.DrawRect(r, f);
+                c.DrawRect(r, l);
+            }
+        }
+        if (ScreenPath is { Count: > 0 } lasso)
+        {
+            var (f, l) = SelectionPaints();
+            using (f)
+            using (l)
+            using (var path = new SKPath { FillType = SKPathFillType.Winding })
+            {
+                path.MoveTo(lasso[0].X, lasso[0].Y);
+                for (int i = 1; i < lasso.Count; i++) path.LineTo(lasso[i].X, lasso[i].Y);
+                if (ScreenCursor is var (cx, cy)) path.LineTo(cx, cy);
+                // the inside as it will be selected: closed, by the nonzero rule
+                using (var closed = new SKPath(path)) { closed.Close(); c.DrawPath(closed, f); }
+                c.DrawPath(path, l);
+                // how it closes: a thin dash from the cursor back to the start
+                using var back = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = l.Color.WithAlpha(0xA0), PathEffect = SKPathEffect.CreateDash(new[] { 3f, 3f }, 0) };
+                var (ex, ey) = ScreenCursor ?? lasso[^1];
+                c.DrawLine(ex, ey, lasso[0].X, lasso[0].Y, back);
+            }
         }
         if (Snap is Vec3 s)
         {

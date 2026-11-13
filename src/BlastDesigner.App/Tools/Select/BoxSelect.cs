@@ -29,7 +29,10 @@ public sealed class BoxSelect : ISelectGesture
 
     public void Drag(ToolPointer p, PreviewOverlay preview)
     {
-        if (_down != null) preview.ScreenRect = ((float)_down.X, (float)_down.Y, (float)p.X, (float)p.Y);
+        if (_down == null) return;
+        preview.ScreenRect = ((float)_down.X, (float)_down.Y, (float)p.X, (float)p.Y);
+        // drawn from right to left: a crossing, green and dashed
+        preview.Crossing = p.X < _down.X;
     }
 
     public void Release(ToolPointer p)

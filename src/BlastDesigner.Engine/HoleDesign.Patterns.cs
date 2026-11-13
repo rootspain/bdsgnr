@@ -25,6 +25,15 @@ public sealed class PatternRebuildOptions
     public SurfaceEntity? GradeSurface { get; set; }
     /// <summary>Layer of new holes; the holes layer when null.</summary>
     public Layer? Layer { get; set; }
+
+    /// <summary>The options of a project: collars on its bench surface, lengths to its grade, new holes on the holes layer.</summary>
+    public static PatternRebuildOptions For(BlastProject p, PatternBearingMode bearing = PatternBearingMode.Rotate) => new()
+    {
+        Bearing = bearing,
+        CollarSurface = p.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench),
+        GradeSurface = p.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Grade),
+        Layer = p.GetOrCreateLayer(StandardLayers.Holes, 0xFF1E3A8A, "Design")
+    };
 }
 
 /// <summary>Why a pattern cannot be laid out again: an English format with the label of the hole as {0}.</summary>
@@ -131,7 +140,7 @@ public static partial class HoleDesign
         }
         var c = AreaCentre(polygon);
         var dc = c - origin;
-        return new HolePattern
+        var pattern = new HolePattern
         {
             Outline = FlatOutline(polygon, c.Z),
             Center = c,
@@ -149,8 +158,106 @@ public static partial class HoleDesign
             HoleDefaults = new PatternHoleDefaults
             {
                 Diameter = hp.Diameter, Angle = hp.Angle, Bearing = hp.Bearing, Subdrill = hp.Subdrill, BenchHeight = hp.BenchHeight, HoleType = hp.HoleType, Dummy = hp.Dummy
-            }
+            },
+            FaceEdge = pp.FaceEdge is int k && k >= 0 && k < polygon.Count ? k : null,
+            Alignment = pp.Alignment
         };
+        if (pattern.FaceEdge != null || pattern.Alignment != RowAlignment.Left)
+        {
+            Anchor(pattern);
+            pattern.InitialAzimuth = pattern.Azimuth;
+        }
+        return pattern;
+    }
+
+    /// <summary>The longest side of a polygon (from point k to point k + 1, the last back to the first).</summary>
+    public static int LongestEdge(IReadOnlyList<Vec3> polygon)
+    {
+        int best = 0;
+        double len = -1;
+        for (int k = 0; k < polygon.Count; k++)
+        {
+            var d = Vec3.Distance2D(polygon[k], polygon[(k + 1) % polygon.Count]);
+            if (d > len) (best, len) = (k, d);
+        }
+        return best;
+    }
+
+    /// <summary>Bearing straight out of a polygon across its side k (from point k to point k + 1), degrees from north.</summary>
+    public static double OutwardBearing(IReadOnlyList<Vec3> polygon, int k)
+    {
+        var a = polygon[k];
+        var b = polygon[(k + 1) % polygon.Count];
+        var o = polygon[0];
+        double area = 0;
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            var p = polygon[i] - o;
+            var q = polygon[(i + 1) % polygon.Count] - o;
+            area += p.X * q.Y - q.X * p.Y;
+        }
+        // anticlockwise (positive area) the outside is on the right of a side, clockwise on its left
+        double dx = b.X - a.X, dy = b.Y - a.Y;
+        var (nx, ny) = area >= 0 ? (dy, -dx) : (-dy, dx);
+        return GeoMath.NormalizeBearing(Math.Atan2(nx, ny) / GeoMath.Deg);
+    }
+
+    /// <summary>
+    /// Lays the grid on its outline: with a face side the direction across that side, the first row half a burden inside it;
+    /// else the first row half a burden from the face side of the outline. Along a row the holes start half a spacing from the
+    /// left end of the outline, from its right end, or with the same room at both (<see cref="HolePattern.Alignment"/>).
+    /// </summary>
+    public static void Anchor(HolePattern pat)
+    {
+        if (pat.Outline.Count < 3 || pat.Burden <= 0 || pat.Spacing <= 0) return;
+        if (pat.FaceEdge is int k && (k < 0 || k >= pat.Outline.Count)) pat.FaceEdge = null;
+        if (pat.FaceEdge is int edge) pat.Azimuth = OutwardBearing(pat.Outline, edge);
+        var (u, v) = PatternAxes(pat.Azimuth);
+        double minU = double.MaxValue, maxU = double.MinValue, minV = double.MaxValue;
+        foreach (var q in pat.Outline)
+        {
+            var d = q - pat.Center;
+            var du = d.X * u.X + d.Y * u.Y;
+            minU = Math.Min(minU, du);
+            maxU = Math.Max(maxU, du);
+            minV = Math.Min(minV, d.X * v.X + d.Y * v.Y);
+        }
+        if (pat.FaceEdge is int f)
+        {
+            // the line of the side, not the furthest point: a polygon bent out beyond it keeps the first row along the side
+            var d = pat.Outline[f] - pat.Center;
+            minV = d.X * v.X + d.Y * v.Y;
+        }
+        pat.PhaseV = minV + pat.Burden / 2;
+        // between the holes half a spacing in from both ends: what is left over goes to the right, both sides or the left
+        var span = maxU - minU - pat.Spacing;
+        var count = span >= 0 ? Math.Floor(span / pat.Spacing + 1e-9) + 1 : 1;
+        var spare = span - (count - 1) * pat.Spacing;
+        var share = pat.Alignment switch { RowAlignment.Centre => 0.5, RowAlignment.Right => 1.0, _ => 0.0 };
+        pat.PhaseU = minU + pat.Spacing / 2 + spare * share;
+    }
+
+    /// <summary>
+    /// Lays a pattern out on its polygon again after the polygon was edited: on its face side the grid follows the side (its
+    /// direction and first row), else it stays where it is and only the outline changes. Holes go to their nodes, those whose
+    /// node left the outline are deleted, new nodes get holes, as <see cref="RebuildPattern"/>.
+    /// </summary>
+    public static PatternRebuildReport FitToOutline(BlastProject p, HolePattern pat, IReadOnlyList<Vec3> polygon, PatternRebuildOptions? o = null)
+    {
+        o ??= PatternRebuildOptions.For(p);
+        if (RebuildRefusal(p, pat, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        pat.Outline = FlatOutline(polygon, pat.Center.Z);
+        if (pat.FaceEdge != null || pat.Alignment != RowAlignment.Left)
+        {
+            if (pat.FaceEdge is int k && k >= polygon.Count) pat.FaceEdge = LongestEdge(polygon);
+            var c = AreaCentre(polygon);
+            pat.Center = c.WithZ(pat.Center.Z);
+            var before = pat.Azimuth;
+            Anchor(pat);
+            // the holes turn with the side, as with a turn of the grid
+            o.BearingDelta = PatternTurn.Turn(before, pat.Azimuth);
+        }
+        return RebuildPattern(p, pat, o);
     }
 
     /// <summary>Fills a polygon with a rectangular or staggered pattern and gives the grid it was laid out on.</summary>
@@ -238,6 +345,8 @@ public static partial class HoleDesign
         o ??= new PatternRebuildOptions();
         if (RebuildRefusal(p, pat, o) is { } no) return new PatternRebuildReport { Refusal = no };
         pat.Azimuth = GeoMath.NormalizeBearing(pat.Azimuth + delta);
+        // turned by hand: the grid no longer goes along a side of its polygon
+        pat.FaceEdge = null;
         if (pat.RotateOrientation) p.Header.BlastOrientation = GeoMath.NormalizeBearing(p.Header.BlastOrientation + delta);
         o.BearingDelta = delta;
         return RebuildPattern(p, pat, o);
@@ -262,17 +371,7 @@ public static partial class HoleDesign
     {
         pat.Burden = burden;
         pat.Spacing = spacing;
-        if (pat.Outline.Count < 3) return;
-        var (u, v) = PatternAxes(pat.Azimuth);
-        double minU = double.MaxValue, minV = double.MaxValue;
-        foreach (var q in pat.Outline)
-        {
-            var d = q - pat.Center;
-            minU = Math.Min(minU, d.X * u.X + d.Y * u.Y);
-            minV = Math.Min(minV, d.X * v.X + d.Y * v.Y);
-        }
-        pat.PhaseU = minU + spacing / 2;
-        pat.PhaseV = minV + burden / 2;
+        Anchor(pat);
     }
 
     /// <summary>

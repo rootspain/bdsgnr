@@ -17,9 +17,20 @@ public interface IMovePreviewOverlay : IOverlay
     void Draw(SKCanvas canvas, Camera camera, BlastProject project, ISet<Guid>? moved, Vec3 offset);
 }
 
-public sealed class SceneOptions
+public sealed record SceneOptions
 {
     public ISet<Guid> Selection { get; init; } = new HashSet<Guid>();
+    /// <summary>
+    /// The selected objects get a halo, as the hole labels do: drawn once more over the scene, round a band in a colour
+    /// against the selection colour, so they read over a surface of any colour.
+    /// </summary>
+    public bool SelectionHalo { get; init; }
+    /// <summary>How far the halo reaches out of a selected object, px (1 or 2).</summary>
+    public int SelectionHaloPx { get; init; } = 2;
+    /// <summary>How much thicker a selected object is drawn than its line, px (the collar of a hole half as much); 0 as thick.</summary>
+    public float SelectionExtra { get; init; } = 2;
+    /// <summary>The second pass of <see cref="SelectionHalo"/>: only the selected objects, no background, grid or legends.</summary>
+    public bool HaloPass { get; init; }
     public SKColor Background { get; init; } = SKColors.White;
     public SKColor SelectionColor { get; init; } = new(0xFFFF00FF);
     public float CollarPixels { get; init; } = 6;
@@ -132,8 +143,9 @@ public static class PlanRenderer
     {
         _dark = IsDark(opt.Background);
         _topInset = opt.TopInset;
-        using (var bg = new SKPaint { Color = opt.Background, Style = SKPaintStyle.Fill })
-            canvas.DrawRect(0, 0, (float)cam.Width, (float)cam.Height, bg);
+        if (!opt.HaloPass)
+            using (var bg = new SKPaint { Color = opt.Background, Style = SKPaintStyle.Fill })
+                canvas.DrawRect(0, 0, (float)cam.Width, (float)cam.Height, bg);
         var view = project.View;
         var visibleLayers = project.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
         var layerById = project.Layers.ToDictionary(l => l.Id);
@@ -173,11 +185,11 @@ public static class PlanRenderer
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = Ink, Typeface = SKTypeface.Default };
 
-        if (opt.ShowGrid ?? view.ShowGrid) DrawGrid(canvas, cam, stroke, text);
+        if (!opt.HaloPass && (opt.ShowGrid ?? view.ShowGrid)) DrawGrid(canvas, cam, stroke, text);
         // a sheet of a section asks for its grid: the views on the screen go by the switch of the plan, and have none
-        if (opt.ShowGrid == true && opt.SliceHalfWidth != null && cam.Pitch == 0) DrawSectionGrid(canvas, cam, stroke, text);
+        if (!opt.HaloPass && opt.ShowGrid == true && opt.SliceHalfWidth != null && cam.Pitch == 0) DrawSectionGrid(canvas, cam, stroke, text);
 
-        var entities = project.Entities.Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity)).ToList();
+        var entities = project.Entities.Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity) && (!opt.HaloPass || opt.Selection.Contains(e.Id))).ToList();
         if (clip != null) entities = entities.SelectMany(e => CutByBlocks(clip, e)).ToList();
         if (view.ReverseDrawOrder) entities.Reverse();
 
@@ -196,7 +208,8 @@ public static class PlanRenderer
         // not drawn, or with the eye (View ▸ hidden paler) drawn at a quarter of the opacity of the surfaces, which then
         // also go paler behind each other. In the plan lines and points stay as they are (a 2D drawing at 0 would go under
         // every surface): only the surfaces go paler with the eye. Worked out for every frame, coarser while the camera moves.
-        var shownSurfaces = view.ShowSurfaces ? entities.OfType<SurfaceEntity>().ToList() : new List<SurfaceEntity>();
+        // the halo pass has no surfaces of its own (their outer edges only, at the end): no depth, no order to sort
+        var shownSurfaces = view.ShowSurfaces && !opt.HaloPass ? entities.OfType<SurfaceEntity>().ToList() : new List<SurfaceEntity>();
         var hiddenAlpha = (byte)((opt.SurfaceAlpha ?? (byte)(_dark ? 70 : 150)) / 4);
         // while the camera turns or zooms the map is coarser (quicker), and fine again once it stops
         var depth = (view.FadeHidden || !cam.IsPlan || shownSurfaces.Count > 1) && shownSurfaces.Count > 0
@@ -205,7 +218,8 @@ public static class PlanRenderer
         var paleLines = view.FadeHidden;
         // Surfaces whole, far to near by their nearest point; then the lines by their segments, far to near.
         var batched = new HashSet<Entity>();
-        DrawSurfacesAndLines();
+        // the halo pass draws its few lines one by one with the other objects, and leaves the order of the scene as it is
+        if (!opt.HaloPass) DrawSurfacesAndLines();
 
         // Plain point crosses go into one batch per colour and width: thousands of survey points as two lines each would
         // be thousands of draw calls a frame, the batch is one.
@@ -221,7 +235,7 @@ public static class PlanRenderer
                 var selected = opt.Selection.Contains(e.Id);
                 var crossColor = selected ? opt.SelectionColor : ColorOf(e);
                 if (lineDepth != null && paleLines && !selected && lineDepth.Hidden(x, y, (float)cam.Depth(pe.Position))) crossColor = crossColor.WithAlpha(Math.Min(crossColor.Alpha, hiddenAlpha));
-                var key = (crossColor, (float)((layerById.TryGetValue(e.LayerId, out var pl) ? pl.LineWidth : 1) * (selected ? 2 : 1)));
+                var key = (crossColor, (float)((layerById.TryGetValue(e.LayerId, out var pl) ? pl.LineWidth : 1) + (selected ? opt.SelectionExtra : 0)));
                 if (!crosses.TryGetValue(key, out var list)) crosses[key] = list = new List<SKPoint>();
                 // on pixel centres: the crosses are drawn without antialiasing and stay sharp
                 float cx = MathF.Floor(x) + 0.5f, cy = MathF.Floor(y) + 0.5f;
@@ -330,7 +344,7 @@ public static class PlanRenderer
                     DrawPolygonFill(canvas, cam, ((PolylineEntity)e).Points, fill);
                     continue;
                 }
-                var width = (float)((layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1) * (selected ? 2 : 1) * (e is PolylineEntity { Kind: LineKind.CrossSection } ? 2 : 1));
+                var width = (float)((layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1) * (e is PolylineEntity { Kind: LineKind.CrossSection } ? 2 : 1) + (selected ? opt.SelectionExtra : 0));
                 if (look != (color, width)) { Flush(); look = (color, width); }
                 IReadOnlyList<Vec3> pts = e is CircleEntity c ? circles[c] : ((PolylineEntity)e).Points;
                 Vec3 a = pts[seg], b = pts[(seg + 1) % pts.Count];
@@ -372,7 +386,10 @@ public static class PlanRenderer
             if (lineDepth != null && paleLines && !selected && e is PointEntity or TextEntity or ArrowEntity or DimensionEntity && lineDepth.Hidden(cam, e.GetVertices().First()))
                 color = color.WithAlpha(Math.Min(color.Alpha, hiddenAlpha));
             stroke.Color = color;
-            stroke.StrokeWidth = (float)((layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1) * (selected ? 2 : 1));
+            // a selected object a couple of pixels thicker than its line; a section line, twice as thick, too
+            var lineWidth = layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1;
+            if (e is PolylineEntity { Kind: LineKind.CrossSection }) lineWidth *= 2;
+            stroke.StrokeWidth = (float)(lineWidth + (selected ? opt.SelectionExtra : 0));
             fill.Color = color;
             text.Color = color;
             var showText = view.ShowText && (lay?.ShowText ?? true);
@@ -382,9 +399,8 @@ public static class PlanRenderer
                     // drawn with the surfaces, far to near; here only a dragged one, and the label of a contour
                     if (!batched.Contains(pl))
                     {
-                        if (pl.Kind == LineKind.CrossSection) stroke.StrokeWidth *= 2;
                         DrawPolyline(canvas, cam, pl.Points, pl.Closed, stroke);
-                        if (pl.Closed && pl.Kind == LineKind.ClearanceZone)
+                        if (pl.Closed && pl.Kind == LineKind.ClearanceZone && !opt.HaloPass)
                         {
                             fill.Color = color.WithAlpha(30);
                             DrawPolygonFill(canvas, cam, pl.Points, fill);
@@ -447,7 +463,7 @@ public static class PlanRenderer
         // each end of each tie (with a survey under the blast that was most of the frame).
         Dictionary<Guid, Entity>? byId = null;
         var showTies = view.ShowTies || opt.HideGeometry;
-        var showRows = view.ShowRows && !opt.HideGeometry;
+        var showRows = view.ShowRows && !opt.HideGeometry && !opt.HaloPass;
         if (showTies || showRows)
         {
             byId = new Dictionary<Guid, Entity>(project.Entities.Count);
@@ -463,7 +479,8 @@ public static class PlanRenderer
             foreach (var h in holes) { var mc = BeginMove(h); DrawHoleTracks(canvas, cam, h, view); EndMove(mc); }
         // Depth lines and charge columns of all holes in one batch, under the collars: in 3D with the charge shown they
         // were three or four thick lines per hole, thousands of draws a frame. Dragged holes draw their own.
-        _colorBy = ColorRange(project, holes);
+        // the halo pass keeps the colour range of the scene: the selected holes alone would make another one
+        if (!opt.HaloPass) _colorBy = ColorRange(project, holes);
         var columns = new LineMesh();
         foreach (var h in holes)
             if (moved?.Contains(h.Id) != true) DrawHoleColumn(canvas, cam, project, h, opt, fill, columns);
@@ -475,7 +492,7 @@ public static class PlanRenderer
             DrawHole(canvas, cam, project, h, opt, stroke, fill);
             EndMove(mc);
         }
-        if (view.ShowBurdenMarker) DrawBurdenMarkers(canvas, cam, project, holes, text);
+        if (view.ShowBurdenMarker && !opt.HaloPass) DrawBurdenMarkers(canvas, cam, project, holes, text);
         foreach (var ip in entities.OfType<InitiationPoint>())
         {
             var mc = BeginMove(ip);
@@ -484,7 +501,8 @@ public static class PlanRenderer
         }
         var holeLabels = new TextBatch();
         var labelSides = HoleLabelLayout.Sides(view);
-        foreach (var h in holes)
+        // the halo pass leaves the hole labels to the scene: they have their own outline, a second one made blots of them
+        foreach (var h in opt.HaloPass ? new List<Hole>() : holes)
         {
             // labels of dragged holes follow them at once, the rest go into one batch
             if (moved?.Contains(h.Id) == true) { var mc = BeginMove(h); var own = new TextBatch(); DrawHoleLabels(cam, project, h, view, labelSides, opt, text, own); own.Flush(canvas, text, halo: true); EndMove(mc); }
@@ -493,13 +511,26 @@ public static class PlanRenderer
         // outlined: the labels read over the surfaces, whatever their colour
         holeLabels.Flush(canvas, text, halo: true);
         var productsKey = ProductsKey(project);
-        foreach (var h in holes)
+        foreach (var h in opt.HaloPass ? new List<Hole>() : holes)
         {
             if (!LoadingWarning(project, h, productsKey)) continue;
             var mc = BeginMove(h);
             DrawLoadingWarning(canvas, cam, h, opt, fill);
             EndMove(mc);
         }
+
+        if (opt.HaloPass)
+        {
+            // a selected surface by its outer edge only: a halo round the whole mesh would cover it
+            foreach (var s in entities.OfType<SurfaceEntity>())
+            {
+                var mc = BeginMove(s);
+                DrawSurfaceEdge(canvas, cam, s, opt.SelectionColor);
+                EndMove(mc);
+            }
+            return;
+        }
+        if (opt.SelectionHalo && opt.SelectionHaloPx > 0 && opt.Selection.Count > 0) DrawSelectionHalo(canvas, cam, project, opt);
 
         if (opt.AnalysisOverlays.Count > 0)
         {
@@ -524,6 +555,88 @@ public static class PlanRenderer
         if (view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, project, holes, fill, text);
         if (view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, fill, text);
         if (opt.DrawSummaryBlock && project.Summary.Visible) DrawSummary(canvas, cam, project, fill, stroke, text);
+    }
+
+    /// <summary>The colour of the halo against the selection colour, as for the hole labels: dark round a light one, light round a dark one.</summary>
+    public static SKColor HaloColor(SKColor selection) =>
+        (0.2126 * selection.Red + 0.7152 * selection.Green + 0.0722 * selection.Blue) / 255 > 0.45 ? new SKColor(0, 0, 0, 200) : new SKColor(255, 255, 255, 215);
+
+    /// <summary>
+    /// The selected objects once more over the scene, on a layer whose filter puts a band in <see cref="HaloColor"/> round
+    /// all that is drawn on it (the drawing grown by <see cref="SceneOptions.SelectionHaloPx"/>), and the drawing over the band.
+    /// </summary>
+    private static void DrawSelectionHalo(SKCanvas canvas, Camera cam, BlastProject project, SceneOptions opt)
+    {
+        var screen = new SKRect(0, 0, (float)cam.Width, (float)cam.Height);
+        // the layer and its filter cover the selected objects only, with room for their labels; a dragged selection the view
+        var box = SKRect.Empty;
+        if (opt.MovedEntities is { Count: > 0 }) box = screen;
+        else
+            foreach (var e in project.Entities)
+            {
+                if (!opt.Selection.Contains(e.Id)) continue;
+                var b = e.GetBounds();
+                if (b.IsEmpty) continue;
+                for (int i = 0; i < 8; i++)
+                {
+                    var (x, y) = cam.ToScreen(new Vec3((i & 1) == 0 ? b.Min.X : b.Max.X, (i & 2) == 0 ? b.Min.Y : b.Max.Y, (i & 4) == 0 ? b.Min.Z : b.Max.Z));
+                    box = box.IsEmpty ? new SKRect(x, y, x + 0.01f, y + 0.01f) : SKRect.Union(box, new SKRect(x, y, x + 0.01f, y + 0.01f));
+                }
+            }
+        if (box.IsEmpty) return;
+        box.Inflate(80, 40);
+        if (!box.IntersectsWith(screen)) return;
+        box.Intersect(screen);
+        using var tint = SKColorFilter.CreateBlendMode(HaloColor(opt.SelectionColor), SKBlendMode.SrcIn);
+        using var grown = SKImageFilter.CreateDilate(opt.SelectionHaloPx, opt.SelectionHaloPx);
+        using var band = SKImageFilter.CreateColorFilter(tint, grown);
+        using var self = SKImageFilter.CreateOffset(0, 0);
+        using var both = SKImageFilter.CreateMerge(band, self);
+        using var paint = new SKPaint { ImageFilter = both };
+        canvas.SaveLayer(box, paint);
+        Render(canvas, cam, project, opt with { HaloPass = true });
+        canvas.Restore();
+    }
+
+    private sealed class EdgeCache { public int Key; public (int A, int B)[] Edges = Array.Empty<(int, int)>(); }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SurfaceEntity, EdgeCache> _edges = new();
+
+    /// <summary>The outer edge of a surface: the sides of its triangles that no other triangle shares. Kept while the mesh stays.</summary>
+    public static IReadOnlyList<(int A, int B)> OuterEdges(SurfaceEntity s)
+    {
+        var cache = _edges.GetOrCreateValue(s);
+        var key = HashCode.Combine(GeometryFingerprint(s), s.Triangles.Count);
+        lock (cache)
+        {
+            if (cache.Key == key && (cache.Edges.Length > 0 || s.Triangles.Count == 0)) return cache.Edges;
+            var count = new Dictionary<(int, int), int>();
+            var t = s.Triangles;
+            for (int i = 0; i + 2 < t.Count; i += 3)
+                for (int k = 0; k < 3; k++)
+                {
+                    int a = t[i + k], b = t[i + (k + 1) % 3];
+                    var e = a < b ? (a, b) : (b, a);
+                    count[e] = count.TryGetValue(e, out var n) ? n + 1 : 1;
+                }
+            cache.Edges = count.Where(x => x.Value == 1).Select(x => x.Key).ToArray();
+            cache.Key = key;
+            return cache.Edges;
+        }
+    }
+
+    private static void DrawSurfaceEdge(SKCanvas canvas, Camera cam, SurfaceEntity s, SKColor color)
+    {
+        using var path = new SKPath();
+        foreach (var (a, b) in OuterEdges(s))
+        {
+            if (a >= s.Vertices.Count || b >= s.Vertices.Count) continue;
+            var (ax, ay) = cam.ToScreen(s.Vertices[a]);
+            var (bx, by) = cam.ToScreen(s.Vertices[b]);
+            path.MoveTo(ax, ay);
+            path.LineTo(bx, by);
+        }
+        using var pen = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2, Color = color };
+        canvas.DrawPath(path, pen);
     }
 
     /// <summary>What of an entity is drawn inside the blocks: itself, the parts of a line, the cut part of a surface, or nothing.</summary>
@@ -1466,7 +1579,8 @@ public static class PlanRenderer
 
         bool fired = opt.AnimationTimeMs is double at && h.FiringTimeMs is double ft && ft <= at;
         stroke.Color = color;
-        stroke.StrokeWidth = selected ? 2.5f : 1.5f;
+        // the collar: 1 px thicker when selected, not 2, it is small
+        stroke.StrokeWidth = 1.5f + (selected && opt.SelectionExtra > 0 ? 1 : 0);
         if (h.IsDummy)
         {
             c.DrawLine(x - r, y - r, x + r, y + r, stroke);

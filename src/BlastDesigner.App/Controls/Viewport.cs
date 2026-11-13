@@ -121,6 +121,9 @@ public sealed class Viewport : Control
             Selection = opt.Selection,
             Background = opt.Background,
             SelectionColor = opt.SelectionColor,
+            SelectionHalo = opt.SelectionHalo,
+            SelectionHaloPx = opt.SelectionHaloPx,
+            SelectionExtra = opt.SelectionExtra,
             CollarPixels = opt.CollarPixels,
             DrawSummaryBlock = opt.DrawSummaryBlock,
             DrawHoleLegend = opt.DrawHoleLegend,
@@ -427,16 +430,22 @@ public sealed class Viewport : Control
         return best;
     }
 
-    /// <summary>Entities whose geometry lies fully inside a screen rectangle.</summary>
-    public IEnumerable<Entity> InRect(double x0, double y0, double x1, double y1, bool crossing)
+    /// <summary>Entities inside a screen rectangle: fully (window), or with any part (crossing).</summary>
+    public IEnumerable<Entity> InRect(double x0, double y0, double x1, double y1, bool crossing) =>
+        InShape(Lasso.Rect(x0, y0, x1, y1), crossing);
+
+    /// <summary>
+    /// Entities inside a closed outline on the screen (a box or a lasso). Window: all the vertices inside and no line leaves
+    /// the outline. Crossing: a vertex inside, or a line going through the outline even with no vertex in it.
+    /// </summary>
+    public IEnumerable<Entity> InShape(Lasso shape, bool crossing)
     {
         var project = Project;
-        if (project == null) yield break;
+        if (project == null || shape.Empty) yield break;
         var layers = project.Layers.ToDictionary(l => l.Id);
         var hidden = OptionsSource?.Invoke().HiddenEntities;
         // the visible blocks: what is outside them is not drawn, nor picked
         var clip = BlockClip.Of(project);
-        var (minX, maxX, minY, maxY) = (Math.Min(x0, x1), Math.Max(x0, x1), Math.Min(y0, y1), Math.Max(y0, y1));
         foreach (var e in project.Entities)
         {
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || layer.Frozen) continue;
@@ -446,9 +455,33 @@ public sealed class Viewport : Control
                 : clip != null && e is SurfaceEntity se ? PlanRenderer.CutSurface(clip, se)?.Vertices.ToArray() ?? Array.Empty<Vec3>()
                 : e.GetVertices().ToArray();
             if (verts.Length == 0) continue;
-            bool Inside(Vec3 v) { var (x, y) = Camera.ToScreen(v); return x >= minX && x <= maxX && y >= minY && y <= maxY; }
-            if (crossing ? verts.Any(Inside) : verts.All(Inside)) yield return e;
+            bool Inside(Vec3 v) { var (x, y) = Camera.ToScreen(v); return shape.Contains(x, y); }
+            var lines = Segments(e, clip);
+            bool Cuts(Vec3 a, Vec3 b) { var (ax, ay) = Camera.ToScreen(a); var (bx, by) = Camera.ToScreen(b); return shape.CutsEdge(ax, ay, bx, by); }
+            if (crossing ? verts.Any(Inside) || lines.Any(s => Cuts(s.A, s.B)) : verts.All(Inside) && !lines.Any(s => Cuts(s.A, s.B))) yield return e;
         }
+    }
+
+    /// <summary>The lines of an entity as drawn, for a box or a lasso that goes through them; none for holes and surfaces.</summary>
+    private static IEnumerable<(Vec3 A, Vec3 B)> Segments(Entity e, BlockClip? clip)
+    {
+        static IEnumerable<(Vec3, Vec3)> Run(IReadOnlyList<Vec3> pts, bool closed)
+        {
+            for (int i = 1; i < pts.Count; i++) yield return (pts[i - 1], pts[i]);
+            if (closed && pts.Count > 2) yield return (pts[^1], pts[0]);
+        }
+        return e switch
+        {
+            PolylineEntity pl when clip != null => clip.Pieces(pl.Points, pl.Closed).SelectMany(p => Run(p, false)),
+            PolylineEntity pl => Run(pl.Points, pl.Closed),
+            CircleEntity c => Run(c.ToPolygon(48), true),
+            TimingLineEntity tl => Run(tl.Points, false),
+            TieEntity t => new[] { (t.FromPos, t.ToPos) },
+            ArrowEntity a => new[] { (a.Start, a.End) },
+            DimensionEntity d => new[] { (d.Start, d.End) },
+            BlockEntity b => BlockEntity.Edges.Select(x => (b.Corner(x.A), b.Corner(x.B))),
+            _ => Enumerable.Empty<(Vec3, Vec3)>()
+        };
     }
 
     private (Vec3 Point, bool Snapped) Snap(double sx, double sy, Vec3 world)

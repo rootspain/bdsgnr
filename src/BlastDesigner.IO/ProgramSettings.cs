@@ -113,6 +113,10 @@ public sealed class ProgramSettings
     public string LastTemplate { get; set; } = string.Empty;
     public uint BackgroundColor { get; set; } = DarkBackground;
     public uint SelectionColor { get; set; } = 0xFF4C9BFF;
+    /// <summary>Selected objects are drawn 2 px thicker than their line (the collar of a hole 1 px).</summary>
+    public bool SelectionThick { get; set; } = true;
+    /// <summary>The contrasting halo round selected objects, px: 0 (off), 1 or 2.</summary>
+    public int SelectionHaloPx { get; set; } = 2;
     /// <summary>Fill of the circle that turns a pattern (Select tool) when the grid can be turned.</summary>
     public uint PatternTurnColor { get; set; } = DefaultPatternTurn;
     /// <summary>Fill of the circle of a pattern that cannot be turned (its holes drilled, locked and so on).</summary>

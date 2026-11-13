@@ -31,6 +31,8 @@ public sealed partial class MainViewModel : ObservableObject
         View.ProjectSource = () => Doc?.Project;
         View.ToolSource = () => _tool;
         View.OptionsSource = BuildSceneOptions;
+        // an edited polygon whose pattern cannot be laid out again: the status bar says why
+        PatternOutlines.Refused = (_, no) => SetStatus(Loc.F(no.Reason, no.HoleLabel) + " " + Loc.T("The pattern stays as it was."));
         View.ViewMenu = ViewContextMenu;
         View.SnapEnabled = settings.SnapToObjects;
         View.TargetRadius = settings.TargetRadiusPixels;
@@ -266,6 +268,9 @@ public sealed partial class MainViewModel : ObservableObject
             Selection = Doc?.Selection ?? new HashSet<Guid>(),
             Background = new SKColor(PreviewBackground ?? Settings.BackgroundColor),
             SelectionColor = new SKColor(Settings.SelectionColor),
+            SelectionHalo = Settings.SelectionHaloPx > 0,
+            SelectionHaloPx = Math.Clamp(Settings.SelectionHaloPx, 0, 2),
+            SelectionExtra = Settings.SelectionThick ? 2 : 0,
             CollarPixels = (float)Settings.CollarSizePixels,
             Overlays = overlays,
             // cut to the visible blocks with the blast
@@ -302,6 +307,9 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     public void SelectTool() => SetTool(new SelectTool(this));
+
+    /// <summary>The Select tool with a lasso: a drag over nothing draws a curve that selects what it rings.</summary>
+    public void LassoTool() => SetTool(new SelectTool(this, lasso: true));
 
     /// <summary>Done / Enter on a tool: finish the input in progress; with nothing pending, close the tool and return to selection.</summary>
     public void CompleteTool()

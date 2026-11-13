@@ -41,6 +41,13 @@ public sealed class PatternParameters
     public int StartNumber { get; set; } = 1;
     /// <summary>Turning the grid of the pattern later turns the blast orientation with it.</summary>
     public bool RotateOrientation { get; set; }
+    /// <summary>
+    /// The side of the polygon (from point k to point k + 1) the first row runs along, half a burden inside it; the direction
+    /// is then across that side, out of the polygon, and <see cref="Orientation"/> is not used. Null: by the orientation.
+    /// </summary>
+    public int? FaceEdge { get; set; }
+    /// <summary>Where the holes of a row start, looking along the blast direction.</summary>
+    public RowAlignment Alignment { get; set; }
 }
 
 /// <summary>Hole layout operations: patterns, rows, along lines, numbering, draping to surfaces.</summary>

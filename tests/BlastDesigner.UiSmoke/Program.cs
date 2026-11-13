@@ -687,7 +687,7 @@ Step("object context menus", () =>
     }
     Check("holes", p.Holes.Take(3).Select(h => h.Id), "Apply loading rules");
     Check("polyline", p.Entities.OfType<PolylineEntity>().Where(l => !l.Closed).Take(1).Select(l => l.Id), "Add along selected polyline…");
-    Check("polygon", p.Entities.OfType<PolylineEntity>().Where(l => l.Closed).Take(1).Select(l => l.Id), "Fill selected polygon…");
+    Check("polygon", p.Entities.OfType<PolylineEntity>().Where(l => l.Closed).Take(1).Select(l => l.Id), "Pattern from polygon");
     Check("surface", p.Entities.OfType<SurfaceEntity>().Take(1).Select(s => s.Id), "Volume…");
     Check("empty", Array.Empty<Guid>(), "Paste");
 });
@@ -2349,6 +2349,9 @@ Step("section line colour in the settings", () =>
     int arrowBox = boxes.IndexOf("patternArrow"), turn = boxes.IndexOf("patternTurn"), refusedTurn = boxes.IndexOf("patternTurnRefused");
     if (arrowBox != selection + 1 || turn != arrowBox + 1 || refusedTurn != turn + 1) throw new Exception($"the colours of the pattern arrow and turn circle are not after the selection colour: {selection}, {arrowBox}, {turn}, {refusedTurn}");
     if (dlg.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "patternArrow").Text != $"#{ProgramSettings.DefaultPatternArrow & 0xFFFFFF:X6}") throw new Exception("the pattern arrow should start yellow");
+    // under the selection colour: thicker selected objects, and their halo off, 1 px or 2 px
+    if (!dlg.GetLogicalDescendants().OfType<Control>().Any(c => c.Name == "selectionThick")) throw new Exception("the settings have no switch for thicker selected objects");
+    if (dlg.GetLogicalDescendants().OfType<ComboBox>().FirstOrDefault(c => c.Name == "selectionHalo") is not { ItemCount: 3, SelectedIndex: 2 }) throw new Exception("the halo of selected objects is not a choice of off, 1 px and 2 px at 2 px");
     var turnBoxes = dlg.GetLogicalDescendants().OfType<TextBox>().Where(b => b.Name is "patternTurn" or "patternTurnRefused").Select(b => b.Text).ToList();
     if (turnBoxes[0] != $"#{ProgramSettings.DefaultPatternTurn & 0xFFFFFF:X6}" || turnBoxes[1] != $"#{ProgramSettings.DefaultPatternTurnRefused & 0xFFFFFF:X6}") throw new Exception("the pattern turn circle should start green and red: " + string.Join(", ", turnBoxes));
     dlg.GetLogicalDescendants().OfType<Button>().First(b => b.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Viewport"))).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
@@ -3606,6 +3609,129 @@ Step("hidden objects are not selectable", () =>
     if (vm.View.InRect(0, 0, w, h, true).OfType<SurfaceEntity>().Any()) throw new Exception("hidden surfaces caught by rectangle");
     vm.ToggleView(v => { v.ShowTies = true; v.ShowSurfaces = true; });
     vm.Doc.ClearSelection();
+});
+
+Step("the lasso (Q) selects what it rings: the first move right a window, left a crossing that takes a line going through", () =>
+{
+    vm.PlanView(); vm.ZoomAll(); vm.Doc!.ClearSelection(); Pump();
+    vm.LassoTool(); Pump();
+    if (vm.ActiveTool?.Name != "Lasso") throw new Exception("the lasso tool did not open: " + vm.ActiveTool?.Name);
+    var cam = vm.View.Camera;
+    var none = Avalonia.Input.KeyModifiers.None;
+    ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Left = true, ClickCount = 1, Modifiers = none };
+    double w = vm.View.Bounds.Width, h = vm.View.Bounds.Height, r = Math.Min(w, h) / 5;
+    // round the hole nearest the middle of the screen
+    var (cx, cy) = vm.Project!.Holes.Select(x => cam.ToScreen(x.Collar)).OrderBy(q => Math.Abs(q.X - w / 2) + Math.Abs(q.Y - h / 2)).Select(q => ((double)q.X, (double)q.Y)).First();
+    // a line across the middle with its ends outside the curve: no vertex in it
+    var layer = vm.Project!.Layers.First(l => l.Visible && !l.Frozen);
+    var line = new PolylineEntity { LayerId = layer.Id, Points = new List<Vec3> { cam.ToWorld(cx - 2 * r, cy), cam.ToWorld(cx + 2 * r, cy) } };
+    vm.Project.Entities.Add(line);
+    double Off(Hole hole) { var (x, y) = cam.ToScreen(hole.Collar); return Math.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)); }
+    // a circle from its bottom: dir +1 goes right first, -1 left first
+    HashSet<Guid> Lasso(int dir, string shot)
+    {
+        vm.Doc!.ClearSelection();
+        var pts = Enumerable.Range(0, 73).Select(i => { var t = Math.PI / 2 - dir * 2 * Math.PI * i / 72; return (cx + r * Math.Cos(t), cy + r * Math.Sin(t)); }).ToList();
+        vm.ActiveTool!.PointerPressed(At(pts[0].Item1, pts[0].Item2));
+        foreach (var (x, y) in pts.Skip(1).Take(60)) vm.ActiveTool.PointerMoved(At(x, y));
+        var preview = vm.View.Preview;
+        if (preview.ScreenPath is not { Count: > 20 }) throw new Exception("the curve is not drawn while dragging");
+        if (preview.Crossing != (dir < 0)) throw new Exception($"the curve shows the wrong mode: {preview.Crossing}, first move {(dir > 0 ? "right" : "left")}");
+        vm.View.Redraw(); Pump(); Shot(shot);
+        foreach (var (x, y) in pts.Skip(61)) vm.ActiveTool.PointerMoved(At(x, y));
+        vm.ActiveTool.PointerReleased(At(pts[^1].Item1, pts[^1].Item2)); Pump();
+        if (vm.View.Preview.ScreenPath != null) throw new Exception("the curve stayed after the release");
+        return vm.Doc.Selection.ToHashSet();
+    }
+    var holes = vm.Project.Holes.Where(x => vm.View.InRect(0, 0, w, h, true).Contains(x)).ToList();
+    var inside = holes.Where(x => Off(x) < r * 0.97).Select(x => x.Id).ToHashSet();
+    var outside = holes.Where(x => Off(x) > r * 1.03).Select(x => x.Id).ToHashSet();
+    if (inside.Count == 0) throw new Exception("no holes in the middle of the screen to ring");
+    var window = Lasso(+1, "92_lasso_window");
+    if (!inside.IsSubsetOf(window) || window.Overlaps(outside)) throw new Exception($"the window lasso took {window.Count}, inside {inside.Count}");
+    if (window.Contains(line.Id)) throw new Exception("a window took a line that goes out of it");
+    var crossing = Lasso(-1, "92_lasso_crossing");
+    if (!inside.IsSubsetOf(crossing) || crossing.Overlaps(outside)) throw new Exception($"the crossing lasso took the wrong holes: {crossing.Count}");
+    if (!crossing.Contains(line.Id)) throw new Exception("a crossing did not take a line going through it with no vertex inside");
+    // the box has the same rule now: a line through it is crossed, and it is green while drawn from right to left
+    if (!vm.View.InRect(cx + r, cy - r, cx - r, cy + r, true).Contains(line)) throw new Exception("a crossing box did not take a line going through it");
+    if (vm.View.InRect(cx - r, cy - r, cx + r, cy + r, false).Contains(line)) throw new Exception("a window box took a line going out of it");
+    vm.SelectTool(); Pump();
+    vm.ActiveTool!.PointerPressed(At(cx + r, cy - r));
+    vm.ActiveTool.PointerMoved(At(cx, cy));
+    vm.ActiveTool.PointerMoved(At(cx - r, cy + r));
+    if (vm.View.Preview.Crossing != true) throw new Exception("a box from right to left is not shown as a crossing");
+    vm.View.Redraw(); Pump(); Shot("92_box_crossing");
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, none);
+    vm.ActiveTool.PointerReleased(At(cx - r, cy + r)); Pump();
+    // Esc in the middle of a lasso drops it: the selection stays as it was
+    vm.LassoTool(); Pump();
+    vm.Doc!.Select(new[] { inside.First() });
+    vm.ActiveTool!.PointerPressed(At(cx, cy + r));
+    vm.ActiveTool.PointerMoved(At(cx - r, cy));
+    vm.ActiveTool.PointerMoved(At(cx, cy - r));
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, none);
+    vm.ActiveTool.PointerReleased(At(cx + r, cy)); Pump();
+    if (!vm.Doc.Selection.SetEquals(new[] { inside.First() }) || vm.View.Preview.ScreenPath != null) throw new Exception("Esc did not drop the lasso");
+    vm.Project.Entities.Remove(line);
+    vm.Doc.ClearSelection(); vm.SelectTool(); vm.View.Redraw(); Pump();
+});
+
+Step("selected objects on the plan get a halo against the selection colour", () =>
+{
+    if (!vm.BuildSceneOptions().SelectionHalo) throw new Exception("the plan draws the selection without a halo");
+    if (vm.BuildSceneOptions() is not { SelectionHaloPx: 2, SelectionExtra: 2 }) throw new Exception("by default the selection is not 2 px thicker with a 2 px halo");
+    var (thick, halo) = (vm.Settings.SelectionThick, vm.Settings.SelectionHaloPx);
+    vm.Settings.SelectionThick = false; vm.Settings.SelectionHaloPx = 0;
+    if (vm.BuildSceneOptions() is not { SelectionHalo: false, SelectionExtra: 0 }) throw new Exception("the settings of the selection look do not reach the plan");
+    (vm.Settings.SelectionThick, vm.Settings.SelectionHaloPx) = (thick, halo);
+    vm.PlanView(); vm.ZoomAll();
+    vm.Doc!.Select(vm.Project!.Rows[0].HoleIds.Concat(vm.Project.Entities.OfType<SurfaceEntity>().Take(1).Select(x => x.Id)));
+    vm.Doc.Select(vm.Project.Rows[0].HoleIds, BlastDesigner.Domain.SelectionMode.Replace); vm.ZoomSelection();
+    vm.Doc.Select(vm.Project.Rows[0].HoleIds.Concat(vm.Project.Entities.OfType<SurfaceEntity>().Take(1).Select(x => x.Id)));
+    vm.View.Redraw(); Pump(); Shot("93_selection_halo");
+    vm.ZoomAll();
+    vm.Doc.ClearSelection();
+});
+
+Step("pattern from polygon: the first row along the longest side, another side by a click, the pattern keeps with its polygon", () =>
+{
+    var steps = vm.Doc!.UndoNames.Count;
+    var c = vm.Project!.Holes.First().Collar + new Vec3(400, 0, 0);
+    // 30 × 12 m, the long side on the south
+    var poly = new PolylineEntity { Closed = true, Points = new List<Vec3> { c, c + new Vec3(30, 0, 0), c + new Vec3(30, 12, 0), c + new Vec3(0, 12, 0) } };
+    vm.Change("Add polygon", p => p.Add(poly));
+    vm.Doc.Select(new[] { poly.Id });
+    vm.ZoomSelection(); Pump();
+    vm.PatternTool(); Pump();
+    if (vm.ActiveTool is not BlastDesigner.App.Tools.PolygonPatternTool tool) throw new Exception("the pattern button with a polygon selected opened " + vm.ActiveTool?.Name);
+    if (tool.Edges[poly.Id] != 0) throw new Exception("the first row is not along the longest side: side " + tool.Edges[poly.Id]);
+    if (tool.PreviewCount == 0 || vm.View.Preview.Markers.Count != tool.PreviewCount) throw new Exception($"no preview of the holes: {tool.PreviewCount}, markers {vm.View.Preview.Markers.Count}");
+    if (window.GetLogicalDescendants().OfType<ComboBox>().FirstOrDefault(x => x.Name == "patternAlignment") is not { } align) throw new Exception("the panel has no alignment along the row");
+    vm.View.Redraw(); Pump(); Shot("94_pattern_from_polygon");
+    // a click on the east side takes it: the blast goes east
+    var cam = vm.View.Camera;
+    var (ex, ey) = cam.ToScreen(c + new Vec3(30, 6, 0));
+    tool.PointerPressed(new ToolPointer { X = ex, Y = ey, World = cam.ToWorld(ex, ey), Snapped = cam.ToWorld(ex, ey), Left = true, ClickCount = 1 });
+    if (tool.Edges[poly.Id] != 1) throw new Exception("a click on the east side did not take it: side " + tool.Edges[poly.Id]);
+    align.SelectedIndex = 1; Pump();
+    if (vm.PatternAlignment != BlastDesigner.Domain.Model.RowAlignment.Centre) throw new Exception("the alignment did not reach the pattern");
+    var before = tool.PreviewCount;
+    vm.CompleteTool(); Pump();
+    if (vm.ActiveTool is not SelectTool) throw new Exception("after Done the tool is " + vm.ActiveTool?.Name);
+    var pat = vm.Project.Patterns.Single(x => x.OutlineEntityId == poly.Id);
+    List<Hole> Holes() => vm.Project!.Holes.Where(h => h.PatternId == pat.Id).ToList();
+    if (Holes().Count != before) throw new Exception($"made {Holes().Count} holes, the preview showed {before}");
+    if (Math.Abs(pat.Azimuth - 90) > 1e-6 || pat.FaceEdge != 1) throw new Exception($"the pattern is not along the east side: {pat.Azimuth}° side {pat.FaceEdge}");
+    if (!vm.Doc.Selection.SetEquals(Holes().Select(h => h.Id))) throw new Exception("the new holes are not selected");
+    // the polygon made longer to the north: the pattern grows with it in the same undo step
+    var count = Holes().Count;
+    vm.Change("Move vertex", p => { var l = (PolylineEntity)p.FindEntity(poly.Id)!; l.Points[2] += new Vec3(0, 10, 0); l.Points[3] += new Vec3(0, 10, 0); });
+    if (Holes().Count <= count) throw new Exception($"the pattern did not follow its polygon: {count} → {Holes().Count}");
+    vm.Undo(); Pump();
+    if (Holes().Count != count) throw new Exception("undo did not take the pattern back with its polygon");
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    vm.Doc.ClearSelection(); vm.ZoomAll(); Pump();
 });
 
 Step("delete selection", () => { vm.Doc!.Select(vm.Project!.Rows[0].HoleIds); vm.DeleteSelected(); });

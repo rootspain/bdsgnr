@@ -403,4 +403,84 @@ public class RenderTests
         // kept in the file
         Assert.True(BlastDesigner.Domain.ProjectJson.Deserialize(BlastDesigner.Domain.ProjectJson.Serialize(p)).View.FadeHidden);
     }
+    /// <summary>A selected line gets a band against the selection colour round it, as the hole labels do; an unselected one none.</summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ASelectedObjectHasAHalo(bool selected, bool halo)
+    {
+        var p = BlastProject.CreateNew("halo");
+        var line = new PolylineEntity { LayerId = p.Layers[0].Id, Points = new List<Vec3> { new(-20, 0, 0), new(20, 0, 0) } };
+        p.Entities.Add(line);
+        var cam = new Camera { Width = 400, Height = 300, Scale = 4, Target = new Vec3(0, 0, 0) };
+        var options = new SceneOptions
+        {
+            Background = SKColors.Black, ShowGrid = false, DrawNorthArrow = false, DrawScaleBar = false, DrawSummaryBlock = false,
+            Selection = selected ? new HashSet<Guid> { line.Id } : new HashSet<Guid>(), SelectionColor = new SKColor(0xFFFF00FF), SelectionHalo = halo
+        };
+        using var bitmap = new SKBitmap(400, 300);
+        using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+        var (x, y) = cam.ToScreen(new Vec3(0, 0, 0));
+        // the selected line is 2 px wide: 2 px beyond its edge is the halo, or the background
+        var beside = bitmap.GetPixel((int)x, (int)Math.Round(y) - 3);
+        var lit = selected && halo;
+        Assert.Equal(lit, beside.Red > 150 && beside.Green > 150 && beside.Blue > 150);
+        // the line itself stays in the selection colour over its halo
+        if (selected) Assert.Equal(new SKColor(0xFFFF00FF), bitmap.GetPixel((int)x, (int)Math.Round(y)));
+    }
+
+    /// <summary>How many pixels of a column across a selected line of a 4 px layer are not the background.</summary>
+    private static int LitAcross(float extra, int halo)
+    {
+        var p = BlastProject.CreateNew("width");
+        p.Layers[0].LineWidth = 4;
+        var line = new PolylineEntity { LayerId = p.Layers[0].Id, Points = new List<Vec3> { new(-20, 0, 0), new(20, 0, 0) } };
+        p.Entities.Add(line);
+        var cam = new Camera { Width = 400, Height = 300, Scale = 4, Target = new Vec3(0, 0, 0) };
+        var options = new SceneOptions
+        {
+            Background = SKColors.Black, ShowGrid = false, DrawNorthArrow = false, DrawScaleBar = false, DrawSummaryBlock = false,
+            Selection = new HashSet<Guid> { line.Id }, SelectionColor = new SKColor(0xFFFF00FF),
+            SelectionExtra = extra, SelectionHalo = halo > 0, SelectionHaloPx = halo
+        };
+        using var bitmap = new SKBitmap(400, 300);
+        using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+        var (x, _) = cam.ToScreen(new Vec3(0, 0, 0));
+        return Enumerable.Range(100, 100).Count(y => { var c = bitmap.GetPixel((int)x, y); return c.Red > 30 || c.Green > 30 || c.Blue > 30; });
+    }
+
+    [Fact]
+    public void ASelectedLineIsTwoPixelsThicker_NotTwiceAsThick()
+    {
+        Assert.Equal(4, LitAcross(0, 0));
+        Assert.Equal(6, LitAcross(2, 0));
+    }
+
+    [Fact]
+    public void TheHaloIsOneOrTwoPixels()
+    {
+        Assert.Equal(4 + 2, LitAcross(0, 1));
+        Assert.Equal(4 + 4, LitAcross(0, 2));
+    }
+
+    [Fact]
+    public void TheHaloIsDarkRoundALightSelectionAndLightRoundADarkOne()
+    {
+        Assert.True(PlanRenderer.HaloColor(new SKColor(0xFFFFFF00)).Red < 50);
+        Assert.True(PlanRenderer.HaloColor(new SKColor(0xFFFF00FF)).Red > 200);
+    }
+
+    [Fact]
+    public void ASurfaceHaloGoesRoundItsOuterEdgeOnly()
+    {
+        // a square of four triangles round a middle point: the four sides are the edge, the four spokes inside are not
+        var s = new SurfaceEntity
+        {
+            Vertices = new List<Vec3> { new(0, 0, 0), new(10, 0, 0), new(10, 10, 0), new(0, 10, 0), new(5, 5, 0) },
+            Triangles = new List<int> { 0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4 }
+        };
+        var edges = PlanRenderer.OuterEdges(s).Select(e => (Math.Min(e.A, e.B), Math.Max(e.A, e.B))).OrderBy(e => e).ToList();
+        Assert.Equal(new[] { (0, 1), (0, 3), (1, 2), (2, 3) }, edges);
+    }
 }

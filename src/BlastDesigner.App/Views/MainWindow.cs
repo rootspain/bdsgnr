@@ -237,7 +237,8 @@ public sealed class MainWindow : Window
         Grid.SetColumn(rail, 0);
         _body.Children.Add(rail);
 
-        _center.RowDefinitions = new RowDefinitions("*,4,0");
+        // the plan, then the hole table (Ctrl+T) at a fixed height under it, with no splitter between
+        _center.RowDefinitions = new RowDefinitions("*,0,0");
         var plan = new Panel { ClipToBounds = true };
         plan.Children.Add(new Border { Child = _viewport, Background = Look.Field });
         plan.Children.Add(BuildPlanOverlay());
@@ -245,9 +246,6 @@ public sealed class MainWindow : Window
         plan.Children.Add(_toolPanel);
         _center.Children.Add(plan);
         _viewport.Rendering += () => Dispatcher.UIThread.Post(UpdateAnchorButtons);
-        var tableSplit = new GridSplitter { ResizeDirection = GridResizeDirection.Rows, Background = Look.Line };
-        Grid.SetRow(tableSplit, 1);
-        _center.Children.Add(tableSplit);
         Grid.SetRow(_table, 2);
         _center.Children.Add(_table);
         _table.IsVisible = false;
@@ -325,21 +323,21 @@ public sealed class MainWindow : Window
     {
         // the classic menu opens from the top left corner, where menus are looked for
         var logo = Ui.Row(6, Look.Icon("menu", 16, Look.TextSoft), new TextBlock { Text = Loc.Ui("Menu"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center });
-        var allMenu = Ui.Flat(logo, Loc.Ui("All commands in the classic menu"), height: 40);
+        var allMenu = Ui.Flat(logo, Loc.Ui("All commands in the classic menu"), height: 30);
         allMenu.Name = "mainMenu";
         allMenu.Padding = new Thickness(8, 0, 10, 0);
         Ui.DropDown(allMenu, _vm.BuildMenu, PlacementMode.BottomEdgeAlignedLeft);
-        var undo = Ui.Flat(Look.Icon("undo", 18, Look.TextSoft), Loc.Ui("Undo (Ctrl+Z)"), _vm.Undo, 34);
+        var undo = Ui.Flat(Look.Icon("undo", 18, Look.TextSoft), Loc.Ui("Undo (Ctrl+Z)"), _vm.Undo, 30);
         undo.Name = "headerUndo";
-        var redo = Ui.Flat(Look.Icon("redo", 18, Look.TextSoft), Loc.Ui("Redo (Ctrl+Y)"), _vm.Redo, 34);
+        var redo = Ui.Flat(Look.Icon("redo", 18, Look.TextSoft), Loc.Ui("Redo (Ctrl+Y)"), _vm.Redo, 30);
         redo.Name = "headerRedo";
         var history = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1, 0, 1, 0), Padding = new Thickness(6, 0), Margin = new Thickness(6, 0, 4, 0), Child = Ui.Row(2, undo, redo) };
         var left = Ui.Row(0, allMenu, history);
         left.Margin = new Thickness(4, 0, 0, 0);
 
-        var settings = Ui.Flat(Look.Icon("gear", 18, Look.TextSoft), Loc.T("Program settings…"), () => _ = _vm.EditProgramSettings(), 34);
-        var help = Ui.Flat(Look.Icon("help", 18, Look.TextSoft), Loc.Ui("Help (F1)"), () => AnalysisWindows.Help(), 34);
-        _searchButton = Ui.Flat(Look.Icon("search", 18, Look.TextSoft), Loc.Ui("Search: command, hole, setting (Ctrl+K)"), OpenSearch, 34);
+        var settings = Ui.Flat(Look.Icon("gear", 18, Look.TextSoft), Loc.T("Program settings…"), () => _ = _vm.EditProgramSettings(), 30);
+        var help = Ui.Flat(Look.Icon("help", 18, Look.TextSoft), Loc.Ui("Help (F1)"), () => AnalysisWindows.Help(), 30);
+        _searchButton = Ui.Flat(Look.Icon("search", 18, Look.TextSoft), Loc.Ui("Search: command, hole, setting (Ctrl+K)"), OpenSearch, 30);
         _searchButton.Name = "searchButton";
         _searchButton.IsVisible = false;
         _palette.Margin = new Thickness(8, 0);
@@ -359,7 +357,8 @@ public sealed class MainWindow : Window
         _searchOver.Done += () => _searchPopup.IsOpen = false;
 
         var tabs = _ribbon.TabStrip;
-        var bar = new DockPanel { Background = Look.Panel, Height = 48 };
+        // as high as the tabs: no empty band between the title bar of the window and the header
+        var bar = new DockPanel { Background = Look.Panel, Height = 31 };
         DockPanel.SetDock(left, Dock.Left);
         DockPanel.SetDock(right, Dock.Right);
         bar.Children.Add(left);
@@ -688,6 +687,7 @@ public sealed class MainWindow : Window
         {
             Key.V => _vm.SelectTool,
             Key.H => () => _vm.SetTool(new PanTool(_vm)),
+            Key.Q => _vm.LassoTool,
             Key.Z => () => _vm.SetTool(new ZoomBoxTool(_vm)),
             Key.Home => _vm.ZoomAll,
             Key.O => () => _vm.SetTool(new RotateTool(_vm, false)),

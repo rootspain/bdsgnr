@@ -201,27 +201,41 @@ public sealed partial class MainViewModel
         });
     }
 
-    public void PatternTool() =>
+    /// <summary>With closed polygons selected the Pattern from polygon tool on them, else the pattern tool that takes an outline by clicks.</summary>
+    public void PatternTool()
+    {
+        if (SelectedPolygons().Count > 0) { PolygonPatternTool(); return; }
         SetTool(new PickPointsTool(this, "Pattern", "Click the pattern boundary; double-click to finish. The pattern fills the polygon.", 3, int.MaxValue, true, async pts => await FillPolygon(pts, false))
         { Extra = { MenuEntry.Item("Set pattern properties..", Run(EditDesignData)) }, Measure = DistLabel });
+    }
 
-    public async Task FillSelectedPolygon()
+    /// <summary>The selected polygons made into patterns, with the Pattern from polygon tool (its panel and preview).</summary>
+    public Task FillSelectedPolygon()
     {
-        var poly = Doc?.SelectedEntities.OfType<PolylineEntity>().FirstOrDefault(p => p.Closed);
-        if (poly == null) { await Dialogs.Info(Loc.T("Select a closed polygon first.")); return; }
-        await FillPolygon(poly.Points, true, poly.Id);
+        PolygonPatternTool();
+        return Task.CompletedTask;
     }
 
     /// <summary>Pattern tool panel: fields kept for the session (the project has no place for them).</summary>
-    public double PatternEdgeOffset { get; set; }
-    public string PatternLabelPrefix { get; set; } = string.Empty;
+    public double PatternEdgeOffset { get => _patternEdgeOffset; set { _patternEdgeOffset = value; PatternSetupChanged?.Invoke(); } }
+    private double _patternEdgeOffset;
+    public string PatternLabelPrefix { get => _patternLabelPrefix; set { _patternLabelPrefix = value; PatternSetupChanged?.Invoke(); } }
+    private string _patternLabelPrefix = string.Empty;
     /// <summary>First hole number of the next pattern; null: the next free number.</summary>
-    public int? PatternStartNumber { get; set; }
+    public int? PatternStartNumber { get => _patternStartNumber; set { _patternStartNumber = value; PatternSetupChanged?.Invoke(); } }
+    private int? _patternStartNumber;
     public int NextPatternNumber => PatternStartNumber ?? (int.TryParse(NextHoleLabel(), out var n) ? n : 1);
     /// <summary>To level of the holes of the next pattern (<see cref="Hole.ToLevel"/>); null: none.</summary>
-    public double? PatternToLevel { get; set; }
+    public double? PatternToLevel { get => _patternToLevel; set { _patternToLevel = value; PatternSetupChanged?.Invoke(); } }
+    private double? _patternToLevel;
     /// <summary>The holes of the next pattern take as their level where their line meets the first surface, each its own.</summary>
-    public bool PatternToSurface { get; set; }
+    public bool PatternToSurface { get => _patternToSurface; set { _patternToSurface = value; PatternSetupChanged?.Invoke(); } }
+    private bool _patternToSurface;
+    /// <summary>Where the holes of the rows of the next pattern start, looking along the blast direction.</summary>
+    public RowAlignment PatternAlignment { get => _patternAlignment; set { _patternAlignment = value; PatternSetupChanged?.Invoke(); } }
+    private RowAlignment _patternAlignment;
+    /// <summary>A field of the pattern panel kept for the session changed: the preview of the Pattern from polygon tool follows.</summary>
+    public event Action? PatternSetupChanged;
 
     /// <summary>
     /// Fills a polygon with the pattern. The pattern tool takes its values from its panel; filling a selected polygon,
@@ -233,7 +247,8 @@ public sealed partial class MainViewModel
         var pp = new PatternParameters
         {
             Burden = d.Burden, Spacing = d.Spacing, Pattern = d.Pattern, Orientation = Project.Header.BlastOrientation,
-            EdgeOffset = PatternEdgeOffset, LabelPrefix = PatternLabelPrefix, StartNumber = NextPatternNumber, RotateOrientation = PatternRotateOrientation
+            EdgeOffset = PatternEdgeOffset, LabelPrefix = PatternLabelPrefix, StartNumber = NextPatternNumber, RotateOrientation = PatternRotateOrientation,
+            Alignment = PatternAlignment
         };
         if (ask)
         {

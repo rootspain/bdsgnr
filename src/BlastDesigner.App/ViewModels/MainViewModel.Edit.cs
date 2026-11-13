@@ -414,6 +414,8 @@ public sealed partial class MainViewModel
         // a copy: the window keeps editing its own after Apply, and Cancel must not leave those edits here
         s.SurfaceColors = new Dictionary<string, uint>(edited.SurfaceColors);
         s.SelectionColor = edited.SelectionColor;
+        s.SelectionThick = edited.SelectionThick;
+        s.SelectionHaloPx = edited.SelectionHaloPx;
         s.PatternArrowColor = edited.PatternArrowColor;
         s.PatternTurnColor = edited.PatternTurnColor;
         s.PatternTurnRefusedColor = edited.PatternTurnRefusedColor;

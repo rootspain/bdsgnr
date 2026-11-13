@@ -154,6 +154,12 @@ public sealed class ProjectHeader
 
 public enum PatternType { Rectangular, Staggered }
 
+/// <summary>
+/// Where the holes of the rows of a pattern start, looking along the blast direction: half a spacing from the left end of the
+/// outline, from its right end, or with the same room at both.
+/// </summary>
+public enum RowAlignment { Left, Centre, Right }
+
 public sealed class DesignData
 {
     public double Burden { get; set; } = 4;
@@ -245,6 +251,14 @@ public sealed class HolePattern
     public bool RotateOrientation { get; set; }
     /// <summary>Laying the grid out again keeps the numbers of the holes; new holes take the next free ones.</summary>
     public bool KeepLabels { get; set; }
+    /// <summary>
+    /// The side of the outline (from point k to point k + 1) the first row runs along, half a burden inside it; the blast
+    /// moves out across it. Kept when the polygon is edited, so the grid follows the side; null when the direction was given
+    /// as a bearing or the grid was turned by hand.
+    /// </summary>
+    public int? FaceEdge { get; set; }
+    /// <summary>Where the holes of a row start: from the left end of the outline, its right end, or the middle.</summary>
+    public RowAlignment Alignment { get; set; }
     /// <summary>Raised by every layout of the grid within a change, so what follows the change can tell it from a hand edit.</summary>
     [JsonIgnore] public int Revision { get; set; }
 

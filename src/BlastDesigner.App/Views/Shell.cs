@@ -235,7 +235,7 @@ public sealed class RibbonBar : DockPanel
                 Content = Ui.Row(6, new TextBlock { Text = (i + 1).ToString(), FontFamily = Look.Mono, FontSize = 10, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
                     new TextBlock { Text = Loc.Ui(_stages[i].Name), FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal, Foreground = active ? Look.Accent : Look.Muted }),
                 // from the bottom of the header: the active one runs on into its ribbon below
-                Height = 36,
+                Height = 30,
                 VerticalAlignment = VerticalAlignment.Bottom,
                 Padding = new Thickness(12, 0),
                 CornerRadius = new CornerRadius(6, 6, 0, 0),
@@ -376,7 +376,7 @@ public sealed class CommandPalette : Border
         BorderBrush = Look.Line;
         BorderThickness = new Thickness(1);
         CornerRadius = new CornerRadius(8);
-        Height = 34;
+        Height = 30;
         Padding = new Thickness(10, 0, 6, 0);
         var row = new DockPanel();
         var icon = Look.Icon("search", 16, Look.Faint);
@@ -539,17 +539,25 @@ public sealed class ToolPanel : Border
         ToolTip.SetTip(_hint, _hint.Text);
         _fields.Children.Clear();
         var d = _vm.Project!.Design;
-        if (tool.Name is "Pattern" or "Row" or "Hole" or "Dummy hole")
+        var polygonPattern = tool is PolygonPatternTool;
+        if (tool.Name is "Pattern" or "Row" or "Hole" or "Dummy hole" || polygonPattern)
         {
-            if (tool.Name is "Pattern" or "Row") _fields.Children.Add(Field("Burden, m", d.Burden, v => _vm.Change("Design data", p => p.Design.Burden = v)));
-            if (tool.Name is "Pattern" or "Row") _fields.Children.Add(Field("Spacing, m", d.Spacing, v => _vm.Change("Design data", p => p.Design.Spacing = v)));
+            if (tool.Name is "Pattern" or "Row" || polygonPattern) _fields.Children.Add(Field("Burden, m", d.Burden, v => _vm.Change("Design data", p => p.Design.Burden = v), "patternBurdenField"));
+            if (tool.Name is "Pattern" or "Row" || polygonPattern) _fields.Children.Add(Field("Spacing, m", d.Spacing, v => _vm.Change("Design data", p => p.Design.Spacing = v), "patternSpacingField"));
             _fields.Children.Add(Field("Diameter, mm", d.Diameter, v => _vm.Change("Design data", p => p.Design.Diameter = v)));
             _fields.Children.Add(Field("Angle, °", d.Angle, v => _vm.Change("Design data", p => p.Design.Angle = v)));
-            if (tool.Name == "Pattern")
+            if (tool.Name == "Pattern" || polygonPattern)
             {
                 var combo = new ComboBox { ItemsSource = Enum.GetValues<PatternType>().Select(x => Loc.Enum(x)).ToList(), SelectedIndex = (int)d.Pattern, Width = 120, Height = 26 };
                 combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) _vm.Change("Design data", p => p.Design.Pattern = (PatternType)combo.SelectedIndex); };
                 _fields.Children.Add(Labelled("Pattern", combo));
+                var align = new ComboBox { ItemsSource = new[] { "Left", "Centre", "Right" }.Select(Loc.Ui).ToList(), SelectedIndex = (int)_vm.PatternAlignment, Width = 110, Height = 26, Name = "patternAlignment" };
+                ToolTip.SetTip(align, Loc.Ui("Where the holes of a row start, looking along the blast direction: half a spacing from the left end of the outline, from its right end, or with the same room at both ends"));
+                align.SelectionChanged += (_, _) => { if (align.SelectedIndex >= 0) _vm.PatternAlignment = (Domain.Model.RowAlignment)align.SelectedIndex; };
+                _fields.Children.Add(Labelled("Along the row", align));
+            }
+            if (tool.Name == "Pattern")
+            {
                 // what the pattern dialog used to ask after the outline was drawn
                 var direction = Field("Direction, °", _vm.Project.Header.BlastOrientation, v => _vm.Change("Blast orientation", p => p.Header.BlastOrientation = v), "patternDirection",
                     string.Join("\n\n", DirectionTipParagraphs.Select(Loc.Ui)));
@@ -557,6 +565,9 @@ public sealed class ToolPanel : Border
                 ToolTip.SetTip(withGrid, Loc.Ui("On: when the pattern is turned later, the blast orientation turns with it. Off: the orientation stays, and the face row is then the row furthest along it"));
                 withGrid.IsCheckedChanged += (_, _) => _vm.PatternRotateOrientationChoice = withGrid.IsChecked == true;
                 _fields.Children.Add(new StackPanel { Spacing = 2, Children = { direction, withGrid } });
+            }
+            if (tool.Name == "Pattern" || polygonPattern)
+            {
                 _fields.Children.Add(Field("Edge offset, m", _vm.PatternEdgeOffset, v => _vm.PatternEdgeOffset = v, "patternOffset"));
                 _fields.Children.Add(TextField("Number prefix", _vm.PatternLabelPrefix, v => _vm.PatternLabelPrefix = v, "patternPrefix"));
                 _fields.Children.Add(Field("Start number", _vm.NextPatternNumber, v => _vm.PatternStartNumber = Math.Max(0, (int)Math.Round(v)), "patternStart"));

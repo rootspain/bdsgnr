@@ -9,6 +9,15 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.3 — 2026-11-13
 
 ### New
+- **Pattern from polygon.** Select a closed polygon (or several) and press Pattern (P) or Pattern from polygon in its
+  menu. The holes to be made show on the plan at once and change with the fields of the panel. The first row runs along
+  the longest side half a burden inside it, the blast goes out across it; a click on another side takes that one. The
+  holes of a row are aligned left, centre or right. The polygon stays as the outline of the pattern: editing it lays the
+  pattern out again in the same undo step, and if the holes are already drilled or loaded the pattern stays as it was.
+- **Lasso selection (Q, a button on the left bar).** Hold the left button and draw a curve round the objects: let go,
+  it closes and selects what is inside. As with a box, the first move to the right is a window (only what is fully
+  inside), to the left a crossing (what the curve touches too). Loops and figure eights select all they go round. Shift
+  adds, Ctrl toggles; moving and the grips work as in the Select tool.
 - **An eye button next to Plan | 3D (Shift+H)** switches two ways of drawing. The usual one (the default): surfaces are
   drawn far to near, each whole, and the part of a surface behind another is not drawn at all, also while turning and zooming — a
   large far surface does not cover a nearer one, whatever their order in the project; lines far to near over the
@@ -53,6 +62,15 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the toolbar.
 
 ### Changed
+- **The header of the window is lower:** the empty band between the title bar and the buttons is gone, the ribbon tabs are 6 px lower. The resize
+  strip under the plan is gone too.
+- **Selected objects have a contrasting halo,** as the hole labels do: dark round a light selection colour, light round
+  a dark one. They read over a surface of any colour. A selected surface is outlined by its outer edge only.
+- **A selected line is 2 pixels thicker, not twice as thick:** a line of a 4 px layer is selected at 6 px, not 8; the
+  collar of a hole 1 pixel thicker. In the program settings, under Selected objects colour, the thickening can be switched
+  off, and the halo switched off or set to 1 or 2 pixels.
+- **A box drawn from right to left also selects a line going right through it,** with no vertex inside. Window and
+  crossing show by colour for the box and the lasso: a window is blue with a solid line, a crossing green and dashed.
 - **Chevron: independent segments and an oval of delays.** Each end of a chevron is dragged on its own: the vertex and
   the other end stay. A segment's delay changes with its length and shows on the plan and in the front window; a delay
   typed in the window moves the end. A hole's time is its straight distance from the vertex × the delay toward it, given

@@ -110,7 +110,7 @@ public sealed partial class MainViewModel
         new Stage("Layout", new()
         {
             G("Layout", Tb("Hole", "hole", "Hole", "D", true), Tb("Row", "row", "Row", "R", true), Tb("Pattern", "pattern", "Pattern", "P", true),
-                Tb("Baseline", "baseline", "Baseline"), M("Fill polygon", "fill", "Tools/Holes/Fill selected polygon…"), M("Curved layout", "curve", "Tools/Holes/Curved layout…")),
+                Tb("Baseline", "baseline", "Baseline"), M("Pattern from polygon", "fill", "Tools/Holes/Pattern from polygon"), M("Curved layout", "curve", "Tools/Holes/Curved layout…")),
             G("From objects", M("At points", "point", "Tools/Holes/Add at points"), M("Along line", "polyline", "Tools/Holes/Add along selected polyline…"),
                 M("Between lines", "row", "Tools/Holes/Drill holes between lines…"), M("From polylines", "polyline", "Tools/Holes/Create holes from selected polylines"),
                 M("To survey points", "point", "Tools/Holes/Move to selected points…"), M("Delete outside polygon", "polygon", "Tools/Holes/Delete holes outside polygon")),
@@ -186,6 +186,7 @@ public sealed partial class MainViewModel
     public List<(string Icon, string Tip, string Key, bool Sep, Action Action, string? Tool)> BuildRail() => new()
     {
         ("select", "Select", "V", false, SelectTool, "Select"),
+        ("lasso", "Lasso selection", "Q", false, LassoTool, "Lasso"),
         ("pan", "Pan (or middle button)", "H", false, () => SetTool(new PanTool(this)), "Pan"),
         ("zoombox", "Zoom to rectangle", "Z", false, () => SetTool(new ZoomBoxTool(this)), "Zoom"),
         ("fit", "View everything", "Home", false, ZoomAll, null),
@@ -329,7 +330,7 @@ public sealed partial class MainViewModel
             "polygon" => new[]
             {
                 props, Separator,
-                Item("Fill selected polygon…", Run(FillSelectedPolygon), W), Item("Delete holes outside polygon", Run(DeleteHolesOutsidePolygon), W), Item("Volume…", Run(VolumeTool)), Separator,
+                Item("Pattern from polygon", PolygonPatternTool, W), Item("Delete holes outside polygon", Run(DeleteHolesOutsidePolygon), W), Item("Volume…", Run(VolumeTool)), Separator,
                 Item("Expand polygon…", Run(ExpandPolygon), W), Item("Clip polylines to be inside polygon", Run(ClipPolylinesToPolygon), W),
                 Item("Clip surface to polygon", Run(SurfaceClip), W), Item("Create centre of mass for polygons", Run(CentreOfMass), W), Item("3D polygon area", Run(PolygonArea3D)),
                 Sub("Convert", Item("Selected polygons to polylines", () => SetClosed(false), W), Item("Selected objects to points", () => ConvertToPoints(false), W))
