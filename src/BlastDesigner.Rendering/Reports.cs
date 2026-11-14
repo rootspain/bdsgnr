@@ -355,12 +355,16 @@ public static class Reports
         }
     }
 
+    /// <summary>Points of a page (1/72 inch) in a millimetre of the sheet.</summary>
+    public const double PointsPerMm = 72 / 25.4;
+
     private static void DrawScene(SKCanvas c, SKRect rect, BlastProject project, Camera cam, SceneOptions options)
     {
         c.Save();
         c.ClipRect(rect);
         c.Translate(rect.Left, rect.Top);
-        PlanRenderer.Render(c, cam, project, options);
+        // on the sheet a line weight is its millimetres, as AutoCAD plots it
+        PlanRenderer.Render(c, cam, project, options with { UnitsPerMm = PointsPerMm });
         c.Restore();
         using var border = new SKPaint { Style = SKPaintStyle.Stroke, Color = SKColors.Gray, StrokeWidth = 0.5f };
         c.DrawRect(rect, border);

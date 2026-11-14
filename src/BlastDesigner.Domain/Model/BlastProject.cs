@@ -25,6 +25,10 @@ public sealed class BlastProject
     /// (<see cref="HolePattern"/>). Kept beside the entities, not as one: a program that does not know them reads the holes as before.
     /// </summary>
     public List<HolePattern> Patterns { get; set; } = new();
+    /// <summary>Line types of the project (from imported drawings), besides the standard ones (<see cref="LineTypes.Standard"/>).</summary>
+    public List<LineTypeDef> LineTypes { get; set; } = new();
+    /// <summary>Scale of the dashes of all line types, as LTSCALE of AutoCAD.</summary>
+    public double LineTypeScale { get; set; } = 1;
     public List<LoadingRule> LoadingRules { get; set; } = new();
     public BlastOutcomes Outcomes { get; set; } = new();
     public CostSchema Costs { get; set; } = new();
@@ -296,6 +300,10 @@ public sealed class Layer
     public bool Frozen { get; set; }
     public bool ShowText { get; set; } = true;
     public double LineWidth { get; set; } = 1;
+    /// <summary>Weight of the lines of the layer in hundredths of a millimetre, as AutoCAD; null: <see cref="LineWidth"/> pixels.</summary>
+    public int? LineWeight { get; set; }
+    /// <summary>Line type of the lines of the layer (DASHED, CENTER…); null: continuous.</summary>
+    public string? LineType { get; set; }
 
     public bool IsEditable => Visible && !Locked && !Frozen;
 }

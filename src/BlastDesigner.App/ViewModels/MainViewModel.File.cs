@@ -287,7 +287,7 @@ public sealed partial class MainViewModel
         var opt = await CadImportWindow.Show(path);
         if (opt == null) return;
         var drawing = CadFiles.ReadCad(path, opt);
-        AddImported(Loc.T("Import DXF"), drawing.Items, false, drawing.Layers);
+        AddImported(Loc.T("Import DXF"), drawing.Items, false, drawing.Layers, drawing);
         var status = Loc.F("{0} objects imported", drawing.Items.Count);
         if (_blocksMade > 0) status += "; " + Loc.F("blocks put together from lines: {0}", _blocksMade);
         if (_looseBlocks.Count > 0) status += "; " + Loc.F("the lines on {0} make no block", string.Join(", ", _looseBlocks));
@@ -328,7 +328,8 @@ public sealed partial class MainViewModel
     private List<string> _looseBlocks = new();
 
     /// <param name="layers">Colour and visibility of the source layers (drawings); applied to layers this import creates.</param>
-    private void AddImported(string undoName, IEnumerable<(string Layer, Entity Entity)> items, bool holesToHoleLayer, IReadOnlyDictionary<string, CadLayerInfo>? layers = null)
+    /// <param name="drawing">A drawing: its line types join the project's, and its LTSCALE becomes the project's when that is still 1.</param>
+    private void AddImported(string undoName, IEnumerable<(string Layer, Entity Entity)> items, bool holesToHoleLayer, IReadOnlyDictionary<string, CadLayerInfo>? layers = null, CadImport? drawing = null)
     {
         var list = items.ToList();
         _blocksMade = 0;
@@ -353,8 +354,17 @@ public sealed partial class MainViewModel
                 {
                     if (info.Color is uint c) layer.Color = c;
                     layer.Visible = info.Visible;
+                    layer.LineWeight = info.LineWeight;
+                    layer.LineType = info.LineType;
                 }
                 p.Add(e, layer);
+            }
+            if (drawing != null)
+            {
+                // a type of the drawing by a name the project has already: the project's stays
+                foreach (var t in drawing.LineTypes)
+                    if (!p.LineTypes.Any(x => x.Name.Equals(t.Name, StringComparison.OrdinalIgnoreCase))) p.LineTypes.Add(t);
+                if (Math.Abs(p.LineTypeScale - 1) < 1e-12) p.LineTypeScale = drawing.LineTypeScale;
             }
             if (list.Any(x => x.Entity is Hole) && p.Rows.Count == 0)
                 p.Rows.AddRange(HoleDesign.AutoRows(p.Holes, p.Header.BlastOrientation, p.Design.Burden / 2));

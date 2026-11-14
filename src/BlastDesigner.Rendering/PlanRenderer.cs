@@ -27,6 +27,11 @@ public sealed record SceneOptions
     public bool SelectionHalo { get; init; }
     /// <summary>How far the halo reaches out of a selected object, px (1 or 2).</summary>
     public int SelectionHaloPx { get; init; } = 2;
+    /// <summary>
+    /// Units of the canvas in a millimetre of the sheet, when the scene is printed: line weights are then millimetres of the
+    /// sheet. Null on the screen, where they are pixels as AutoCAD shows them.
+    /// </summary>
+    public double? UnitsPerMm { get; init; }
     /// <summary>How much thicker a selected object is drawn than its line, px (the collar of a hole half as much); 0 as thick.</summary>
     public float SelectionExtra { get; init; } = 2;
     /// <summary>The second pass of <see cref="SelectionHalo"/>: only the selected objects, no background, grid or legends.</summary>
@@ -168,6 +173,23 @@ public static class PlanRenderer
                 return Adapt(g);
             return Adapt(new(e.Color ?? (layerById.TryGetValue(e.LayerId, out var l) ? l.Color : 0xFF000000)));
         }
+        // The width of a line: its own weight or its layer's, as AutoCAD shows them (0.25 mm a pixel), else the pixels of the layer.
+        float LineWidthOf(Entity e)
+        {
+            var layer = layerById.TryGetValue(e.LayerId, out var l) ? l : null;
+            var weight = (e as ILineStyled)?.LineWeight ?? layer?.LineWeight;
+            if (weight is not int wt) return (float)(layer?.LineWidth ?? 1);
+            // on a sheet the weight is its millimetres; on the screen pixels, as AutoCAD shows it
+            return opt.UnitsPerMm is double u ? LineTypes.WeightOnSheet(wt, u) : LineTypes.WeightPixels(wt);
+        }
+        // The dashes of a line: its own type or its layer's, in drawing units scaled by the line and the project; null solid.
+        using var dashes = new DashCache();
+        SKPathEffect? DashOf(Entity e)
+        {
+            if (e is not ILineStyled ls) return null;
+            var name = ls.LineType ?? (layerById.TryGetValue(e.LayerId, out var l) ? l.LineType : null);
+            return LineTypes.Find(project, name) is { } type ? dashes.Of(type, ls.LineTypeScale * project.LineTypeScale * cam.Scale) : null;
+        }
         // The view is a parallel projection, so a world offset is the same screen offset everywhere.
         var moved = opt.MovedEntities is { Count: > 0 } m ? m : null;
         var moveX = (float)(Vec3.Dot(opt.MoveOffset, cam.Right) * cam.Scale);
@@ -303,14 +325,16 @@ public static class PlanRenderer
             // consecutive segments of one look go into one path: a survey is a few draws, not one a segment
             using var shown = new SKPath();
             using var hidden = new SKPath();
-            (SKColor Color, float Width)? look = null;
+            (SKColor Color, float Width, SKPathEffect? Dash)? look = null;
             void Flush()
             {
                 if (look is not { } l) return;
                 stroke.StrokeWidth = l.Width;
+                stroke.PathEffect = l.Dash;
                 if (!shown.IsEmpty) { stroke.Color = l.Color; canvas.DrawPath(shown, stroke); shown.Reset(); }
                 // behind a surface: paler with the eye, else not drawn
                 if (!hidden.IsEmpty) { if (paleLines) { stroke.Color = l.Color.WithAlpha(Math.Min(l.Color.Alpha, hiddenAlpha)); canvas.DrawPath(hidden, stroke); } hidden.Reset(); }
+                stroke.PathEffect = null;
             }
             float w = (float)cam.Width, h = (float)cam.Height;
             foreach (var (_, e, seg) in items)
@@ -344,8 +368,9 @@ public static class PlanRenderer
                     DrawPolygonFill(canvas, cam, ((PolylineEntity)e).Points, fill);
                     continue;
                 }
-                var width = (float)((layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1) * (e is PolylineEntity { Kind: LineKind.CrossSection } ? 2 : 1) + (selected ? opt.SelectionExtra : 0));
-                if (look != (color, width)) { Flush(); look = (color, width); }
+                var width = LineWidthOf(e) * (e is PolylineEntity { Kind: LineKind.CrossSection } ? 2 : 1) + (selected ? opt.SelectionExtra : 0);
+                var dash = DashOf(e);
+                if (look != (color, width, dash)) { Flush(); look = (color, width, dash); }
                 IReadOnlyList<Vec3> pts = e is CircleEntity c ? circles[c] : ((PolylineEntity)e).Points;
                 Vec3 a = pts[seg], b = pts[(seg + 1) % pts.Count];
                 var (ax, ay) = cam.ToScreen(a);
@@ -387,7 +412,8 @@ public static class PlanRenderer
                 color = color.WithAlpha(Math.Min(color.Alpha, hiddenAlpha));
             stroke.Color = color;
             // a selected object a couple of pixels thicker than its line; a section line, twice as thick, too
-            var lineWidth = layerById.TryGetValue(e.LayerId, out var lay) ? lay.LineWidth : 1;
+            layerById.TryGetValue(e.LayerId, out var lay);
+            double lineWidth = LineWidthOf(e);
             if (e is PolylineEntity { Kind: LineKind.CrossSection }) lineWidth *= 2;
             stroke.StrokeWidth = (float)(lineWidth + (selected ? opt.SelectionExtra : 0));
             fill.Color = color;
@@ -399,7 +425,9 @@ public static class PlanRenderer
                     // drawn with the surfaces, far to near; here only a dragged one, and the label of a contour
                     if (!batched.Contains(pl))
                     {
+                        stroke.PathEffect = DashOf(pl);
                         DrawPolyline(canvas, cam, pl.Points, pl.Closed, stroke);
+                        stroke.PathEffect = null;
                         if (pl.Closed && pl.Kind == LineKind.ClearanceZone && !opt.HaloPass)
                         {
                             fill.Color = color.WithAlpha(30);
@@ -430,7 +458,12 @@ public static class PlanRenderer
                     break;
                 }
                 case CircleEntity c:
-                    if (!batched.Contains(c)) DrawPolyline(canvas, cam, c.ToPolygon(48), true, stroke);
+                    if (!batched.Contains(c))
+                    {
+                        stroke.PathEffect = DashOf(c);
+                        DrawPolyline(canvas, cam, c.ToPolygon(48), true, stroke);
+                        stroke.PathEffect = null;
+                    }
                     break;
                 case BlockEntity b:
                     DrawBlock(canvas, cam, b, stroke, selected, opt.HotBlock == b.Id);
@@ -649,7 +682,11 @@ public static class PlanRenderer
                 break;
             case CircleEntity c:
                 foreach (var piece in clip.Pieces(c.ToPolygon(48), true))
-                    yield return new PolylineEntity { Id = c.Id, LayerId = c.LayerId, Color = c.Color, GroupId = c.GroupId, Points = piece };
+                    yield return new PolylineEntity
+                    {
+                        Id = c.Id, LayerId = c.LayerId, Color = c.Color, GroupId = c.GroupId, Points = piece,
+                        LineWeight = c.LineWeight, LineType = c.LineType, LineTypeScale = c.LineTypeScale
+                    };
                 break;
             case SurfaceEntity s:
                 if (CutSurface(clip, s) is { } cut) yield return cut;
@@ -657,6 +694,26 @@ public static class PlanRenderer
             default:
                 yield return e;
                 break;
+        }
+    }
+
+    /// <summary>The dash effects of a frame, one a line type and scale, let go with the frame.</summary>
+    private sealed class DashCache : IDisposable
+    {
+        private readonly Dictionary<(LineTypeDef, double), SKPathEffect?> _effects = new();
+
+        public SKPathEffect? Of(LineTypeDef type, double pixelsPerUnit)
+        {
+            var key = (type, Math.Round(pixelsPerUnit, 6));
+            if (!_effects.TryGetValue(key, out var effect))
+                _effects[key] = effect = LineTypes.ScreenPattern(type, pixelsPerUnit) is { } pattern ? SKPathEffect.CreateDash(pattern, 0) : null;
+            return effect;
+        }
+
+        public void Dispose()
+        {
+            foreach (var e in _effects.Values) e?.Dispose();
+            _effects.Clear();
         }
     }
 

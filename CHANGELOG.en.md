@@ -6,9 +6,15 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.3.3 — 2026-11-13
+## 0.3.4 — 2026-11-13
 
 ### New
+- **Line weights and types as in AutoCAD.** Polylines, polygons and circles have a line weight, a line type (dashed,
+  center, dot…) and a type scale, layers a weight and a type; empty is "by layer". Importing DXF/DWG takes them from the
+  objects and layers, with the line types of the drawing and its LTSCALE, nothing lost. A weight shows as in AutoCAD:
+  0.25 mm is a pixel; dashes are in drawing units and grow as the plan is zoomed in, too fine they are drawn solid. On a
+  printed sheet and in a PDF a weight is millimetres of the sheet (0.50 mm is half a millimetre on paper), a weight of 0
+  a hairline. They are chosen from lists in the properties of a line and of a layer.
 - **Pattern from polygon.** Select a closed polygon (or several) and press Pattern (P) or Pattern from polygon in its
   menu. The holes to be made show on the plan at once and change with the fields of the panel. The first row runs along
   the longest side half a burden inside it, the blast goes out across it; a click on another side takes that one. The
@@ -18,6 +24,23 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   it closes and selects what is inside. As with a box, the first move to the right is a window (only what is fully
   inside), to the left a crossing (what the curve touches too). Loops and figure eights select all they go round. Shift
   adds, Ctrl toggles; moving and the grips work as in the Select tool.
+
+### Changed
+- **DXF export is AutoCAD 2000 (R2000)** instead of R12: line weights, line types, their scale and layer colours come
+  through.
+- **The header of the window is lower:** the empty band between the title bar and the buttons is gone, the ribbon tabs are 6 px lower. The resize
+  strip under the plan is gone too.
+- **Selected objects have a contrasting halo,** as the hole labels do: dark round a light selection colour, light round
+  a dark one. They read over a surface of any colour. A selected surface is outlined by its outer edge only.
+- **A selected line is 2 pixels thicker, not twice as thick:** a line of a 4 px layer is selected at 6 px, not 8; the
+  collar of a hole 1 pixel thicker. In the program settings, under Selected objects colour, the thickening can be switched
+  off, and the halo switched off or set to 1 or 2 pixels.
+- **A box drawn from right to left also selects a line going right through it,** with no vertex inside. Window and
+  crossing show by colour for the box and the lasso: a window is blue with a solid line, a crossing green and dashed.
+
+## 0.3.3 — 2026-11-13
+
+### New
 - **An eye button next to Plan | 3D (Shift+H)** switches two ways of drawing. The usual one (the default): surfaces are
   drawn far to near, each whole, and the part of a surface behind another is not drawn at all, also while turning and zooming — a
   large far surface does not cover a nearer one, whatever their order in the project; lines far to near over the
@@ -62,15 +85,6 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the toolbar.
 
 ### Changed
-- **The header of the window is lower:** the empty band between the title bar and the buttons is gone, the ribbon tabs are 6 px lower. The resize
-  strip under the plan is gone too.
-- **Selected objects have a contrasting halo,** as the hole labels do: dark round a light selection colour, light round
-  a dark one. They read over a surface of any colour. A selected surface is outlined by its outer edge only.
-- **A selected line is 2 pixels thicker, not twice as thick:** a line of a 4 px layer is selected at 6 px, not 8; the
-  collar of a hole 1 pixel thicker. In the program settings, under Selected objects colour, the thickening can be switched
-  off, and the halo switched off or set to 1 or 2 pixels.
-- **A box drawn from right to left also selects a line going right through it,** with no vertex inside. Window and
-  crossing show by colour for the box and the lasso: a window is blue with a solid line, a crossing green and dashed.
 - **Chevron: independent segments and an oval of delays.** Each end of a chevron is dragged on its own: the vertex and
   the other end stay. A segment's delay changes with its length and shows on the plan and in the front window; a delay
   typed in the window moves the end. A hole's time is its straight distance from the vertex × the delay toward it, given
@@ -114,7 +128,6 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The window's title bar on small screens.** On a laptop, or with large text set in Windows, the program's window
   opened larger than the screen and its title bar was above the top edge until the window was resized. On such a
   screen the window now opens maximized, and its normal size fits the screen.
-
 ## 0.3.2 — 2026-11-12
 
 ### New

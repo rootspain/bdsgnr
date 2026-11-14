@@ -209,11 +209,15 @@ public static class Dialogs
     }
 
     /// <summary>Edits a copy of an object in a property grid; returns the edited copy on OK.</summary>
-    public static async Task<T?> EditObject<T>(string title, T obj, params string[] exclude) where T : class
+    public static Task<T?> EditObject<T>(string title, T obj, params string[] exclude) where T : class => EditObject(title, obj, null, exclude);
+
+    /// <param name="setup">Choices, tips and units of the fields, before they are made.</param>
+    public static async Task<T?> EditObject<T>(string title, T obj, Action<PropertyGrid>? setup, params string[] exclude) where T : class
     {
         var copy = Domain.ProjectJson.DeepClone(obj);
         var grid = new PropertyGrid { Exclude = exclude.ToHashSet() };
         FormLayouts.Apply(grid, typeof(T));
+        setup?.Invoke(grid);
         grid.SetTarget(copy);
         var scroll = new ScrollViewer { Content = grid, MaxHeight = 640, Padding = new Thickness(0, 0, 10, 0) };
         return await Custom(title, scroll, width: 620, form: true) ? copy : null;

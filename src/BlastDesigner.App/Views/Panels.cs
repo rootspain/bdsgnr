@@ -265,6 +265,8 @@ public sealed class PropertiesPanel : DockPanel
                 grid.After[nameof(Hole.ToLevel)] = toSurface;
             }
         }
+        // the weight and the type of a line as AutoCAD has them, chosen from its lists
+        if (sel.All(e => e is ILineStyled)) LineStyleFields.Apply(grid, doc.Project);
         if (first is BlockEntity)
         {
             string m = Loc.Ui("m");

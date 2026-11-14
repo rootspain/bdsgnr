@@ -3175,3 +3175,11 @@ ui:A band of a dark or light colour round selected objects, as round the hole la
 ui:Off	выкл
 ui:1 px	1 пкс
 ui:2 px	2 пкс
+Line weight	Вес линии
+Line type scale	Масштаб типа
+By layer	По слою
+Continuous	Сплошная
+Line width in pixels	Толщина линии в пикселях
+ui:As in AutoCAD: 0.25 mm is a pixel on the screen, thinner too, thicker in proportion	Как в AutoCAD: 0,25 мм — один пиксель на экране, тоньше — тоже один, толще — пропорционально
+ui:Dashes as in AutoCAD, in drawing units: they grow as the plan is zoomed in	Штрихи как в AutoCAD, в единицах чертежа: при приближении плана они становятся крупнее
+ui:The dashes of this line longer (above 1) or shorter (below 1)	Штрихи этой линии длиннее (больше 1) или короче (меньше 1)

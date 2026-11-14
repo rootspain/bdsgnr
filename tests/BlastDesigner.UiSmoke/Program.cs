@@ -3734,6 +3734,30 @@ Step("pattern from polygon: the first row along the longest side, another side b
     vm.Doc.ClearSelection(); vm.ZoomAll(); Pump();
 });
 
+Step("a line of AutoCAD: its weight and type in its properties, its dashes on the plan", () =>
+{
+    var steps = vm.Doc!.UndoNames.Count;
+    var c = vm.Project!.Holes.First().Collar + new Vec3(0, -30, 0);
+    var line = new PolylineEntity { Points = new List<Vec3> { c, c + new Vec3(60, 0, 0) }, LineType = "DASHED", LineWeight = 50, LineTypeScale = 4 };
+    vm.Change("Add line", p => p.Add(line));
+    vm.Doc.Select(new[] { line.Id });
+    vm.ZoomSelection(); Pump();
+    var combos = window.GetLogicalDescendants().OfType<ComboBox>().ToList();
+    var type = combos.FirstOrDefault(x => x.Items.OfType<string>().Contains("DASHED")) ?? throw new Exception("the properties of a line have no line type");
+    if (type.SelectedItem as string != "DASHED") throw new Exception("the line type shows " + type.SelectedItem);
+    var mm = BlastDesigner.App.Services.Loc.Ui("mm");
+    var weight = combos.FirstOrDefault(x => x.Items.OfType<string>().Any(i => i.EndsWith(" " + mm) && i.StartsWith("0"))) ?? throw new Exception("the properties of a line have no line weight");
+    if (weight.SelectedItem as string != (0.5).ToString("0.00", System.Globalization.CultureInfo.CurrentCulture) + " " + mm) throw new Exception("the line weight shows " + weight.SelectedItem);
+    vm.View.Redraw(); Pump(); Shot("95_line_type_dashed");
+    type.SelectedItem = "CENTER"; Pump();
+    if (((PolylineEntity)vm.Project.FindEntity(line.Id)!).LineType != "CENTER") throw new Exception("the line type chosen did not reach the line");
+    // the drawing goes out with it
+    var dxf = CadFiles.ExportDxf(vm.Project, new[] { vm.Project.FindEntity(line.Id)! });
+    if (!dxf.Contains("AC1015") || !dxf.Contains("CENTER")) throw new Exception("the DXF is not of AutoCAD 2000 with the line type");
+    while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+    vm.Doc.ClearSelection(); vm.ZoomAll(); Pump();
+});
+
 Step("delete selection", () => { vm.Doc!.Select(vm.Project!.Rows[0].HoleIds); vm.DeleteSelected(); });
 Shot("09_after_delete");
 

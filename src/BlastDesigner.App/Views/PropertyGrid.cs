@@ -153,6 +153,8 @@ public sealed class PropertyGrid : Grid
     public bool ReadOnly { get; set; }
     /// <summary>Named choices for id properties (e.g. products), keyed by property name.</summary>
     public Dictionary<string, IReadOnlyList<(string Id, string Name)>> Choices { get; } = new();
+    /// <summary>What the empty choice of a property with <see cref="Choices"/> is called ("By layer"); "(none)" when not given.</summary>
+    public Dictionary<string, string> NoneLabels { get; } = new();
     /// <summary>Colour swatch (ARGB) shown next to each value of an enum type in its list, e.g. the colour of each kind of surface.</summary>
     public Dictionary<Type, Func<object, uint>> EnumColors { get; } = new();
     public event Action<string>? PropertyEdited;
@@ -382,7 +384,7 @@ public sealed class PropertyGrid : Grid
             };
             return tb;
         }
-        if (type == typeof(double) || under == typeof(double) || type == typeof(int) || under == typeof(int))
+        if ((type == typeof(double) || under == typeof(double) || type == typeof(int) || under == typeof(int)) && !(under == typeof(int) && Choices.ContainsKey(p.Name)))
         {
             var isInt = (under ?? type) == typeof(int);
             var tb = new TextBox { Text = mixed ? "" : Format(value), Watermark = mixed ? MixedText : under != null ? "—" : null };
@@ -547,12 +549,19 @@ public sealed class PropertyGrid : Grid
             }
             return g;
         }
-        if (type == typeof(string) && Choices.TryGetValue(p.Name, out var choices))
+        if ((type == typeof(string) || under == typeof(int)) && Choices.TryGetValue(p.Name, out var choices))
         {
-            var items = new List<(string? Id, string Name)> { (null, Loc.T("(none)")) };
+            var items = new List<(string? Id, string Name)> { (null, Loc.T(NoneLabels.GetValueOrDefault(p.Name, "(none)"))) };
             items.AddRange(choices.Select(c => ((string?)c.Id, c.Name)));
-            var combo = new ComboBox { ItemsSource = items.Select(i => i.Name).ToList(), SelectedIndex = mixed ? -1 : Math.Max(0, items.FindIndex(i => Equals(i.Id, value))), PlaceholderText = mixed ? MixedText : null, MinWidth = 200 };
-            combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) Set(p, items[combo.SelectedIndex].Id); };
+            // a number chosen by name (a line weight): the id is the number as text
+            var shown = value is int n ? n.ToString(CultureInfo.InvariantCulture) : value as string;
+            var combo = new ComboBox { ItemsSource = items.Select(i => i.Name).ToList(), SelectedIndex = mixed ? -1 : Math.Max(0, items.FindIndex(i => string.Equals(i.Id, shown, StringComparison.OrdinalIgnoreCase))), PlaceholderText = mixed ? MixedText : null, MinWidth = 200 };
+            combo.SelectionChanged += (_, _) =>
+            {
+                if (combo.SelectedIndex < 0) return;
+                var id = items[combo.SelectedIndex].Id;
+                Set(p, under == typeof(int) ? id == null ? null : int.Parse(id, CultureInfo.InvariantCulture) : id);
+            };
             return combo;
         }
         return null;

@@ -27,8 +27,11 @@ public sealed class CadImportOptions
 
 public enum CadHiddenLayers { ImportHidden, Skip, ImportVisible }
 
-/// <summary>Colour (null: keep the program's default) and visibility of a drawing layer.</summary>
-public sealed record CadLayerInfo(uint? Color, bool Visible);
+/// <summary>
+/// Colour (null: keep the program's default), visibility, line weight (hundredths of a millimetre; null: the default) and
+/// line type (null: continuous) of a drawing layer.
+/// </summary>
+public sealed record CadLayerInfo(uint? Color, bool Visible, int? LineWeight = null, string? LineType = null);
 
 /// <summary>Objects read from a drawing, with the layers they came from.</summary>
 public sealed class CadImport
@@ -39,6 +42,10 @@ public sealed class CadImport
     public int SkippedHidden { get; set; }
     /// <summary>Lines moved to "(2D)" layers (<see cref="CadImportOptions.SeparateFlatLines"/>).</summary>
     public int FlatLines { get; set; }
+    /// <summary>The line types of the drawing (its LTYPE table, without the continuous, by layer and by block ones).</summary>
+    public List<LineTypeDef> LineTypes { get; } = new();
+    /// <summary>LTSCALE of the drawing: the scale of the dashes of all its line types.</summary>
+    public double LineTypeScale { get; set; } = 1;
 }
 
 /// <summary>CAD and mining-package exchange formats: DXF/DWG, string files, OBJ and an IREDES-style drill plan.</summary>
@@ -62,7 +69,8 @@ public static class CadFiles
             var shown = e.Layer == null || (e.Layer.IsOn && !e.Layer.Flags.HasFlag(ACadSharp.Tables.LayerFlags.Frozen));
             if (!shown && options.HiddenLayers == CadHiddenLayers.Skip) { result.SkippedHidden++; continue; }
             if (!result.Layers.ContainsKey(layer))
-                result.Layers[layer] = new CadLayerInfo(e.Layer == null ? null : Argb(e.Layer.Color), shown || options.HiddenLayers == CadHiddenLayers.ImportVisible);
+                result.Layers[layer] = new CadLayerInfo(e.Layer == null ? null : Argb(e.Layer.Color), shown || options.HiddenLayers == CadHiddenLayers.ImportVisible,
+                    e.Layer == null ? null : LayerWeight(e.Layer.LineWeight), TypeName(e.Layer?.LineType));
             Entity? item = null;
             switch (e)
             {
@@ -108,9 +116,19 @@ public static class CadFiles
             }
             if (item == null) continue;
             item.Color = Argb(e.Color);
+            if (item is ILineStyled styled)
+            {
+                styled.LineWeight = Weight(e.LineWeight);
+                styled.LineType = TypeName(e.LineType);
+                styled.LineTypeScale = e.LineTypeScale > 0 ? e.LineTypeScale : 1;
+            }
             result.Items.Add((layer, item));
         }
         foreach (var (layer, tri) in faces) result.Items.Add((layer, SurfaceFromTriangleSoup(tri, layer)));
+        foreach (var lt in doc.LineTypes)
+            if (TypeName(lt) is { } name && lt.Segments.Any())
+                result.LineTypes.Add(new LineTypeDef { Name = name, Description = lt.Description ?? "", Pattern = lt.Segments.Select(x => x.Length).ToList() });
+        if (doc.Header.LineTypeScale > 0) result.LineTypeScale = doc.Header.LineTypeScale;
         if (options.SeparateFlatLines) SeparateFlat(result);
         return result;
     }
@@ -236,76 +254,126 @@ public static class CadFiles
 
     // ---- DXF export (own ASCII writer) ---------------------------------------
 
+    /// <summary>
+    /// The objects as a DXF drawing of AutoCAD 2000 (AC1015): one layer each of the project's, with its colour, line weight and
+    /// line type; polylines and circles with their own weight, type and type scale; the line types used, and the scale of the
+    /// project as LTSCALE. Holes are a circle, a line down the hole and the number; surfaces 3D faces.
+    /// </summary>
     public static string ExportDxf(BlastProject project, IEnumerable<Entity> entities)
     {
-        var sb = new StringBuilder();
-        void G(int code, string value) { sb.Append(code).Append('\n').Append(value).Append('\n'); }
-        void Gd(int code, double v) => G(code, v.ToString("0.######", Ci));
-        void Pt(Vec3 p, int baseCode = 10) { Gd(baseCode, p.X); Gd(baseCode + 10, p.Y); Gd(baseCode + 20, p.Z); }
-        string LayerName(Entity e) => Sanitize(project.FindLayer(e.LayerId)?.Name ?? "0");
+        var doc = new ACadSharp.CadDocument(ACadSharp.ACadVersion.AC1015);
+        doc.Header.LineTypeScale = project.LineTypeScale > 0 ? project.LineTypeScale : 1;
+        ACadSharp.Tables.LineType? Type(string? name)
+        {
+            if (LineTypes.IsSolid(name)) return null;
+            if (doc.LineTypes.TryGetValue(name!, out var have)) return have;
+            if (LineTypes.Find(project, name) is not { } def) return null;
+            var lt = new ACadSharp.Tables.LineType(def.Name) { Description = def.Description };
+            foreach (var v in def.Pattern) lt.AddSegment(new ACadSharp.Tables.LineType.Segment { Length = v });
+            doc.LineTypes.Add(lt);
+            return lt;
+        }
+        ACadSharp.Tables.Layer LayerOf(string name, Layer? from = null)
+        {
+            name = Sanitize(name);
+            if (doc.Layers.TryGetValue(name, out var have)) return have;
+            var l = new ACadSharp.Tables.Layer(name);
+            if (from != null)
+            {
+                l.Color = new ACadSharp.Color((byte)(from.Color >> 16), (byte)(from.Color >> 8), (byte)from.Color);
+                if (from.LineWeight is int w) l.LineWeight = (ACadSharp.LineWeightType)w;
+                if (Type(from.LineType) is { } lt) l.LineType = lt;
+            }
+            doc.Layers.Add(l);
+            return l;
+        }
+        foreach (var l in project.Layers) LayerOf(l.Name, l);
+        CSMath.XYZ P(Vec3 v) => new(v.X, v.Y, v.Z);
+        void Add(Cad.Entity e, string layer, Entity? from = null)
+        {
+            e.Layer = LayerOf(layer);
+            if (from?.Color is uint c) e.Color = new ACadSharp.Color((byte)(c >> 16), (byte)(c >> 8), (byte)c);
+            if (from is ILineStyled ls)
+            {
+                if (ls.LineWeight is int w) e.LineWeight = (ACadSharp.LineWeightType)w;
+                if (Type(ls.LineType) is { } lt) e.LineType = lt;
+                if (ls.LineTypeScale > 0 && Math.Abs(ls.LineTypeScale - 1) > 1e-12) e.LineTypeScale = ls.LineTypeScale;
+            }
+            doc.Entities.Add(e);
+        }
+        void Line(Vec3 a, Vec3 b, string layer) => Add(new Cad.Line { StartPoint = P(a), EndPoint = P(b) }, layer);
+        void Text(Vec3 at, double height, string text, string layer, double rotationDeg = 0) =>
+            Add(new Cad.TextEntity { InsertPoint = P(at), Height = height, Value = text, Rotation = rotationDeg * GeoMath.Deg }, layer);
+        void Poly(IEnumerable<Vec3> points, bool closed, string layer, Entity? from)
+        {
+            var pl = new Cad.Polyline3D();
+            foreach (var v in points) pl.Vertices.Add(new Cad.Vertex3D(P(v)));
+            if (closed) pl.IsClosed = true;
+            Add(pl, layer, from);
+        }
 
-        G(0, "SECTION"); G(2, "HEADER"); G(9, "$ACADVER"); G(1, "AC1009"); G(0, "ENDSEC");
-        G(0, "SECTION"); G(2, "TABLES"); G(0, "TABLE"); G(2, "LAYER"); G(70, project.Layers.Count.ToString(Ci));
-        foreach (var l in project.Layers) { G(0, "LAYER"); G(2, Sanitize(l.Name)); G(70, "0"); G(62, "7"); G(6, "CONTINUOUS"); }
-        G(0, "ENDTAB"); G(0, "ENDSEC");
-        G(0, "SECTION"); G(2, "ENTITIES");
         foreach (var e in entities)
         {
-            var layer = LayerName(e);
+            var layer = project.FindLayer(e.LayerId)?.Name ?? "0";
             switch (e)
             {
                 case Hole h:
-                    G(0, "CIRCLE"); G(8, layer); Pt(h.Collar); Gd(40, Math.Max(h.RadiusM, 0.05));
-                    G(0, "LINE"); G(8, layer + "_TRACE"); Pt(h.Collar); Pt(h.Toe, 11);
-                    G(0, "TEXT"); G(8, layer + "_LABEL"); Pt(h.Collar + new Vec3(0.3, 0.3, 0)); Gd(40, 0.5); G(1, h.Label);
+                    Add(new Cad.Circle { Center = P(h.Collar), Radius = Math.Max(h.RadiusM, 0.05) }, layer);
+                    Line(h.Collar, h.Toe, layer + "_TRACE");
+                    Text(h.Collar + new Vec3(0.3, 0.3, 0), 0.5, h.Label, layer + "_LABEL");
                     break;
                 case PointEntity p:
-                    G(0, "POINT"); G(8, layer); Pt(p.Position);
+                    Add(new Cad.Point { Location = P(p.Position) }, layer, p);
                     break;
                 case PolylineEntity pl:
-                    G(0, "POLYLINE"); G(8, layer); G(66, "1"); Pt(Vec3.Zero); G(70, pl.Closed ? "9" : "8");
-                    foreach (var v in pl.Points) { G(0, "VERTEX"); G(8, layer); Pt(v); G(70, "32"); }
-                    G(0, "SEQEND"); G(8, layer);
+                    Poly(pl.Points, pl.Closed, layer, pl);
                     break;
                 case TimingLineEntity tl:
-                    G(0, "POLYLINE"); G(8, layer); G(66, "1"); Pt(Vec3.Zero); G(70, "8");
-                    foreach (var v in tl.Points) { G(0, "VERTEX"); G(8, layer); Pt(v); G(70, "32"); }
-                    G(0, "SEQEND"); G(8, layer);
+                    Poly(tl.Points, false, layer, null);
                     break;
                 case TextEntity t:
-                    G(0, "TEXT"); G(8, layer); Pt(t.Position); Gd(40, t.Height); Gd(50, t.Rotation); G(1, t.Text);
+                    Text(t.Position, t.Height, t.Text, layer, t.Rotation);
                     break;
                 case CircleEntity c:
-                    G(0, "CIRCLE"); G(8, layer); Pt(c.Center); Gd(40, c.Radius);
+                    Add(new Cad.Circle { Center = P(c.Center), Radius = c.Radius }, layer, c);
                     break;
                 case ArrowEntity a:
-                    G(0, "LINE"); G(8, layer); Pt(a.Start); Pt(a.End, 11);
+                    Line(a.Start, a.End, layer);
                     break;
                 case DimensionEntity d:
-                    G(0, "LINE"); G(8, layer); Pt(d.Start); Pt(d.End, 11);
-                    G(0, "TEXT"); G(8, layer); Pt(Vec3.Lerp(d.Start, d.End, 0.5)); Gd(40, 0.5); G(1, d.Distance.ToString("0.00", Ci));
+                    Line(d.Start, d.End, layer);
+                    Text(Vec3.Lerp(d.Start, d.End, 0.5), 0.5, d.Distance.ToString("0.00", Ci), layer);
                     break;
                 case TieEntity tie:
-                    G(0, "LINE"); G(8, layer); Pt(tie.FromPos); Pt(tie.ToPos, 11);
+                    Line(tie.FromPos, tie.ToPos, layer);
                     break;
                 case BlockEntity b:
                     // twelve edges on the block's own layer: opened again, they make the block (BlockAssembly)
                     var corners = b.Corners();
-                    foreach (var (i, j) in BlockEntity.Edges) { G(0, "LINE"); G(8, layer); Pt(corners[i]); Pt(corners[j], 11); }
+                    foreach (var (i, j) in BlockEntity.Edges) Line(corners[i], corners[j], layer);
                     break;
                 case SurfaceEntity s:
-                    for (int i = 0; i < s.Triangles.Count; i += 3)
+                    for (int i = 0; i + 2 < s.Triangles.Count; i += 3)
                     {
-                        G(0, "3DFACE"); G(8, layer);
-                        Pt(s.Vertices[s.Triangles[i]], 10); Pt(s.Vertices[s.Triangles[i + 1]], 11);
-                        Pt(s.Vertices[s.Triangles[i + 2]], 12); Pt(s.Vertices[s.Triangles[i + 2]], 13);
+                        var (p0, p1, p2) = (s.Vertices[s.Triangles[i]], s.Vertices[s.Triangles[i + 1]], s.Vertices[s.Triangles[i + 2]]);
+                        Add(new Cad.Face3D { FirstCorner = P(p0), SecondCorner = P(p1), ThirdCorner = P(p2), FourthCorner = P(p2) }, layer);
                     }
                     break;
             }
         }
-        G(0, "ENDSEC"); G(0, "EOF");
-        return sb.ToString();
+        using var stream = new MemoryStream();
+        using (var writer = new DxfWriter(stream, doc, false)) writer.Write();
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
+
+    /// <summary>The weight of an object: its own in hundredths of a millimetre, the default as 0.25 mm; null by layer or block.</summary>
+    private static int? Weight(ACadSharp.LineWeightType w) => (short)w >= 0 ? (short)w : w == ACadSharp.LineWeightType.Default ? 25 : null;
+
+    /// <summary>The weight of a layer: its own; null for the default.</summary>
+    private static int? LayerWeight(ACadSharp.LineWeightType w) => (short)w >= 0 ? (short)w : null;
+
+    /// <summary>The name of a line type; null for continuous, by layer and by block.</summary>
+    private static string? TypeName(ACadSharp.Tables.LineType? lt) => lt == null || LineTypes.IsSolid(lt.Name) ? null : lt.Name;
 
     private static string Sanitize(string name) => new(name.Select(c => char.IsLetterOrDigit(c) || c is '_' or '-' ? c : '_').ToArray());
 

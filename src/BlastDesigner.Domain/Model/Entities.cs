@@ -111,7 +111,7 @@ public enum LineKind
 }
 
 /// <summary>3D polyline; when <see cref="Closed"/> is set it is a polygon.</summary>
-public sealed class PolylineEntity : Entity
+public sealed class PolylineEntity : Entity, ILineStyled
 {
     public List<Vec3> Points { get; set; } = new();
     /// <summary>Middle of the line's extent; set, it moves the whole line there, its shape and the heights of its vertices kept.</summary>
@@ -123,6 +123,12 @@ public sealed class PolylineEntity : Entity
     public bool Closed { get; set; }
     public LineKind Kind { get; set; }
     public string Label { get; set; } = string.Empty;
+    /// <inheritdoc cref="ILineStyled.LineWeight"/>
+    public int? LineWeight { get; set; }
+    /// <inheritdoc cref="ILineStyled.LineType"/>
+    public string? LineType { get; set; }
+    /// <inheritdoc cref="ILineStyled.LineTypeScale"/>
+    public double LineTypeScale { get; set; } = 1;
 
     public override string KindName => Closed ? "Polygon" : "Polyline";
     public override IEnumerable<Vec3> GetVertices() => Points;
@@ -156,10 +162,16 @@ public sealed class TextEntity : Entity
     public override void Transform(Func<Vec3, Vec3> f) => Position = f(Position);
 }
 
-public sealed class CircleEntity : Entity
+public sealed class CircleEntity : Entity, ILineStyled
 {
     public Vec3 Center { get; set; }
     public double Radius { get; set; } = 1;
+    /// <inheritdoc cref="ILineStyled.LineWeight"/>
+    public int? LineWeight { get; set; }
+    /// <inheritdoc cref="ILineStyled.LineType"/>
+    public string? LineType { get; set; }
+    /// <inheritdoc cref="ILineStyled.LineTypeScale"/>
+    public double LineTypeScale { get; set; } = 1;
 
     public override string KindName => "Circle";
     public override IEnumerable<Vec3> GetVertices() { yield return Center; }

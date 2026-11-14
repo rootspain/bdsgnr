@@ -180,7 +180,7 @@ public static class FormLayouts
         [typeof(MainViewModel.CurvedLayoutParameters)] = Of("m: Burden, Spacing", S("Pattern", "Rows Burden Spacing Staggered RowsToTheLeft")),
         [typeof(MainViewModel.LasImportOptions)] = Of("m: CellSize, MaxEdge", S("Points", "CellSize KeepLowest"), S("Surface", "MaxEdge CreateSurface")),
         [typeof(PatternParameters)] = Of("m: Burden, Spacing, EdgeOffset; °: Orientation", S("Pattern", "Burden Spacing Pattern Orientation RotateOrientation EdgeOffset"), S("Numbering", "LabelPrefix StartNumber")),
-        [typeof(Layer)] = Of("", S("Layer", "Name Group Color LineWidth"), S("Display", "Visible Locked Frozen ShowText")),
+        [typeof(Layer)] = Of("", S("Layer", "Name Group Color LineWidth LineWeight LineType"), S("Display", "Visible Locked Frozen ShowText")),
         [typeof(ReportFrame)] = Of("", S("", "MarginMm LineWidthMm")),
         [typeof(ReportStamp)] = Of("", S("Stamp", "Name Place Attach Pages")),
         [typeof(TypeDefinition)] = Of("mm: Diameter", S("Type", "Name Color Diameter Density")),

@@ -272,7 +272,7 @@ public sealed partial class MainViewModel
 
     public async Task EditLayer(Layer layer)
     {
-        var edited = await Dialogs.EditObject("Layer properties", layer, nameof(Layer.Id));
+        var edited = await Dialogs.EditObject("Layer properties", layer, g => LineStyleFields.Apply(g, Project!, layer: true), nameof(Layer.Id));
         if (edited == null) return;
         var id = layer.Id;
         Change("Layer properties", p =>
@@ -281,6 +281,7 @@ public sealed partial class MainViewModel
             if (l == null) return;
             l.Name = edited.Name; l.Group = edited.Group; l.Color = edited.Color; l.Visible = edited.Visible;
             l.Locked = edited.Locked; l.Frozen = edited.Frozen; l.ShowText = edited.ShowText; l.LineWidth = edited.LineWidth;
+            l.LineWeight = edited.LineWeight; l.LineType = edited.LineType;
         });
     }
 
