@@ -69,14 +69,32 @@ public sealed class ProgramSettings
     public static readonly IReadOnlyDictionary<string, uint> DefaultSurfaceColors = new Dictionary<string, uint>
     {
         ["General"] = 0xFF8A9BB0,
-        ["Bench"] = 0xFFD9A441,
-        ["Grade"] = 0xFFC46A4A,
-        ["Face"] = 0xFF7D644C,
-        ["Topography"] = 0xFF8DA35A,
-        ["Design"] = 0xFF3B82F6,
-        ["Strata"] = 0xFF9B7BFF,
+        ["Bench"] = 0xFF4C3A17,
+        ["Grade"] = 0xFF76402D,
+        ["Face"] = 0xFF33291F,
+        ["Topography"] = 0xFF434D2A,
+        ["Design"] = 0xFF25529C,
+        ["Strata"] = 0xFF4A3A79,
         ["PointCloud"] = 0xFFB4BAC2
     };
+
+    /// <summary>
+    /// Colours the surface palette had before 0.3.5 and the ones that took their place (RGB, the alpha kept): the settings
+    /// and the projects that still have them are given the new ones when they are loaded (<see cref="NewSurfaceColor"/>).
+    /// </summary>
+    public static readonly IReadOnlyDictionary<uint, uint> RetiredSurfaceColors = new Dictionary<uint, uint>
+    {
+        [0xD9A441] = 0x4C3A17,
+        [0xC46A4A] = 0x76402D,
+        [0x7D644C] = 0x33291F,
+        [0x8DA35A] = 0x434D2A,
+        [0x3B82F6] = 0x25529C,
+        [0x9B7BFF] = 0x4A3A79
+    };
+
+    /// <summary>A colour of the old surface palette as its new one, its alpha kept; any other as it is.</summary>
+    public static uint NewSurfaceColor(uint argb) =>
+        RetiredSurfaceColors.TryGetValue(argb & 0xFFFFFF, out var rgb) ? (argb & 0xFF000000) | rgb : argb;
 
     public uint SurfaceColor(string kind) =>
         SurfaceColors.TryGetValue(kind, out var c) ? c : DefaultSurfaceColors.TryGetValue(kind, out var d) ? d : 0xFF8A9BB0;
@@ -128,12 +146,13 @@ public sealed class ProgramSettings
     public const uint DefaultPatternTurnRefused = 0xFFDC2626;
     /// <summary>Version of the defaults the file was written with; older files are upgraded on load.</summary>
     public int SettingsVersion { get; set; }
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 5;
 
     /// <summary>
     /// Version 2 moved to the dark interface: a plan background or selection colour still at the old light defaults
     /// (white, magenta) is switched to the dark defaults. Colours the user picked themselves are kept.
     /// Version 3 made the theme work: files wrote "Light" before it meant anything, and the interface was dark.
+    /// Versions 4 and 5 changed six colours of the surface palette: the colours of surface types still at the old ones take the new.
     /// </summary>
     public void Upgrade()
     {
@@ -144,6 +163,8 @@ public sealed class ProgramSettings
         }
         if (SettingsVersion < 3) Theme = DarkTheme;
         if (Theme != LightTheme) Theme = DarkTheme;
+        if (SettingsVersion < 5)
+            foreach (var kind in SurfaceColors.Keys.ToList()) SurfaceColors[kind] = NewSurfaceColor(SurfaceColors[kind]);
         SettingsVersion = CurrentVersion;
     }
 

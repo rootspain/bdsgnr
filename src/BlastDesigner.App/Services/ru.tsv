@@ -3202,3 +3202,6 @@ Convert line to chevron	Преобразовать из линии в шевро
 Left front azimuth deg	Угол фронта слева, °
 Right front azimuth deg	Угол фронта справа, °
 ui:Bearing of the segment from the vertex, clockwise from north: typed in, the segment turns to it	Азимут отрезка от вершины, по часовой стрелке от севера: введённое значение поворачивает отрезок
+First segment relief ms per m	Замедление отрезка 1, мс/м
+Second segment relief ms per m	Замедление отрезка 2, мс/м
+Line relief ms per m	Замедление, мс/м

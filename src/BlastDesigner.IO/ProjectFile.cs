@@ -104,6 +104,9 @@ public static class ProjectFile
         foreach (var h in p.Holes)
             if (lined.Contains(h.Id) && h.ElectronicTimeMs.HasValue && !h.ElectronicTimeManual && !Engine.Charging.HasElectronicDetonator(p, h))
                 h.ElectronicTimeMs = null;
+        // the surface palette changed three colours (0.3.5): a surface with one of the old ones as its own takes the new one
+        foreach (var s in p.Entities.OfType<SurfaceEntity>())
+            if (s.Color is uint own) s.Color = ProgramSettings.NewSurfaceColor(own);
         // one shape, one type: a line front of two points is now the straight chevron (its vertex in the middle)
         foreach (var l in p.Entities.OfType<TimingLineEntity>()) l.LineFrontToStraightChevron();
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;

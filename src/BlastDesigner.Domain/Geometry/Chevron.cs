@@ -8,7 +8,7 @@ namespace BlastDesigner.Domain.Geometry;
 public static class Chevron
 {
     /// <summary>Angle between the segments of a new front, degrees.</summary>
-    public const double DefaultAngleDeg = 30;
+    public const double DefaultAngleDeg = 90;
     public const double MinAngleDeg = 5;
     public const double MaxAngleDeg = 170;
     /// <summary>Shortest segment, m: the shape stays one even when an end is dragged onto the vertex.</summary>

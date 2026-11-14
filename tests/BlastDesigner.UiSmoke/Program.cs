@@ -92,6 +92,24 @@ Step("new blast opens on the File tab", () =>
     if (window.Ribbon.Current != 0) throw new Exception($"ribbon is on stage {window.Ribbon.Current}");
     window.Ribbon.Select(2); // the shots below are taken on the Layout stage
 });
+Step("ribbon groups are as wide as their buttons: small ones in columns of three, no empty column kept (Topography)", () =>
+{
+    window.Ribbon.Select(1); Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    var stage = window.Ribbon.Stages[1];
+    var panels = window.Ribbon.GetLogicalDescendants().OfType<StackPanel>().Where(p => p.Name == "ribbonSmalls").ToList();
+    var groups = stage.Groups.Where(g => g.Items.Any(i => !i.Big)).ToList();
+    if (panels.Count != groups.Count) throw new Exception($"{panels.Count} panels of small buttons for {groups.Count} groups");
+    for (int i = 0; i < groups.Count; i++)
+    {
+        var columns = panels[i].Children.OfType<StackPanel>().ToList();
+        var smalls = groups[i].Items.Count(it => !it.Big);
+        if (columns.Count != (smalls + 2) / 3 || columns.Any(c => c.Children.Count > 3)) throw new Exception($"{groups[i].Name}: {smalls} small buttons in {columns.Count} columns");
+        // the panel is as wide as its columns
+        if (Math.Abs(panels[i].Bounds.Width - columns.Sum(c => c.Bounds.Width)) > 1) throw new Exception($"{groups[i].Name}: the buttons take {columns.Sum(c => c.Bounds.Width):0} px of {panels[i].Bounds.Width:0}");
+    }
+    Shot("01b_ribbon_topography");
+    window.Ribbon.Select(2); Pump();
+});
 var boundary = new[] { new Vec3(1000, 2000, 300), new Vec3(1060, 2000, 300), new Vec3(1070, 2035, 300), new Vec3(1005, 2040, 300) };
 Step("bench surface", () => vm.Change("Create surface", p =>
 {
@@ -562,6 +580,37 @@ Step("save and reload", () =>
     BlastDesigner.IO.ProjectFile.Save(vm.Project!, path, 1);
     var p = BlastDesigner.IO.ProjectFile.Load(path);
     if (p.Holes.Count() != vm.Project!.Holes.Count()) throw new Exception("hole count differs after reload");
+});
+Step("the surface palette has the new colours, and a surface saved with an old one opens with the new one", () =>
+{
+    var swatches = BlastDesigner.IO.ProgramSettings.DefaultSurfaceColors.Values.Select(c => c & 0xFFFFFF).ToList();
+    foreach (var old in new uint[] { 0xD9A441, 0xC46A4A, 0x7D644C, 0x8DA35A, 0x3B82F6, 0x9B7BFF })
+        if (swatches.Contains(old)) throw new Exception($"the surface palette still has #{old:X6}");
+    foreach (var now in new uint[] { 0x4C3A17, 0x76402D, 0x33291F, 0x434D2A, 0x25529C, 0x4A3A79 })
+        if (!swatches.Contains(now)) throw new Exception($"the surface palette has no #{now:X6}");
+    var p = BlastProject.CreateNew("old palette");
+    var s = new SurfaceEntity { Color = 0xFF7D644C, Vertices = { new(0, 0, 0), new(1, 0, 0), new(0, 1, 0) }, Triangles = { 0, 1, 2 } };
+    p.Add(s);
+    var path = Path.Combine(outDir, "old-palette.bdp");
+    BlastDesigner.IO.ProjectFile.Save(p, path, 0);
+    var back = (SurfaceEntity)BlastDesigner.IO.ProjectFile.Load(path).FindEntity(s.Id)!;
+    if (back.Color != 0xFF33291F) throw new Exception($"a surface of #7D644C opened as #{back.Color:X8}, #33291F expected");
+});
+Step("the value of the surface type list (with colour swatches) is in the colour of the text, not a dark copy", () =>
+{
+    var s = vm.Project!.Entities.OfType<SurfaceEntity>().FirstOrDefault();
+    if (s == null) return;
+    vm.Doc!.Select(new[] { s.Id }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    var box = window.GetLogicalDescendants().OfType<ComboBox>().FirstOrDefault(c => c.Name == "propKind" && c.IsEffectivelyVisible) ?? throw new Exception("no Type field of the surface");
+    var shown = BlastDesigner.App.Services.Loc.Enum(s.Kind);
+    var text = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(box).OfType<TextBlock>().FirstOrDefault(t => t.Text == shown) ?? throw new Exception("the closed box does not show the type " + shown);
+    var fg = (text.Foreground as Avalonia.Media.ISolidColorBrush)?.Color ?? throw new Exception("the type has no colour of its own");
+    var bg = (BlastDesigner.App.Services.Look.Field as Avalonia.Media.ISolidColorBrush)?.Color ?? Avalonia.Media.Colors.Gray;
+    double L(Avalonia.Media.Color c) => (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255;
+    if (Math.Abs(L(fg) - L(bg)) < 0.4 || fg.A < 200) throw new Exception($"the type is hardly seen: text {fg}, ground {bg}");
+    vm.Doc.ClearSelection(); Pump();
 });
 Step("pdf report", () =>
 {
@@ -2459,10 +2508,10 @@ Step("surface kind list shows the kind colours", () =>
 {
     var s = vm.Project!.Entities.OfType<SurfaceEntity>().First();
     vm.Doc!.Select(new[] { s.Id }); window.ShowInspectorTab(0); Pump();
-    var combo = window.GetLogicalDescendants().OfType<ComboBox>()
-        .FirstOrDefault(c => c.ItemsSource is System.Collections.IEnumerable items && items.OfType<StackPanel>().Count() == Enum.GetValues<SurfaceKind>().Length)
-        ?? throw new Exception("surface kind list without colour swatches");
-    var swatch = ((System.Collections.IEnumerable)combo.ItemsSource!).OfType<StackPanel>().ElementAt((int)SurfaceKind.Bench).Children.OfType<Border>().First();
+    // the kinds drawn by a template with their swatches (the closed box shows the value like the items of the list)
+    var combo = window.GetLogicalDescendants().OfType<ComboBox>().FirstOrDefault(c => c.Name == "propKind" && c.IsEffectivelyVisible) ?? throw new Exception("no surface kind list");
+    if (combo.ItemTemplate == null || ((System.Collections.IEnumerable)combo.ItemsSource!).Cast<object>().Count() != Enum.GetValues<SurfaceKind>().Length) throw new Exception("surface kind list without colour swatches");
+    var swatch = (combo.ItemTemplate.Build(SurfaceKind.Bench) as StackPanel)?.Children.OfType<Border>().First() ?? throw new Exception("the bench has no swatch");
     if (((Avalonia.Media.ISolidColorBrush)swatch.Background!).Color.ToUInt32() != vm.Settings.SurfaceColor("Bench")) throw new Exception("bench swatch is not the bench colour");
     combo.IsDropDownOpen = true; Pump();
 });
@@ -2791,6 +2840,7 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
         var made = vm.Project.Entities.OfType<TimingLineEntity>().Last();
         if (made.Front != BlastDesigner.Domain.Model.TimingFrontShape.Chevron || !vm.Doc.Selection.Contains(made.Id)) throw new Exception("the chevron was not made and selected");
         if (made.Style != TimingLineStyle.BurnLine) throw new Exception("the chevron made should be of the Two fronts type: " + made.Style);
+        if (Math.Abs(BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points) - 90) > 1e-6) throw new Exception($"a new chevron should open at 90°: {BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points):0.##}°");
         // timed by its oval all the same: as a chevron of the Front line type
         var asFront = BlastDesigner.Engine.EbsTimingLine.OptionsOf(made); asFront.Style = TimingLineStyle.TimeLine;
         var timedHoles = vm.Project.Holes.Where(h => made.HoleIds.Contains(h.Id)).ToList();
@@ -3100,6 +3150,25 @@ Step("the front angles of a chevron in the properties panel are the bearings of 
     var labels = window.GetLogicalDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
     if (!labels.Contains(BlastDesigner.App.Services.Loc.Property("LeftFrontAzimuthDeg"))) throw new Exception("the left angle has no caption");
     vm.View.Redraw(); Pump(); Shot("47k_chevron_angles_panel");
+    // the delays of a bent chevron are its segments', the relief along the line (the advanced burn's) is not shown
+    if (window.GetLogicalDescendants().OfType<Control>().Any(c => (c.Name is "propBurdenReliefMsPerM" or "propLineReliefMsPerM") && c.IsEffectivelyVisible)) throw new Exception("a bent chevron shows the relief along the line or the one delay of a straight one");
+    var first = Field("propFirstSegmentReliefMsPerM");
+    // fields of one line are one line high, also under a caption that wraps
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    var heights = new[] { "propStartOffsetMs", "propFirstSegmentReliefMsPerM", "propSecondSegmentReliefMsPerM", "propLeftFrontAzimuthDeg" }
+        .Select(n => window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == n && b.IsEffectivelyVisible).Bounds.Height).ToList();
+    if (heights.Max() - heights.Min() > 1) throw new Exception("the fields of one line are not alike high: " + string.Join(", ", heights.Select(h => h.ToString("0"))));
+    first = Field("propFirstSegmentReliefMsPerM");
+    if (Math.Abs(Value(first) - 8) > 0.01 || Math.Abs(Value(Field("propSecondSegmentReliefMsPerM")) - 8) > 0.01) throw new Exception("the delays of the segments should be 8 and 8");
+    first = Field("propFirstSegmentReliefMsPerM");
+    var wasLength = (Now().Points[0] - Now().Points[1]).Length2D;
+    first.Text = "16";
+    first.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    var doubled = Now();
+    if (doubled.Segments[0].ReliefMsPerM != 16 || doubled.Segments[1].ReliefMsPerM != 8 || Math.Abs((doubled.Points[0] - doubled.Points[1]).Length2D - 2 * wasLength) > 1e-6) throw new Exception("a delay of 16 should make the first segment twice as long");
+    var replanned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, holes, doubled.Points, doubled.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(doubled), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
+    if (replanned.Any(kv => ((Hole)vm.Project.FindEntity(kv.Key)!).ElectronicTimeMs is not double et || Math.Abs(et - kv.Value) > 1e-6)) throw new Exception("the holes were not programmed again after the delay");
+    vm.Undo();
     // typed in: the left segment turns to the east, its length kept, and the holes are programmed again
     left.Text = "90";
     left.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
@@ -3118,6 +3187,15 @@ Step("the front angles of a chevron in the properties panel are the bearings of 
     if (flat.Style != TimingLineStyle.TimeLine || !BlastDesigner.Domain.Geometry.Chevron.IsStraight(flat.Points) || Vec3.Distance2D(flat.Points[1], (before[0] + before[2]) / 2) > 1e-9
         || Vec3.Distance2D(flat.Points[0], before[0]) > 1e-9 || flat.Segments[1].ReliefMsPerM != flat.Segments[0].ReliefMsPerM) throw new Exception("Front line chosen should make the chevron straight, its vertex in the middle");
     vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); Shot("47l_chevron_to_front_line");
+    // a straight one has one delay
+    var one = Field("propLineReliefMsPerM");
+    if (window.GetLogicalDescendants().OfType<Control>().Any(c => (c.Name is "propFirstSegmentReliefMsPerM" or "propSecondSegmentReliefMsPerM" or "propBurdenReliefMsPerM") && c.IsEffectivelyVisible)) throw new Exception("a straight chevron shows the delays of two segments or the relief along the line");
+    var half = (Now().Points[0] - Now().Points[1]).Length2D;
+    one.Text = "4";
+    one.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    var shorter = Now();
+    if (!BlastDesigner.Domain.Geometry.Chevron.IsStraight(shorter.Points) || shorter.Segments.Any(x => x.ReliefMsPerM != 4) || Math.Abs((shorter.Points[2] - shorter.Points[1]).Length2D - half / 2) > 1e-6)
+        throw new Exception("a delay of 4 should halve both halves of the straight chevron");
     while (vm.Project.FindEntity(line.Id) != null) vm.Undo();
     // a line front has neither
     var y = holes.Max(h => h.Collar.Y) + 3;

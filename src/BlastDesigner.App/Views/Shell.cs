@@ -259,11 +259,24 @@ public sealed class RibbonBar : DockPanel
         foreach (var g in stage.Groups)
         {
             var bigs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
-            var smalls = new WrapPanel { Orientation = Orientation.Vertical, Height = 3 * 25 };
+            // the small buttons in columns of three, made here and not by a wrap panel: a wrap panel exactly three buttons
+            // high put two in a column when it measured them on a scaled screen (150 %, 175 %: a button rounds to a little
+            // more than a third) and three when it arranged them, so the group kept room for columns it never filled
+            var smalls = new StackPanel { Orientation = Orientation.Horizontal, Name = "ribbonSmalls" };
+            StackPanel? column = null;
             foreach (var it in g.Items)
             {
                 var b = it.Big ? BigButton(it) : SmallButton(it);
-                (it.Big ? (Panel)bigs : smalls).Children.Add(b);
+                if (it.Big) bigs.Children.Add(b);
+                else
+                {
+                    if (column == null || column.Children.Count == SmallsPerColumn)
+                    {
+                        column = new StackPanel { Orientation = Orientation.Vertical, VerticalAlignment = VerticalAlignment.Top };
+                        smalls.Children.Add(column);
+                    }
+                    column.Children.Add(b);
+                }
                 _buttons.Add((it, b));
             }
             var body = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
@@ -278,6 +291,9 @@ public sealed class RibbonBar : DockPanel
         }
         Refresh();
     }
+
+    /// <summary>Small buttons in a column of a ribbon group.</summary>
+    public const int SmallsPerColumn = 3;
 
     private Button BigButton(RibbonItem it)
     {

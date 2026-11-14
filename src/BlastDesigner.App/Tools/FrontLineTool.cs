@@ -195,7 +195,7 @@ public sealed class FrontLineHandles : ISelectGesture
 
 /// <summary>
 /// Timing front tool, drawing the shape chosen in its panel (<see cref="MainViewModel.FrontShape"/>).
-/// A chevron: two segments meeting at a vertex at 30°, the times growing from the vertex outwards. A press places the vertex; dragging with the button held pulls the base after the cursor (direction and length),
+/// A chevron: two segments meeting at a vertex at a right angle (<see cref="Chevron.DefaultAngleDeg"/>), the times growing from the vertex outwards. A press places the vertex; dragging with the button held pulls the base after the cursor (direction and length),
 /// a click without a drag gives segments 60 px long at the present zoom, pointing up the screen.
 /// A line: a press places one end, the drag the other (a click gives 60 px across the screen); its ends are put in the order
 /// that makes the times grow to the side of most holes, which an arrow shows.

@@ -22,11 +22,19 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   a drag) on the label of its delay in its middle, which says so as the cursor comes over it; its context menu (a straight
   one of the Front line type only); Two fronts chosen in the list of timing line types. The ends stay, the vertex goes
   forward until the segments are 170° apart, the type becomes Two fronts, and the holes are programmed again, in one undo step.
+- **The delays of a chevron's segments are in the properties panel.** A bent chevron has the fields "first segment delay"
+  and "second segment delay", a straight one a single delay; a value typed in changes the length of the segment in
+  proportion, as its circle dragged, and programs the holes again. The relief along the line is left to lines picked point by point.
 - **The left and right front angles of a chevron are the bearings of its segments** from the vertex, clockwise from
   north. Typed in, the segment turns about the vertex, its length kept, and the holes are programmed again. Other lines
   have no such fields in the panel (the angles of the advanced burn are set in the timing line window).
 
 ### Changed
+- **A new chevron opens at a right angle between its segments** (it was 30°).
+- **Six colours of the surface palette are darker:** #D9A441 → #4C3A17 (bench), #C46A4A → #76402D (grade),
+  #7D644C → #33291F (face), #8DA35A → #434D2A (topography), #3B82F6 → #25529C (design), #9B7BFF → #4A3A79 (strata). The colours of surface types in the settings and the own colours of surfaces in projects
+  still at the old values take the new ones when loaded; other colours you picked stay.
+- **The value of the surface Type list (with colour swatches) can be read:** it was dark on the grey field.
 - **A chevron has no ray from its vertex any more:** selected, turned or drawn. Its oval of delays stays.
 - **The timing line styles in the Russian properties panel are renamed:** «Линия фронта», «Два фронта», «Расширенная линия»;
   the field «Обратный порядок (B → A)» is just «Обратный порядок».
@@ -44,6 +52,7 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   bent (by an end, a typed angle or the conversion) Two fronts. The oval is drawn for both types, not for the advanced burn.
 
 ### Fixed
+- **Empty gaps in the ribbon groups** (the Topography tab and others) on screens scaled to 150 % and 175 %: a group kept room for columns of small buttons that stayed empty. The buttons now stand three to a column, and the group is as wide as they are.
 - **The analysis windows have the colours of the theme again.** The Dashboard, the burden check, the front row profile
   and the other analysis windows turned white once open, and the light text of the dark theme could hardly be read on them.
 - **The halo of a selected surface goes round its outer edge only** also when blocks cut the plan: it went round every

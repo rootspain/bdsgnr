@@ -158,7 +158,8 @@ public sealed class PropertiesPanel : DockPanel
         nameof(TimingLineEntity.Style), nameof(TimingLineEntity.ReverseOrder), nameof(TimingLineEntity.StartOffsetMs),
         nameof(TimingLineEntity.UseProgressive), nameof(TimingLineEntity.ProgressRate), nameof(TimingLineEntity.BurdenReliefMsPerM),
         nameof(TimingLineEntity.Angle1Deg), nameof(TimingLineEntity.Angle2Deg), nameof(TimingLineEntity.Segments),
-        nameof(TimingLineEntity.LeftFrontAzimuthDeg), nameof(TimingLineEntity.RightFrontAzimuthDeg)
+        nameof(TimingLineEntity.LeftFrontAzimuthDeg), nameof(TimingLineEntity.RightFrontAzimuthDeg),
+        nameof(TimingLineEntity.FirstSegmentReliefMsPerM), nameof(TimingLineEntity.SecondSegmentReliefMsPerM), nameof(TimingLineEntity.LineReliefMsPerM)
     };
 
     /// <summary>The groups of the fields of a hole; the last one takes all the others.</summary>
@@ -259,11 +260,22 @@ public sealed class PropertiesPanel : DockPanel
             // in their place, "left front angle" and "right front angle", and typed in they turn its segments
             grid.Exclude.Add(nameof(TimingLineEntity.Angle1Deg));
             grid.Exclude.Add(nameof(TimingLineEntity.Angle2Deg));
-            if (!sel.All(e => e is TimingLineEntity { Front: TimingFrontShape.Chevron, Points.Count: 3 }))
+            var chevrons = sel.All(e => e is TimingLineEntity { Front: TimingFrontShape.Chevron, Points.Count: 3 });
+            if (!chevrons)
             {
                 grid.Exclude.Add(nameof(TimingLineEntity.LeftFrontAzimuthDeg));
                 grid.Exclude.Add(nameof(TimingLineEntity.RightFrontAzimuthDeg));
             }
+            // the delays of a chevron are its segments' (a straight one has one); the relief along the line is the advanced
+            // burn's, for the lines picked point by point
+            var straight = chevrons && sel.All(e => Chevron.IsStraight(((TimingLineEntity)e).Points));
+            if (!chevrons || straight)
+            {
+                grid.Exclude.Add(nameof(TimingLineEntity.FirstSegmentReliefMsPerM));
+                grid.Exclude.Add(nameof(TimingLineEntity.SecondSegmentReliefMsPerM));
+            }
+            if (!straight) grid.Exclude.Add(nameof(TimingLineEntity.LineReliefMsPerM));
+            if (sel.Any(e => e is TimingLineEntity { Front: TimingFrontShape.Chevron or TimingFrontShape.Line })) grid.Exclude.Add(nameof(TimingLineEntity.BurdenReliefMsPerM));
             grid.Tips[nameof(TimingLineEntity.LeftFrontAzimuthDeg)] = grid.Tips[nameof(TimingLineEntity.RightFrontAzimuthDeg)] =
                 Loc.Ui("Bearing of the segment from the vertex, clockwise from north: typed in, the segment turns to it");
             // one shape, one type: the list offers the types the selected lines can take

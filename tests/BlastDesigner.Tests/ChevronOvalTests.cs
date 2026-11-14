@@ -293,4 +293,39 @@ public class ChevronOvalTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact]
+    public void TheDelayOfASegmentTypedInMovesItsEnd_AStraightOneHasOneDelayForBothHalves()
+    {
+        var bent = new TimingLineEntity
+        {
+            Front = TimingFrontShape.Chevron, Points = Shape(new Vec3(-6, -8, 0), new Vec3(3, -4, 0)), Segments = { new(0, 8, 0), new(0, 5, 0) }
+        };
+        Assert.Equal(8, bent.FirstSegmentReliefMsPerM);
+        Assert.Equal(5, bent.SecondSegmentReliefMsPerM);
+        // twice the delay, twice as long, the direction and the other segment kept
+        bent.FirstSegmentReliefMsPerM = 16;
+        Assert.Equal(Apex + new Vec3(-12, -16, 0), bent.Points[0]);
+        Assert.Equal(Apex + new Vec3(3, -4, 0), bent.Points[2]);
+        Assert.Equal(new[] { 16.0, 5 }, bent.Segments.Select(x => x.ReliefMsPerM));
+        bent.SecondSegmentReliefMsPerM = 2.5;
+        Assert.Equal(Apex + new Vec3(1.5, -2, 0), bent.Points[2]);
+
+        var straight = new TimingLineEntity
+        {
+            Front = TimingFrontShape.Chevron, Points = Shape(new Vec3(-10, 0, 0), new Vec3(10, 0, 0)), Segments = { new(0, 8, 0), new(0, 8, 0) }
+        };
+        Assert.Equal(8, straight.LineReliefMsPerM);
+        straight.LineReliefMsPerM = 4;
+        Assert.True(Chevron.IsStraight(straight.Points));
+        Assert.Equal(Apex + new Vec3(-5, 0, 0), straight.Points[0]);
+        Assert.Equal(Apex, straight.Points[1]);
+        Assert.Equal(Apex + new Vec3(5, 0, 0), straight.Points[2]);
+        Assert.Equal(new[] { 4.0, 4 }, straight.Segments.Select(x => x.ReliefMsPerM));
+        // a line that is no chevron has none
+        var picked = new TimingLineEntity { Points = { Apex, Apex + new Vec3(10, 0, 0) }, Segments = { new(0, 8, 0) } };
+        Assert.Equal(0, picked.FirstSegmentReliefMsPerM);
+        picked.FirstSegmentReliefMsPerM = 3;
+        Assert.Equal(8, picked.Segments[0].ReliefMsPerM);
+    }
 }

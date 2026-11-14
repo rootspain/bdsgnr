@@ -103,6 +103,61 @@ public sealed class TimingLineEntity : Entity, IHoleTimer
     public int ProgressRate { get; set; } = 1;
     public bool ReverseOrder { get; set; }
     public double BurdenReliefMsPerM { get; set; } = 8;
+
+    /// <summary>
+    /// The delay of a chevron's first segment (from the vertex to point 0), ms/m; set, the segment's length goes with it, as
+    /// its circle dragged (twice the delay, twice as long). The properties panel shows it for a bent chevron; 0 for any other line.
+    /// </summary>
+    [JsonIgnore]
+    public double FirstSegmentReliefMsPerM
+    {
+        get => SegmentRelief(0);
+        set => SetSegmentRelief(0, value);
+    }
+
+    /// <summary>The delay of a chevron's second segment (from the vertex to point 2), see <see cref="FirstSegmentReliefMsPerM"/>.</summary>
+    [JsonIgnore]
+    public double SecondSegmentReliefMsPerM
+    {
+        get => SegmentRelief(1);
+        set => SetSegmentRelief(1, value);
+    }
+
+    /// <summary>
+    /// The one delay of a chevron opened into a straight line (the first segment's), ms/m; set, both segments take it and both
+    /// halves their lengths with it, the vertex staying in the middle. The properties panel shows it for a straight one.
+    /// </summary>
+    [JsonIgnore]
+    public double LineReliefMsPerM
+    {
+        get => SegmentRelief(0);
+        set
+        {
+            // both halves from the one delay they share, so they stay alike and the vertex in the middle
+            if (ChevronOfThree && Segments.Count >= 2) Segments[1] = Segments[1] with { ReliefMsPerM = Segments[0].ReliefMsPerM };
+            SetSegmentRelief(0, value);
+            SetSegmentRelief(1, value);
+        }
+    }
+
+    private double SegmentRelief(int seg) => ChevronOfThree && Segments.Count > seg ? Segments[seg].ReliefMsPerM : 0;
+
+    private void SetSegmentRelief(int seg, double value)
+    {
+        if (!ChevronOfThree || Segments.Count < 2 || double.IsNaN(value) || double.IsInfinity(value) || value < 0) return;
+        var end = seg == 0 ? 0 : 2;
+        var old = Segments[seg].ReliefMsPerM;
+        var d = (Points[end] - Points[1]).WithZ(0);
+        var length = d.Length2D;
+        if (old > 1e-9 && length > 1e-12)
+        {
+            var to = d * (Math.Max(length * value / old, Geometry.Chevron.MinLength) / length);
+            var list = Points.ToList();
+            list[end] = new Vec3(Points[1].X + to.X, Points[1].Y + to.Y, Points[end].Z);
+            Points = list;
+        }
+        Segments[seg] = Segments[seg] with { ReliefMsPerM = value };
+    }
     public double Angle1Deg { get; set; }
     public double Angle2Deg { get; set; }
 

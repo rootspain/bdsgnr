@@ -343,6 +343,54 @@ public class SettingsTests
     }
 
     [Fact]
+    public void TheThreeOldColoursOfTheSurfacePaletteAreTheNewOnes_InTheSettingsAndInTheProjects()
+    {
+        Assert.Equal(0xFF4C3A17u, ProgramSettings.DefaultSurfaceColors["Bench"]);
+        Assert.Equal(0xFF76402Du, ProgramSettings.DefaultSurfaceColors["Grade"]);
+        Assert.Equal(0xFF33291Fu, ProgramSettings.DefaultSurfaceColors["Face"]);
+        var palette = ProgramSettings.DefaultSurfaceColors.Values.Select(c => c & 0xFFFFFF).ToHashSet();
+        Assert.DoesNotContain(0xD9A441u, palette);
+        Assert.DoesNotContain(0xC46A4Au, palette);
+        Assert.DoesNotContain(0x7D644Cu, palette);
+        Assert.Equal(0xFF434D2Au, ProgramSettings.DefaultSurfaceColors["Topography"]);
+        Assert.Equal(0xFF25529Cu, ProgramSettings.DefaultSurfaceColors["Design"]);
+        Assert.Equal(0xFF4A3A79u, ProgramSettings.DefaultSurfaceColors["Strata"]);
+        foreach (var gone in new uint[] { 0x8DA35A, 0x3B82F6, 0x9B7BFF }) Assert.DoesNotContain(gone, palette);
+        Assert.Equal(0xFF25529Cu, ProgramSettings.NewSurfaceColor(0xFF3B82F6));
+        // the alpha is kept, other colours stay
+        Assert.Equal(0x804C3A17u, ProgramSettings.NewSurfaceColor(0x80D9A441));
+        Assert.Equal(0xFF123456u, ProgramSettings.NewSurfaceColor(0xFF123456));
+
+        // settings written before: the colours of the types at the old ones take the new, a colour of the user's own stays
+        // a file of version 4 (the first three colours changed) still takes the other three
+        var four = new ProgramSettings { SettingsVersion = 4, SurfaceColors = new() { ["Strata"] = 0xFF9B7BFF } };
+        four.Upgrade();
+        Assert.Equal(0xFF4A3A79u, four.SurfaceColors["Strata"]);
+        var old = new ProgramSettings { SettingsVersion = 3, SurfaceColors = new() { ["Bench"] = 0xFFD9A441, ["Grade"] = 0xFFC46A4A, ["Topography"] = 0xFF7D644C, ["Design"] = 0xFF00FF00 } };
+        old.Upgrade();
+        Assert.Equal(0xFF4C3A17u, old.SurfaceColors["Bench"]);
+        Assert.Equal(0xFF76402Du, old.SurfaceColors["Grade"]);
+        Assert.Equal(0xFF33291Fu, old.SurfaceColors["Topography"]);
+        Assert.Equal(0xFF00FF00u, old.SurfaceColors["Design"]);
+
+        // a project written before: a surface with an old colour of its own takes the new one
+        var p = BlastProject.CreateNew("palette");
+        var bench = new SurfaceEntity { Color = 0xFFC46A4A, Vertices = { new(0, 0, 0), new(1, 0, 0), new(0, 1, 0) }, Triangles = { 0, 1, 2 } };
+        var other = new SurfaceEntity { Color = 0xFF112233, Vertices = { new(0, 0, 0), new(1, 0, 0), new(0, 1, 0) }, Triangles = { 0, 1, 2 } };
+        p.Add(bench);
+        p.Add(other);
+        var path = Path.Combine(Path.GetTempPath(), $"palette-{Guid.NewGuid():N}.bdproj");
+        try
+        {
+            BlastDesigner.IO.ProjectFile.Save(p, path, 0);
+            var back = BlastDesigner.IO.ProjectFile.Load(path);
+            Assert.Equal(0xFF76402Du, ((SurfaceEntity)back.FindEntity(bench.Id)!).Color);
+            Assert.Equal(0xFF112233u, ((SurfaceEntity)back.FindEntity(other.Id)!).Color);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Adapt_LightensDarkColoursOnlyOnDarkBackground()
     {
         var navy = new SkiaSharp.SKColor(0xFF1E3A8A);

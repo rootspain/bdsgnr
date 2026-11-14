@@ -186,6 +186,8 @@ public sealed class PropertyGrid : Grid
             editor.Name = "prop" + p.Name;
             if (Tips.TryGetValue(p.Name, out var tip)) ToolTip.SetTip(editor, tip);
             editor.Margin = new Thickness(0, 2);
+            // a field of one line stays one line high when its caption wraps onto two or three
+            if (editor is TextBox { AcceptsReturn: false } single) single.VerticalAlignment = VerticalAlignment.Center;
             editor.IsEnabled = !ReadOnly && p.SetMethod?.IsPublic == true;
             Children.Add(label);
             Children.Add(editor);
@@ -495,11 +497,17 @@ public sealed class PropertyGrid : Grid
                 return Ui.Row(4, chips.Cast<Control>().ToArray());
             }
             System.Collections.IEnumerable items = values.Select(Loc.Enum).ToList();
+            Avalonia.Controls.Templates.IDataTemplate? swatched = null;
             if (EnumColors.TryGetValue(enumType, out var colorOf))
-                items = values.Select(v => (Control)Ui.Row(8,
-                new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromUInt32(colorOf(v))), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center },
-                new TextBlock { Text = Loc.Enum(v), VerticalAlignment = VerticalAlignment.Center })).ToList();
-            var combo = new ComboBox { ItemsSource = items, SelectedIndex = value == null || mixed ? -1 : values.IndexOf(value), PlaceholderText = mixed ? MixedText : null, MinWidth = 160, HorizontalContentAlignment = HorizontalAlignment.Left };
+            {
+                // a template, not ready controls (as the layer box): the closed box then draws the chosen value like the
+                // items of the list, in the colour of the text, not a dimmed copy
+                items = values;
+                swatched = new Avalonia.Controls.Templates.FuncDataTemplate<object>((v, _) => v == null ? new TextBlock() : Ui.Row(8,
+                    new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromUInt32(colorOf(v))), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock { Text = Loc.Enum(v), VerticalAlignment = VerticalAlignment.Center }));
+            }
+            var combo = new ComboBox { ItemsSource = items, ItemTemplate = swatched, SelectedIndex = value == null || mixed ? -1 : values.IndexOf(value), PlaceholderText = mixed ? MixedText : null, MinWidth = 160, HorizontalContentAlignment = HorizontalAlignment.Left };
             combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) Set(p, values[combo.SelectedIndex]); };
             return combo;
         }
