@@ -2348,8 +2348,8 @@ ui:Each kind has its colour; one height scale for all surfaces, darker at the lo
 ui:Colour: kind of surface; one height scale for all, darker at the lowest point, lighter at the highest	Цвет — тип поверхности; шкала высот общая: темнее в самой низкой точке, светлее в самой высокой
 Click up to four points of the timing line (double-click or Enter to finish); selected holes (or all) are programmed from it.	Щёлкните до четырёх точек фронта отбойки ЭСИ (двойной щелчок или Enter — готово); выбранные (или все) скважины получат время от него.
 Time line (contour)	Фронт отбойки ЭСИ (контурный)
-Burn line	Линия горения
-Advanced burn	Расширенная линия горения
+Burn line	Два фронта
+Advanced burn	Расширенная линия
 Reverse line direction	Обратное направление линии
 Progressive relief	Прогрессивное замедление
 Progressive exponent	Показатель прогрессии
@@ -2963,13 +2963,13 @@ Line {0}: the chain of ties is not in the plan.	Линия {0}: цепочки �
 Top detonator	Верхний детонатор
 Bottom detonator	Нижний детонатор
 {0}: holes {1}–{2}, {3} ties ({4} holes)	{0}: скв. {1}–{2}, связей {3} ({4} скважин)
-Press to place the vertex of the front and drag the way the times are to grow: the ray follows the cursor, the sides open behind it (a click gives 60 px, upwards). On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.	Нажмите, чтобы поставить вершину фронта, и тяните туда, куда должно расти время: луч идёт за курсором, стороны расходятся позади него (щелчок даёт 60 пкс вверх). У выделенного фронта кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину, перетаскивание линии сдвигает фронт.
-Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line to the side of most holes, the arrow shows it. On a selected line drag a circle to move its end, the line to move it.	Нажмите в одном конце линии и тяните к другому (щелчок даёт 60 px); время растёт от линии в ту сторону, где больше скважин, это показывает стрелка. У выделенной линии кружок перемещает её конец, перетаскивание линии перемещает её.
+Press to place the vertex of the front and drag the way it is to point: the sides open behind the cursor (a click gives 60 px, upwards). On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length (drawn out to 180° it becomes a straight line, whose ends then move on their own), the line to move it.	Нажмите, чтобы поставить вершину фронта, и тяните туда, куда он должен смотреть: стороны расходятся позади курсора (щелчок даёт 60 пкс вверх). У выделенного фронта кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину (раскрытый до 180° фронт становится прямой, и тогда его концы двигаются сами по себе), перетаскивание линии сдвигает фронт.
+Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line both ways, the holes at one distance from it fire together. On a selected line drag a circle to move its end, the label in its middle to make it a chevron, the line to move it.	Нажмите в одном конце линии и тяните к другому (щелчок даёт 60 пкс); время растёт от линии в обе стороны, скважины на одном расстоянии от неё срабатывают вместе. У выделенной линии кружок двигает её конец, подпись в середине делает её шевроном, перетаскивание линии сдвигает её.
 ui:Shape	Фигура
 ui:Line	Линия
 ui:Chevron	Галочка
-ui:The times grow from the line to the side of most holes; the holes at one distance from it fire together	Время растёт от линии в ту сторону, где больше скважин; скважины на одном расстоянии от неё взрываются вместе
-ui:Two segments at a vertex: the times grow along its ray, from the vertex outwards	Два отрезка с общей вершиной: время растёт вдоль луча, от вершины наружу
+ui:The times grow from the line both ways; the holes at one distance from it fire together	Время растёт от линии в обе стороны; скважины на одном расстоянии от неё срабатывают вместе
+ui:Two segments at a vertex: the times grow from the vertex outwards; opened to 180° it is a straight line, the times grow from it	Два отрезка с общей вершиной: время растёт от вершины наружу; раскрытый до 180° — прямая, время растёт от неё
 Rotate timing line	Поворот фронта отбойки ЭСИ
 Reshape timing line	Изменение формы фронта отбойки ЭСИ
 Timing line changed: {0} holes reprogrammed	Фронт отбойки ЭСИ изменён: перепрограммировано скважин — {0}
@@ -3190,3 +3190,15 @@ At {0} the predicted PPV is {1:0.00} mm/s, above the limit of {2:0.##} mm/s. Low
 {0:0.0} % of the rock is predicted larger than {1} (the oversize size), more than 10 %. A smaller burden and spacing, a higher powder factor or shorter stemming break it finer. The prediction and its inputs are in the Fragmentation prediction window.	По прогнозу {0:0.0} % породы крупнее {1} (размер негабарита) — больше 10 %. Мельче дробят меньшие ЛНС и расстояние, больший удельный расход или более короткая забойка. Расчёт и исходные данные — в окне «Прогноз фрагментации».
 {0} of {1} surveyed holes are outside the design tolerances (collar, depth, toe, angle or bearing). Which holes and by how much: the Design tolerance check window; the tolerances themselves: Project properties ▸ Design tolerances.	{0} из {1} снятых скважин вне проектных допусков (устье, глубина, забой, угол или азимут). Какие и насколько — в окне «Проверка допусков»; сами допуски — в «Свойства проекта ▸ Проектные допуски».
 {0} holes have a burden to the hole ahead of less than {1:0.00} m (80 % of the design burden of {2:0.00} m), measured along the blast orientation: the rock in front of them breaks out early and can be thrown. Which holes: the Burden check window.	У {0} скважин ЛНС до скважины впереди меньше {1:0.00} м (80 % проектной ЛНС {2:0.00} м) по направлению взрыва: порода перед ними выходит раньше и может дать разлёт. Какие это скважины — в окне «Проверка ЛНС».
+Style	Тип линии времени
+Reverse order	Обратный порядок
+Use progressive	Прогрессивное замедление
+Progress rate	Показатель прогрессии
+Burden relief ms per m	Замедление вдоль линии, мс/м
+Angle1 deg	Угол фронта слева, °
+Angle2 deg	Угол фронта справа, °
+Time line	Линия фронта
+Convert line to chevron	Преобразовать из линии в шеврон
+Left front azimuth deg	Угол фронта слева, °
+Right front azimuth deg	Угол фронта справа, °
+ui:Bearing of the segment from the vertex, clockwise from north: typed in, the segment turns to it	Азимут отрезка от вершины, по часовой стрелке от севера: введённое значение поворачивает отрезок

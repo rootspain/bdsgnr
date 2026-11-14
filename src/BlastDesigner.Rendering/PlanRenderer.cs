@@ -482,12 +482,8 @@ public static class PlanRenderer
                     break;
                 case TimingLineEntity tl:
                     DrawTimingLine(canvas, cam, tl, selected || e.Color != null ? color : (SKColor?)null, text);
-                    // a selected chevron of the front tool shows its ray, as long as its sides
-                    if (selected && tl.Front == TimingFrontShape.Chevron && tl.Points.Count == 3)
-                    {
-                        DrawChevronRay(canvas, cam, tl.Points, color, Chevron.Length(tl.Points));
-                        DrawChevronOval(canvas, cam, tl.Points, color);
-                    }
+                    // a selected chevron of the front tool shows its oval of delays (not one of the advanced burn, not timed by it)
+                    if (selected && tl.TimedAsChevron()) DrawChevronOval(canvas, cam, tl.Points, color);
                     break;
             }
         }
@@ -1076,30 +1072,19 @@ public static class PlanRenderer
     }
 
     public static SKColor TimingLineColor(TimingLineEntity tl) =>
-        Adapt(tl.Color is uint own ? new SKColor(own) : tl.Style == TimingLineStyle.BurnLine ? new SKColor(0xFF808000) : new SKColor(0xFF008000));
+        // a chevron of the "two fronts" type is no burn line: the green of the fronts
+        Adapt(tl.Color is uint own ? new SKColor(own) : tl.Style == TimingLineStyle.BurnLine && !tl.TimedAsChevron() ? new SKColor(0xFF808000) : new SKColor(0xFF008000));
 
     /// <summary>
-    /// Ray of a two-segment front (<see cref="Chevron"/>): dashed, from the vertex outwards along the axis. On a selected front it
-    /// is as long as the sides, while the front is created or turned as long as the view is wide; an unselected one has none.
-    /// </summary>
-    /// <summary>
     /// The oval of a chevron's delays, thin and dashed: its centre at the vertex, through both ends (its segments are its
-    /// semi-diameters). The delay a hole gets is the oval's radius toward it, in the chevron's scale.
+    /// semi-diameters). The delay a hole gets is the oval's radius toward it, in the chevron's scale. A chevron opened into a
+    /// straight line has none: its times grow from the line.
     /// </summary>
     public static void DrawChevronOval(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color)
     {
-        if (points.Count != 3) return;
+        if (points.Count != 3 || Chevron.IsStraight(points)) return;
         using var dashed = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = color.WithAlpha(170), PathEffect = SKPathEffect.CreateDash(new[] { 4f, 4f }, 0) };
         DrawPolyline(c, cam, Chevron.Oval(points), true, dashed);
-    }
-
-    public static void DrawChevronRay(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color, double? length = null)
-    {
-        if (points.Count != 3) return;
-        var apex = points[1];
-        length ??= cam.Width / Math.Max(cam.Scale, 1e-9);
-        using var dashed = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, Color = color, PathEffect = SKPathEffect.CreateDash(new[] { 8f, 5f }, 0) };
-        DrawPolyline(c, cam, new[] { apex, apex + Chevron.RayDir(points) * length.Value }, false, dashed);
     }
 
     /// <summary>
@@ -1108,6 +1093,34 @@ public static class PlanRenderer
     /// on both sides plus an arrow at the segment end for a burn line; the advanced burn is a red dashed line with a start
     /// circle and two 20 m angle arms labelled with relief / cos(angle). Brackets and labels are screen-aligned.
     /// </summary>
+    /// <summary>
+    /// A screen point on the label of the delay in the middle of a chevron opened into a straight line (the marker a press on
+    /// which converts it to a chevron again): within the bracket <see cref="DrawTimingLine"/> draws there, and off the line
+    /// itself, so the line is still taken to move it at any scale.
+    /// </summary>
+    public static bool OnStraightLabel(Camera cam, TimingLineEntity tl, double sx, double sy)
+    {
+        if (!tl.CanConvertToChevron() || tl.Style == TimingLineStyle.AdvancedBurn) return false;
+        var pts = tl.OrderedPoints;
+        var (x0, y0) = cam.ToScreen(pts[0]);
+        var (x1, y1) = cam.ToScreen(pts[^1]);
+        double dx = x1 - x0, dy = y1 - y0, len = Math.Sqrt(dx * dx + dy * dy);
+        if (len < 1) return false;
+        dx /= len; dy /= len;
+        double rx = sx - (x0 + x1) / 2, ry = sy - (y0 + y1) / 2;
+        var along = rx * dx + ry * dy;
+        // the bracket stands on the −n side, n = (−dy, dx), from the line out to 1.5 lines of text; its width is the text's
+        var away = -(rx * -dy + ry * dx);
+        return Math.Abs(along) <= LabelHalfWidthPx && away >= LabelOffLinePx && away <= LabelReachPx;
+    }
+
+    /// <summary>How far the label of a straight chevron reaches from the line, px (text of about 11 px: 1.5 lines of it).</summary>
+    private const double LabelReachPx = 20;
+    /// <summary>Half the width of the label of a straight chevron, px (a delay of a few figures).</summary>
+    private const double LabelHalfWidthPx = 13;
+    /// <summary>The label is taken this far from the line and further, px: nearer is the line itself (its stroke and halo).</summary>
+    private const double LabelOffLinePx = 5;
+
     public static void DrawTimingLine(SKCanvas c, Camera cam, TimingLineEntity tl, SKColor? colorOverride, SKPaint text)
     {
         if (tl.Points.Count == 0) return;
@@ -1178,12 +1191,15 @@ public static class PlanRenderer
         {
             var pts = tl.OrderedPoints;
             DrawPolyline(c, cam, pts, false, stroke);
+            // a chevron opened into a straight line has one delay, the first segment's: one label, in its middle
+            if (tl.Front == TimingFrontShape.Chevron && Chevron.IsStraight(tl.Points)) pts = new[] { pts[0], pts[^1] };
             for (int i = 0; i < pts.Count - 1; i++)
             {
                 var relief = i < tl.Segments.Count ? tl.Segments[i].ReliefMsPerM : 0;
                 var label = relief.ToString("0.0");
                 Label(pts[i], pts[i + 1], label, false, false);
-                if (tl.Style == TimingLineStyle.BurnLine) Label(pts[i], pts[i + 1], label, true, true);
+                // a burn line has the burn rate on its other side; a chevron of the "two fronts" type is not one
+                if (tl.Style == TimingLineStyle.BurnLine && !tl.TimedAsChevron()) Label(pts[i], pts[i + 1], label, true, true);
             }
         }
         text.Color = oldColor;

@@ -42,6 +42,8 @@ public sealed partial class MainViewModel
         var text = await Clipboard.GetTextAsync();
         if (text == null || !text.StartsWith(ClipboardPrefix)) return;
         var entities = ProjectJson.DeserializeEntities(text[ClipboardPrefix.Length..]);
+        // a line front copied by an older version is the straight chevron now
+        foreach (var l in entities.OfType<TimingLineEntity>()) l.LineFrontToStraightChevron();
         // Paste with a small offset so copies are visible next to the originals.
         var offset = new Vec3(Project!.Design.Spacing, -Project.Design.Burden, 0);
         var ids = new List<Guid>();

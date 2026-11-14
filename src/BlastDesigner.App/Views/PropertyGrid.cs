@@ -155,6 +155,8 @@ public sealed class PropertyGrid : Grid
     public Dictionary<string, IReadOnlyList<(string Id, string Name)>> Choices { get; } = new();
     /// <summary>What the empty choice of a property with <see cref="Choices"/> is called ("By layer"); "(none)" when not given.</summary>
     public Dictionary<string, string> NoneLabels { get; } = new();
+    /// <summary>The values an enum property offers in its list, by property name (the value it has is always among them); all when not given.</summary>
+    public Dictionary<string, IReadOnlyList<object>> EnumValues { get; } = new();
     /// <summary>Colour swatch (ARGB) shown next to each value of an enum type in its list, e.g. the colour of each kind of surface.</summary>
     public Dictionary<Type, Func<object, uint>> EnumColors { get; } = new();
     public event Action<string>? PropertyEdited;
@@ -471,6 +473,12 @@ public sealed class PropertyGrid : Grid
                 return panel;
             }
             var values = Enum.GetValues(enumType).Cast<object>().ToList();
+            if (EnumValues.TryGetValue(p.Name, out var only))
+            {
+                var keep = only.ToHashSet();
+                if (value != null && !mixed) keep.Add(value);
+                values = values.Where(keep.Contains).ToList();
+            }
             if (Chips.Contains(p.Name))
             {
                 var chips = new List<Button>();

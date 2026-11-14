@@ -12,12 +12,47 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Tips on the red warnings of the Dashboard.** Point at a row: the tip says why it is red, with its numbers (how many
   holes, which threshold, which limit), and which window shows more: holes not loaded and not initiated, neighbour
   overlaps, PPV above the limit, oversize, holes outside the tolerances, low burden.
+- **A chevron opened to 180° becomes a straight line.** An end brought within 5° of the continuation of the other
+  segment snaps onto it, the label at the end says "180°". The line has one delay, the first segment's, and one label of it, in
+  its middle. It has no vertex circle and is not turned by its vertex; its ends move on their own, as a line front's, and it
+  stays straight. A hole's time grows with its distance from the line, square to it, on both sides: the holes on one
+  parallel fire together, the nearer ones first (the other way round in the reverse order). Drawn further before the
+  button is let go, the chevron bends to the other side.
+- **Convert line to chevron.** A chevron opened into a straight line is made a chevron again in three ways: a press (or
+  a drag) on the label of its delay in its middle, which says so as the cursor comes over it; its context menu (a straight
+  one of the Front line type only); Two fronts chosen in the list of timing line types. The ends stay, the vertex goes
+  forward until the segments are 170° apart, the type becomes Two fronts, and the holes are programmed again, in one undo step.
+- **The left and right front angles of a chevron are the bearings of its segments** from the vertex, clockwise from
+  north. Typed in, the segment turns about the vertex, its length kept, and the holes are programmed again. Other lines
+  have no such fields in the panel (the angles of the advanced burn are set in the timing line window).
+
+### Changed
+- **A chevron has no ray from its vertex any more:** selected, turned or drawn. Its oval of delays stays.
+- **The timing line styles in the Russian properties panel are renamed:** «Линия фронта», «Два фронта», «Расширенная линия»;
+  the field «Обратный порядок (B → A)» is just «Обратный порядок».
+- **The line front is now the straight chevron.** The Line chip of the timing front tool draws a straight chevron of the
+  Front line type: its vertex in the middle, the times growing from the line both ways, the holes at one distance from it
+  firing together (the times grew only toward most holes before, which an arrow showed; it is gone). Line fronts of older
+  files and of the clipboard become straight chevrons when opened or pasted; the times of their holes are worked out again
+  at the next edit of the line.
+- **One shape, one type.** A front (a line or a chevron) offers only Front line and Two fronts in the list of timing line
+  types, and changing the type changes the shape: Two fronts bends a straight one or a line front into a chevron (170°),
+  Front line makes a chevron straight, its vertex in the middle of its ends, one delay, the first segment's. A line front
+  is also converted to a chevron by a press on its label in the middle and by its context menu.
+- **A chevron drawn by the timing front tool is of the Two fronts type** (it was Front line). It is still timed by its oval,
+  with the same colour and labels. The type of a chevron follows its shape: opened into a straight line it is Front line,
+  bent (by an end, a typed angle or the conversion) Two fronts. The oval is drawn for both types, not for the advanced burn.
 
 ### Fixed
 - **The analysis windows have the colours of the theme again.** The Dashboard, the burden check, the front row profile
   and the other analysis windows turned white once open, and the light text of the dark theme could hardly be read on them.
 - **The halo of a selected surface goes round its outer edge only** also when blocks cut the plan: it went round every
   triangle then.
+- **Reverse order, style and the other values of a timing line changed in the properties panel reprogram its holes**
+  in the same undo step, as in the timing line window. Only the line itself changed before: the holes kept their old
+  delays, and after a change of style some of them did not fire by the line.
+- **Reverse order of a chevron:** the delays run from the farthest hole back to the vertex — the farthest fires first,
+  the one by the vertex last. A chevron programmed the holes the same either way before.
 
 ## 0.3.4 — 2026-11-13
 

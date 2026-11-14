@@ -780,7 +780,9 @@ public sealed partial class MainViewModel
         try
         {
             var holes = SelectedOrAllHoles().Where(h => !h.IsDummy).ToList();
-            var front = pts.Count == 2 ? TimingFrontShape.Line : TimingFrontShape.Chevron;
+            // one shape, one type: the line of the tool is the straight chevron, its vertex in the middle, a front line
+            if (pts.Count == 2) pts = new List<Vec3> { pts[0], new((pts[0].X + pts[1].X) / 2, (pts[0].Y + pts[1].Y) / 2, pts[0].Z), new(pts[1].X, pts[1].Y, pts[0].Z) };
+            var front = TimingFrontShape.Chevron;
             if (await TimingLineWindow.Show(this, pts, holes, front: front) is not { } setup) return;
             var ids = ElectronicHoleIds(holes);
             TimingLineResult? r = null;
@@ -908,9 +910,33 @@ public sealed partial class MainViewModel
             l.Points = list.ToList();
             // a chevron's end dragged: the delay of its segment went with its length
             if (segments != null) l.Segments = segments.ToList();
+            // snapped into a straight line it is a front line, bent again two fronts
+            l.TypeByShape();
         }));
         if (timed > 0) SetStatus(Loc.F("Timing line changed: {0} holes reprogrammed", timed));
     }
+
+    /// <summary>
+    /// "Convert line to chevron" (the circle at the middle of a straight chevron, its context menu): every chevron opened into
+    /// a straight line among <paramref name="lineIds"/> is bent and takes the "two fronts" type
+    /// (<see cref="TimingLineEntity.ConvertToChevron"/>), its holes programmed again, in one undo step.
+    /// </summary>
+    public void ConvertLinesToChevrons(IEnumerable<Guid> lineIds)
+    {
+        if (Project == null) return;
+        var ids = lineIds.Where(id => Project.FindEntity(id) is TimingLineEntity l && l.CanConvertToChevron()).ToHashSet();
+        if (ids.Count == 0) return;
+        var timed = 0;
+        Change("Convert line to chevron", p => timed = ReprogramTimingLines(p, ids, () =>
+        {
+            foreach (var l in p.Entities.OfType<TimingLineEntity>().Where(l => ids.Contains(l.Id))) l.ConvertToChevron();
+        }));
+        if (timed > 0) SetStatus(Loc.F("Timing line changed: {0} holes reprogrammed", timed));
+    }
+
+    /// <summary>Context menu ▸ Convert line to chevron: the selected straight chevrons of the "front line" type.</summary>
+    public void ConvertSelectedLinesToChevrons() =>
+        ConvertLinesToChevrons(Doc?.SelectedEntities.OfType<TimingLineEntity>().Where(l => l.Style == TimingLineStyle.TimeLine).Select(l => l.Id) ?? Enumerable.Empty<Guid>());
 
     /// <summary>
     /// Edits a timing line of the project in the timing line window. The line's values, its layer and (unless switched off)

@@ -270,17 +270,30 @@ public class EbsTimingLineTests
     }
 
     [Fact]
-    public void AReversedChevronTimesFromTheHolesItPointsAt()
+    public void AReversedChevronTimesFromTheFarthestHoleBackToItsVertex()
     {
-        // ray to the north: the hole ahead of the vertex fires first, the times grow back into the angle
+        // ray to the north: forward the hole by the vertex fires first and the times grow away from it; reversed the
+        // farthest hole fires first, at the start, and the times come back to the vertex, each gap the same
         var pts = Chevron.Build(new Vec3(0, 0, 100), new Vec3(0, 1, 0), 30, 10);
-        var holes = new List<Hole> { H(0, 2), H(0, -4), H(0, -8), H(-2, -6), H(2, -6) };
-        EbsTimingLine.Apply(Project, holes, pts, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) },
-            new TimingLineOptions { Style = TimingLineStyle.TimeLine, ReverseOrder = true, StartOffsetMs = 100 }, 20000, true);
-        var t = holes.Select(h => h.ElectronicTimeMs!.Value).ToList();
-        Assert.Equal(100, t[0], 6);
-        Assert.True(t[0] < t[1] && t[1] < t[2]);
-        Assert.Equal(t[3], t[4], 6);
+        var segments = new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) };
+        List<double> Times(bool reverse)
+        {
+            var holes = new List<Hole> { H(0, 2), H(0, -4), H(0, -8), H(-2, -6), H(2, -6) };
+            EbsTimingLine.Apply(Project, holes, pts, segments,
+                new TimingLineOptions { Style = TimingLineStyle.TimeLine, Front = TimingFrontShape.Chevron, ReverseOrder = reverse, StartOffsetMs = 100 }, 20000, true);
+            return holes.Select(h => h.ElectronicTimeMs!.Value).ToList();
+        }
+        var forward = Times(false);
+        var back = Times(true);
+        Assert.Equal(100, forward[0], 6);
+        Assert.True(forward[0] < forward[1] && forward[1] < forward[2]);
+        // the farthest of the holes, 8 m behind the vertex, first
+        Assert.Equal(100, back[2], 6);
+        Assert.True(back[2] < back[1] && back[1] < back[0]);
+        Assert.Equal(back[3], back[4], 6);
+        // the same delays between the holes, the other way round
+        var span = forward.Max() - forward.Min();
+        for (int i = 0; i < forward.Count; i++) Assert.Equal(span - (forward[i] - 100), back[i] - 100, 1);
     }
 
     [Fact]
@@ -412,6 +425,45 @@ public class EbsTimingLineTests
         // a change that leaves the holes as they are reprograms nothing
         doc.Execute("Rename", pr => { foreach (var x in pr.Holes) x.ElectronicTimeMs = x.ElectronicTimeManual ? x.ElectronicTimeMs : 1; ((Hole)pr.FindEntity(other.Id)!).Notes = "n"; });
         Assert.Equal(1, ((Hole)doc.Project.FindEntity(other.Id)!).ElectronicTimeMs);
+    }
+
+    /// <summary>
+    /// A line along the front of a grid gives every hole of the grid a time in each of its styles, walked either way, and
+    /// walked the other way it fires the other end first (what the properties panel programs again when they are changed).
+    /// </summary>
+    [Theory]
+    [InlineData(TimingLineStyle.TimeLine)]
+    [InlineData(TimingLineStyle.BurnLine)]
+    [InlineData(TimingLineStyle.AdvancedBurn)]
+    public void EveryStyleWalkedEitherWayTimesEveryHoleOfTheGrid(TimingLineStyle style)
+    {
+        var p = BlastProject.CreateNew();
+        for (int r = 0; r < 4; r++)
+            for (int c = 0; c < 6; c++)
+                p.Add(H(c * 5, r * 4));
+        Dictionary<string, double?> Times(bool reverse)
+        {
+            var line = EbsTimingLine.CreateEntity(Line((-5, -4), (30, -4)), new[] { new TimingLineSegment(5, 10, 0) },
+                new TimingLineOptions { Style = style, ReverseOrder = reverse, Angle1Deg = 30, Angle2Deg = 30 });
+            var r = EbsTimingLine.Apply(p, p.Holes.ToList(), line);
+            Assert.True(r.Timed == 24, $"{style}{(reverse ? " reversed" : "")}: {r.Timed} of 24 holes timed, {r.OutOfReach} out of reach");
+            return p.Holes.ToDictionary(h => h.Label, h => h.ElectronicTimeMs);
+        }
+        var forward = Times(false);
+        var back = Times(true);
+        // the advanced burn is walked from its first point whatever the order
+        if (style == TimingLineStyle.AdvancedBurn) return;
+        if (style == TimingLineStyle.TimeLine)
+        {
+            // a contour line times by the distance from it, the same along it; walked the other way the wave runs back to it
+            Assert.Equal(forward["0/0"], forward["25/0"]);
+            Assert.Equal(back["0/0"], back["25/0"]);
+            Assert.True(forward["0/0"] < forward["0/12"], $"forward {forward["0/0"]}…{forward["0/12"]}");
+            Assert.True(back["0/12"] < back["0/0"], $"back {back["0/0"]}…{back["0/12"]}");
+            return;
+        }
+        Assert.True(forward["0/0"] < forward["25/0"], $"{style}: {forward["0/0"]} / {forward["25/0"]}");
+        Assert.True(back["25/0"] < back["0/0"], $"{style} reversed: {back["0/0"]} / {back["25/0"]}");
     }
 
     [Fact]

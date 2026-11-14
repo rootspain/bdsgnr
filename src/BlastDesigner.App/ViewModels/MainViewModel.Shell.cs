@@ -351,6 +351,12 @@ public sealed partial class MainViewModel
                 Item("Selected points to monitoring points", PointsToMonitoring, W), Item("Create surface", Run(() => CreateSurface(true)), W),
                 Sub("Convert", Item("Selected objects to a polyline", () => ConvertToPolyline(false), W), Item("Selected objects to a polygon", () => ConvertToPolyline(true), W))
             }.Concat(edit),
+            // chevrons opened into a straight line, of the "front line" type: they can be made chevrons again
+            "straight front" => new[]
+            {
+                props, Item("Convert line to chevron", ConvertSelectedLinesToChevrons, W), Separator,
+                Item("Select like", SelectLike), Item("Select exact", SelectExact), Item("Transform coordinates..", TransformCoordinates, W)
+            }.Concat(edit),
             _ => new[] { props, Item("Select like", SelectLike), Item("Select exact", SelectExact), Item("Transform coordinates..", TransformCoordinates, W) }.Concat(edit)
         };
     }
@@ -362,6 +368,7 @@ public sealed partial class MainViewModel
         PolylineEntity => "polyline",
         SurfaceEntity => "surface",
         PointEntity => "points",
+        TimingLineEntity { Style: TimingLineStyle.TimeLine } t when t.CanConvertToChevron() => "straight front",
         _ => "other"
     };
 

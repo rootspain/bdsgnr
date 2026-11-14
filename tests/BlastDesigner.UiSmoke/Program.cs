@@ -2763,8 +2763,12 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
         if (form.Options.ReverseOrder || form.Options.Style != TimingLineStyle.TimeLine) throw new Exception("a new line should be a contour line A → B");
         form.Closing!(true); Pump();
         var line = vm.Project.Entities.OfType<TimingLineEntity>().Last();
-        if (vm.Project.Entities.OfType<TimingLineEntity>().Count() != lines + 1 || line.Front != BlastDesigner.Domain.Model.TimingFrontShape.Line || line.Points.Count != 2 || !line.HasHandles) throw new Exception("no line front made");
-        if (line.Points[0].X < line.Points[1].X) throw new Exception("the ends of the line were not turned to the holes");
+        // one shape, one type: the line of the tool is the straight chevron of the Front line type, its vertex in the middle
+        if (vm.Project.Entities.OfType<TimingLineEntity>().Count() != lines + 1 || line.Front != BlastDesigner.Domain.Model.TimingFrontShape.Chevron || line.Points.Count != 3
+            || !BlastDesigner.Domain.Geometry.Chevron.IsStraight(line.Points) || line.Style != TimingLineStyle.TimeLine || !line.HasHandles) throw new Exception("the line of the tool should be a straight chevron of the Front line type");
+        if (Vec3.Distance2D(line.Points[1], (line.Points[0] + line.Points[2]) / 2) > 1e-9) throw new Exception("the vertex of the line is not in its middle");
+        // its ends still in order toward the holes: the way it bends when it is made a chevron
+        if (line.Points[0].X < line.Points[2].X) throw new Exception("the ends of the line were not turned to the holes");
         var top = vm.Project.Holes.Where(h => line.HoleIds.Contains(h.Id) && h.ElectronicTimeMs.HasValue).ToList();
         if (top.Count == 0) throw new Exception("the line timed no hole");
         var first = top.MinBy(h => h.ElectronicTimeMs!.Value)!;
@@ -2773,18 +2777,25 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
         window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47d_front_line.png"));
         vm.Undo(); Pump();
 
-        // a chevron: its times grow along its ray, not reversed
+        // a chevron: its times grow from its vertex, not reversed
         vm.TimingLineTool(); Pump();
         Chip(BlastDesigner.Domain.Model.TimingFrontShape.Chevron);
         if (vm.FrontShape != BlastDesigner.Domain.Model.TimingFrontShape.Chevron) throw new Exception("the Chevron chip did not choose the chevron");
         var x = holes.Average(h => h.Collar.X);
-        // dragged south, into the holes: the ray follows the cursor, the times grow that way
+        // dragged south, into the holes: the front points the way of the cursor
         var chevron = Draw(x, x, y - 10);
-        if (chevron.Options.ReverseOrder) throw new Exception("a new chevron should go A → B, its times along its ray");
+        if (chevron.Options.ReverseOrder) throw new Exception("a new chevron should go A → B, its times from its vertex");
+        if (chevron.Options.Style != TimingLineStyle.BurnLine) throw new Exception("a new chevron should be of the Two fronts type: " + chevron.Options.Style);
         chevron.Closing!(true); Pump();
-        // its ray is drawn while it is selected (it is, made), and not once it is not
+        // it has no ray from its vertex, selected (it is, made) or not
         var made = vm.Project.Entities.OfType<TimingLineEntity>().Last();
         if (made.Front != BlastDesigner.Domain.Model.TimingFrontShape.Chevron || !vm.Doc.Selection.Contains(made.Id)) throw new Exception("the chevron was not made and selected");
+        if (made.Style != TimingLineStyle.BurnLine) throw new Exception("the chevron made should be of the Two fronts type: " + made.Style);
+        // timed by its oval all the same: as a chevron of the Front line type
+        var asFront = BlastDesigner.Engine.EbsTimingLine.OptionsOf(made); asFront.Style = TimingLineStyle.TimeLine;
+        var timedHoles = vm.Project.Holes.Where(h => made.HoleIds.Contains(h.Id)).ToList();
+        var byOval = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, timedHoles, made.Points, made.Segments, asFront, vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
+        if (byOval.Count == 0 || byOval.Any(kv => ((Hole)vm.Project.FindEntity(kv.Key)!).ElectronicTimeMs is not double et || Math.Abs(et - kv.Value) > 1e-6)) throw new Exception("the chevron of the Two fronts type is not timed by its oval");
         uint[] RayPixels()
         {
             vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
@@ -2805,12 +2816,12 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
         vm.Doc.ClearSelection(false); Pump();
         var withoutRay = RayPixels();
         window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47f_front_chevron_unselected.png"));
-        // against the plan without the chevron at all: ahead of its vertex only the ray can be drawn
+        // against the plan without the chevron at all: ahead of its vertex, where the ray was, nothing is drawn
         vm.HiddenEntities.Add(made.Id);
         var none = RayPixels();
         vm.HiddenEntities.Remove(made.Id);
-        if (withRay.Zip(none).Count(p => p.First != p.Second) < 8) throw new Exception("the ray of the selected chevron is not drawn");
-        if (withoutRay.Zip(none).Any(p => p.First != p.Second)) throw new Exception("an unselected chevron still draws its ray");
+        if (withRay.Zip(none).Any(p => p.First != p.Second)) throw new Exception("the selected chevron still draws a ray");
+        if (withoutRay.Zip(none).Any(p => p.First != p.Second)) throw new Exception("an unselected chevron draws a ray");
         vm.Undo(); vm.ZoomAll(); Pump();
     }
     finally
@@ -2866,6 +2877,335 @@ Step("Properties ▸ Add holes: electronic holes on no timing line join the line
     tabs.SelectedIndex = tabBefore; Pump();
 });
 Step("electronic detonators for moving a timing line", () => AllElectronic(true));
+Step("a chevron in the reverse order (properties panel) times from the farthest hole back to its vertex", () =>
+{
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy && BlastDesigner.Engine.Charging.HasElectronicDetonator(vm.Project, h)).ToList();
+    // the vertex at the north-west corner, the ray into the blast
+    var vertex = new BlastDesigner.Domain.Geometry.Vec3(holes.Min(h => h.Collar.X) - 3, holes.Max(h => h.Collar.Y) + 3, 300);
+    var pts = BlastDesigner.Domain.Geometry.Chevron.Build(vertex, new BlastDesigner.Domain.Geometry.Vec3(1, -1, 0).Normalized(), 30, 10);
+    var line = BlastDesigner.Engine.EbsTimingLine.CreateEntity(pts, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) },
+        new BlastDesigner.Engine.TimingLineOptions { Front = BlastDesigner.Domain.Model.TimingFrontShape.Chevron, StartOffsetMs = 50 });
+    line.HoleIds = holes.Select(h => h.Id).ToList();
+    vm.Change("Smoke chevron", p => { p.Add(line); BlastDesigner.Engine.EbsTimingLine.Apply(p, p.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), line); });
+    var near = holes.MinBy(h => (h.Collar - vertex).Length2D)!.Id;
+    double? T(Guid id) => ((Hole)vm.Project.FindEntity(id)!).ElectronicTimeMs;
+    var timed = holes.Where(h => T(h.Id).HasValue).ToList();
+    if (Math.Abs(T(near)!.Value - 50) > 1e-6) throw new Exception($"forward, the hole by the vertex should fire first at 50 ms: {T(near)}");
+    var last = timed.MaxBy(h => T(h.Id))!.Id;
+    vm.Doc!.Select(new[] { line.Id }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    var reverse = window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == "propReverseOrder" && c.IsEffectivelyVisible) ?? throw new Exception("no Reverse order field");
+    reverse.IsChecked = true; Pump();
+    if (Math.Abs(T(last)!.Value - 50) > 1e-6) throw new Exception($"reversed, the farthest hole should fire first at 50 ms: {T(last)}");
+    if (timed.Any(h => T(h.Id) > T(near) + 1e-6)) throw new Exception("reversed, the hole by the vertex should fire last");
+    if (holes.Count(h => T(h.Id).HasValue) != timed.Count) throw new Exception("reversed, holes lost their times");
+    // selecting is a step of its own: back until the chevron is gone
+    while (vm.Project.FindEntity(line.Id) != null) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+});
+Step("a chevron's end drawn out to 180° snaps into a straight line: its vertex in the middle, one delay, the times grow from the line both ways", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy && BlastDesigner.Engine.Charging.HasElectronicDetonator(vm.Project, h)).ToList();
+    var apex = new Vec3(holes.Average(h => h.Collar.X), holes.Max(h => h.Collar.Y) + 3, 300);
+    var shape = BlastDesigner.Domain.Geometry.Chevron.Build(apex, new Vec3(0, -1, 0), 60, 10);
+    var line = BlastDesigner.Engine.EbsTimingLine.CreateEntity(shape, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 12, 0) },
+        new BlastDesigner.Engine.TimingLineOptions { Front = BlastDesigner.Domain.Model.TimingFrontShape.Chevron, StartOffsetMs = 50 });
+    line.HoleIds = holes.Select(h => h.Id).ToList();
+    vm.Change("Smoke chevron", p => { p.Add(line); BlastDesigner.Engine.EbsTimingLine.Apply(p, p.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), line); });
+    vm.Doc!.Select(new[] { line.Id }); vm.ZoomSelection(); Pump();
+    var cam = vm.View.Camera;
+    // end 0 a little off the continuation of segment 2: it snaps onto it
+    var along = (apex - shape[2]).WithZ(0);
+    var target = apex + along + new Vec3(-along.Y, along.X, 0).Normalized() * 0.2;
+    var (fx, fy) = cam.ToScreen(shape[0]);
+    var (tx, ty) = cam.ToScreen(target);
+    var tool = vm.ActiveTool!;
+    tool.PointerMoved(new ToolPointer { X = fx, Y = fy, World = shape[0], Snapped = shape[0] });
+    tool.PointerPressed(new ToolPointer { X = fx, Y = fy, World = shape[0], Snapped = shape[0], Left = true, ClickCount = 1 });
+    tool.PointerMoved(new ToolPointer { X = tx, Y = ty, World = target, Snapped = target, Left = true }); Pump();
+    if (!vm.View.Preview.Labels.Any(l => l.Text.Contains("180°"))) throw new Exception("the drag does not say the front is straight: " + string.Join(" | ", vm.View.Preview.Labels.Select(l => l.Text)));
+    tool.PointerReleased(new ToolPointer { X = tx, Y = ty, World = target, Snapped = target, Left = true }); Pump();
+    // one undo step (the list is full by now: its name, not its length)
+    if (vm.Doc.UndoNames[0] != BlastDesigner.App.Services.Loc.T("Reshape timing line") && vm.Doc.UndoNames[0] != "Reshape timing line") throw new Exception("the snap should be one undo step: " + string.Join(", ", vm.Doc.UndoNames.Take(3)));
+    var made = (TimingLineEntity)vm.Project.FindEntity(line.Id)!;
+    if (!BlastDesigner.Domain.Geometry.Chevron.IsStraight(made.Points)) throw new Exception("the chevron did not snap into a straight line");
+    if (Vec3.Distance2D(made.Points[1], (made.Points[0] + made.Points[2]) / 2) > 1e-6) throw new Exception("the vertex is not in the middle of the line");
+    if (Vec3.Distance2D(made.Points[2], shape[2]) > 1e-6) throw new Exception("the other end moved");
+    if (made.Segments[0].ReliefMsPerM != 8 || made.Segments[1].ReliefMsPerM != 8) throw new Exception($"the line should have the first segment's delay, 8: {made.Segments[0].ReliefMsPerM} and {made.Segments[1].ReliefMsPerM}");
+    vm.View.Redraw(); Pump(); Shot("47g_front_chevron_straight");
+    var straight = made.Points.ToList();
+    void Drag(Vec3 from, Vec3 to)
+    {
+        vm.Doc.Select(new[] { line.Id }); Pump();
+        var (ax, ay) = cam.ToScreen(from);
+        var (bx, by) = cam.ToScreen(to);
+        tool.PointerMoved(new ToolPointer { X = ax, Y = ay, World = from, Snapped = from, Hit = vm.View.HitTest(ax, ay) });
+        tool.PointerPressed(new ToolPointer { X = ax, Y = ay, World = from, Snapped = from, Hit = vm.View.HitTest(ax, ay), Left = true, ClickCount = 1 });
+        tool.PointerMoved(new ToolPointer { X = (ax + bx) / 2, Y = (ay + by) / 2, World = (from + to) / 2, Snapped = (from + to) / 2, Left = true });
+        tool.PointerMoved(new ToolPointer { X = bx, Y = by, World = to, Snapped = to, Left = true });
+        tool.PointerReleased(new ToolPointer { X = bx, Y = by, World = to, Snapped = to, Left = true }); Pump();
+    }
+    static Vec3 dirOf(List<Vec3> q) => (q[2] - q[0]).WithZ(0).Normalized();
+    List<Vec3> Now() => ((TimingLineEntity)vm.Project.FindEntity(line.Id)!).Points.ToList();
+    // no circle at its vertex: a drag there does not turn it, the label in the middle converts line to chevron instead
+    if (!BlastDesigner.Rendering.FrontLineHandlesOverlay.Circles(made, made.Points).SequenceEqual(new[] { 0, 2 })) throw new Exception("a straight chevron should show the circles of its ends only");
+    var sideways = new Vec3(-dirOf(straight).Y, dirOf(straight).X, 0) * 3;
+    Drag(straight[1], straight[1] + sideways);
+    var after = Now();
+    // on the line itself, off its label (a hole may be under it there, which the press takes): neither turned nor converted
+    var shift = after[0] - straight[0];
+    if (!BlastDesigner.Domain.Geometry.Chevron.IsStraight(after) || Math.Abs(Vec3.Dot(dirOf(after), dirOf(straight))) < 1 - 1e-9
+        || Vec3.Distance2D(after[2] - straight[2], shift) > 1e-6 || ((TimingLineEntity)vm.Project.FindEntity(line.Id)!).Style != TimingLineStyle.TimeLine)
+        throw new Exception("a drag on the middle of a straight chevron turned or converted it");
+    for (int k = 0; k < 3 && Now().Zip(straight).Any(q => Vec3.Distance2D(q.First, q.Second) > 1e-9); k++) vm.Undo();
+    if (Now().Zip(straight).Any(q => Vec3.Distance2D(q.First, q.Second) > 1e-9)) throw new Exception("undo did not bring the line back");
+    // an end moves on its own: the other one stays, the line straight, the vertex in its middle, the holes programmed again
+    var to2 = straight[2] + sideways;
+    Drag(straight[2], to2);
+    after = Now();
+    if (!BlastDesigner.Domain.Geometry.Chevron.IsStraight(after) || Vec3.Distance2D(after[2], to2) > 0.05 || Vec3.Distance2D(after[0], straight[0]) > 1e-9
+        || Vec3.Distance2D(after[1], (after[0] + after[2]) / 2) > 1e-9) throw new Exception("the end of a straight chevron does not move on its own, the line straight");
+    var replanned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, holes, after, ((TimingLineEntity)vm.Project.FindEntity(line.Id)!).Segments,
+        BlastDesigner.Engine.EbsTimingLine.OptionsOf((TimingLineEntity)vm.Project.FindEntity(line.Id)!), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
+    if (replanned.Any(kv => ((Hole)vm.Project.FindEntity(kv.Key)!).ElectronicTimeMs is not double et || Math.Abs(et - kv.Value) > 1e-6)) throw new Exception("the holes were not programmed again after the end moved");
+    vm.View.Redraw(); Pump(); Shot("47h_front_chevron_straight_end");
+    vm.Undo();
+    if (Now().Zip(straight).Any(q => Vec3.Distance2D(q.First, q.Second) > 1e-9)) throw new Exception("undo did not bring the end back");
+    // undo puts a copy of the line back
+    made = (TimingLineEntity)vm.Project.FindEntity(line.Id)!;
+    vm.Doc.Select(new[] { line.Id }); Pump();
+    // the times: 50 ms on the line, 8 ms a metre of distance from it, square to it, on both sides
+    var dir = (made.Points[2] - made.Points[0]).WithZ(0).Normalized();
+    double Away(Hole h) => Math.Abs(Vec3.Dot((BlastDesigner.Engine.EbsTimingLine.TimingPoint(vm.Project, h) - made.Points[1]).WithZ(0), new Vec3(-dir.Y, dir.X, 0)));
+    double? T(Guid id) => ((Hole)vm.Project.FindEntity(id)!).ElectronicTimeMs;
+    if (holes.Any(h => !T(h.Id).HasValue)) throw new Exception($"{holes.Count(h => !T(h.Id).HasValue)} holes lost their times");
+    var nearest = holes.Min(Away);
+    var wrong = holes.FirstOrDefault(h => Math.Abs(T(h.Id)!.Value - (50 + 8 * (Away(h) - nearest))) > 1);
+    if (wrong != null) throw new Exception($"a hole {Away(wrong):0.00} m from the line fires at {T(wrong.Id)}, {50 + 8 * (Away(wrong) - nearest):0} expected; undo: " + string.Join(", ", vm.Doc.UndoNames.Take(6)) + "; points " + string.Join(" ", Now().Select(q => $"{q.X:0.00},{q.Y:0.00}")) + " vs " + string.Join(" ", made.Points.Select(q => $"{q.X:0.00},{q.Y:0.00}")));
+    var side = holes.Select(h => Math.Sign(Vec3.Dot((h.Collar - made.Points[1]).WithZ(0), new Vec3(-dir.Y, dir.X, 0)))).Distinct().Count();
+    if (side < 2) throw new Exception("the line should cross the blast, holes on both sides of it");
+    // reversed in the properties panel: the farthest from the line first, the nearest last
+    window.ShowInspectorTab(0); Pump();
+    var reverse = window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == "propReverseOrder" && c.IsEffectivelyVisible) ?? throw new Exception("no Reverse order field");
+    reverse.IsChecked = true; Pump();
+    var far = holes.MaxBy(Away)!;
+    var near = holes.MinBy(Away)!;
+    if (Math.Abs(T(far.Id)!.Value - 50) > 1e-6 || holes.Any(h => T(h.Id) > T(near.Id) + 1e-6)) throw new Exception($"reversed, the farthest from the line should fire first and the nearest last: {T(far.Id)}, {T(near.Id)}");
+    if (holes.Any(h => !T(h.Id).HasValue)) throw new Exception("reversed, holes lost their times");
+    // the order, then the snap (selecting is a step too): the chevron bends back as it was
+    for (int k = 0; k < 8 && BlastDesigner.Domain.Geometry.Chevron.IsStraight(Now()); k++) vm.Undo();
+    if (Now().Zip(shape).Any(q => Vec3.Distance2D(q.First, q.Second) > 1e-9)) throw new Exception("undoing the snap should bend the chevron back as it was");
+    while (vm.Project.FindEntity(line.Id) != null) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+});
+Step("convert line to chevron: the label in the middle of a straight chevron, its context menu and Two fronts in the panel bend it and give it the Two fronts type", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy && BlastDesigner.Engine.Charging.HasElectronicDetonator(vm.Project, h)).ToList();
+    var mid = new Vec3(holes.Average(h => h.Collar.X), holes.Max(h => h.Collar.Y) + 3, 300);
+    var straight = new List<Vec3> { mid + new Vec3(10, 0, 0), mid, mid - new Vec3(10, 0, 0) };
+    var line = BlastDesigner.Engine.EbsTimingLine.CreateEntity(straight, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) },
+        new BlastDesigner.Engine.TimingLineOptions { Front = BlastDesigner.Domain.Model.TimingFrontShape.Chevron });
+    line.HoleIds = holes.Select(h => h.Id).ToList();
+    vm.Change("Smoke straight chevron", p => { p.Add(line); BlastDesigner.Engine.EbsTimingLine.Apply(p, p.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), line); });
+    TimingLineEntity Now() => (TimingLineEntity)vm.Project.FindEntity(line.Id)!;
+    void Converted(string how)
+    {
+        var l = Now();
+        if (BlastDesigner.Domain.Geometry.Chevron.IsStraight(l.Points) || Math.Abs(BlastDesigner.Domain.Geometry.Chevron.AngleDeg(l.Points) - 170) > 1e-6)
+            throw new Exception($"{how}: the line was not bent to 170°: {BlastDesigner.Domain.Geometry.Chevron.AngleDeg(l.Points):0.##}°");
+        if (l.Style != TimingLineStyle.BurnLine) throw new Exception($"{how}: the type is {l.Style}, Two fronts (burn line) expected");
+        if (Vec3.Distance2D(l.Points[0], straight[0]) > 1e-9 || Vec3.Distance2D(l.Points[2], straight[2]) > 1e-9) throw new Exception($"{how}: the ends moved");
+        // the ray of this straight line points south (end 0 in the east, on the left looking south): the vertex goes that way
+        if (!(l.Points[1].Y < mid.Y)) throw new Exception($"{how}: the vertex did not go forward");
+        var planned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, holes, l.Points, l.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(l), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
+        if (planned.Count == 0 || planned.Any(kv => ((Hole)vm.Project.FindEntity(kv.Key)!).ElectronicTimeMs is not double et || Math.Abs(et - kv.Value) > 1e-6)) throw new Exception($"{how}: the holes were not programmed again");
+        // back, as one undo step, and the line selected again
+        vm.Undo();
+        if (!BlastDesigner.Domain.Geometry.Chevron.IsStraight(Now().Points) || Now().Style != TimingLineStyle.TimeLine) throw new Exception($"{how}: one undo should bring the straight line back");
+        vm.Doc!.Select(new[] { line.Id }); Pump();
+    }
+    vm.Doc!.Select(new[] { line.Id }); vm.ZoomSelection(); Pump();
+
+    // 1. the context menu, for a straight chevron of the Front line type only
+    var entry = vm.ObjectContextMenu().FirstOrDefault(e => e.Header == "Convert line to chevron") ?? throw new Exception("no Convert line to chevron in the menu of a straight chevron");
+    entry.Action!(); Pump();
+    Converted("context menu");
+
+    // 2. a press on the label in the middle: what it does is written as the cursor comes over it
+    var cam = vm.View.Camera;
+    var (mx, my) = cam.ToScreen(mid);
+    var (ax, ay) = cam.ToScreen(straight[0]);
+    var (bx, by) = cam.ToScreen(straight[2]);
+    double dx = bx - ax, dy = by - ay, len = Math.Sqrt(dx * dx + dy * dy);
+    // the bracket of the label stands on the −n side, n = (−dy, dx)
+    double lx = mx - (-dy / len) * 10, ly = my - (dx / len) * 10;
+    var at = cam.ToWorld(lx, ly);
+    var tool = vm.ActiveTool!;
+    tool.PointerMoved(new ToolPointer { X = lx, Y = ly, World = at, Snapped = at }); Pump();
+    var over = vm.View.Overlays.OfType<BlastDesigner.Rendering.FrontLineHandlesOverlay>().FirstOrDefault() ?? throw new Exception("no circles of the fronts");
+    if (over.Hot is not { } hot || hot.Line != line.Id || hot.Handle != BlastDesigner.Rendering.FrontLineHandlesOverlay.LabelHandle) throw new Exception("the label in the middle is not under the cursor");
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); Shot("47i_front_line_to_chevron_hover");
+    tool.PointerPressed(new ToolPointer { X = lx, Y = ly, World = at, Snapped = at, Left = true, ClickCount = 1 });
+    tool.PointerReleased(new ToolPointer { X = lx, Y = ly, World = at, Snapped = at, Left = true }); Pump();
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); Shot("47j_front_line_to_chevron");
+    Converted("the label in the middle");
+
+    // 3. Two fronts chosen in the list of types
+    window.ShowInspectorTab(0); Pump();
+    var style = window.GetLogicalDescendants().OfType<ComboBox>().FirstOrDefault(c => c.Name == "propStyle" && c.IsEffectivelyVisible) ?? throw new Exception("no field of the type");
+    // one shape, one type: a straight chevron is a front line and can be made two fronts, nothing else
+    var offered = style.ItemsSource!.Cast<object>().Select(o => o.ToString()).ToList();
+    var straightTypes = new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine }.Select(v => BlastDesigner.App.Services.Loc.Enum(v)).ToList();
+    if (!offered.SequenceEqual(straightTypes)) throw new Exception("a straight chevron should offer Front line and Two fronts: " + string.Join(", ", offered));
+    style.SelectedIndex = Enum.GetValues<TimingLineStyle>().ToList().IndexOf(TimingLineStyle.BurnLine); Pump();
+    Converted("Two fronts in the panel");
+
+    // a bent chevron, or one of another type, has no such entry
+    vm.Doc.Select(new[] { line.Id }); Pump();
+    vm.ObjectContextMenu().First(e => e.Header == "Convert line to chevron").Action!(); Pump();
+    if (vm.ObjectContextMenu().Any(e => e.Header == "Convert line to chevron")) throw new Exception("a bent chevron offers Convert line to chevron");
+    while (vm.Project.FindEntity(line.Id) != null) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+});
+Step("the front angles of a chevron in the properties panel are the bearings of its segments; typed in, they turn them; other lines have none", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy && BlastDesigner.Engine.Charging.HasElectronicDetonator(vm.Project, h)).ToList();
+    var apex = new Vec3(holes.Average(h => h.Collar.X), holes.Max(h => h.Collar.Y) + 3, 300);
+    // segments to the north-east and the north-west: the front points south, into the blast
+    var shape = new List<Vec3> { apex + new Vec3(5, 5, 0), apex, apex + new Vec3(-5, 5, 0) };
+    var line = BlastDesigner.Engine.EbsTimingLine.CreateEntity(shape, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) },
+        new BlastDesigner.Engine.TimingLineOptions { Front = BlastDesigner.Domain.Model.TimingFrontShape.Chevron });
+    line.HoleIds = holes.Select(h => h.Id).ToList();
+    vm.Change("Smoke chevron", p => { p.Add(line); BlastDesigner.Engine.EbsTimingLine.Apply(p, p.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), line); });
+    TimingLineEntity Now() => (TimingLineEntity)vm.Project.FindEntity(line.Id)!;
+    TextBox Field(string name)
+    {
+        vm.Doc!.Select(new[] { line.Id }); Pump();
+        window.ShowInspectorTab(0); Pump();
+        return window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(c => c.Name == name && c.IsEffectivelyVisible) ?? throw new Exception("no field " + name);
+    }
+    var left = Field("propLeftFrontAzimuthDeg");
+    var right = Field("propRightFrontAzimuthDeg");
+    List<string?> Offered() => window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propStyle" && c.IsEffectivelyVisible).ItemsSource!.Cast<object>().Select(o => o.ToString()).ToList();
+    // one shape, one type: a front offers Front line and Two fronts, nothing else
+    var frontTypes = new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine }.Select(v => (string?)BlastDesigner.App.Services.Loc.Enum(v)).ToList();
+    var bentTypes = Offered();
+    if (!bentTypes.SequenceEqual(frontTypes)) throw new Exception("a chevron should offer Front line and Two fronts only: " + string.Join(", ", bentTypes));
+    double Value(TextBox b) => double.Parse(b.Text!.Replace(',', '.'), System.Globalization.CultureInfo.InvariantCulture);
+    if (Math.Abs(Value(left) - 45) > 0.01 || Math.Abs(Value(right) - 315) > 0.01) throw new Exception($"the angles should be the bearings of the segments, 45 and 315: {left.Text}, {right.Text}");
+    if (window.GetLogicalDescendants().OfType<Control>().Any(c => (c.Name == "propAngle1Deg" || c.Name == "propAngle2Deg") && c.IsEffectivelyVisible)) throw new Exception("the angles of the advanced burn are still shown");
+    var labels = window.GetLogicalDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
+    if (!labels.Contains(BlastDesigner.App.Services.Loc.Property("LeftFrontAzimuthDeg"))) throw new Exception("the left angle has no caption");
+    vm.View.Redraw(); Pump(); Shot("47k_chevron_angles_panel");
+    // typed in: the left segment turns to the east, its length kept, and the holes are programmed again
+    left.Text = "90";
+    left.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    var l = Now();
+    var to0 = l.Points[0] - l.Points[1];
+    if (Math.Abs(l.LeftFrontAzimuthDeg - 90) > 1e-6 || Math.Abs(to0.Length2D - Math.Sqrt(50)) > 1e-6 || Vec3.Distance2D(l.Points[2], shape[2]) > 1e-9) throw new Exception($"the left segment did not turn to 90°: {l.LeftFrontAzimuthDeg:0.##}°, {to0.Length2D:0.##} m");
+    var planned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, holes, l.Points, l.Segments, BlastDesigner.Engine.EbsTimingLine.OptionsOf(l), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
+    if (planned.Any(kv => ((Hole)vm.Project.FindEntity(kv.Key)!).ElectronicTimeMs is not double et || Math.Abs(et - kv.Value) > 1e-6)) throw new Exception("the holes were not programmed again after the angle");
+    if (Math.Abs(Value(Field("propLeftFrontAzimuthDeg")) - 90) > 0.01) throw new Exception("the panel does not show the new angle");
+    if (Now().Style != TimingLineStyle.BurnLine) throw new Exception("a bent chevron should be of the Two fronts type: " + Now().Style);
+    // Front line chosen: the chevron becomes straight, its vertex in the middle of its ends, one delay
+    var before = Now().Points.ToList();
+    var styleBox = window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propStyle" && c.IsEffectivelyVisible);
+    styleBox.SelectedIndex = 0; Pump();
+    var flat = Now();
+    if (flat.Style != TimingLineStyle.TimeLine || !BlastDesigner.Domain.Geometry.Chevron.IsStraight(flat.Points) || Vec3.Distance2D(flat.Points[1], (before[0] + before[2]) / 2) > 1e-9
+        || Vec3.Distance2D(flat.Points[0], before[0]) > 1e-9 || flat.Segments[1].ReliefMsPerM != flat.Segments[0].ReliefMsPerM) throw new Exception("Front line chosen should make the chevron straight, its vertex in the middle");
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); Shot("47l_chevron_to_front_line");
+    while (vm.Project.FindEntity(line.Id) != null) vm.Undo();
+    // a line front has neither
+    var y = holes.Max(h => h.Collar.Y) + 3;
+    var front = BlastDesigner.Engine.EbsTimingLine.CreateEntity(new List<Vec3> { new(holes.Min(h => h.Collar.X), y, 300), new(holes.Max(h => h.Collar.X), y, 300) }, new[] { new TimingLineSegment(0, 8, 0) },
+        new BlastDesigner.Engine.TimingLineOptions { Front = BlastDesigner.Domain.Model.TimingFrontShape.Line });
+    var frontEnds = front.Points.ToList();
+    vm.Change("Smoke line front", p => p.Add(front));
+    // a line front is a straight front: its context menu converts it to a chevron
+    vm.Doc!.Select(new[] { front.Id }); Pump();
+    if (!vm.ObjectContextMenu().Any(e => e.Header == "Convert line to chevron")) throw new Exception("a line front has no Convert line to chevron in its menu");
+    vm.Doc!.Select(new[] { front.Id }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    var names = new[] { "propLeftFrontAzimuthDeg", "propRightFrontAzimuthDeg", "propAngle1Deg", "propAngle2Deg" };
+    if (window.GetLogicalDescendants().OfType<Control>().Any(c => names.Contains(c.Name) && c.IsEffectivelyVisible)) throw new Exception("a line front shows front angles");
+    var lineTypes = Offered();
+    if (!lineTypes.SequenceEqual(frontTypes)) throw new Exception("a line front should offer Front line and Two fronts only: " + string.Join(", ", lineTypes));
+    // Two fronts chosen: the line front becomes a chevron, bent to 170°, its ends where they were
+    window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propStyle" && c.IsEffectivelyVisible).SelectedIndex = 1; Pump();
+    var bentFront = (TimingLineEntity)vm.Project.FindEntity(front.Id)!;
+    if (bentFront.Front != BlastDesigner.Domain.Model.TimingFrontShape.Chevron || bentFront.Points.Count != 3 || bentFront.Style != TimingLineStyle.BurnLine
+        || Math.Abs(BlastDesigner.Domain.Geometry.Chevron.AngleDeg(bentFront.Points) - 170) > 1e-6 || bentFront.Segments.Count != 2
+        || Vec3.Distance2D(bentFront.Points[0], frontEnds[0]) > 1e-9 || Vec3.Distance2D(bentFront.Points[2], frontEnds[1]) > 1e-9) throw new Exception("Two fronts chosen should make the line front a chevron bent to 170°");
+    vm.Undo();
+    // and a press on the label in the middle of the line front does the same
+    vm.Doc.Select(new[] { front.Id }); vm.ZoomSelection(); Pump();
+    {
+        var cam = vm.View.Camera;
+        var (ax, ay) = cam.ToScreen(frontEnds[0]);
+        var (bx, by) = cam.ToScreen(frontEnds[1]);
+        double dx = bx - ax, dy = by - ay, len = Math.Sqrt(dx * dx + dy * dy);
+        double lx = (ax + bx) / 2 + dy / len * 10, ly = (ay + by) / 2 - dx / len * 10;
+        var at = cam.ToWorld(lx, ly);
+        vm.ActiveTool!.PointerMoved(new ToolPointer { X = lx, Y = ly, World = at, Snapped = at }); Pump();
+        vm.ActiveTool.PointerPressed(new ToolPointer { X = lx, Y = ly, World = at, Snapped = at, Left = true, ClickCount = 1 });
+        vm.ActiveTool.PointerReleased(new ToolPointer { X = lx, Y = ly, World = at, Snapped = at, Left = true }); Pump();
+        var pressed = (TimingLineEntity)vm.Project.FindEntity(front.Id)!;
+        if (pressed.Front != BlastDesigner.Domain.Model.TimingFrontShape.Chevron || pressed.Style != TimingLineStyle.BurnLine) throw new Exception("a press on the label of a line front should convert it to a chevron");
+    }
+    while (vm.Project.FindEntity(front.Id) != null) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+});
+Step("Reverse order and Style of a timing line changed in the properties panel reprogram all its holes", () =>
+{
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy && BlastDesigner.Engine.Charging.HasElectronicDetonator(vm.Project, h)).ToList();
+    if (holes.Count < 20) throw new Exception("the smoke blast needs 20 electronic holes");
+    // a burn line along the north edge of the blast, from west to east
+    var y = holes.Max(h => h.Collar.Y) + 3;
+    var pts = new List<BlastDesigner.Domain.Geometry.Vec3> { new(holes.Min(h => h.Collar.X) - 3, y, 300), new(holes.Max(h => h.Collar.X) + 3, y, 300) };
+    var line = BlastDesigner.Engine.EbsTimingLine.CreateEntity(pts, new[] { new TimingLineSegment(5, 8, 0) }, new BlastDesigner.Engine.TimingLineOptions { Style = TimingLineStyle.BurnLine });
+    line.HoleIds = holes.Select(h => h.Id).ToList();
+    vm.Change("Smoke burn line", p => { p.Add(line); BlastDesigner.Engine.EbsTimingLine.Apply(p, p.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), line); });
+    var west = holes.MinBy(h => h.Collar.X)!.Id;
+    var east = holes.MaxBy(h => h.Collar.X)!.Id;
+    double? T(Guid id) => ((Hole)vm.Project.FindEntity(id)!).ElectronicTimeMs;
+    int Timed() => vm.Project.Holes.Count(h => line.HoleIds.Contains(h.Id) && h.ElectronicTimeMs.HasValue);
+    if (Timed() != holes.Count || !(T(west) < T(east))) throw new Exception("the burn line should time all its holes from the west");
+    Control Field(string name)
+    {
+        vm.Doc!.Select(new[] { line.Id }); Pump();
+        window.ShowInspectorTab(0); Pump();
+        return window.GetLogicalDescendants().OfType<Control>().FirstOrDefault(c => c.Name == name && c.IsEffectivelyVisible) ?? throw new Exception("no field " + name + " for a timing line");
+    }
+    ((CheckBox)Field("propReverseOrder")).IsChecked = true; Pump();
+    if (!((TimingLineEntity)vm.Project.FindEntity(line.Id)!).ReverseOrder) throw new Exception("Reverse order was not set");
+    if (Timed() != holes.Count) throw new Exception($"reversed: {Timed()} of {holes.Count} holes timed");
+    if (!(T(east) < T(west))) throw new Exception($"reversed, the east end should fire first: west {T(west)}, east {T(east)}");
+    vm.Undo();
+    if (!(T(west) < T(east))) throw new Exception("one undo should bring the order and the times back");
+    foreach (var style in Enum.GetValues<TimingLineStyle>().Where(st => st != TimingLineStyle.BurnLine))
+    {
+        var combo = (ComboBox)Field("propStyle");
+        combo.SelectedIndex = Enum.GetValues<TimingLineStyle>().ToList().IndexOf(style); Pump();
+        if (((TimingLineEntity)vm.Project.FindEntity(line.Id)!).Style != style) throw new Exception(style + " was not set");
+        var planned = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, vm.Project.Holes.Where(h => line.HoleIds.Contains(h.Id)).ToList(), line.Points, line.Segments,
+            BlastDesigner.Engine.EbsTimingLine.OptionsOf((TimingLineEntity)vm.Project.FindEntity(line.Id)!), vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
+        if (Timed() != holes.Count) throw new Exception($"{style}: {Timed()} of {holes.Count} holes timed");
+        foreach (var (id, t) in planned)
+            if (T(id) is not double et || Math.Abs(et - t) > 1e-6) throw new Exception($"{style}: a hole is not programmed from the line");
+        // the visualisation fires every one of them
+        BlastDesigner.Engine.Timing.Solve(vm.Project);
+        var fired = vm.Project.Holes.Count(h => line.HoleIds.Contains(h.Id) && h.FiringTimeMs.HasValue);
+        if (fired != holes.Count) throw new Exception($"{style}: {fired} of {holes.Count} holes fire");
+        vm.Undo();
+    }
+    // selecting is a step of its own: back until the line is gone
+    while (vm.Project.FindEntity(line.Id) != null) vm.Undo();
+    vm.Doc!.ClearSelection(); Pump();
+});
 Step("moving a timing line reprograms its holes in the same undo step", () =>
 {
     var holes = vm.Project!.Holes.Where(h => !h.IsDummy).ToList();

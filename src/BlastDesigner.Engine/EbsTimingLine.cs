@@ -82,18 +82,42 @@ public static class EbsTimingLine
             var br = o.BurdenReliefMsPerM;
             return AdvancedTimes(line, br, br, br * Math.Tan(o.Angle1Deg * GeoMath.Deg), br * Math.Tan(o.Angle2Deg * GeoMath.Deg), 0, false, true, advPoints ?? points);
         }
-        if (o.Front == TimingFrontShape.Chevron && line.Count == 3 && o.Style == TimingLineStyle.TimeLine) return ChevronTimes(line, data, points);
+        if (TimedAsChevron(o, line.Count))
+        {
+            var t = ChevronTimes(line, data, points);
+            if (!o.ReverseOrder || t.Length == 0) return t;
+            // the other way: from the farthest hole back to the vertex, the farthest first, the vertex last
+            var far = t.Max();
+            return t.Select(x => far - x).ToArray();
+        }
         return LineTimes(line, data, o, points);
     }
 
     /// <summary>
+    /// A chevron of the front tool of three points timed by its oval (or, opened into a straight line, from the line): of the
+    /// "two fronts" type, as the tool makes it, or of the "front line" type, as a straight one has and older files have it.
+    /// </summary>
+    public static bool TimedAsChevron(TimingLineOptions o, int points) =>
+        o.Front == TimingFrontShape.Chevron && points == 3 && o.Style is TimingLineStyle.TimeLine or TimingLineStyle.BurnLine;
+
+    /// <summary>
     /// A chevron: a hole's time is its distance in plan from the vertex times the delay the oval of the chevron gives in its
-    /// direction (<see cref="Chevron.DelayAlong"/>). The oval is closed, so the times grow from the vertex every way.
+    /// direction (<see cref="Chevron.DelayAlong"/>). The oval is closed, so the times grow from the vertex every way; in the
+    /// reverse order (<see cref="TimingLineOptions.ReverseOrder"/>) they grow from the farthest hole back to the vertex.
+    /// A chevron opened into a straight line (<see cref="Chevron.IsStraight"/>) has no oval: a hole's time is its distance from
+    /// the line, square to it, times the delay of the first segment, on both sides of it; the holes on one parallel fire together.
     /// </summary>
     static double[] ChevronTimes(IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, IReadOnlyList<Vec3> points)
     {
         var apex = line[1];
         var result = new double[points.Count];
+        if (Chevron.IsStraight(line))
+        {
+            var along = Unit2D(line[2] - line[0]);
+            var across = new Vec3(-along.Y, along.X, 0);
+            for (int i = 0; i < points.Count; i++) result[i] = Math.Abs(Vec3.Dot(Flat(points[i] - apex), across)) * data[0].ReliefMsPerM;
+            return result;
+        }
         for (int i = 0; i < points.Count; i++)
         {
             var d = Flat(points[i] - apex);
@@ -131,7 +155,7 @@ public static class EbsTimingLine
     public static (Dictionary<Guid, double> Times, TimingLineResult Result) Plan(BlastProject project, IReadOnlyList<Hole> holes, IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o, double maxTimeMs, bool allowSubMs = false)
     {
         // a chevron's times start at its vertex, on the line: the holes behind it would fire before it and are out of its reach
-        var chevron = o.Front == TimingFrontShape.Chevron && line.Count == 3 && o.Style == TimingLineStyle.TimeLine;
+        var chevron = TimedAsChevron(o, line.Count);
         // Time / burn lines use the firing point, the advanced burn uses the collar.
         return Program(project, holes, e => RawTimes(line, data, o, e.Select(h => TimingPoint(project, h)).ToList(), e.Select(h => h.Collar).ToList()),
             o.StartOffsetMs, o.KeepManualTimes, chevron, maxTimeMs, allowSubMs);

@@ -151,6 +151,16 @@ public sealed class PropertiesPanel : DockPanel
     };
 
     public static string LengthTip() => string.Join("\n\n", LengthTipParagraphs.Select(Loc.Ui));
+
+    /// <summary>The fields of a timing line its times come from: changed in the panel, the line programs its holes again.</summary>
+    private static readonly HashSet<string> TimingValues = new()
+    {
+        nameof(TimingLineEntity.Style), nameof(TimingLineEntity.ReverseOrder), nameof(TimingLineEntity.StartOffsetMs),
+        nameof(TimingLineEntity.UseProgressive), nameof(TimingLineEntity.ProgressRate), nameof(TimingLineEntity.BurdenReliefMsPerM),
+        nameof(TimingLineEntity.Angle1Deg), nameof(TimingLineEntity.Angle2Deg), nameof(TimingLineEntity.Segments),
+        nameof(TimingLineEntity.LeftFrontAzimuthDeg), nameof(TimingLineEntity.RightFrontAzimuthDeg)
+    };
+
     /// <summary>The groups of the fields of a hole; the last one takes all the others.</summary>
     private static readonly PropertySection[] HoleSections =
     {
@@ -243,6 +253,22 @@ public sealed class PropertiesPanel : DockPanel
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
         var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset", "U", "V", "Center", "Current", "KindName" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid, first is TieEntity ? sel.OfType<TieEntity>().ToList() : null);
+        if (first is TimingLineEntity)
+        {
+            // the angles of the advanced burn are set in the timing line window; a chevron shows the bearings of its segments
+            // in their place, "left front angle" and "right front angle", and typed in they turn its segments
+            grid.Exclude.Add(nameof(TimingLineEntity.Angle1Deg));
+            grid.Exclude.Add(nameof(TimingLineEntity.Angle2Deg));
+            if (!sel.All(e => e is TimingLineEntity { Front: TimingFrontShape.Chevron, Points.Count: 3 }))
+            {
+                grid.Exclude.Add(nameof(TimingLineEntity.LeftFrontAzimuthDeg));
+                grid.Exclude.Add(nameof(TimingLineEntity.RightFrontAzimuthDeg));
+            }
+            grid.Tips[nameof(TimingLineEntity.LeftFrontAzimuthDeg)] = grid.Tips[nameof(TimingLineEntity.RightFrontAzimuthDeg)] =
+                Loc.Ui("Bearing of the segment from the vertex, clockwise from north: typed in, the segment turns to it");
+            // one shape, one type: the list offers the types the selected lines can take
+            grid.EnumValues[nameof(TimingLineEntity.Style)] = sel.OfType<TimingLineEntity>().SelectMany(l => l.AllowedStyles()).Distinct().Cast<object>().ToList();
+        }
         if (first is Hole)
         {
             // the detonator id of a hole is its serial number, not a product
@@ -288,16 +314,33 @@ public sealed class PropertiesPanel : DockPanel
                 Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
                 return;
             }
+            var timed = 0;
             _vm.Change(Loc.F("Edit {0}", Loc.Property(name)), p =>
             {
-                foreach (var e in p.Entities.Where(e => ids.Contains(e.Id)))
+                foreach (var e in p.Entities.Where(e => ids.Contains(e.Id)).ToList())
                 {
+                    // a value a timing line times by: its holes are programmed again from it, in the same undo step
+                    if (e is TimingLineEntity tl && TimingValues.Contains(name))
+                    {
+                        // a type its shape does not take (several lines selected): that line keeps its own
+                        if (name == nameof(TimingLineEntity.Style) && template is TimingLineEntity want && !tl.AllowedStyles().Contains(want.Style)) continue;
+                        // one shape, one type: a front takes the shape of the type chosen (two fronts bends it into a chevron,
+                        // front line makes it straight)
+                        var reshape = name == nameof(TimingLineEntity.Style);
+                        timed += MainViewModel.ReprogramTimingLines(p, new HashSet<Guid> { e.Id }, () =>
+                        {
+                            grid.ApplyTo(template, e);
+                            if (reshape) tl.ShapeByType();
+                        });
+                        continue;
+                    }
                     grid.ApplyTo(template, e);
                     if (e is SurfaceEntity s) s.InvalidateIndex();
                     // crests, toes, contours and boundaries live in the layers of their type, in its colour
                     if (name == nameof(PolylineEntity.Kind) && e is PolylineEntity line) SurveyRecognitionWindow.PutInKindLayer(p, line);
                 }
             });
+            if (timed > 0) _vm.SetStatus(Loc.F("Timing line changed: {0} holes reprogrammed", timed));
         };
         if (first is Hole hole)
         {

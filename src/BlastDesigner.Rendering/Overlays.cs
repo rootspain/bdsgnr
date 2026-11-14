@@ -175,8 +175,9 @@ public sealed class VertexGripsOverlay : IOverlay
 /// <summary>
 /// Circles of the selected fronts (<see cref="TimingLineEntity.HasHandles"/>). A chevron: the vertex in the accent colour
 /// (drag to turn the front), the two ends of the base in the colour of the line (drag to change the angle and the length).
-/// A line: its two ends in its colour (drag to move one).
-/// While one is dragged the front is drawn as it will be, with the ray from its vertex when it is turned.
+/// A line: its two ends in its colour (drag to move one). A chevron opened into a straight line: only its ends, which move
+/// as a line's; no vertex circle, it is not turned by its vertex.
+/// While one is dragged the front is drawn as it will be, with its oval of delays.
 /// </summary>
 public sealed class FrontLineHandlesOverlay : IOverlay
 {
@@ -192,28 +193,60 @@ public sealed class FrontLineHandlesOverlay : IOverlay
     /// <summary>The circle under the cursor (0, 2 = ends of the base, 1 = vertex), drawn larger.</summary>
     public (Guid Line, int Handle)? Hot { get; set; }
 
-    /// <summary>The front being dragged, with the points it has on the screen; <c>Ray</c> while it is turned.</summary>
-    public (TimingLineEntity Line, IReadOnlyList<Vec3> Points, bool Ray)? Dragged { get; set; }
+    /// <summary>The front being dragged, with the points it has on the screen.</summary>
+    public (TimingLineEntity Line, IReadOnlyList<Vec3> Points)? Dragged { get; set; }
+
+    /// <summary>The label in the middle of a straight front as <see cref="Hot"/>: a press on it converts the front to a chevron.</summary>
+    public const int LabelHandle = -1;
+
+    /// <summary>The circles a front shows, by index of its points: the vertex first on a chevron, none on a straight one.</summary>
+    public static int[] Circles(TimingLineEntity line, IReadOnlyList<Vec3> points) =>
+        line.Front == TimingFrontShape.Line ? new[] { 0, 1 }
+        : Chevron.IsStraight(points) ? new[] { 0, 2 }
+        : new[] { 1, 0, 2 };
 
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = PlanRenderer.Ink };
         if (Dragged is { } dragged)
         {
-            var (line, pts, ray) = dragged;
+            var (line, pts) = dragged;
             var shown = line.WithPoints(pts);
             PlanRenderer.DrawTimingLine(c, cam, shown, null, text);
-            if (ray) PlanRenderer.DrawChevronRay(c, cam, pts, _accent());
             // the oval of delays follows the ends dragged
-            if (line.Front == TimingFrontShape.Chevron && pts.Count == 3) PlanRenderer.DrawChevronOval(c, cam, pts, PlanRenderer.TimingLineColor(line));
+            // the oval times a chevron of the "two fronts" or the "front line" type, not one of the advanced burn
+            if (line.WithPoints(pts).TimedAsChevron()) PlanRenderer.DrawChevronOval(c, cam, pts, PlanRenderer.TimingLineColor(line));
         }
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var edge = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.2f, Color = PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White };
         foreach (var l in _lines())
         {
+            // the label in the middle of a straight chevron under the cursor: it says what a press does
+            if (Dragged == null && Hot is { } over && over.Line == l.Id && over.Handle == LabelHandle && l.CanConvertToChevron())
+            {
+                // beyond the label, on its side of the line (as DrawTimingLine puts it), on a plate of its own
+                var ordered = l.OrderedPoints;
+                var (ax, ay) = cam.ToScreen(ordered[0]);
+                var (bx, by) = cam.ToScreen(ordered[^1]);
+                float dx = bx - ax, dy = by - ay, len = MathF.Sqrt(dx * dx + dy * dy);
+                if (len > 0)
+                {
+                    dx /= len; dy /= len;
+                    var hint = PlanRenderer.Translate("Convert line to chevron");
+                    var w = text.MeasureText(hint);
+                    float cx = (ax + bx) / 2 + dy * 44, cy = (ay + by) / 2 - dx * 44;
+                    var plate = new SKRect(cx - w / 2 - 6, cy - text.TextSize, cx + w / 2 + 6, cy + text.TextSize * 0.6f);
+                    using var back = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = (PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White).WithAlpha(230) };
+                    c.DrawRoundRect(plate, 4, 4, back);
+                    using var rim = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = _accent() };
+                    c.DrawRoundRect(plate, 4, 4, rim);
+                    text.Color = PlanRenderer.Ink;
+                    c.DrawText(hint, cx - w / 2, cy, text);
+                }
+            }
             var points = Dragged is { } d && d.Line.Id == l.Id ? d.Points : l.Points;
             if (!l.HasHandles || points.Count != l.Points.Count) continue;
-            for (int i = 0; i < points.Count; i++)
+            foreach (var i in Circles(l, points))
             {
                 var (x, y) = cam.ToScreen(points[i]);
                 var r = (Hot is { } hot && hot.Line == l.Id && hot.Handle == i ? VertexGripsOverlay.Radius + 2 : VertexGripsOverlay.Radius) + 1;

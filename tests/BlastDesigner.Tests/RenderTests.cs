@@ -534,4 +534,100 @@ public class RenderTests
         var (ex, ey) = cam.ToScreen(new Vec3(0, -20, 0));
         Assert.NotEqual(without.GetPixel((int)ex, (int)Math.Round(ey) + 2), with.GetPixel((int)ex, (int)Math.Round(ey) + 2));
     }
+
+    /// <summary>A selected chevron shows its oval and no ray from its vertex; opened into a straight line, not even the oval.</summary>
+    [Theory]
+    [InlineData(30.0)]
+    [InlineData(180.0)]
+    public void ASelectedChevronHasNoRay_AStraightOneNoOval(double angle)
+    {
+        var apex = new Vec3(0, 0, 0);
+        var pts = angle >= 180
+            ? new List<Vec3> { new(-10, 0, 0), apex, new(10, 0, 0) }
+            : Chevron.Build(apex, new Vec3(0, 1, 0), angle, 10);
+        Assert.Equal(angle >= 180, Chevron.IsStraight(pts));
+        var cam = new Camera { Width = 400, Height = 300, Scale = 10, Target = apex };
+        SKBitmap Draw(bool withLine)
+        {
+            var p = BlastProject.CreateNew("chevron");
+            var line = BlastDesigner.Engine.EbsTimingLine.CreateEntity(pts, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) },
+                new BlastDesigner.Engine.TimingLineOptions { Front = TimingFrontShape.Chevron });
+            line.LayerId = p.Layers[0].Id;
+            if (withLine) p.Entities.Add(line);
+            var options = new SceneOptions
+            {
+                Background = SKColors.Black, ShowGrid = false, DrawNorthArrow = false, DrawScaleBar = false, DrawSummaryBlock = false,
+                Selection = new HashSet<Guid> { line.Id }, SelectionColor = new SKColor(0xFFFF00FF)
+            };
+            var bitmap = new SKBitmap(400, 300);
+            using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+            return bitmap;
+        }
+        using var with = Draw(true);
+        using var none = Draw(false);
+        // ahead of the vertex, where the ray was drawn, square to the line of a straight one: nothing (past the label in the
+        // middle of a straight one)
+        var ray = Chevron.RayDir(pts);
+        for (double t = angle >= 180 ? 0.4 : 0.2; t < 0.9; t += 0.05)
+        {
+            var (x, y) = cam.ToScreen(apex + ray * (10 * t));
+            Assert.Equal(none.GetPixel((int)x, (int)y), with.GetPixel((int)x, (int)y));
+        }
+        // the oval of a bent one is drawn: across, square to the ray, it crosses the oval within the length of a side
+        if (angle < 180)
+        {
+            var across = new Vec3(1, 0, 0);
+            var radius = Chevron.OvalRadius(pts[0] - apex, pts[2] - apex, across);
+            // the oval is dashed: anywhere in a box round the point it crosses
+            var (ox, oy) = cam.ToScreen(apex + across * radius);
+            var hit = Enumerable.Range(-5, 11).SelectMany(dx => Enumerable.Range(-5, 11).Select(dy => (dx, dy)))
+                .Any(d => with.GetPixel((int)Math.Round(ox) + d.dx, (int)Math.Round(oy) + d.dy) != none.GetPixel((int)Math.Round(ox) + d.dx, (int)Math.Round(oy) + d.dy));
+            Assert.True(hit, "the oval of the selected chevron is not drawn");
+        }
+    }
+
+    /// <summary>A chevron opened into a straight line is drawn as a line front: one label of its delay, in its middle.</summary>
+    [Fact]
+    public void AStraightChevronHasOneLabelInItsMiddle()
+    {
+        var cam = new Camera { Width = 400, Height = 300, Scale = 10, Target = new Vec3(0, 0, 0) };
+        SKBitmap Draw(TimingLineEntity line)
+        {
+            var p = BlastProject.CreateNew("chevron");
+            line.LayerId = p.Layers[0].Id;
+            p.Entities.Add(line);
+            var options = new SceneOptions { Background = SKColors.Black, ShowGrid = false, DrawNorthArrow = false, DrawScaleBar = false, DrawSummaryBlock = false };
+            var bitmap = new SKBitmap(400, 300);
+            using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+            return bitmap;
+        }
+        Vec3 a = new(-12, -3, 0), b = new(12, 3, 0);
+        using var chevron = Draw(new TimingLineEntity { Front = TimingFrontShape.Chevron, Points = { a, (a + b) / 2, b }, Segments = { new(0, 3.6, 0), new(0, 3.6, 0) } });
+        using var line = Draw(new TimingLineEntity { Front = TimingFrontShape.Line, Points = { a, b }, Segments = { new(0, 3.6, 0) } });
+        var differ = 0;
+        for (int y = 0; y < 300; y++)
+            for (int x = 0; x < 400; x++)
+                if (chevron.GetPixel(x, y) != line.GetPixel(x, y)) differ++;
+        Assert.Equal(0, differ);
+    }
+
+    /// <summary>The label in the middle of a straight chevron is where a press converts it to a chevron; not along the line, not a bent one.</summary>
+    [Fact]
+    public void TheLabelInTheMiddleOfAStraightChevronIsFoundOnTheScreen()
+    {
+        var cam = new Camera { Width = 400, Height = 300, Scale = 10, Target = new Vec3(0, 0, 0) };
+        var line = new TimingLineEntity { Front = TimingFrontShape.Chevron, Points = { new(-12, 0, 0), new(0, 0, 0), new(12, 0, 0) }, Segments = { new(0, 3.6, 0), new(0, 3.6, 0) } };
+        var (mx, my) = cam.ToScreen(new Vec3(0, 0, 0));
+        // left to right on the screen: the bracket stands above the line (−n, n pointing down the screen)
+        Assert.True(PlanRenderer.OnStraightLabel(cam, line, mx, my - 10));
+        Assert.True(PlanRenderer.OnStraightLabel(cam, line, mx + 8, my - 7));
+        Assert.False(PlanRenderer.OnStraightLabel(cam, line, mx, my + 20));
+        Assert.False(PlanRenderer.OnStraightLabel(cam, line, mx + 60, my - 10));
+        // on the line itself, or just beside the label: the line, to be moved
+        Assert.False(PlanRenderer.OnStraightLabel(cam, line, mx, my));
+        Assert.False(PlanRenderer.OnStraightLabel(cam, line, mx, my - 2));
+        Assert.False(PlanRenderer.OnStraightLabel(cam, line, mx + 20, my - 10));
+        var bent = new TimingLineEntity { Front = TimingFrontShape.Chevron, Points = Chevron.Build(new Vec3(0, 0, 0), new Vec3(0, 1, 0), 30, 10) };
+        Assert.False(PlanRenderer.OnStraightLabel(cam, bent, mx, my - 10));
+    }
 }

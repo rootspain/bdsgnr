@@ -601,8 +601,8 @@ public sealed class ToolPanel : Border
             var shapes = Ui.Row(6);
             foreach (var (shape, text, tip) in new[]
             {
-                (Domain.Model.TimingFrontShape.Line, "Line", "The times grow from the line to the side of most holes; the holes at one distance from it fire together"),
-                (Domain.Model.TimingFrontShape.Chevron, "Chevron", "Two segments at a vertex: the times grow along its ray, from the vertex outwards")
+                (Domain.Model.TimingFrontShape.Line, "Line", "The times grow from the line both ways; the holes at one distance from it fire together"),
+                (Domain.Model.TimingFrontShape.Chevron, "Chevron", "Two segments at a vertex: the times grow from the vertex outwards; opened to 180° it is a straight line, the times grow from it")
             })
             {
                 var s = shape;

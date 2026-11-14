@@ -41,21 +41,32 @@ public sealed class FrontLineHandles : ISelectGesture
     public FrontLineHandlesOverlay Overlay { get; }
     IOverlay? ISelectGesture.Overlay => Overlay;
 
+    /// <summary>The "handle" of the label in the middle of a straight front (a line front, a chevron opened into a straight line).</summary>
+    public const int LabelHandle = FrontLineHandlesOverlay.LabelHandle;
+
     /// <summary>A circle was pressed and its drag is not over yet.</summary>
     public bool Active => _drag != null;
 
-    /// <summary>The circle of a selected front at a screen point: the nearest one, the vertex first when they overlap.</summary>
+    /// <summary>
+    /// The circle of a selected front at a screen point: the nearest one, the vertex first when they overlap. A chevron opened
+    /// into a straight line has no vertex circle (<see cref="FrontLineHandlesOverlay.Circles"/>): it is not turned by it. Its
+    /// label in the middle (<see cref="PlanRenderer.OnStraightLabel"/>) is <see cref="LabelHandle"/> instead, as the label of a
+    /// line front: a press there converts it to a chevron.
+    /// </summary>
     public (TimingLineEntity Line, int Handle)? HandleAt(double sx, double sy)
     {
         (TimingLineEntity, int)? best = null;
         var bestD = VertexGripsOverlay.Reach + 1;
         foreach (var line in _vm.EditableFrontLines())
-            foreach (var i in line.Front == TimingFrontShape.Line ? new[] { 0, 1 } : new[] { 1, 0, 2 })
+            foreach (var i in FrontLineHandlesOverlay.Circles(line, line.Points))
             {
                 var (x, y) = _vm.View.Camera.ToScreen(line.Points[i]);
                 var d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
                 if (d < bestD) { bestD = d; best = (line, i); }
             }
+        if (best == null)
+            foreach (var line in _vm.EditableFrontLines())
+                if (line.CanConvertToChevron() && PlanRenderer.OnStraightLabel(_vm.View.Camera, line, sx, sy)) return (line, LabelHandle);
         return best;
     }
 
@@ -66,6 +77,13 @@ public sealed class FrontLineHandles : ISelectGesture
     public bool TryPress(ToolPointer p)
     {
         if (!p.Left || p.Modifiers.HasFlag(KeyModifiers.Control) || HandleAt(p.X, p.Y) is not { } hit) return false;
+        if (hit.Handle == LabelHandle)
+        {
+            // the label in the middle of a straight chevron: a press (or a drag) on it converts line to chevron at once
+            Overlay.Hot = null;
+            _vm.ConvertLinesToChevrons(new[] { hit.Line.Id });
+            return true;
+        }
         _drag = hit;
         _down = p;
         _dragging = false;
@@ -107,17 +125,27 @@ public sealed class FrontLineHandles : ISelectGesture
             _shown = Chevron.Rotate(pts, center, turn);
             preview.Labels.Add((_shown[1], $"Δ {turn / GeoMath.Deg:0.0}°"));
         }
+        else if (Chevron.IsStraight(pts))
+        {
+            // a straight one: an end moves on its own as a line's does, the line stays straight, its vertex in its middle
+            var other = pts[2 - handle];
+            var end = cam.ToWorld(p.X, p.Y, pts[1].Z);
+            if (p.Modifiers.HasFlag(KeyModifiers.Shift)) end = FrontLineTool.Stepped(other, end);
+            _shown = Chevron.MoveStraightEnd(pts, handle, end);
+            preview.Labels.Add((_shown[handle], $"{Vec3.Distance2D(other, _shown[handle]):0.00} m · 180°"));
+        }
         else
         {
             // one end on its own: the vertex and the other end stay, the delay of the segment goes with its length
             _shown = Chevron.MoveEnd(pts, handle, cam.ToWorld(p.X, p.Y, pts[1].Z));
             _segments = ChevronDelays(line, _shown, handle);
             var seg = handle == 0 ? 0 : 1;
-            preview.Labels.Add((_shown[handle], $"{_segments[seg].ReliefMsPerM:0.0} ms/m · {Vec3.Distance2D(_shown[handle], _shown[1]):0.00} m"));
+            var straight = Chevron.IsStraight(_shown) ? " · 180°" : "";
+            preview.Labels.Add((_shown[handle], $"{_segments[seg].ReliefMsPerM:0.0} ms/m · {Vec3.Distance2D(_shown[handle], _shown[1]):0.00} m{straight}"));
         }
         var shownLine = line;
         if (_segments != null) { shownLine = line.WithPoints(line.Points); shownLine.Segments = _segments; }
-        Overlay.Dragged = (shownLine, _shown, line.Front == TimingFrontShape.Chevron && handle == 1);
+        Overlay.Dragged = (shownLine, _shown);
     }
 
     /// <summary>Applies the drag (with undo, reprogramming the front's holes); a press without a drag changes nothing.</summary>
@@ -144,12 +172,20 @@ public sealed class FrontLineHandles : ISelectGesture
         Overlay.Dragged = null;
     }
 
-    /// <summary>The delays of a chevron's segments with end <paramref name="end"/> moved: that segment's delay grows with its length.</summary>
+    /// <summary>
+    /// The delays of a chevron's segments with end <paramref name="end"/> moved: that segment's delay grows with its length.
+    /// Snapped into a straight line, the front has one delay, the first segment's, for both.
+    /// </summary>
     public static List<TimingLineSegment> ChevronDelays(TimingLineEntity line, IReadOnlyList<Vec3> shown, int end)
     {
         var segments = line.Segments.ToList();
         var seg = end == 0 ? 0 : 1;
         if (segments.Count <= seg) return segments;
+        if (Chevron.IsStraight(shown))
+        {
+            segments[1] = segments[1] with { ReliefMsPerM = segments[0].ReliefMsPerM };
+            return segments;
+        }
         var was = Vec3.Distance2D(line.Points[end], line.Points[1]);
         var now = Vec3.Distance2D(shown[end], shown[1]);
         if (was > 1e-9) segments[seg] = segments[seg] with { ReliefMsPerM = Math.Round(segments[seg].ReliefMsPerM * now / was, 2) };
@@ -159,7 +195,7 @@ public sealed class FrontLineHandles : ISelectGesture
 
 /// <summary>
 /// Timing front tool, drawing the shape chosen in its panel (<see cref="MainViewModel.FrontShape"/>).
-/// A chevron: two segments meeting at a vertex at 30°, with a ray from the vertex outwards that shows where the times grow. A press places the vertex; dragging with the button held pulls the base after the cursor (direction and length),
+/// A chevron: two segments meeting at a vertex at 30°, the times growing from the vertex outwards. A press places the vertex; dragging with the button held pulls the base after the cursor (direction and length),
 /// a click without a drag gives segments 60 px long at the present zoom, pointing up the screen.
 /// A line: a press places one end, the drag the other (a click gives 60 px across the screen); its ends are put in the order
 /// that makes the times grow to the side of most holes, which an arrow shows.
@@ -194,8 +230,8 @@ public sealed class FrontLineTool : Tool
 
     public override string Name => "Timing line";
     public override string Hint => Vm.FrontShape == TimingFrontShape.Line
-        ? "Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line to the side of most holes, the arrow shows it. On a selected line drag a circle to move its end, the line to move it."
-        : "Press to place the vertex of the front and drag the way the times are to grow: the ray follows the cursor, the sides open behind it (a click gives 60 px, upwards). On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length, the line to move it.";
+        ? "Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line both ways, the holes at one distance from it fire together. On a selected line drag a circle to move its end, the label in its middle to make it a chevron, the line to move it."
+        : "Press to place the vertex of the front and drag the way it is to point: the sides open behind the cursor (a click gives 60 px, upwards). On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length (drawn out to 180° it becomes a straight line, whose ends then move on their own), the line to move it.";
 
     /// <summary>The end of a segment from <paramref name="from"/> turned to the nearest step of 15°, its length kept.</summary>
     public static Vec3 Stepped(Vec3 from, Vec3 to)
@@ -289,7 +325,7 @@ public sealed class FrontLineTool : Tool
         base.Cancel();
     }
 
-    /// <summary>The front as the pointer gives it now, shown with its circles and its ray.</summary>
+    /// <summary>The front as the pointer gives it now, shown with its circles.</summary>
     private void UpdateShape(ToolPointer p)
     {
         if (_line) { UpdateLine(p); return; }
@@ -298,7 +334,7 @@ public sealed class FrontLineTool : Tool
         double length;
         if (_stretching)
         {
-            // the ray follows the cursor: dragged up, the front points up and its sides open below the vertex
+            // the front follows the cursor: dragged up, it points up and its sides open below the vertex
             var v = (cam.ToWorld(p.X, p.Y, _apex.Z) - _apex).WithZ(0);
             length = v.Length2D;
             dir = v.Normalized();
@@ -322,9 +358,8 @@ public sealed class FrontLineTool : Tool
         Preview.Points.Clear();
         Preview.Labels.Clear();
         Preview.Lines.Add((_shape, false, PreviewColor));
-        Preview.Guides.Add((new[] { _apex, _apex + dir * (cam.Width / Math.Max(cam.Scale, 1e-9)) }, PreviewColor));
         foreach (var q in _shape) Preview.Points.Add((q, PreviewColor));
-        // bearing of the ray, clockwise from north
+        // bearing the front points to, clockwise from north
         var bearing = (Math.Atan2(dir.X, dir.Y) / GeoMath.Deg + 360) % 360;
         Preview.Labels.Add((_shape[0], $"{bearing:0.0}° · {Chevron.Length(_shape):0.00} m"));
     }
@@ -349,16 +384,10 @@ public sealed class FrontLineTool : Tool
         Preview.Labels.Clear();
         Preview.Lines.Add((_shape, false, PreviewColor));
         foreach (var q in _shape) Preview.Points.Add((q, PreviewColor));
-        // the left of the line walked from its first end to its second is timed later
+        // the times grow from the line both ways: no arrow. Its ends are still put in order toward most holes, the way it
+        // bends when it is made a chevron
         var d = (_shape[1] - _shape[0]).WithZ(0);
         var length = d.Length2D;
-        var mid = (_shape[0] + _shape[1]) / 2;
-        var left = new Vec3(-d.Y, d.X, 0).Normalized();
-        var tip = mid + left * (length / 4);
-        var back = -left * (length / 16);
-        var across = d.Normalized() * (length / 24);
-        Preview.Guides.Add((new[] { mid, tip }, PreviewColor));
-        Preview.Guides.Add((new[] { tip + back + across, tip, tip + back - across }, PreviewColor));
         var bearing = (Math.Atan2(d.X, d.Y) / GeoMath.Deg + 360) % 360;
         Preview.Labels.Add((_shape[1], $"{bearing:0.0}° · {length:0.00} m"));
     }

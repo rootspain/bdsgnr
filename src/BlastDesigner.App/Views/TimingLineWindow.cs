@@ -39,7 +39,9 @@ public static class TimingLineWindow
             ReverseOrder = source.ReverseOrder, BurdenReliefMsPerM = source.BurdenReliefMsPerM, Angle1Deg = source.Angle1Deg, Angle2Deg = source.Angle2Deg,
             Front = front
         };
-        if (front != TimingFrontShape.None) options.Style = TimingLineStyle.TimeLine;
+        // a line front is a front line; a chevron "two fronts", and "front line" while it is opened into a straight line
+        if (front == TimingFrontShape.Line) options.Style = TimingLineStyle.TimeLine;
+        else if (front == TimingFrontShape.Chevron) options.Style = points.Count == 3 && Chevron.IsStraight(points) ? TimingLineStyle.TimeLine : TimingLineStyle.BurnLine;
         // A new front goes A → B: a chevron's times grow along its ray, from the vertex outwards, a line's (its ends put in
         // order by the tool) to the side of most holes. A front edited keeps its direction, which A → B / B → A turn.
         if (existing == null && front != TimingFrontShape.None) options.ReverseOrder = false;
@@ -187,11 +189,13 @@ public sealed class TimingLineForm : DockPanel
     {
         if (!IsChevron || _chevronScale <= 0) return;
         var delays = Segments();
+        // a straight one has one delay, the first segment's, and its vertex stays in its middle
+        var straight = Chevron.IsStraight(_points);
         foreach (var (seg, end) in new[] { (0, 0), (1, 2) })
         {
             var dir = (_points[end] - _points[1]).WithZ(0);
             if (dir.Length2D < 1e-12) continue;
-            var length = Math.Max(delays[seg].ReliefMsPerM / _chevronScale, Chevron.MinLength);
+            var length = Math.Max(delays[straight ? 0 : seg].ReliefMsPerM / _chevronScale, Chevron.MinLength);
             var to = dir.Normalized() * length;
             _points[end] = new Vec3(_points[1].X + to.X, _points[1].Y + to.Y, _points[end].Z);
         }
@@ -477,7 +481,8 @@ public sealed class TimingLineForm : DockPanel
 
     private Control SegmentTable()
     {
-        var burn = Options.Style == TimingLineStyle.BurnLine;
+        // a chevron of the "two fronts" type has no burn rate: its oval times it
+        var burn = Options.Style == TimingLineStyle.BurnLine && !IsChevron;
         var progress = Options.UseProgressive;
         var stack = new StackPanel { Spacing = 8 };
         if (SegmentCount > 1)

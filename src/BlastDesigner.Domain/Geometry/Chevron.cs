@@ -28,11 +28,30 @@ public static class Chevron
     /// <summary>Middle of the shape (mean of its three points), the centre it turns about.</summary>
     public static Vec3 Center(IReadOnlyList<Vec3> p) => (p[0] + p[1] + p[2]) / 3;
 
-    /// <summary>Unit plan direction of the ray: from the middle of the base through the vertex.</summary>
+    /// <summary>
+    /// Unit plan direction of the ray: from the middle of the base through the vertex; of a straight front (<see cref="IsStraight"/>)
+    /// square to it, point 0 on its left.
+    /// </summary>
     public static Vec3 RayDir(IReadOnlyList<Vec3> p)
     {
+        if (IsStraight(p))
+        {
+            var left = (p[0] - p[2]).WithZ(0).Normalized();
+            return new Vec3(left.Y, -left.X, 0);
+        }
         var d = (p[1] - (p[0] + p[2]) / 2).WithZ(0).Normalized();
         return d == Vec3.Zero ? new Vec3(0, 1, 0) : d;
+    }
+
+    /// <summary>The two segments on one straight line, either side of the vertex (180° between them): the front is a straight line.</summary>
+    public static bool IsStraight(IReadOnlyList<Vec3> p)
+    {
+        if (p.Count != 3) return false;
+        var a = (p[0] - p[1]).WithZ(0);
+        var b = (p[2] - p[1]).WithZ(0);
+        double la = a.Length2D, lb = b.Length2D;
+        if (la < 1e-12 || lb < 1e-12) return false;
+        return Math.Abs(a.X * b.Y - a.Y * b.X) <= 1e-9 * la * lb && a.X * b.X + a.Y * b.Y < 0;
     }
 
     /// <summary>Angle between the two segments in plan, degrees.</summary>
@@ -74,9 +93,10 @@ public static class Chevron
 
     /// <summary>
     /// The shape with end <paramref name="end"/> (0 or 2) taken to <paramref name="target"/> on its own: the vertex and the
-    /// other end stay. No shorter than <see cref="MinLength"/>; an end that would lie along the other segment (closer to it,
-    /// or to its straight continuation, than <see cref="MinAngleDeg"/>) stays where it was, the oval of delays needing two
-    /// directions.
+    /// other end stay. No shorter than <see cref="MinLength"/>. An end that would lie along the other segment (closer to it
+    /// than <see cref="MinAngleDeg"/>) stays where it was, the oval of delays needing two directions. An end as close to the
+    /// straight continuation of the other segment snaps onto it: the front becomes a straight line (<see cref="IsStraight"/>)
+    /// with its vertex in its middle. Further on it bends again, to the other side.
     /// </summary>
     public static List<Vec3> MoveEnd(IReadOnlyList<Vec3> points, int end, Vec3 target)
     {
@@ -89,11 +109,67 @@ public static class Chevron
         {
             var a = v.Normalized();
             var b = other.Normalized();
-            if (Math.Abs(a.X * b.Y - a.Y * b.X) < Math.Sin(MinAngleDeg * GeoMath.Deg)) return points.ToList();
+            if (Math.Abs(a.X * b.Y - a.Y * b.X) < Math.Sin(MinAngleDeg * GeoMath.Deg))
+            {
+                if (a.X * b.X + a.Y * b.Y > 0) return points.ToList();
+                // onto the continuation of the other segment: a straight line, the vertex in its middle
+                var reach = Math.Max(-(v.X * b.X + v.Y * b.Y), MinLength);
+                var tip = new Vec3(apex.X - b.X * reach, apex.Y - b.Y * reach, apex.Z);
+                var far = points[2 - end];
+                var line = points.ToList();
+                line[end] = tip;
+                line[1] = new Vec3((tip.X + far.X) / 2, (tip.Y + far.Y) / 2, apex.Z);
+                return line;
+            }
         }
         var result = points.ToList();
         result[end] = new Vec3(apex.X + v.X, apex.Y + v.Y, apex.Z);
         return result;
+    }
+
+    /// <summary>Angle a straight front is bent to when it is made a chevron again (<see cref="Bend"/>): past the snap of <see cref="MoveEnd"/>.</summary>
+    public const double BentAngleDeg = 180 - 2 * MinAngleDeg;
+
+    /// <summary>
+    /// A straight front (<see cref="IsStraight"/>) bent into a chevron: the ends stay, the vertex goes forward (along
+    /// <see cref="RayDir"/>, point 0 on the left) until the segments are <see cref="BentAngleDeg"/> apart. Any other shape as it is.
+    /// </summary>
+    public static List<Vec3> Bend(IReadOnlyList<Vec3> points)
+    {
+        if (!IsStraight(points)) return points.ToList();
+        var mid = new Vec3((points[0].X + points[2].X) / 2, (points[0].Y + points[2].Y) / 2, points[1].Z);
+        var half = Vec3.Distance2D(points[0], points[2]) / 2;
+        var ahead = half * Math.Tan((180 - BentAngleDeg) / 2 * GeoMath.Deg);
+        var bent = points.ToList();
+        bent[1] = mid + RayDir(points) * ahead;
+        return bent;
+    }
+
+    /// <summary>A chevron made straight: the ends stay, the vertex goes to the middle between them (at its own elevation).</summary>
+    public static List<Vec3> Straighten(IReadOnlyList<Vec3> points)
+    {
+        var line = points.ToList();
+        if (points.Count != 3 || Vec3.Distance2D(points[0], points[2]) < 2 * MinLength) return line;
+        line[1] = new Vec3((points[0].X + points[2].X) / 2, (points[0].Y + points[2].Y) / 2, points[1].Z);
+        return line;
+    }
+
+    /// <summary>
+    /// A straight front (<see cref="IsStraight"/>) with end <paramref name="end"/> (0 or 2) taken to <paramref name="target"/>:
+    /// the other end stays, the line stays straight and its vertex in its middle. Ends closer than twice
+    /// <see cref="MinLength"/> leave it as it was.
+    /// </summary>
+    public static List<Vec3> MoveStraightEnd(IReadOnlyList<Vec3> points, int end, Vec3 target)
+    {
+        var apex = points[1];
+        var far = points[2 - end];
+        if (Vec3.Distance2D(target, far) < 2 * MinLength) return points.ToList();
+        var tip = new Vec3(target.X, target.Y, apex.Z);
+        var line = points.ToList();
+        line[end] = tip;
+        line[2 - end] = new Vec3(far.X, far.Y, apex.Z);
+        line[1] = new Vec3((tip.X + far.X) / 2, (tip.Y + far.Y) / 2, apex.Z);
+        return line;
     }
 
     /// <summary>
