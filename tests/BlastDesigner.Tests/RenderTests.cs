@@ -482,5 +482,56 @@ public class RenderTests
         };
         var edges = PlanRenderer.OuterEdges(s).Select(e => (Math.Min(e.A, e.B), Math.Max(e.A, e.B))).OrderBy(e => e).ToList();
         Assert.Equal(new[] { (0, 1), (0, 3), (1, 2), (2, 3) }, edges);
+        // the same square with three corners of its own in every triangle, as blocks cut it: still its four sides
+        var soup = new SurfaceEntity();
+        foreach (var i in s.Triangles) { soup.Triangles.Add(soup.Vertices.Count); soup.Vertices.Add(s.Vertices[i]); }
+        var sides = PlanRenderer.OuterEdges(soup).Select(e => (soup.Vertices[e.A], soup.Vertices[e.B])).ToList();
+        Assert.Equal(4, sides.Count);
+        Assert.All(sides, e => Assert.Equal(10, Vec3.Distance(e.Item1, e.Item2), 9));
+    }
+
+    /// <summary>A selected surface drawn with the halo on and off: inside the mesh, by its triangles, the two are the same.</summary>
+    /// <param name="block">The plan cut by a block round the surface: the surface comes cut, three corners of its own in every triangle.</param>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void TheTrianglesOfASelectedSurfaceHaveNoHalo(bool wireframe, bool block)
+    {
+        SKBitmap Draw(bool halo)
+        {
+            var p = BlastProject.CreateNew("surface halo");
+            var s = new SurfaceEntity
+            {
+                LayerId = p.Layers[0].Id, ShowWireframe = wireframe,
+                Vertices = new List<Vec3> { new(-20, -20, 0), new(20, -20, 0), new(20, 20, 0), new(-20, 20, 0), new(0, 0, 5) },
+                Triangles = new List<int> { 0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4 }
+            };
+            p.Entities.Add(s);
+            if (block) p.Entities.Add(new BlockEntity { LayerId = p.Layers[0].Id, Origin = new Vec3(-30, -30, -10), Length = 60, Width = 60, Height = 30 });
+            var cam = new Camera { Width = 400, Height = 300, Scale = 4, Target = new Vec3(0, 0, 0) };
+            var options = new SceneOptions
+            {
+                Background = SKColors.Gray, ShowGrid = false, DrawNorthArrow = false, DrawScaleBar = false, DrawSummaryBlock = false,
+                Selection = new HashSet<Guid> { s.Id }, SelectionColor = new SKColor(0xFF4C9BFF), SelectionHalo = halo
+            };
+            var bitmap = new SKBitmap(400, 300);
+            using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+            return bitmap;
+        }
+        using var with = Draw(true);
+        using var without = Draw(false);
+        var cam = new Camera { Width = 400, Height = 300, Scale = 4, Target = new Vec3(0, 0, 0) };
+        // along the spoke from the middle to a corner, and 2 px beside it: inside the mesh
+        for (double t = 0.2; t < 0.8; t += 0.1)
+        {
+            var (x, y) = cam.ToScreen(new Vec3(-20 * t, -20 * t, 0));
+            foreach (var (dx, dy) in new[] { (0, 0), (2, 0), (0, 2), (-2, 0), (0, -2) })
+                Assert.Equal(without.GetPixel((int)x + dx, (int)y + dy), with.GetPixel((int)x + dx, (int)y + dy));
+        }
+        // the outer edge has it
+        var (ex, ey) = cam.ToScreen(new Vec3(0, -20, 0));
+        Assert.NotEqual(without.GetPixel((int)ex, (int)Math.Round(ey) + 2), with.GetPixel((int)ex, (int)Math.Round(ey) + 2));
     }
 }

@@ -616,6 +616,22 @@ Step("v6 setup", () => vm.Change("Smoke v6 data", p =>
 Step("initiation rules", () => { if (Initiation.ApplyRules(vm.Project!, vm.Project!.Holes) == 0) throw new Exception("no holes initiated"); });
 Step("dashboard", () => AnalisysWindows.Dashboard(vm));
 WindowShot("10_dashboard");
+Step("tool windows (Dashboard) take the ground of the theme, not the white of the Fluent theme; its warnings have tips", () =>
+{
+    AnalisysWindows.Dashboard(vm); Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    try
+    {
+        if (w.Background != BlastDesigner.App.Services.Look.Ground) throw new Exception($"{w.Title}: background {(w.Background as Avalonia.Media.ISolidColorBrush)?.Color}");
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "10b_dashboard_theme.png"));
+        // a red warning says why, in the language of the program, with its numbers
+        var tips = w.GetLogicalDescendants().OfType<DockPanel>().Select(d => ToolTip.GetTip(d) as string).Where(t => t != null).ToList();
+        if (tips.Count == 0) throw new Exception("no tip on the warnings of the dashboard");
+        if (tips.Any(t => t!.Contains('{') || !t.Contains('«'))) throw new Exception("tip not translated: " + tips.First(t => t!.Contains('{') || !t.Contains('«')));
+    }
+    finally { w.Close(); Pump(); }
+});
 Step("burden check", () => AnalisysWindows.BurdenCheck(vm));
 WindowShot("11_burden_check");
 Step("front row profile", () => AnalisysWindows.FrontRowProfile(vm));

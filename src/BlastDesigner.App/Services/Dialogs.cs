@@ -290,7 +290,9 @@ public static class Dialogs
             Content = content,
             Width = width,
             Height = height,
-            WindowStartupLocation = alignBottomToOwner || at != null ? WindowStartupLocation.Manual : WindowStartupLocation.CenterOwner
+            WindowStartupLocation = alignBottomToOwner || at != null ? WindowStartupLocation.Manual : WindowStartupLocation.CenterOwner,
+            // the theme's ground: a new window already has the white of the Fluent theme, before it takes the program's variant
+            Background = Look.Ground
         };
         // black until drawn, then the theme: no white flash on opening
         DarkStart.Attach(w, w.Background ?? Look.Ground);

@@ -150,6 +150,10 @@ public static class AnalisysWindows
         return t;
     }
 
+    /// <summary>Why a warning is raised and where to look further; null for a value in order.</summary>
+    internal static string? Tip(Analysis.Kpi k) =>
+        !k.Warning || k.Tip == null ? null : Loc.F(k.Tip, (k.TipArgs ?? Array.Empty<object?>()).Select(a => a is string s ? Units(s) : a).ToArray());
+
     /// <summary>Translates the unit words in values formatted by the engine.</summary>
     private static string Units(string value)
     {
@@ -173,14 +177,20 @@ public static class AnalisysWindows
                 var card = new StackPanel { Spacing = 4, Margin = new Thickness(6), Width = 300 };
                 card.Children.Add(new TextBlock { Text = Loc.T(g.Key), FontWeight = FontWeight.Bold, FontSize = 15 });
                 foreach (var k in g)
-                    card.Children.Add(new DockPanel
+                {
+                    var row = new DockPanel
                     {
+                        // the tip shows over the whole row, the gap between the name and the value too
+                        Background = Brushes.Transparent,
                         Children =
                         {
                             Name(k),
                             new TextBlock { Text = Units(k.Value), HorizontalAlignment = HorizontalAlignment.Right, FontWeight = FontWeight.SemiBold }
                         }
-                    });
+                    };
+                    if (Tip(k) is { } tip) ToolTip.SetTip(row, tip);
+                    card.Children.Add(row);
+                }
                 panel.Children.Add(new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Padding = new Thickness(8), Margin = new Thickness(4), Child = card });
             }
             host.Content = new ScrollViewer { Content = panel };

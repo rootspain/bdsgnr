@@ -156,7 +156,8 @@ public static class Analysis
 
     // ---- dashboard ------------------------------------------------------------------------
 
-    public sealed record Kpi(string Group, string Name, string Value, bool Warning = false);
+    /// <param name="Tip">Why a warning is raised and where to look further: an English format, <paramref name="TipArgs"/> its values.</param>
+    public sealed record Kpi(string Group, string Name, string Value, bool Warning = false, string? Tip = null, object?[]? TipArgs = null);
 
     public static List<Kpi> Dashboard(BlastProject project)
     {
@@ -173,18 +174,26 @@ public static class Analysis
         list.Add(new("Loading", "Powder factor", $"{q.PowderFactorKgM3:0.000} kg/m³"));
         list.Add(new("Loading", "Energy factor", $"{q.EnergyFactorMJt:0.00} MJ/t"));
         var unloaded = holes.Count(h => h.Decks.Count == 0);
-        list.Add(new("Loading", "Holes not loaded", unloaded.ToString(), unloaded > 0));
+        list.Add(new("Loading", "Holes not loaded", unloaded.ToString(), unloaded > 0,
+            "{0} of {1} holes have no charge: they are not counted in the explosive and the powder factor. Select them and give them a loading.",
+            new object?[] { unloaded, holes.Count }));
         var timed = holes.Where(h => h.FiringTimeMs.HasValue).ToList();
-        list.Add(new("Timing", "Holes initiated", $"{timed.Count} / {holes.Count}", timed.Count < holes.Count));
+        list.Add(new("Timing", "Holes initiated", $"{timed.Count} / {holes.Count}", timed.Count < holes.Count,
+            "{0} holes have no firing time: they are not connected to the initiation, and drop out of the firing order, the isochrones and the instantaneous charge. Connect them with ties or apply the initiation rules.",
+            new object?[] { holes.Count - timed.Count }));
         if (timed.Count > 0) list.Add(new("Timing", "Firing span", $"{timed.Min(h => h.FiringTimeMs!.Value):0} – {timed.Max(h => h.FiringTimeMs!.Value):0} ms"));
         list.Add(new("Timing", "Maximum instantaneous charge", $"{q.MaxInstantaneousCharge:0.0} kg / {project.Vibration.WindowMs:0} ms"));
         var overlaps = TimingOverlap(project, project.Design.Spacing * 1.5, project.Vibration.WindowMs).Count;
-        list.Add(new("Timing", "Neighbour overlaps", overlaps.ToString(), overlaps > 0));
+        list.Add(new("Timing", "Neighbour overlaps", overlaps.ToString(), overlaps > 0,
+            "{0} pairs of neighbouring holes (no more than {1:0.0} m apart, 1.5 × spacing) fire less than {2:0} ms apart: their charges act together, the vibration grows and the rock between them breaks worse. The pairs are listed in the Timing overlap window.",
+            new object?[] { overlaps, project.Design.Spacing * 1.5, project.Vibration.WindowMs }));
         var monitors = project.Entities.OfType<PointEntity>().Where(p => p.Kind == PointKind.Monitoring).ToList();
         if (monitors.Count > 0)
         {
             var worst = monitors.Select(m => (m, r: Vibration.Predict(project, m.Position))).OrderByDescending(x => x.r.Ppv).First();
-            list.Add(new("Environment", "Highest PPV", $"{worst.r.Ppv:0.00} mm/s at {worst.m.Label}", worst.r.Ppv > project.Vibration.PpvLimit));
+            list.Add(new("Environment", "Highest PPV", $"{worst.r.Ppv:0.00} mm/s at {worst.m.Label}", worst.r.Ppv > project.Vibration.PpvLimit,
+                "At {0} the predicted PPV is {1:0.00} mm/s, above the limit of {2:0.##} mm/s. Lower the charge per delay (fewer holes firing within {3:0} ms, decked charges) or check the constants in Project properties ▸ Vibration site constants.",
+                new object?[] { worst.m.Label, worst.r.Ppv, project.Vibration.PpvLimit, project.Vibration.WindowMs }));
             list.Add(new("Environment", "Highest airblast", $"{monitors.Max(m => Vibration.Predict(project, m.Position).AirblastDb):0.0} dB"));
         }
         var fly = Flyrock.Compute(project);
@@ -197,14 +206,20 @@ public static class Analysis
             string Size(double cm) => SizeUnits.FromCm(cm, unit).ToString(SizeUnits.Format(unit)) + " " + SizeUnits.Symbol(unit);
             list.Add(new("Fragmentation", "X50", Size(frag.X50Cm)));
             list.Add(new("Fragmentation", "X80", Size(frag.X80Cm)));
-            list.Add(new("Fragmentation", "Oversize", $"{frag.OversizePct:0.0} %", frag.OversizePct > 10));
+            list.Add(new("Fragmentation", "Oversize", $"{frag.OversizePct:0.0} %", frag.OversizePct > 10,
+                "{0:0.0} % of the rock is predicted larger than {1} (the oversize size), more than 10 %. A smaller burden and spacing, a higher powder factor or shorter stemming break it finer. The prediction and its inputs are in the Fragmentation prediction window.",
+                new object?[] { frag.OversizePct, Size(project.Fragmentation.OversizeCm) }));
         }
         var tol = Tolerance.Check(project);
         var surveyed = tol.Where(t => t.Hole.ActualCollar.HasValue || t.Hole.ActualLength.HasValue || t.Hole.BoreTrack != null).ToList();
         if (surveyed.Count > 0)
-            list.Add(new("Quality", "Holes within tolerance", $"{surveyed.Count(t => t.Pass)} / {surveyed.Count}", surveyed.Any(t => !t.Pass)));
+            list.Add(new("Quality", "Holes within tolerance", $"{surveyed.Count(t => t.Pass)} / {surveyed.Count}", surveyed.Any(t => !t.Pass),
+                "{0} of {1} surveyed holes are outside the design tolerances (collar, depth, toe, angle or bearing). Which holes and by how much: the Design tolerance check window; the tolerances themselves: Project properties ▸ Design tolerances.",
+                new object?[] { surveyed.Count(t => !t.Pass), surveyed.Count }));
         var burden = CheckBurden(project);
-        list.Add(new("Quality", "Low-burden holes", burden.Count(b => b.Low).ToString(), burden.Any(b => b.Low)));
+        list.Add(new("Quality", "Low-burden holes", burden.Count(b => b.Low).ToString(), burden.Any(b => b.Low),
+            "{0} holes have a burden to the hole ahead of less than {1:0.00} m (80 % of the design burden of {2:0.00} m), measured along the blast orientation: the rock in front of them breaks out early and can be thrown. Which holes: the Burden check window.",
+            new object?[] { burden.Count(b => b.Low), project.Design.Burden * 0.8, project.Design.Burden }));
         return list;
     }
 }

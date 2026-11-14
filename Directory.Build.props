@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>0.3.4</Version>
+    <Version>0.3.5</Version>
     <Product>Blast Designer</Product>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <!-- Не зашивать локальный путь к исходникам в сборки и pdb -->

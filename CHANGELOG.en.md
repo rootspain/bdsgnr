@@ -6,6 +6,19 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.5 — 2026-11-14
+
+### New
+- **Tips on the red warnings of the Dashboard.** Point at a row: the tip says why it is red, with its numbers (how many
+  holes, which threshold, which limit), and which window shows more: holes not loaded and not initiated, neighbour
+  overlaps, PPV above the limit, oversize, holes outside the tolerances, low burden.
+
+### Fixed
+- **The analysis windows have the colours of the theme again.** The Dashboard, the burden check, the front row profile
+  and the other analysis windows turned white once open, and the light text of the dark theme could hardly be read on them.
+- **The halo of a selected surface goes round its outer edge only** also when blocks cut the plan: it went round every
+  triangle then.
+
 ## 0.3.4 — 2026-11-13
 
 ### New

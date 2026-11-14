@@ -634,7 +634,11 @@ public static class PlanRenderer
     private sealed class EdgeCache { public int Key; public (int A, int B)[] Edges = Array.Empty<(int, int)>(); }
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<SurfaceEntity, EdgeCache> _edges = new();
 
-    /// <summary>The outer edge of a surface: the sides of its triangles that no other triangle shares. Kept while the mesh stays.</summary>
+    /// <summary>
+    /// The outer edge of a surface: the sides of its triangles that no other triangle shares. A side is shared by where its
+    /// ends are (to a millimetre), not by their numbers: a surface cut by blocks has three corners of its own in every
+    /// triangle, and by the numbers every side of it would be an edge. Kept while the mesh stays.
+    /// </summary>
     public static IReadOnlyList<(int A, int B)> OuterEdges(SurfaceEntity s)
     {
         var cache = _edges.GetOrCreateValue(s);
@@ -642,16 +646,29 @@ public static class PlanRenderer
         lock (cache)
         {
             if (cache.Key == key && (cache.Edges.Length > 0 || s.Triangles.Count == 0)) return cache.Edges;
-            var count = new Dictionary<(int, int), int>();
+            // one number for the corners at one place
+            var place = new int[s.Vertices.Count];
+            var first = new Dictionary<(long, long, long), int>();
+            for (int i = 0; i < place.Length; i++)
+            {
+                var v = s.Vertices[i];
+                var at = ((long)Math.Round(v.X * 1000), (long)Math.Round(v.Y * 1000), (long)Math.Round(v.Z * 1000));
+                if (!first.TryGetValue(at, out var f)) first[at] = f = i;
+                place[i] = f;
+            }
+            var count = new Dictionary<(int, int), (int Count, int A, int B)>();
             var t = s.Triangles;
             for (int i = 0; i + 2 < t.Count; i += 3)
                 for (int k = 0; k < 3; k++)
                 {
                     int a = t[i + k], b = t[i + (k + 1) % 3];
-                    var e = a < b ? (a, b) : (b, a);
-                    count[e] = count.TryGetValue(e, out var n) ? n + 1 : 1;
+                    if (a >= place.Length || b >= place.Length) continue;
+                    int pa = place[a], pb = place[b];
+                    if (pa == pb) continue;
+                    var e = pa < pb ? (pa, pb) : (pb, pa);
+                    count[e] = count.TryGetValue(e, out var n) ? (n.Count + 1, n.A, n.B) : (1, a, b);
                 }
-            cache.Edges = count.Where(x => x.Value == 1).Select(x => x.Key).ToArray();
+            cache.Edges = count.Values.Where(x => x.Count == 1).Select(x => (x.A, x.B)).ToArray();
             cache.Key = key;
             return cache.Edges;
         }
