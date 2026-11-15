@@ -516,7 +516,7 @@ public sealed class PropertiesPanel : DockPanel
         body.Children.Add(turns);
         var select = new Button { Content = Loc.T("Select pattern"), Height = 28, Name = "selectPattern" };
         select.Click += (_, _) => _vm.SelectPatternHoles();
-        var rotate = new Button { Content = Loc.T("Rotate pattern with the mouse"), Height = 28, Name = "rotatePattern", IsEnabled = !doc.IsReadOnly };
+        var rotate = new Button { Content = Loc.T("Rotate pattern"), Height = 28, Name = "rotatePattern", IsEnabled = !doc.IsReadOnly };
         rotate.Click += (_, _) => _vm.PatternRotateTool();
         body.Children.Add(Ui.Row(6, select, rotate));
         return new StackPanel { Spacing = 8, Children = { head, body } };
