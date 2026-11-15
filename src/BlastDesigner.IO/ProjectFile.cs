@@ -89,6 +89,9 @@ public static class ProjectFile
             foreach (var pat in p.Patterns)
                 if (pat.ToLevel is double z && Math.Abs(z) < 1e-6) pat.ToLevel = null;
         }
+        // schema 4: the depth of a pattern has a mode of its own; before, its level, its surface button or its bench height
+        if (schema < 4)
+            foreach (var pat in p.Patterns) Engine.PatternTree.DepthFromLegacy(pat);
         if (p.Layers.Count == 0) p.DefaultLayerId = p.GetOrCreateLayer("Default").Id;
         foreach (var e in p.Entities)
             if (p.FindLayer(e.LayerId) == null) e.LayerId = p.DefaultLayer.Id;

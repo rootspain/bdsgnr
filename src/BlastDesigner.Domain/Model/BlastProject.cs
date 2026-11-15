@@ -6,7 +6,7 @@ namespace BlastDesigner.Domain.Model;
 /// <summary>The whole blast design document.</summary>
 public sealed class BlastProject
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -265,6 +265,26 @@ public sealed class HolePattern
     public RowAlignment Alignment { get; set; }
     /// <summary>Raised by every layout of the grid within a change, so what follows the change can tell it from a hand edit.</summary>
     [JsonIgnore] public int Revision { get; set; }
+    /// <summary>The pattern this one is a segment of; null for a pattern of its own (a root).</summary>
+    public Guid? ParentId { get; set; }
+    /// <summary>Place of the segment among those of its parent, from the face back: segment k lies between cut lines k − 1 and k.</summary>
+    public int Order { get; set; }
+    /// <summary>The parameters the segment sets itself; the others are those of its parent.</summary>
+    public PatternOverrides Overrides { get; set; } = new();
+    /// <summary>
+    /// The lines the pattern is cut along into segments, from the face back; the pattern has one segment more than lines.
+    /// A pattern with lines is a container: its holes belong to its segments.
+    /// </summary>
+    public List<SegmentLine> SegmentLines { get; set; } = new();
+    /// <summary>
+    /// The polygon of a container: its <see cref="OutlineEntityId"/> is cleared, so a version that does not know segments
+    /// does not lay the whole container out again when the polygon is edited.
+    /// </summary>
+    public Guid? SourceOutlineId { get; set; }
+    /// <summary>The pattern is cut into segments and has no holes of its own.</summary>
+    [JsonIgnore] public bool IsContainer => SegmentLines.Count > 0;
+    /// <summary>The polygon the outline follows: that of a container or of a pattern of its own.</summary>
+    [JsonIgnore] public Guid? PolygonId => OutlineEntityId ?? SourceOutlineId;
 
     public bool IsSuppressed(int i, int j) => Suppressed.Any(s => s.I == i && s.J == j);
 }
@@ -279,6 +299,11 @@ public sealed class PatternHoleDefaults
     public double BenchHeight { get; set; } = 10;
     public int HoleType { get; set; } = 1;
     public bool Dummy { get; set; }
+    /// <summary>
+    /// What the holes go down to. Its modes Fixed, ToLevel and ToSurface mirror <see cref="BenchHeight"/>,
+    /// <see cref="HolePattern.ToLevel"/> and <see cref="HolePattern.ToSurface"/>, which stay as they were for older versions.
+    /// </summary>
+    public DepthSpec Depth { get; set; } = new();
 }
 
 /// <summary>A node of a pattern grid.</summary>

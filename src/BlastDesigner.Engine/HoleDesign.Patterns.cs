@@ -78,10 +78,15 @@ public static partial class HoleDesign
     public static Vec3 NodePoint(HolePattern pat, int i, int j)
     {
         var (u, v) = PatternAxes(pat.Azimuth);
-        var stagger = pat.Type == PatternType.Staggered && (j & 1) == 1 ? pat.Spacing / 2 : 0;
-        var a = pat.PhaseU + i * pat.Spacing + stagger;
-        var b = pat.PhaseV + j * pat.Burden;
+        var (a, b) = NodeGrid(pat, i, j);
         return new Vec3(pat.Center.X + u.X * a + v.X * b, pat.Center.Y + u.Y * a + v.Y * b, pat.Center.Z);
+    }
+
+    /// <summary>Position of node (i, j) in the axes of the grid about its centre: along the rows (u) and from the face back (v).</summary>
+    public static (double U, double V) NodeGrid(HolePattern pat, int i, int j)
+    {
+        var stagger = pat.Type == PatternType.Staggered && (j & 1) == 1 ? pat.Spacing / 2 : 0;
+        return (pat.PhaseU + i * pat.Spacing + stagger, pat.PhaseV + j * pat.Burden);
     }
 
     /// <summary>Whether a point gets a hole: inside the outline and not nearer to it than the edge offset.</summary>
@@ -157,7 +162,8 @@ public static partial class HoleDesign
             RotateOrientation = pp.RotateOrientation,
             HoleDefaults = new PatternHoleDefaults
             {
-                Diameter = hp.Diameter, Angle = hp.Angle, Bearing = hp.Bearing, Subdrill = hp.Subdrill, BenchHeight = hp.BenchHeight, HoleType = hp.HoleType, Dummy = hp.Dummy
+                Diameter = hp.Diameter, Angle = hp.Angle, Bearing = hp.Bearing, Subdrill = hp.Subdrill, BenchHeight = hp.BenchHeight, HoleType = hp.HoleType, Dummy = hp.Dummy,
+                Depth = new DepthSpec { Front = new DepthPair(hp.BenchHeight, hp.BenchHeight), Back = new DepthPair(hp.BenchHeight, hp.BenchHeight) }
             },
             FaceEdge = pp.FaceEdge is int k && k >= 0 && k < polygon.Count ? k : null,
             Alignment = pp.Alignment
@@ -392,23 +398,35 @@ public static partial class HoleDesign
             PatternBearingMode.BlastOrientation => p.Header.BlastOrientation,
             _ => null
         };
-        void Level(Hole h, bool isNew)
+        // the four numbers of the depth at the corners of the conditional rectangle of the grid
+        var depth = pat.HoleDefaults.Depth;
+        var rect = depth.UsesRectangle ? DepthRectangle.Of(pat) : null;
+        double? RectDepth(int i, int j) => rect is { } r && r.Relative(pat, i, j) is var (s, t) ? depth.At(s, t) : null;
+        void Level(Hole h, bool isNew, double? rd)
         {
-            if (pat.ToSurface) h.ToLevel = HoleLevel.SurfaceLevel(p, h) is double s && HoleLevel.Reaches(h, s) ? s : null;
+            if (rd is double d)
+            {
+                var below = depth.IncludesSubdrill ? h.Subdrill : 0;
+                if (depth.Mode == DepthMode.RectToLevel) h.ToLevel = depth.Level + below;
+                else h.ToLevel = HoleLevel.Reaches(h, d + below) ? d + below : null;
+            }
+            else if (pat.ToSurface) h.ToLevel = HoleLevel.SurfaceLevel(p, h) is double s && HoleLevel.Reaches(h, s) ? s : null;
             else if (isNew && pat.ToLevel is double z && HoleLevel.Reaches(h, z)) h.ToLevel = z;
             if (HoleLevel.Length(h) is double length) h.Length = length;
             else if (o.GradeSurface != null && HoleLevel.Of(h) == null) SetLengthToGrade(h, o.GradeSurface, pat.HoleDefaults.BenchHeight);
         }
 
-        foreach (var (h, _, target) in plan.Moves)
+        foreach (var (h, node, target) in plan.Moves)
         {
-            var collar = o.CollarSurface?.ElevationAt(target.X, target.Y) is double cz ? target.WithZ(cz) : target;
+            var rd = RectDepth(node.I, node.J);
+            var collar = depth.Mode == DepthMode.RectToLevel && rd is double dz ? target.WithZ(depth.Level + dz)
+                : o.CollarSurface?.ElevationAt(target.X, target.Y) is double cz ? target.WithZ(cz) : target;
             var shift = collar - h.Collar;
             if (shift.Length2D > 1e-9) report.Moved++;
             h.Collar = collar;
             if (h.BoreTrack != null) for (int k = 0; k < h.BoreTrack.Count; k++) h.BoreTrack[k] += shift;
             if (BearingOf(h, h.Bearing + o.BearingDelta) is double b) h.Bearing = b;
-            Level(h, false);
+            Level(h, false, rd);
         }
 
         var gone = plan.Deletes.Select(h => h.Id).ToHashSet();
@@ -436,7 +454,9 @@ public static partial class HoleDesign
             h.PatternId = pat.Id;
             h.GridI = n.I;
             h.GridJ = n.J;
-            Level(h, true);
+            var rd = RectDepth(n.I, n.J);
+            if (depth.Mode == DepthMode.RectToLevel && rd is double dz) h.Collar = h.Collar.WithZ(depth.Level + dz);
+            Level(h, true, rd);
             p.Add(h, layer);
             added.Add(h.Id);
             report.AddedIds.Add(h.Id);
