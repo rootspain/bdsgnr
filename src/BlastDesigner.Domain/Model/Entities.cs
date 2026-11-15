@@ -204,19 +204,40 @@ public sealed class ArrowEntity : Entity
     public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(new[] { Start, End }, p, false);
 }
 
-public sealed class DimensionEntity : Entity
+public sealed class DimensionEntity : Entity, ILineStyled
 {
     public Vec3 Start { get; set; }
     public Vec3 End { get; set; }
     /// <summary>Perpendicular offset of the dimension line in plan.</summary>
     public double Offset { get; set; } = 2;
+    /// <inheritdoc cref="ILineStyled.LineWeight"/>
+    public int? LineWeight { get; set; }
+    /// <inheritdoc cref="ILineStyled.LineType"/>
+    public string? LineType { get; set; }
+    /// <inheritdoc cref="ILineStyled.LineTypeScale"/>
+    public double LineTypeScale { get; set; } = 1;
 
     public override string KindName => "Dimension";
     [JsonIgnore] public double Distance => Vec3.Distance(Start, End);
     public override IEnumerable<Vec3> GetVertices() { yield return Start; yield return End; }
     public override void Translate(Vec3 d) { Start += d; End += d; }
     public override void Transform(Func<Vec3, Vec3> f) { Start = f(Start); End = f(End); }
-    public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(new[] { Start, End }, p, false);
+    public override double PickDistance(Vec3 p) => Drawn().Min(s => GeoMath.DistanceToPolyline2D(s, p, false));
+
+    /// <summary>The ends of the dimension line: the measured points moved square to them by <see cref="Offset"/> in plan.</summary>
+    public (Vec3 A, Vec3 B) Line()
+    {
+        var dir = new Vec3(End.X - Start.X, End.Y - Start.Y, 0).Normalized();
+        var n = new Vec3(-dir.Y, dir.X, 0) * Offset;
+        return (Start + n, End + n);
+    }
+
+    /// <summary>What is drawn of it, as it is picked: the two extension lines and the dimension line between them.</summary>
+    public Vec3[][] Drawn()
+    {
+        var (a, b) = Line();
+        return new[] { new[] { Start, a }, new[] { a, b }, new[] { End, b } };
+    }
 }
 
 /// <summary>Role of a surface. Stored by name, so new kinds go anywhere in the list; <see cref="Face"/>: the bench faces of a survey.</summary>

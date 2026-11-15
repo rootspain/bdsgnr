@@ -472,7 +472,10 @@ public static class PlanRenderer
                     DrawArrow(canvas, cam, a.Start, a.End, stroke, fill, 10);
                     break;
                 case DimensionEntity d:
+                    // its lines with its own type (or its layer's), as a line has it
+                    stroke.PathEffect = DashOf(d);
                     DrawDimension(canvas, cam, d, stroke, text);
+                    stroke.PathEffect = null;
                     break;
                 case InitiationPoint:
                     // drawn after the holes: an initiation point usually sits on one
@@ -745,6 +748,9 @@ public static class PlanRenderer
     /// The far-to-near order of the surfaces and the line segments: worked out again only when a line or a surface changes
     /// (its vertices, their count) or the camera turns by more than <see cref="SortTolerance"/> degrees; between, the order
     /// of the last frame. Panning and zooming keep it: depth along the line of sight does not change its order with them.
+    /// The order keeps the objects it drew, and with blocks those are copies of the parts of a line inside them: the style of
+    /// a line (colour, layer, kind, weight, type and its scale) is in the key too, else an edit of it in the properties panel
+    /// was drawn only once the camera turned.
     /// </summary>
     private static (List<(float Key, Entity E, int Seg)> Items, Dictionary<CircleEntity, List<Vec3>> Circles) DrawOrder(
         Camera cam, IReadOnlyList<SurfaceEntity> surfaces, IReadOnlyList<Entity> lines,
@@ -755,6 +761,9 @@ public static class PlanRenderer
         foreach (var e in lines)
         {
             key.Add(e.Id);
+            key.Add(e.Color); key.Add(e.LayerId);
+            if (e is ILineStyled styled) { key.Add(styled.LineWeight); key.Add(styled.LineType); key.Add(styled.LineTypeScale); }
+            if (e is PolylineEntity { Kind: var kind }) key.Add(kind);
             if (e is PolylineEntity pl)
             {
                 key.Add(pl.Points.Count); key.Add(pl.Closed);
@@ -1029,10 +1038,7 @@ public static class PlanRenderer
 
     private static void DrawDimension(SKCanvas c, Camera cam, DimensionEntity d, SKPaint stroke, SKPaint text)
     {
-        var dir = new Vec3(d.End.X - d.Start.X, d.End.Y - d.Start.Y, 0).Normalized();
-        var n = new Vec3(-dir.Y, dir.X, 0) * d.Offset;
-        var a = d.Start + n;
-        var b = d.End + n;
+        var (a, b) = d.Line();
         DrawPolyline(c, cam, new[] { d.Start, a }, false, stroke);
         DrawPolyline(c, cam, new[] { d.End, b }, false, stroke);
         DrawPolyline(c, cam, new[] { a, b }, false, stroke);

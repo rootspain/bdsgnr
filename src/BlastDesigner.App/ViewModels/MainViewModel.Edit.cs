@@ -164,7 +164,26 @@ public sealed partial class MainViewModel
     public void MoveVertex(Guid line, int vertex, Vec3 to) => Change("Move vertex", p =>
     {
         if (p.FindEntity(line) is PolylineEntity l && vertex < l.Points.Count) l.Points[vertex] = to;
+        // a dimension: its start (0) or its end (1), the other end and the offset kept
+        else if (p.FindEntity(line) is DimensionEntity d)
+        {
+            if (vertex == 0) d.Start = to;
+            else if (vertex == 1) d.End = to;
+        }
     });
+
+    /// <summary>
+    /// The selected objects with grips (<see cref="Tools.VertexGrips"/>): the lines (<see cref="EditableLines"/>) and the
+    /// dimensions, whose two ends move on their own. None on a locked layer.
+    /// </summary>
+    public List<Entity> EditableGripped()
+    {
+        var result = new List<Entity>(EditableLines());
+        if (Doc is not { Selection.Count: > 0 } doc) return result;
+        foreach (var d in doc.Project.Entities.OfType<DimensionEntity>())
+            if (doc.Selection.Contains(d.Id) && IsSelectable(d) && doc.Project.FindLayer(d.LayerId) is not { Locked: true }) result.Add(d);
+        return result;
+    }
 
     public void AddVertex(Guid line, int at, Vec3 point) => Change("Add vertex", p =>
     {

@@ -341,7 +341,7 @@ public static class CadFiles
                     Line(a.Start, a.End, layer);
                     break;
                 case DimensionEntity d:
-                    Line(d.Start, d.End, layer);
+                    Add(new Cad.Line { StartPoint = P(d.Start), EndPoint = P(d.End) }, layer, d);
                     Text(Vec3.Lerp(d.Start, d.End, 0.5), 0.5, d.Distance.ToString("0.00", Ci), layer);
                     break;
                 case TieEntity tie:

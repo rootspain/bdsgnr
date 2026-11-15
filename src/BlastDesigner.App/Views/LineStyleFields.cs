@@ -10,12 +10,23 @@ public static class LineStyleFields
     public static void Apply(PropertyGrid grid, BlastProject project, bool layer = false)
     {
         grid.Choices[nameof(ILineStyled.LineWeight)] = LineTypes.Weights.Select(w => (w.ToString(System.Globalization.CultureInfo.InvariantCulture), WeightName(w))).ToList();
-        grid.Choices[nameof(ILineStyled.LineType)] = LineTypes.Names(project).Where(n => !LineTypes.IsSolid(n)).Select(n => (n, n)).ToList();
+        grid.Choices[nameof(ILineStyled.LineType)] = LineTypes.Names(project).Where(n => !LineTypes.IsSolid(n)).Select(n => (n, TypeName(n))).ToList();
         grid.NoneLabels[nameof(ILineStyled.LineWeight)] = layer ? "Line width in pixels" : "By layer";
         grid.NoneLabels[nameof(ILineStyled.LineType)] = layer ? "Continuous" : "By layer";
         grid.Tips[nameof(ILineStyled.LineWeight)] = Loc.Ui("As in AutoCAD: 0.25 mm is a pixel on the screen, thinner too, thicker in proportion");
         grid.Tips[nameof(ILineStyled.LineType)] = Loc.Ui("Dashes as in AutoCAD, in drawing units: they grow as the plan is zoomed in");
         grid.Tips[nameof(ILineStyled.LineTypeScale)] = Loc.Ui("The dashes of this line longer (above 1) or shorter (below 1)");
+    }
+
+    /// <summary>
+    /// A line type as the list shows it: the standard ones of AutoCAD by their name in the language of the program, with the
+    /// name of AutoCAD after it (a drawing goes out with that one); a type of the project's own by its own name.
+    /// </summary>
+    public static string TypeName(string name)
+    {
+        var key = "line type:" + name.ToUpperInvariant();
+        var shown = Loc.T(key);
+        return shown == key ? name : $"{shown} ({name})";
     }
 
     private static string WeightName(int w) => (w / 100.0).ToString("0.00", System.Globalization.CultureInfo.CurrentCulture) + " " + Loc.Ui("mm");

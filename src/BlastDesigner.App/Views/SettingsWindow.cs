@@ -253,17 +253,10 @@ public sealed class SettingsForm : DockPanel
             BorderBrush = Look.LineStrong,
             Text = $"#{value & 0xFFFFFF:X6}"
         };
-        // the swatch of the current colour opens a full colour picker (spectrum, hue, hex)
+        // the swatch of the current colour opens a full colour picker (spectrum, hue, hex) with Cancel and OK
         var swatch = new Border { Width = 32, Height = 32, CornerRadius = new CornerRadius(6), Background = new SolidColorBrush(Color.FromUInt32(value)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1) };
-        var view = new ColorView
-        {
-            Color = Color.FromUInt32(value | 0xFF000000),
-            IsAlphaEnabled = false,
-            IsAlphaVisible = false,
-            IsAccentColorsVisible = false,
-            IsColorPaletteVisible = false,
-            Width = 300
-        };
+        var now = value;
+        var swatches = new List<Button>();
         var current = new Button
         {
             Content = swatch,
@@ -272,37 +265,23 @@ public sealed class SettingsForm : DockPanel
             BorderThickness = new Thickness(0),
             Cursor = new Cursor(StandardCursorType.Hand),
             Name = name + "Picker",
-            Flyout = new Flyout { Content = view, Placement = Avalonia.Controls.PlacementMode.BottomEdgeAlignedLeft }
+            Flyout = ColourFlyout.Make(() => now, c => Pick(c))
         };
         ToolTip.SetTip(current, L("Pick a colour"));
         // Wraps: the swatches go onto a second line in a narrow window instead of being cut off.
         var row = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
         row.Children.Add(current);
         row.Children.Add(hex);
-        var swatches = new List<Button>();
-        var syncing = false;
         void Pick(uint c)
         {
             c |= 0xFF000000;
+            now = c;
             set(c);
             swatch.Background = new SolidColorBrush(Color.FromUInt32(c));
             hex.Text = $"#{c & 0xFFFFFF:X6}";
             foreach (var s in swatches) Mark(s, (uint)s.Tag! == c);
-            syncing = true;
-            view.Color = Color.FromUInt32(c);
-            syncing = false;
             if (rebuild) Build();
         }
-        // follows the picker live; a picker that rebuilds the page applies when it closes (rebuilding would close it)
-        uint? picked = null;
-        view.ColorChanged += (_, e) =>
-        {
-            if (syncing) return;
-            var c = e.NewColor.ToUInt32() | 0xFF000000;
-            if (rebuild) { picked = c; swatch.Background = new SolidColorBrush(Color.FromUInt32(c)); hex.Text = $"#{c & 0xFFFFFF:X6}"; }
-            else Pick(c);
-        };
-        current.Flyout!.Closed += (_, _) => { if (picked is uint c) { picked = null; Pick(c); } };
         hex.LostFocus += (_, _) =>
         {
             var t = (hex.Text ?? "").Trim().TrimStart('#');

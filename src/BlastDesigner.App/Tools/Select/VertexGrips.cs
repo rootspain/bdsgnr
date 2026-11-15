@@ -9,15 +9,16 @@ using SkiaSharp;
 namespace BlastDesigner.App.Tools;
 
 /// <summary>
-/// Round grips on the vertices of the selected lines: a drag of a grip moves its vertex; with Shift a click on a selected line
-/// adds a vertex there, with Ctrl a click on a grip deletes its vertex. A click on a grip without a drag selects as anywhere else.
+/// Round grips on the vertices of the selected lines and on the two ends of the selected dimensions: a drag of a grip moves its
+/// vertex (an end of a dimension on its own, its other end and offset kept); with Shift a click on a selected line adds a vertex
+/// there, with Ctrl a click on a grip of a line deletes its vertex. A click on a grip without a drag selects as anywhere else.
 /// </summary>
 public sealed class VertexGrips : ISelectGesture
 {
     private readonly MainViewModel _vm;
     private ToolPointer? _down;
     /// <summary>Vertex whose grip was pressed: a drag moves it, a click selects as anywhere else.</summary>
-    private (PolylineEntity Line, int Vertex)? _grip;
+    private (Entity Line, int Vertex)? _grip;
     /// <summary>Where the last drag preview put the vertex.</summary>
     private Vec3? _gripTo;
     /// <summary>Spot of a selected line pressed with Shift: a click adds a vertex there, a drag is the box as anywhere else.</summary>
@@ -28,7 +29,7 @@ public sealed class VertexGrips : ISelectGesture
     public VertexGrips(MainViewModel vm, Func<bool> visible)
     {
         _vm = vm;
-        Overlay = new VertexGripsOverlay(() => visible() ? vm.EditableLines() : new List<PolylineEntity>(), () => new SKColor(vm.Settings.SelectionColor));
+        Overlay = new VertexGripsOverlay(() => visible() ? vm.EditableGripped() : new List<Entity>(), () => new SKColor(vm.Settings.SelectionColor));
     }
 
     public VertexGripsOverlay Overlay { get; }
@@ -53,7 +54,7 @@ public sealed class VertexGrips : ISelectGesture
         var free = !shift && !control;
         _grip = free && p.ClickCount < 2 ? GripAt(p.X, p.Y) : null;
         _gripTo = null;
-        _oldVertex = control && !shift ? GripAt(p.X, p.Y) : null;
+        _oldVertex = control && !shift && GripAt(p.X, p.Y) is { Line: PolylineEntity line } old ? (line, old.Vertex) : null;
         _newVertex = shift && !control && GripAt(p.X, p.Y) == null ? SegmentAt(p.X, p.Y) : null;
         return _grip != null;
     }
@@ -80,15 +81,17 @@ public sealed class VertexGrips : ISelectGesture
     public void Drag(ToolPointer p, PreviewOverlay preview)
     {
         if (_grip is not { } grip) return;
-        var from = grip.Line.Points[grip.Vertex];
+        var points = VertexGripsOverlay.GripPoints(grip.Line).ToList();
+        var from = points[grip.Vertex];
         var (to, snap) = VertexTarget(p, grip.Line, from);
         _gripTo = to;
         preview.Snap = snap;
-        var points = grip.Line.Points.ToList();
         points[grip.Vertex] = to;
         preview.Lines.Clear();
         preview.Points.Clear();
-        preview.Lines.Add((points, grip.Line.Closed, Tool.PreviewColor));
+        preview.Lines.Add((points, grip.Line is PolylineEntity { Closed: true }, Tool.PreviewColor));
+        // a dimension says the length it will measure
+        if (grip.Line is DimensionEntity) preview.Labels.Add((Vec3.Lerp(points[0], points[1], 0.5), $"{Vec3.Distance2D(points[0], points[1]):0.00} m"));
         preview.Points.Add((to, Tool.PreviewColor));
         preview.Labels.Add((to, $"Δ {(to - from).Length2D:0.00} m"));
     }
@@ -109,18 +112,21 @@ public sealed class VertexGrips : ISelectGesture
         _oldVertex = null;
     }
 
-    /// <summary>The grip of a selected line at a screen point; the nearest one.</summary>
-    private (PolylineEntity Line, int Vertex)? GripAt(double sx, double sy)
+    /// <summary>The grip of a selected line or dimension at a screen point; the nearest one.</summary>
+    private (Entity Line, int Vertex)? GripAt(double sx, double sy)
     {
-        (PolylineEntity, int)? best = null;
+        (Entity, int)? best = null;
         var bestD = VertexGripsOverlay.Reach;
-        foreach (var line in _vm.EditableLines())
-            for (int i = 0; i < line.Points.Count; i++)
+        foreach (var line in _vm.EditableGripped())
+        {
+            var points = VertexGripsOverlay.GripPoints(line);
+            for (int i = 0; i < points.Count; i++)
             {
-                var (x, y) = View.Camera.ToScreen(line.Points[i]);
+                var (x, y) = View.Camera.ToScreen(points[i]);
                 var d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
                 if (d < bestD) { bestD = d; best = (line, i); }
             }
+        }
         return best;
     }
 
@@ -148,7 +154,7 @@ public sealed class VertexGrips : ISelectGesture
     }
 
     /// <summary>Where a drag puts a vertex: as an object is moved, on another object under the cursor, else horizontally.</summary>
-    private (Vec3 To, Vec3? Snap) VertexTarget(ToolPointer p, PolylineEntity line, Vec3 from)
+    private (Vec3 To, Vec3? Snap) VertexTarget(ToolPointer p, Entity line, Vec3 from)
     {
         var cam = View.Camera;
         var snap = View.SnapForDrag(p.X, p.Y, new[] { line.Id });

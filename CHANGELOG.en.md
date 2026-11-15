@@ -9,6 +9,7 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.5 — 2026-11-14
 
 ### New
+- **The weight and the type of line of a dimension** — in the properties panel, as a line has them; the dimension is drawn with them and goes to DXF with them.
 - **Tips on the red warnings of the Dashboard.** Point at a row: the tip says why it is red, with its numbers (how many
   holes, which threshold, which limit), and which window shows more: holes not loaded and not initiated, neighbour
   overlaps, PPV above the limit, oversize, holes outside the tolerances, low burden.
@@ -28,6 +29,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The left and right front angles of a chevron are the bearings of its segments** from the vertex, clockwise from
   north. Typed in, the segment turns about the vertex, its length kept, and the holes are programmed again. Other lines
   have no such fields in the panel (the angles of the advanced burn are set in the timing line window).
+- **A dimension is selected and moved as a line:** a click on its drawn dimension or extension line (or its label) selects it, Shift and Ctrl add and take away, a drag moves it, a box and a lasso take it by what is drawn. Only a click on the unseen line between the measured points took it before.
+- **The ends of a dimension are dragged.** A selected dimension has grips on both ends, as the vertices of a line: a drag of an end moves it alone (snapping to objects), the other end and the offset stay, and the length is shown while dragging.
+- **The colour of an object in the properties panel** — of lines, dimensions and other objects: the swatch opens the colour picker with Cancel and OK, the By layer button gives the colour of the layer back.
 
 ### Changed
 - **A new chevron opens at a right angle between its segments** (it was 30°).
@@ -52,6 +56,10 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   bent (by an end, a typed angle or the conversion) Two fronts. The oval is drawn for both types, not for the advanced burn.
 
 ### Fixed
+- **The colour of a layer is picked in the colour picker** with Cancel and OK; it could only be typed as a hex code.
+- **An edit of the style of a line in the properties panel is drawn at once,** also when blocks cut the plan: the weight, type and colour of a line changed on the plan only once the camera turned.
+- **The colour picker closes with OK and Cancel:** it had no buttons, the colour changed as it was picked, and the picker was hard to close.
+- **The line types are listed in the language of the program** (Russian: «Штриховая (DASHED)» and so on); a DXF file gets the name of AutoCAD.
 - **Empty gaps in the ribbon groups** (the Topography tab and others) on screens scaled to 150 % and 175 %: a group kept room for columns of small buttons that stayed empty. The buttons now stand three to a column, and the group is as wide as they are.
 - **The analysis windows have the colours of the theme again.** The Dashboard, the burden check, the front row profile
   and the other analysis windows turned white once open, and the light text of the dark theme could hardly be read on them.

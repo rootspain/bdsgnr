@@ -414,22 +414,54 @@ public sealed class PropertyGrid : Grid
             tb.KeyDown += (_, e) => { if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && Commit()) e.Handled = true; };
             return tb;
         }
+        if (under == typeof(uint) && p.Name.Contains("Color"))
+        {
+            // an object's own colour, or none: the colour of its layer
+            var own = (uint?)value;
+            var shownSwatch = new Border { Width = 22, Height = 18, CornerRadius = new CornerRadius(3), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1) };
+            var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = Look.TextSoft };
+            void Show(uint? c)
+            {
+                shownSwatch.Background = c is uint u ? new SolidColorBrush(Color.FromUInt32(u)) : Brushes.Transparent;
+                text.Text = mixed ? MixedText : c is uint v ? $"#{v & 0xFFFFFF:X6}" : Loc.T("By layer");
+            }
+            Show(mixed ? null : own);
+            var pick = new Button
+            {
+                Content = Ui.Row(6, shownSwatch, text),
+                Name = "prop" + p.Name + "Picker",
+                Padding = new Thickness(6, 2),
+                HorizontalContentAlignment = HorizontalAlignment.Left
+            };
+            ToolTip.SetTip(pick, Loc.Ui("Pick a colour"));
+            pick.Flyout = ColourFlyout.Make(() => (uint?)p.GetValue(target) ?? 0xFF808080, c => { Show(c); Set(p, (uint?)c); });
+            var byLayer = new Button { Content = Loc.T("By layer"), Name = "prop" + p.Name + "ByLayer", Padding = new Thickness(8, 2), IsEnabled = mixed || own != null };
+            byLayer.Click += (_, _) => { Show(null); byLayer.IsEnabled = false; Set(p, null); };
+            return Ui.Row(6, pick, byLayer);
+        }
         if (type == typeof(uint) && p.Name.Contains("Color"))
         {
+            // a colour always set (of a layer, a product): the swatch opens the colour picker, the hex can be typed too
             var u = (uint)(value ?? 0u);
-            var swatch = new Border { Width = 22, Height = 18, Background = new SolidColorBrush(Color.FromUInt32(u)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1) };
-            var tb = new TextBox { Text = $"#{u:X8}", Width = 110 };
+            var swatch = new Border { Width = 22, Height = 18, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromUInt32(u)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1) };
+            var tb = new TextBox { Text = $"#{u & 0xFFFFFF:X6}", Width = 90, Name = "prop" + p.Name + "Hex" };
+            void Take(uint c)
+            {
+                swatch.Background = new SolidColorBrush(Color.FromUInt32(c));
+                tb.Text = $"#{c & 0xFFFFFF:X6}";
+                Set(p, c);
+            }
             tb.LostFocus += (_, _) =>
             {
                 var t = (tb.Text ?? "").Trim().TrimStart('#');
                 if (t.Length == 6) t = "FF" + t;
-                if (uint.TryParse(t, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var c))
-                {
-                swatch.Background = new SolidColorBrush(Color.FromUInt32(c));
-                Set(p, c);
-                }
+                if (uint.TryParse(t, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var c)) { if (c != (uint)p.GetValue(target)!) Take(c); }
+                else tb.Text = $"#{(uint)p.GetValue(target)! & 0xFFFFFF:X6}";
             };
-            return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { swatch, tb } };
+            var pick = new Button { Content = swatch, Name = "prop" + p.Name + "Picker", Padding = new Thickness(4, 2) };
+            ToolTip.SetTip(pick, Loc.Ui("Pick a colour"));
+            pick.Flyout = ColourFlyout.Make(() => (uint)p.GetValue(target)!, Take);
+            return new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { pick, tb } };
         }
         if (type == typeof(bool) && Sections != null)
         {

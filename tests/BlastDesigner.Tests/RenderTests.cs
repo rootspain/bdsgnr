@@ -630,4 +630,31 @@ public class RenderTests
         var bent = new TimingLineEntity { Front = TimingFrontShape.Chevron, Points = Chevron.Build(new Vec3(0, 0, 0), new Vec3(0, 1, 0), 30, 10) };
         Assert.False(PlanRenderer.OnStraightLabel(cam, bent, mx, my - 10));
     }
+
+    /// <summary>A dimension has the weight and the type of a line: a heavier one is drawn wider, a dashed one with gaps.</summary>
+    [Fact]
+    public void DimensionIsDrawnWithItsWeightAndType()
+    {
+        int Lit(Action<DimensionEntity> style, bool along)
+        {
+            var p = BlastProject.CreateNew("dim");
+            var d = new DimensionEntity { Start = new Vec3(-20, 0, 0), End = new Vec3(20, 0, 0), Offset = 0 };
+            style(d);
+            p.Add(d);
+            var cam = new Camera { Width = 400, Height = 300, Pitch = 90, Scale = 4, Target = new Vec3(0, 0, 0) };
+            var options = new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false, Background = SKColors.White };
+            using var bitmap = new SKBitmap(400, 300);
+            using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+            var (x0, y0) = cam.ToScreen(new Vec3(-18, 0, 0));
+            var (x1, _) = cam.ToScreen(new Vec3(-2, 0, 0));
+            bool Dark(int x, int y) { var c = bitmap.GetPixel(x, y); return c.Red + c.Green + c.Blue < 600; }
+            var y = (int)Math.Round(y0);
+            // along the line, left of the length written in the middle: pixels lit on the line itself; across it: its width
+            return along
+                ? Enumerable.Range((int)x0, (int)(x1 - x0)).Count(x => Enumerable.Range(y - 1, 3).Any(yy => Dark(x, yy)))
+                : Enumerable.Range(y - 8, 17).Count(yy => Dark((int)Math.Round((x0 + x1) / 2), yy));
+        }
+        Assert.True(Lit(d => d.LineWeight = 100, false) > Lit(_ => { }, false) + 1);
+        Assert.True(Lit(d => { d.LineType = "DASHED"; d.LineTypeScale = 10; }, true) < Lit(_ => { }, true) * 0.85);
+    }
 }

@@ -146,29 +146,40 @@ public sealed class VertexGripsOverlay : IOverlay
     /// <summary>How near to the centre of a grip a press takes it, px.</summary>
     public const double Reach = 7;
 
-    private readonly Func<IReadOnlyList<PolylineEntity>> _lines;
+    private readonly Func<IReadOnlyList<Entity>> _lines;
     private readonly Func<SKColor> _color;
 
-    public VertexGripsOverlay(Func<IReadOnlyList<PolylineEntity>> lines, Func<SKColor> color)
+    public VertexGripsOverlay(Func<IReadOnlyList<Entity>> lines, Func<SKColor> color)
     {
         _lines = lines;
         _color = color;
     }
 
     /// <summary>The grip under the cursor, drawn larger.</summary>
-    public (PolylineEntity Line, int Vertex)? Hot { get; set; }
+    public (Entity Line, int Vertex)? Hot { get; set; }
+
+    /// <summary>The points an object has grips on: the vertices of a line, the two measured ends of a dimension.</summary>
+    public static IReadOnlyList<Vec3> GripPoints(Entity e) => e switch
+    {
+        PolylineEntity l => l.Points,
+        DimensionEntity d => new[] { d.Start, d.End },
+        _ => Array.Empty<Vec3>()
+    };
 
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = _color() };
         float w = (float)cam.Width, h = (float)cam.Height;
         foreach (var line in _lines())
-            for (int i = 0; i < line.Points.Count; i++)
+        {
+            var points = GripPoints(line);
+            for (int i = 0; i < points.Count; i++)
             {
-                var (x, y) = cam.ToScreen(line.Points[i]);
+                var (x, y) = cam.ToScreen(points[i]);
                 if (x < -Radius || y < -Radius || x > w + Radius || y > h + Radius) continue;
                 c.DrawCircle(x, y, Hot is { } hot && hot.Line == line && hot.Vertex == i ? Radius + 2 : Radius, fill);
             }
+        }
     }
 }
 

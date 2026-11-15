@@ -390,7 +390,14 @@ public sealed class Viewport : Control
                 return Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
             }
             case DimensionEntity d:
-                return SegmentsDistance(new[] { d.Start, d.End }, false, sx, sy);
+            {
+                // by what is drawn: the extension lines, the dimension line and its label over the middle of it
+                var lines = d.Drawn().Min(s => SegmentsDistance(s, false, sx, sy));
+                var (a, b) = d.Line();
+                var (mx, my) = Camera.ToScreen(Vec3.Lerp(a, b, 0.5));
+                var label = Math.Abs(sx - (mx + 25)) <= 28 && sy <= my + 2 && sy >= my - 16 ? 0 : double.MaxValue;
+                return Math.Min(lines, label);
+            }
             case CircleEntity c:
                 return SegmentsDistance(c.ToPolygon(36), true, sx, sy);
             case InitiationPoint ip:
@@ -453,6 +460,8 @@ public sealed class Viewport : Control
             var verts = e is Hole hh ? new[] { hh.Collar } : e is TieEntity t ? new[] { t.FromPos, t.ToPos }
                 : clip != null && e is PolylineEntity pl ? clip.Pieces(pl.Points, pl.Closed).SelectMany(x => x).ToArray()
                 : clip != null && e is SurfaceEntity se ? PlanRenderer.CutSurface(clip, se)?.Vertices.ToArray() ?? Array.Empty<Vec3>()
+                // a dimension by what is drawn of it: its measured points and the ends of its dimension line
+                : e is DimensionEntity dim ? dim.Drawn().SelectMany(x => x).ToArray()
                 : e.GetVertices().ToArray();
             if (verts.Length == 0) continue;
             bool Inside(Vec3 v) { var (x, y) = Camera.ToScreen(v); return shape.Contains(x, y); }
@@ -478,7 +487,7 @@ public sealed class Viewport : Control
             TimingLineEntity tl => Run(tl.Points, false),
             TieEntity t => new[] { (t.FromPos, t.ToPos) },
             ArrowEntity a => new[] { (a.Start, a.End) },
-            DimensionEntity d => new[] { (d.Start, d.End) },
+            DimensionEntity d => d.Drawn().Select(x => (x[0], x[1])),
             BlockEntity b => BlockEntity.Edges.Select(x => (b.Corner(x.A), b.Corner(x.B))),
             _ => Enumerable.Empty<(Vec3, Vec3)>()
         };

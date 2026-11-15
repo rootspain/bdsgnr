@@ -3205,3 +3205,11 @@ ui:Bearing of the segment from the vertex, clockwise from north: typed in, the s
 First segment relief ms per m	Замедление отрезка 1, мс/м
 Second segment relief ms per m	Замедление отрезка 2, мс/м
 Line relief ms per m	Замедление, мс/м
+line type:DASHED	Штриховая
+line type:HIDDEN	Невидимая
+line type:CENTER	Осевая
+line type:PHANTOM	Двухточечная
+line type:DOT	Точечная
+line type:DASHDOT	Штрихпунктирная
+line type:BORDER	Граница
+line type:DIVIDE	Разделительная

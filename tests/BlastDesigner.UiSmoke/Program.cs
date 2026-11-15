@@ -122,6 +122,76 @@ Step("bench surface", () => vm.Change("Create surface", p =>
     s.Name = "Bench";
     p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces));
 }));
+Step("a line and a dimension have a colour field (picker with OK, By layer); the line types are listed in Russian", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var c = vm.View.Camera.Target;
+    var line = new PolylineEntity { Points = { new Vec3(c.X - 20, c.Y, c.Z), new Vec3(c.X + 20, c.Y, c.Z) } };
+    var dim = new DimensionEntity { Start = new Vec3(c.X - 10, c.Y + 5, c.Z), End = new Vec3(c.X + 10, c.Y + 5, c.Z) };
+    vm.Change("Smoke colours", pr => { pr.Add(line); pr.Add(dim, pr.GetOrCreateLayer(StandardLayers.Annotation)); });
+    foreach (var id in new[] { line.Id, dim.Id })
+    {
+        vm.Doc!.Select(new[] { id }); Pump();
+        window.ShowInspectorTab(0); Pump();
+        var picker = window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "propColorPicker" && b.IsEffectivelyVisible) ?? throw new Exception("no colour field for " + vm.Project!.FindEntity(id)!.KindName);
+        var flyout = (Flyout)picker.Flyout!;
+        flyout.ShowAt(picker); Pump();
+        BlastDesigner.App.Views.ColourFlyout.ViewOf(flyout)!.Color = Avalonia.Media.Color.FromUInt32(0xFFE11D48); Pump();
+        if (vm.Project!.FindEntity(id)!.Color != null) throw new Exception("the colour was set before OK");
+        ((Control)flyout.Content!).GetLogicalDescendants().OfType<Button>().First(b => b.Tag is "ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (vm.Project.FindEntity(id)!.Color != 0xFFE11D48) throw new Exception("OK did not give the colour: " + vm.Project.FindEntity(id)!.Color);
+        if (id == line.Id) { vm.Doc.ClearSelection(); vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); Shot("49e_line_colour"); vm.Doc.Select(new[] { id }); Pump(); window.ShowInspectorTab(0); Pump(); }
+        var byLayer = window.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "propColorByLayer" && b.IsEffectivelyVisible);
+        byLayer.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (vm.Project.FindEntity(id)!.Color != null) throw new Exception("By layer did not take the colour away");
+        // the weight and the type of a line, a dimension as a line
+        foreach (var field in new[] { "propLineWeight", "propLineType" })
+            if (!window.GetLogicalDescendants().OfType<ComboBox>().Any(x => x.Name == field && x.IsEffectivelyVisible)) throw new Exception($"{vm.Project.FindEntity(id)!.KindName} has no {field}");
+    }
+    vm.Doc!.Select(new[] { line.Id }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    var types = window.GetLogicalDescendants().OfType<ComboBox>().First(x => x.Name == "propLineType" && x.IsEffectivelyVisible).ItemsSource!.Cast<object>().Select(o => o.ToString()).ToList();
+    if (settings.Language == "ru" && !types.Contains("Штриховая (DASHED)")) throw new Exception("the line types are not in Russian: " + string.Join(", ", types));
+    while (vm.Project!.FindEntity(line.Id) != null) vm.Undo();
+    while (vm.Project.FindEntity(dim.Id) != null) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
+});
+Step("a line inside a block shows an edit of its weight (properties panel) at once, without a turn of the camera", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var c = vm.View.Camera.Target;
+    var line = new PolylineEntity { Points = { new Vec3(c.X - 20, c.Y, c.Z), new Vec3(c.X + 20, c.Y, c.Z) } };
+    // a block round it: the line is drawn as its part inside the block, a copy of it
+    var block = new BlockEntity { Origin = new Vec3(c.X - 30, c.Y - 30, c.Z - 20), Length = 60, Width = 60, Height = 40 };
+    vm.Change("Smoke line in a block", pr => { pr.Add(line); pr.Add(block); });
+    if (vm.Blocks == null) throw new Exception("the block does not cut the plan");
+    var cam = vm.View.Camera;
+    int Thick()
+    {
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        using var frame = window.CaptureRenderedFrame()!;
+        using var buffer = frame.Lock();
+        var (sx, sy) = cam.ToScreen(new Vec3(c.X - 5, c.Y, c.Z));
+        var at = vm.View.TranslatePoint(new Avalonia.Point(sx, sy), window)!.Value;
+        int n = 0;
+        for (int dy = -12; dy <= 12; dy++)
+        {
+            var v = (uint)System.Runtime.InteropServices.Marshal.ReadInt32(buffer.Address, ((int)at.Y + dy) * buffer.RowBytes + (int)at.X * 4);
+            if (((v >> 16) & 0xFF) + ((v >> 8) & 0xFF) + (v & 0xFF) > 300) n++;
+        }
+        return n;
+    }
+    vm.View.Redraw();
+    var before = Thick();
+    vm.Doc!.Select(new[] { line.Id }); Pump();
+    window.ShowInspectorTab(0); Pump();
+    var weight = window.GetLogicalDescendants().OfType<ComboBox>().First(x => x.Name == "propLineWeight" && x.IsEffectivelyVisible);
+    weight.SelectedIndex = weight.ItemCount - 1; Pump();
+    vm.Doc.ClearSelection(); Pump();
+    var after = Thick();
+    if (after < before + 4) throw new Exception($"the weight is not drawn until the camera turns: {before} px, then {after} px");
+    while (vm.Project!.FindEntity(line.Id) != null) vm.Undo();
+});
 Step("pattern", () =>
 {
     var hp = vm.NewHoleParameters();
@@ -2549,7 +2619,7 @@ Step("settings: Apply applies and keeps the window, OK applies and closes, butto
     buttons.First(b => b.Tag is "ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     if (applied != 2 || !task.IsCompleted || task.Result == null) throw new Exception("OK did not apply and close");
 });
-Step("settings: the colour swatch opens a colour picker that sets the colour", () =>
+Step("settings: the colour swatch opens a colour picker with Cancel and OK; OK sets the colour, Cancel leaves it", () =>
 {
     _ = SettingsWindow.Show(new ProgramSettings { Language = settings.Language }); Pump();
     var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
@@ -2557,13 +2627,29 @@ Step("settings: the colour swatch opens a colour picker that sets the colour", (
     var flyout = button.Flyout as Flyout ?? throw new Exception("no colour picker on the swatch");
     button.BringIntoView(); Pump();
     flyout.ShowAt(button); Pump();
-    var view = flyout.Content as Avalonia.Controls.ColorView ?? throw new Exception("the flyout holds no colour view");
-    view.Color = Avalonia.Media.Color.FromUInt32(0xFF123456); Pump();
+    var view = BlastDesigner.App.Views.ColourFlyout.ViewOf(flyout) ?? throw new Exception("the flyout holds no colour view");
+    var flyoutButtons = ((Control)flyout.Content!).GetLogicalDescendants().OfType<Button>().ToList();
+    var okButton = flyoutButtons.FirstOrDefault(b => b.Tag is "ok") ?? throw new Exception("the colour picker has no OK");
+    var cancelButton = flyoutButtons.FirstOrDefault(b => b.Tag is "cancel") ?? throw new Exception("the colour picker has no Cancel");
     var hex = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "surfaceBench");
-    if (hex.Text != "#123456") throw new Exception("the picked colour did not reach the field: " + hex.Text);
+    var was = hex.Text;
+    view.Color = Avalonia.Media.Color.FromUInt32(0xFF123456); Pump();
+    if (hex.Text != was) throw new Exception("the colour was taken before OK: " + hex.Text);
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "41d_settings_colour_picker.png"));
-    flyout.Hide(); Pump();
+    okButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (hex.Text != "#123456") throw new Exception("OK did not set the picked colour: " + hex.Text);
+    if (flyout.IsOpen) throw new Exception("OK did not close the colour picker");
+    // Cancel: the colour stays as it was
+    button = dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "surfaceBenchPicker");
+    flyout = (Flyout)button.Flyout!;
+    flyout.ShowAt(button); Pump();
+    view = BlastDesigner.App.Views.ColourFlyout.ViewOf(flyout)!;
+    if (view.Color.ToUInt32() != 0xFF123456) throw new Exception("the picker does not open with the colour set");
+    view.Color = Avalonia.Media.Color.FromUInt32(0xFF00FF00); Pump();
+    ((Control)flyout.Content!).GetLogicalDescendants().OfType<Button>().First(b => b.Tag is "cancel").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    hex = dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "surfaceBench");
+    if (hex.Text != "#123456" || flyout.IsOpen) throw new Exception("Cancel changed the colour or did not close: " + hex.Text);
     dlg.Close(); Pump();
 });
 Step("hole form applies a field and the layer in one undo step", () =>
@@ -2879,6 +2965,63 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
         vm.FrontShape = shape;
         vm.SelectTool(); Pump();
     }
+});
+Step("a selected dimension has grips on its two ends: a drag of one moves that end alone, in one undo step", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var c = vm.View.Camera.Target;
+    var dim = new DimensionEntity { Start = new Vec3(c.X - 10, c.Y, c.Z), End = new Vec3(c.X + 10, c.Y, c.Z), Offset = 2 };
+    vm.Change("Smoke dimension", p => p.Add(dim, p.GetOrCreateLayer(StandardLayers.Annotation)));
+    vm.Doc!.Select(new[] { dim.Id }); vm.ZoomSelection(); Pump();
+    var cam = vm.View.Camera;
+    var grips = vm.View.Overlays.OfType<BlastDesigner.Rendering.VertexGripsOverlay>().SingleOrDefault() ?? throw new Exception("the select tool has no grips");
+    if (!vm.EditableGripped().Any(e => e.Id == dim.Id)) throw new Exception("the selected dimension has no grips");
+    // picked by what is drawn: a click on its dimension line (off the measured points by its offset) selects it, Ctrl takes it away
+    vm.Doc.ClearSelection(); Pump();
+    var (la, lb) = dim.Line();
+    var onLine = Vec3.Lerp(la, lb, 0.3);
+    var (lx, ly) = cam.ToScreen(onLine);
+    ToolPointer Click(double x, double y, Vec3 w, Avalonia.Input.KeyModifiers mods = Avalonia.Input.KeyModifiers.None) =>
+        new() { X = x, Y = y, World = w, Snapped = w, Hit = vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = mods };
+    if (vm.View.HitTest(lx, ly)?.Id != dim.Id) throw new Exception("the dimension line does not pick the dimension");
+    vm.ActiveTool!.PointerPressed(Click(lx, ly, onLine)); vm.ActiveTool.PointerReleased(Click(lx, ly, onLine)); Pump();
+    if (!vm.Doc.Selection.SetEquals(new[] { dim.Id })) throw new Exception("a click on the dimension line does not select the dimension");
+    vm.ActiveTool.PointerPressed(Click(lx, ly, onLine, Avalonia.Input.KeyModifiers.Control)); vm.ActiveTool.PointerReleased(Click(lx, ly, onLine, Avalonia.Input.KeyModifiers.Control)); Pump();
+    if (vm.Doc.Selection.Contains(dim.Id)) throw new Exception("Ctrl+click on the selected dimension does not deselect it");
+    // a drag of the dimension line, selected, moves the whole dimension (as a line is moved)
+    vm.ActiveTool.PointerPressed(Click(lx, ly, onLine)); vm.ActiveTool.PointerReleased(Click(lx, ly, onLine)); Pump();
+    var shift = new Vec3(3, -4, 0);
+    var (sx2, sy2) = cam.ToScreen(onLine + shift);
+    vm.ActiveTool.PointerPressed(Click(lx, ly, onLine));
+    vm.ActiveTool.PointerMoved(new ToolPointer { X = (lx + sx2) / 2, Y = (ly + sy2) / 2, World = onLine + shift / 2, Snapped = onLine + shift / 2, Left = true });
+    vm.ActiveTool.PointerMoved(new ToolPointer { X = sx2, Y = sy2, World = onLine + shift, Snapped = onLine + shift, Left = true });
+    vm.ActiveTool.PointerReleased(new ToolPointer { X = sx2, Y = sy2, World = onLine + shift, Snapped = onLine + shift, Left = true }); Pump();
+    var dragged = (DimensionEntity)vm.Project!.FindEntity(dim.Id)!;
+    if (Vec3.Distance2D(dragged.Start - new Vec3(c.X - 10, c.Y, c.Z), shift) > 0.1 || Vec3.Distance2D(dragged.End - new Vec3(c.X + 10, c.Y, c.Z), shift) > 0.1)
+        throw new Exception($"a drag of the dimension line does not move the dimension: {dragged.Start} - {dragged.End}");
+    while (!(Vec3.Distance2D(((DimensionEntity)vm.Project.FindEntity(dim.Id)!).Start, new Vec3(c.X - 10, c.Y, c.Z)) < 1e-9)) vm.Undo();
+    dim = (DimensionEntity)vm.Project.FindEntity(dim.Id)!;
+    vm.Doc.Select(new[] { dim.Id }); Pump();
+    var end = dim.End;
+    var (ex, ey) = cam.ToScreen(end);
+    var tool = vm.ActiveTool!;
+    tool.PointerMoved(new ToolPointer { X = ex + 1, Y = ey + 1, World = end, Snapped = end }); Pump();
+    if (grips.Hot is not { } hot || hot.Line.Id != dim.Id || hot.Vertex != 1) throw new Exception("the grip of the end under the cursor is not lit");
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); Shot("49d_dimension_grips");
+    var to = end + new Vec3(5, 8, 0);
+    var (tx, ty) = cam.ToScreen(to);
+    tool.PointerPressed(new ToolPointer { X = ex, Y = ey, World = end, Snapped = end, Left = true, ClickCount = 1 });
+    tool.PointerMoved(new ToolPointer { X = (ex + tx) / 2, Y = (ey + ty) / 2, World = (end + to) / 2, Snapped = (end + to) / 2, Left = true });
+    tool.PointerMoved(new ToolPointer { X = tx, Y = ty, World = to, Snapped = to, Left = true });
+    tool.PointerReleased(new ToolPointer { X = tx, Y = ty, World = to, Snapped = to, Left = true }); Pump();
+    var moved = (DimensionEntity)vm.Project!.FindEntity(dim.Id)!;
+    if (Vec3.Distance2D(moved.End, to) > 0.05 || Vec3.Distance2D(moved.Start, new Vec3(c.X - 10, c.Y, c.Z)) > 1e-9 || moved.Offset != 2)
+        throw new Exception($"the end of the dimension did not move alone: {moved.Start} - {moved.End}");
+    vm.Undo();
+    var back = (DimensionEntity)vm.Project.FindEntity(dim.Id)!;
+    if (Vec3.Distance2D(back.End, end) > 1e-9) throw new Exception("one undo should bring the end back");
+    while (vm.Project.FindEntity(dim.Id) != null) vm.Undo();
+    vm.Doc.ClearSelection(); Pump();
 });
 Step("pyrotechnic detonators back for Add holes", () => AllElectronic(false));
 Step("Properties ▸ Add holes: electronic holes on no timing line join the line, are programmed and selected", () =>
@@ -4177,13 +4320,15 @@ Step("a line of AutoCAD: its weight and type in its properties, its dashes on th
     vm.Doc.Select(new[] { line.Id });
     vm.ZoomSelection(); Pump();
     var combos = window.GetLogicalDescendants().OfType<ComboBox>().ToList();
-    var type = combos.FirstOrDefault(x => x.Items.OfType<string>().Contains("DASHED")) ?? throw new Exception("the properties of a line have no line type");
-    if (type.SelectedItem as string != "DASHED") throw new Exception("the line type shows " + type.SelectedItem);
+    // the types by their names in the language of the program, the name of AutoCAD after them
+    string TypeShown(string name) => BlastDesigner.App.Views.LineStyleFields.TypeName(name);
+    var type = combos.FirstOrDefault(x => x.Items.OfType<string>().Contains(TypeShown("DASHED"))) ?? throw new Exception("the properties of a line have no line type");
+    if (type.SelectedItem as string != TypeShown("DASHED")) throw new Exception("the line type shows " + type.SelectedItem);
     var mm = BlastDesigner.App.Services.Loc.Ui("mm");
     var weight = combos.FirstOrDefault(x => x.Items.OfType<string>().Any(i => i.EndsWith(" " + mm) && i.StartsWith("0"))) ?? throw new Exception("the properties of a line have no line weight");
     if (weight.SelectedItem as string != (0.5).ToString("0.00", System.Globalization.CultureInfo.CurrentCulture) + " " + mm) throw new Exception("the line weight shows " + weight.SelectedItem);
     vm.View.Redraw(); Pump(); Shot("95_line_type_dashed");
-    type.SelectedItem = "CENTER"; Pump();
+    type.SelectedItem = TypeShown("CENTER"); Pump();
     if (((PolylineEntity)vm.Project.FindEntity(line.Id)!).LineType != "CENTER") throw new Exception("the line type chosen did not reach the line");
     // the drawing goes out with it
     var dxf = CadFiles.ExportDxf(vm.Project, new[] { vm.Project.FindEntity(line.Id)! });
@@ -4588,6 +4733,25 @@ Step("The edit windows, tables and messages have the look of the input forms and
     Opens("73c_choose", () => BlastDesigner.App.Services.Dialogs.Choose("Print plan", "Scale", new[] { "1:250", "1:500" }));
     Opens("74b_text_import", () => TextImportWindow.Show(new[] { "Hole,X,Y,Z", "1,10,20,300", "2,14,20,300" }, "holes.csv"));
     if (vm.Doc.UndoNames.Count != cancelled) throw new Exception("a cancelled window changed the project");
+
+    // the colour of a layer is picked with the colour picker too (Cancel and OK), not only typed as a hex
+    {
+        var layer = vm.Project!.Layers[0];
+        var was = layer.Color;
+        var open = vm.EditLayer(layer); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var picker = w.GetLogicalDescendants().OfType<Button>().FirstOrDefault(x => x.Name == "propColorPicker") ?? throw new Exception("the layer window has no colour picker");
+        var flyout = (Flyout)picker.Flyout!;
+        flyout.ShowAt(picker); Pump();
+        BlastDesigner.App.Views.ColourFlyout.ViewOf(flyout)!.Color = Avalonia.Media.Color.FromUInt32(0xFF0EA5E9); Pump();
+        ((Control)flyout.Content!).GetLogicalDescendants().OfType<Button>().First(x => x.Tag is "ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        var hexBox = w.GetLogicalDescendants().OfType<TextBox>().First(x => x.Name == "propColorHex");
+        if (hexBox.Text != "#0EA5E9") throw new Exception("OK did not show the colour of the layer: " + hexBox.Text);
+        Press(Pick(w, x => x.Classes.Contains("primary") && x.Tag is not "ok")); Pump();
+        if (!open.IsCompleted) throw new Exception("the layer window did not close");
+        if (vm.Project!.Layers[0].Color != 0xFF0EA5E9) throw new Exception($"the layer did not take the colour: #{vm.Project.Layers[0].Color:X8}");
+        while (vm.Project!.Layers[0].Color != was) vm.Undo();
+    }
 
     // a number still being typed counts when the window is applied
     var factor = vm.Project!.Flyrock.SafetyFactor;
