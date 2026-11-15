@@ -7,6 +7,9 @@ public sealed record ProductQuantity(Product Product, double Amount, string Unit
 
 public sealed record HoleQuantity(Hole Hole, double Area, double Volume, double Tonnes, double ExplosiveKg, double StemmingM);
 
+/// <summary>The totals of one segment of a pattern cut into segments (<see cref="PatternTree"/>).</summary>
+public sealed record SegmentQuantity(HolePattern Pattern, HolePattern Segment, int Holes, double DrilledMetres, double Volume, double ExplosiveKg);
+
 /// <summary>Blast totals: volumes, explosive by product, powder factor and costs.</summary>
 public sealed class QuantityReport
 {
@@ -30,6 +33,8 @@ public sealed class QuantityReport
     public double AverageBurden { get; init; }
     public double AverageSpacing { get; init; }
     public double MaxInstantaneousCharge { get; init; }
+    /// <summary>The totals by segment of the patterns cut into segments, in the order of their numbers.</summary>
+    public List<SegmentQuantity> Segments { get; init; } = new();
 }
 
 public static class Quantities
@@ -92,8 +97,21 @@ public static class Quantities
             PerHole = perHole,
             AverageBurden = V("blast.avgBurden", project),
             AverageSpacing = V("blast.avgSpacing", project),
-            MaxInstantaneousCharge = V("blast.mic", project)
+            MaxInstantaneousCharge = V("blast.mic", project),
+            Segments = BySegment(project, perHole)
         };
+    }
+
+    /// <summary>The holes, drilled metres, volume and explosive of each segment, the segments of a pattern in their order.</summary>
+    public static List<SegmentQuantity> BySegment(BlastProject project, IReadOnlyList<HoleQuantity> perHole)
+    {
+        var list = new List<SegmentQuantity>();
+        foreach (var g in perHole.GroupBy(q => q.Hole.PatternId))
+        {
+            if (project.FindPattern(g.Key) is not { ParentId: not null } seg) continue;
+            list.Add(new SegmentQuantity(PatternTree.Root(project, seg), seg, g.Count(), g.Sum(q => q.Hole.EffectiveLength), g.Sum(q => q.Volume), g.Sum(q => q.ExplosiveKg)));
+        }
+        return list.OrderBy(s => s.Pattern.Name).ThenBy(s => s.Segment.Order).ToList();
     }
 
     /// <summary>Boundary polygon if the project has one, otherwise the hole hull expanded by half a burden.</summary>

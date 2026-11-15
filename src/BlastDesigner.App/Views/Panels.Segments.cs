@@ -84,7 +84,14 @@ public sealed partial class PropertiesPanel
                 };
                 var reset = new MenuItem { Header = Loc.T("As the parent"), IsEnabled = !ro && !s.Overrides.IsEmpty };
                 reset.Click += (_, _) => Done(_vm.ResetSegment(id));
-                row.ContextMenu = new ContextMenu { ItemsSource = new[] { rename, reset } };
+                var items = new List<MenuItem> { rename, reset };
+                if (s.IsIsland)
+                {
+                    var remove = new MenuItem { Header = Loc.T("Remove the island"), IsEnabled = !ro };
+                    remove.Click += (_, _) => Done(_vm.RemoveIsland(id));
+                    items.Add(remove);
+                }
+                row.ContextMenu = new ContextMenu { ItemsSource = items };
                 ToolTip.SetTip(row, Loc.Ui("Click: select the holes of the segment"));
                 list.Children.Add(row);
             }
@@ -211,6 +218,7 @@ public sealed partial class PropertiesPanel
                 $"{N(new[] { d.Front.From, d.Front.To, d.Back.From, d.Back.To }.Min())}…{N(new[] { d.Front.From, d.Front.To, d.Back.From, d.Back.To }.Max())}",
             DepthMode.ToLevel => "→" + N(s.ToLevel ?? d.Level),
             DepthMode.ToSurface => "→" + Loc.Ui("surface"),
+            DepthMode.Range => $"{N(Math.Min(d.Front.From, d.Front.To))}…{N(Math.Max(d.Front.From, d.Front.To))}",
             _ => N(s.HoleDefaults.BenchHeight) + " " + Loc.Ui("m")
         };
     }
@@ -231,8 +239,8 @@ public sealed partial class PropertiesPanel
             change(next);
             done(_vm.SetPatternDepth(id, next));
         }
-        var modes = new[] { DepthMode.Fixed, DepthMode.RectToLevel, DepthMode.SurfaceToRect, DepthMode.ToLevel, DepthMode.ToSurface };
-        var names = new[] { "One depth", "Collars on the rectangle, to a level", "Collars on the surface, to the rectangle", "To a level", "To the surface" };
+        var modes = new[] { DepthMode.Fixed, DepthMode.RectToLevel, DepthMode.SurfaceToRect, DepthMode.ToLevel, DepthMode.ToSurface, DepthMode.Range };
+        var names = new[] { "One depth", "Collars on the rectangle, to a level", "Collars on the surface, to the rectangle", "To a level", "To the surface", "To the grade, within from/to" };
         var mode = new ComboBox
         {
             ItemsSource = names.Select(Loc.Ui).ToList(), SelectedIndex = Array.IndexOf(modes, spec.Mode), Width = 190, Height = 26, MinHeight = 26, FontSize = 12, Name = "patternDepthMode",
@@ -264,7 +272,13 @@ public sealed partial class PropertiesPanel
             yield return Pair("Front edge", "depthFront", spec.Front, true);
             yield return Pair("Back edge", "depthBack", spec.Back, false);
         }
-        if (spec.Mode is DepthMode.RectToLevel or DepthMode.ToLevel)
+        if (spec.Mode == DepthMode.Range)
+        {
+            var range = Pair("Depth range, m", "depthRange", spec.Front, true);
+            ToolTip.SetTip(range, Loc.Ui("The depth down to the grade surface (to the level without one), kept between these two; the holes held at an end are counted"));
+            yield return range;
+        }
+        if (spec.Mode is DepthMode.RectToLevel or DepthMode.ToLevel or DepthMode.Range)
             yield return row("Level, m", box(n(spec.Level, "0.###"), "depthLevel", v => { if (metres(v) is double m) Set(x => x.Level = m); else Refresh(); }, 120));
         if (spec.Mode == DepthMode.Fixed)
         {

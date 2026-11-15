@@ -302,8 +302,18 @@ public sealed class HolePattern
     public List<SeamOffset> SeamOffsets { get; set; } = new();
     /// <summary>Of a pattern cut into segments: the holes the seam rule added in gaps (taken away before the next layout).</summary>
     public List<Guid> SeamAdded { get; set; } = new();
-    /// <summary>The pattern is cut into segments and has no holes of its own.</summary>
-    [JsonIgnore] public bool IsContainer => SegmentLines.Count > 0;
+    /// <summary>Of a pattern cut into segments: its island segments (cut out by polygons inside it, not counted among its segments).</summary>
+    public List<Guid> Islands { get; set; } = new();
+    /// <summary>Of an island segment: the polygon it is cut out by (a copy of its points); null for the other segments.</summary>
+    public List<Vec3>? IslandOutline { get; set; }
+    /// <summary>Of an island segment: the polygon of the project its outline is taken from.</summary>
+    public Guid? IslandPolygonId { get; set; }
+    /// <summary>Of a segment between cut lines: the islands taken out of its part (its nodes there are the islands').</summary>
+    public List<List<Vec3>> Excluded { get; set; } = new();
+    /// <summary>The pattern is cut into segments (by lines or islands) and has no holes of its own.</summary>
+    [JsonIgnore] public bool IsContainer => SegmentLines.Count > 0 || Islands.Count > 0;
+    /// <summary>The segment is an island cut out by a polygon.</summary>
+    [JsonIgnore] public bool IsIsland => IslandOutline != null;
     /// <summary>The polygon the outline follows: that of a container or of a pattern of its own.</summary>
     [JsonIgnore] public Guid? PolygonId => OutlineEntityId ?? SourceOutlineId;
 

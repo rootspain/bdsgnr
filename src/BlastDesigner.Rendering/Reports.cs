@@ -107,6 +107,11 @@ public static class Reports
                 [T("Total cost")] = $"{q.TotalCost:0.00} {project.Costs.Currency} ({q.CostPerTonne:0.000}/t)",
             });
             writer.Table(new[] { T("Product"), T("Amount"), T("Unit"), T("Cost") }, q.Products.Select(p => new[] { p.Product.Name, p.Amount.ToString("0.0"), p.Unit, p.Cost.ToString("0.00") }), new[] { 0.5f, 0.2f, 0.1f, 0.2f });
+            // the totals of each segment of the patterns cut into segments
+            if (q.Segments.Count > 0)
+                writer.Table(new[] { T("Pattern grid"), T("Pattern segment"), T("Holes"), T("Drilled"), T("Volume"), T("Explosive") },
+                    q.Segments.Select(s => new[] { s.Pattern.Name, s.Segment.Name, s.Holes.ToString(), $"{s.DrilledMetres:0.0} m", $"{s.Volume:0} m³", $"{s.ExplosiveKg:0.0} kg" }),
+                    new[] { 0.25f, 0.15f, 0.12f, 0.16f, 0.16f, 0.16f });
         }
         if (opt.Sections.HasFlag(ReportSections.HoleTable))
         {

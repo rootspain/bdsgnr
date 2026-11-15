@@ -208,6 +208,7 @@ public sealed partial class MainViewModel
                 Item("Rotate pattern with the mouse", PatternRotateTool, S),
                 Item("Rebuild pattern", Run(RebuildSelectedPattern), HasPattern),
                 Item("Detach from pattern", Run(DetachSelectedFromPattern), HasPattern),
+                Item("Island from polygon", Run(AddIslandFromSelection), HasPattern),
                 Item("Dissolve pattern", Run(DissolveSelectedPattern), HasPattern),
                 Item("Move to selected points…", Run(MoveHolesToPoints), P),
                 Item("Create points at collar", () => CreatePointsAt("collar"), S),

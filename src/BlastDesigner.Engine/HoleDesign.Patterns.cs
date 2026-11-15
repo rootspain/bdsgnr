@@ -47,6 +47,8 @@ public sealed class PatternRebuildReport
     public int TiesLost { get; set; }
     public List<Guid> AddedIds { get; } = new();
     public List<Guid> DeletedIds { get; } = new();
+    /// <summary>Holes whose depth the range of their pattern held at one of its ends (<see cref="DepthMode.Range"/>).</summary>
+    public List<Guid> ClampedIds { get; } = new();
     /// <summary>Set when nothing was done.</summary>
     public PatternRefusal? Refusal { get; set; }
 }
@@ -95,9 +97,7 @@ public static partial class HoleDesign
         if (pat.EdgeOutline is { Count: >= 3 } edge)
         {
             // a segment: inside the outline of its parent (the edge offset from it, not from the cuts) and on its side of each cut
-            if (pat.Outline.Count < 3 || !GeoMath.PointInPolygon(edge, pt.X, pt.Y)) return false;
-            foreach (var c in pat.Cuts)
-                if (!c.Keeps(pt.X, pt.Y)) return false;
+            if (pat.Outline.Count < 3 || !PatternTree.InPart(pat, pt)) return false;
             var de = GeoMath.DistanceToPolyline2D(edge, pt, true);
             return de > OnOutline && (pat.EdgeOffset <= 0 || de >= pat.EdgeOffset);
         }
@@ -433,6 +433,22 @@ public static partial class HoleDesign
         double? RectDepth(int i, int j) => rect is { } r && r.Relative(pat, i, j) is var (s, t) ? depth.At(s, t) : null;
         void Level(Hole h, bool isNew, double? rd)
         {
+            if (depth.Mode == DepthMode.Range && !h.DepthManual)
+            {
+                // down to the grade (or the level), the depth held between the two numbers
+                h.ToLevel = null;
+                var cos = Math.Max(0.05, Math.Cos(h.Angle * Math.PI / 180));
+                if (o.GradeSurface != null) SetLengthToGrade(h, o.GradeSurface, pat.HoleDefaults.BenchHeight);
+                else h.Length = (h.Collar.Z - depth.Level) / cos + h.Subdrill;
+                var vertical = (h.Length - h.Subdrill) * cos;
+                double lo = Math.Min(depth.Front.From, depth.Front.To), hi = Math.Max(depth.Front.From, depth.Front.To);
+                if (vertical < lo - 1e-9 || vertical > hi + 1e-9)
+                {
+                    h.Length = (Math.Clamp(vertical, lo, hi) + h.Subdrill) / cos;
+                    report.ClampedIds.Add(h.Id);
+                }
+                return;
+            }
             if (rd is double d)
             {
                 var below = depth.IncludesSubdrill ? h.Subdrill : 0;
@@ -599,7 +615,7 @@ public static partial class HoleDesign
         {
             if (h.PatternId is not Guid id || !holesBefore.TryGetValue(id, out var list)) continue;
             list[h.Id] = (h.Collar, h.GridI, h.GridJ);
-            if (project.FindPattern(id)!.HoleDefaults.Depth.UsesRectangle) depthBefore[h.Id] = (h.Length, h.ToLevel, h.Collar.Z, h.Angle, h.Subdrill);
+            if (project.FindPattern(id)!.HoleDefaults.Depth.IsOwnMode) depthBefore[h.Id] = (h.Length, h.ToLevel, h.Collar.Z, h.Angle, h.Subdrill);
         }
         var before = project.Patterns.Select(pat => (pat, pat.Revision)).ToList();
         var revisions = before.ToDictionary(x => x.pat.Id, x => x.Revision);

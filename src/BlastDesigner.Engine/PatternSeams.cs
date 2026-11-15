@@ -54,7 +54,7 @@ public static class PatternSeams
             }
 
         // gaps across the seam between segments k and k + 1, from the holes of either side near the cut line
-        var segments = PatternTree.Children(p, root);
+        var segments = PatternTree.LineSegments(p, root);
         for (int k = 0; k + 1 < segments.Count; k++)
         {
             var (a, b) = (segments[k], segments[k + 1]);

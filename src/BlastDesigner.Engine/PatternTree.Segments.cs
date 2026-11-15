@@ -113,7 +113,7 @@ public static partial class PatternTree
     /// <summary>A new line in the middle (by rows) of the biggest segment; the new segment behind it sets what that one set.</summary>
     private static void HalveBiggest(BlastProject p, HolePattern root)
     {
-        var segments = Children(p, root);
+        var segments = LineSegments(p, root);
         var best = segments.Select(s => (Seg: s, Rows: SegmentRows(p, s))).Where(x => x.Rows.Count >= 2).OrderByDescending(x => x.Rows.Count).ThenBy(x => x.Seg.Order).FirstOrDefault();
         if (best.Seg == null) { root.SegmentLines.Add(Between(root, GridRows(root).LastOrDefault())); p.Patterns.Add(NewSegment(root, segments.Count, new PatternOverrides())); return; }
         var (seg, rows) = best;
@@ -142,8 +142,15 @@ public static partial class PatternTree
     /// <summary>Takes line <paramref name="index"/> away: the segment behind it joins the one before it, which keeps its parameters.</summary>
     private static void RemoveLineAt(BlastProject p, HolePattern root, int index, List<Guid> deleted)
     {
-        var segments = Children(p, root);
+        var segments = LineSegments(p, root);
         root.SegmentLines.RemoveAt(index);
+        if (root.SegmentLines.Count == 0 && root.Islands.Count > 0)
+        {
+            // islands keep the pattern cut: one segment around them
+            Absorb(p, segments[1], segments[0], deleted);
+            Rename(p, root);
+            return;
+        }
         if (root.SegmentLines.Count == 0)
         {
             // one segment left: the parent holds the holes again, with its own parameters
@@ -221,7 +228,7 @@ public static partial class PatternTree
     /// <summary>The names of the segments of a pattern by their order (those not renamed by hand).</summary>
     private static void Rename(BlastProject p, HolePattern root)
     {
-        var segments = Children(p, root);
+        var segments = LineSegments(p, root);
         var auto = Enumerable.Range(0, segments.Count + 1).Select(SegmentName).ToHashSet();
         foreach (var s in segments)
             if (auto.Contains(s.Name)) s.Name = SegmentName(s.Order);
@@ -311,6 +318,7 @@ public static partial class PatternTree
             report.TiesLost += r.TiesLost;
             report.AddedIds.AddRange(r.AddedIds);
             report.DeletedIds.AddRange(r.DeletedIds);
+            report.ClampedIds.AddRange(r.ClampedIds);
             foreach (var id in r.AddedIds) added.Add(id);
         }
         // the seam rule: the segments whose holes it took away or moved are laid out again
@@ -406,7 +414,9 @@ public static partial class PatternTree
     /// </summary>
     private static void Cut(BlastProject p, HolePattern root)
     {
-        var segments = Children(p, root);
+        var segments = LineSegments(p, root);
+        var islands = Children(p, root).Where(s => s.IsIsland).ToList();
+        var holes = islands.Select(s => s.IslandOutline!).Where(x => x.Count >= 3).ToList();
         var (u, v) = HoleDesign.PatternAxes(root.Azimuth);
         Vec3 World(double a, double b) => new(root.Center.X + u.X * a + v.X * b, root.Center.Y + u.Y * a + v.Y * b, root.Center.Z);
         // a snapped line stays in the middle between its rows when the burden or the first row of the parent changes
@@ -432,7 +442,19 @@ public static partial class PatternTree
             if (k > 0) s.Cuts.Add(planes[k - 1].Back);
             if (k < planes.Count) s.Cuts.Add(planes[k].Front);
             s.EdgeOutline = edge;
-            var pieces = Clip(edge, s.Cuts, root.Center);
+            s.Excluded = holes;
+            var pieces = Clip(edge, s.Cuts, root.Center, holes);
+            s.Outline = pieces.Count > 0 ? pieces[0] : new List<Vec3>();
+            s.OutlineParts = pieces.Skip(1).ToList();
+            s.OutlineEntityId = null;
+        }
+        // an island: the part of the outline of the parent inside its polygon
+        foreach (var s in islands)
+        {
+            s.Cuts = new List<CutPlane>();
+            s.Excluded = new List<List<Vec3>>();
+            s.EdgeOutline = edge;
+            var pieces = s.IslandOutline!.Count >= 3 ? Clip(edge, new List<CutPlane>(), root.Center, null, s.IslandOutline) : new List<List<Vec3>>();
             s.Outline = pieces.Count > 0 ? pieces[0] : new List<Vec3>();
             s.OutlineParts = pieces.Skip(1).ToList();
             s.OutlineEntityId = null;
@@ -440,10 +462,15 @@ public static partial class PatternTree
     }
 
     /// <summary>The pieces of a polygon on the kept side of every plane, the biggest first (Clipper2, about a local origin).</summary>
-    private static List<List<Vec3>> Clip(List<Vec3> polygon, List<CutPlane> planes, Vec3 origin)
+    /// <param name="minus">Polygons taken out of the pieces (the islands of the parent).</param>
+    /// <param name="within">A polygon the pieces are kept inside (the polygon of an island).</param>
+    private static List<List<Vec3>> Clip(List<Vec3> polygon, List<CutPlane> planes, Vec3 origin, List<List<Vec3>>? minus = null, List<Vec3>? within = null)
     {
         if (polygon.Count < 3) return new List<List<Vec3>>();
-        var subject = new PathsD { new PathD(polygon.Select(q => new PointD(q.X - origin.X, q.Y - origin.Y))) };
+        PathD Local(IEnumerable<Vec3> pts) => new(pts.Select(q => new PointD(q.X - origin.X, q.Y - origin.Y)));
+        var subject = new PathsD { Local(polygon) };
+        if (within != null) subject = Clipper.Intersect(subject, new PathsD { Local(within) }, FillRule.NonZero, 6);
+        if (minus is { Count: > 0 }) subject = Clipper.Difference(subject, new PathsD(minus.Select(Local)), FillRule.NonZero, 6);
         var reach = polygon.Max(q => Vec3.Distance2D(q, origin)) * 4 + 100;
         foreach (var c in planes)
         {
@@ -481,12 +508,7 @@ public static partial class PatternTree
     }
 
     /// <summary>Whether a point lies in the part of a leaf (no edge offset): inside the outline and on the kept side of every cut.</summary>
-    private static bool InRegion(HolePattern leaf, Vec3 pt)
-    {
-        var outline = leaf.EdgeOutline is { Count: >= 3 } edge ? edge : leaf.Outline;
-        if (outline.Count < 3 || !GeoMath.PointInPolygon(outline, pt.X, pt.Y)) return false;
-        return leaf.Cuts.All(c => c.Keeps(pt.X, pt.Y));
-    }
+    private static bool InRegion(HolePattern leaf, Vec3 pt) => InPart(leaf, pt);
 
     /// <summary>Where the node of a hole is in plan: its collar less its offset from the node.</summary>
     private static Vec3 NodeLocation(HolePattern pat, Hole h)
@@ -662,6 +684,57 @@ public static partial class PatternTree
             if (d < bestD) { bestD = d; best = c; }
         }
         return best.WithZ(root.Center.Z);
+    }
+
+    /// <summary>
+    /// Cuts an island out of a pattern by a polygon inside it: a segment of its own (not counted among those between the cut
+    /// lines), taking the holes inside the polygon; a pattern not cut yet gets one segment around the island.
+    /// </summary>
+    public static PatternRebuildReport AddIsland(BlastProject p, HolePattern root, IReadOnlyList<Vec3> polygon, Guid? polygonId = null, PatternRebuildOptions? o = null)
+    {
+        o ??= PatternRebuildOptions.For(p);
+        if (polygon.Count < 3) throw new ArgumentException("An island needs a closed polygon.");
+        if (TreeRefusal(p, root, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        var rows = TreeRowIds(p, root);
+        if (!root.IsContainer)
+        {
+            p.Patterns.Add(NewSegment(root, 0, new PatternOverrides()));
+            if (root.OutlineEntityId != null) { root.SourceOutlineId = root.OutlineEntityId; root.OutlineEntityId = null; }
+        }
+        var n = root.Islands.Count + 1;
+        var island = NewSegment(root, 1000 + n, new PatternOverrides());
+        island.Name = "I" + n;
+        island.IslandOutline = polygon.Select(q => q.WithZ(root.Center.Z)).ToList();
+        island.IslandPolygonId = polygonId;
+        p.Patterns.Add(island);
+        root.Islands.Add(island.Id);
+        return Relayout(p, root, o, rows);
+    }
+
+    /// <summary>Takes an island away: its holes go to the segments around it; a pattern with nothing else cut holds its holes again.</summary>
+    public static PatternRebuildReport RemoveIsland(BlastProject p, HolePattern root, Guid islandId, PatternRebuildOptions? o = null)
+    {
+        o ??= PatternRebuildOptions.For(p);
+        if (p.FindPattern(islandId) is not { IsIsland: true } island || island.ParentId != root.Id) return new PatternRebuildReport();
+        if (TreeRefusal(p, root, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        var rows = TreeRowIds(p, root);
+        var deleted = new List<Guid>();
+        var around = LineSegments(p, root);
+        root.Islands.Remove(islandId);
+        if (around.Count == 0) { Absorb(p, island, root, deleted); }
+        else Absorb(p, island, around[0], deleted);
+        if (!root.IsContainer)
+        {
+            // nothing cut any more: the parent holds the holes again
+            foreach (var s in LineSegments(p, root)) Absorb(p, s, root, deleted);
+            if (root.SourceOutlineId != null) { root.OutlineEntityId = root.SourceOutlineId; root.SourceOutlineId = null; }
+        }
+        var n = 1;
+        foreach (var s in Children(p, root).Where(s => s.IsIsland)) { s.Order = 1000 + n; if (s.Name.StartsWith('I') && int.TryParse(s.Name[1..], out _)) s.Name = "I" + n; n++; }
+        var report = Relayout(p, root, o, rows);
+        report.DeletedIds.AddRange(deleted);
+        report.Deleted += deleted.Count;
+        return report;
     }
 
     /// <summary>

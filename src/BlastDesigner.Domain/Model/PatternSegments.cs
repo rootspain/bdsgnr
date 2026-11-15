@@ -18,7 +18,12 @@ public enum DepthMode
     /// <summary>Down to the level of the pattern (<see cref="HolePattern.ToLevel"/>).</summary>
     ToLevel,
     /// <summary>Down to the first grade surface in the way of each hole (<see cref="HolePattern.ToSurface"/>).</summary>
-    ToSurface
+    ToSurface,
+    /// <summary>
+    /// Down to the grade surface (to <see cref="DepthSpec.Level"/> without one), the depth kept between the two numbers of
+    /// the front pair; the holes held at an end are counted (<c>PatternRebuildReport.ClampedIds</c>).
+    /// </summary>
+    Range
 }
 
 /// <summary>Two numbers along an edge of the conditional rectangle: at the left end of a row and at its right end, looking along the blast.</summary>
@@ -51,6 +56,8 @@ public sealed class DepthSpec
 
     /// <summary>Whether the four numbers of the conditional rectangle are used.</summary>
     public bool UsesRectangle => Mode is DepthMode.RectToLevel or DepthMode.SurfaceToRect;
+    /// <summary>A mode the older fields of a pattern cannot say: the holes carry what it gives them.</summary>
+    public bool IsOwnMode => UsesRectangle || Mode == DepthMode.Range;
 
     /// <summary>
     /// The value at relative position <paramref name="s"/> (0…1 along a row, left to right) and <paramref name="t"/> (0…1 from

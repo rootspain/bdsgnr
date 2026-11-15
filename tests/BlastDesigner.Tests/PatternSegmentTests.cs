@@ -588,6 +588,100 @@ public class PatternSegmentTests
         Assert.Equal(count, p.Holes.Count());
     }
 
+    // ---- stage 5: islands, the depth range, totals by segment ----
+
+    private static readonly Vec3[] Island = { new(14, 8, 100), new(28, 8, 100), new(28, 16, 100), new(14, 16, 100) };
+
+    [Fact]
+    public void AnIsland_TakesTheHolesInsideItsPolygon_WithoutMovingAny()
+    {
+        var (p, root) = Make(Rectangle);
+        var collars = p.Holes.ToDictionary(h => h.Id, h => h.Collar);
+        var report = PatternTree.AddIsland(p, root, Island);
+        Assert.Null(report.Refusal);
+        Assert.Equal(0, report.Moved + report.Added + report.Deleted);
+        Assert.True(root.IsContainer);
+        Assert.Empty(root.SegmentLines);
+        Assert.Equal(1, PatternTree.SegmentCount(root));
+        var island = Assert.Single(PatternTree.Children(p, root), s => s.IsIsland);
+        var around = Assert.Single(PatternTree.LineSegments(p, root));
+        var inside = HoleDesign.PatternHoles(p, island).ToList();
+        Assert.NotEmpty(inside);
+        Assert.All(inside, h => Assert.True(GeoMath.PointInPolygon(Island, h.Collar.X, h.Collar.Y)));
+        Assert.All(HoleDesign.PatternHoles(p, around), h => Assert.False(GeoMath.PointInPolygon(Island, h.Collar.X, h.Collar.Y)));
+        Assert.All(p.Holes, h => Assert.Equal(collars[h.Id], h.Collar));
+        // its own diameter, and cut lines beside it
+        island.Overrides.Diameter = 76;
+        PatternTree.Split(p, root, 3);
+        Assert.Equal(3, PatternTree.LineSegments(p, root).Count);
+        Assert.All(HoleDesign.PatternHoles(p, island), h => Assert.Equal(76, h.Diameter));
+        Assert.All(PatternTree.LineSegments(p, root).SelectMany(s => HoleDesign.PatternHoles(p, s)), h => Assert.False(GeoMath.PointInPolygon(Island, h.Collar.X, h.Collar.Y)));
+        // numbered after the segments between the lines
+        var labels = p.Rows.SelectMany(r => r.HoleIds).Select(id => H(p, id).Label).ToList();
+        Assert.Equal(Enumerable.Range(1, labels.Count).Select(k => k.ToString()), labels);
+        Assert.Equal(inside.Count, HoleDesign.PatternHoles(p, island).Count());
+
+        // taken away again: the holes go to the segments around, back to one pattern when nothing else is cut
+        PatternTree.Split(p, root, 1);
+        Assert.True(root.IsContainer);
+        PatternTree.RemoveIsland(p, root, island.Id);
+        Assert.False(root.IsContainer);
+        Assert.Single(p.Patterns);
+        Assert.All(p.Holes, h => Assert.Equal(root.Id, h.PatternId));
+        Assert.All(p.Holes, h => Assert.Equal(collars[h.Id], h.Collar));
+    }
+
+    [Fact]
+    public void EditingThePolygonOfAnIsland_CutsThePatternAgain()
+    {
+        var (p, root) = Make(Rectangle);
+        var polygon = new PolylineEntity { Closed = true, Points = Island.ToList() };
+        p.Add(polygon, p.DefaultLayer);
+        PatternTree.AddIsland(p, root, Island, polygon.Id);
+        var doc = new Document(p);
+        var island = PatternTree.Children(doc.Project, doc.Project.FindPattern(root.Id)!).Single(s => s.IsIsland);
+        var before = HoleDesign.PatternHoles(doc.Project, island).Count();
+        doc.Execute("Move vertex", pr =>
+        {
+            var line = (PolylineEntity)pr.FindEntity(polygon.Id)!;
+            line.Points[1] = new Vec3(40, 8, 100);
+            line.Points[2] = new Vec3(40, 16, 100);
+        });
+        var now = doc.Project.FindPattern(island.Id)!;
+        Assert.Equal(40, now.IslandOutline!.Max(q => q.X), 9);
+        Assert.True(HoleDesign.PatternHoles(doc.Project, now).Count() > before);
+    }
+
+    [Fact]
+    public void TheDepthRange_KeepsTheDepthBetweenItsNumbers_AndCountsTheHolesHeld()
+    {
+        var (p, root) = Make(Rectangle);
+        // no grade surface: down to the level, 100 − 88 = 12 m, held at 11
+        root.HoleDefaults.Depth = new DepthSpec { Mode = DepthMode.Range, Level = 88, Front = new DepthPair(8, 11) };
+        PatternTree.SyncLegacyDepth(root);
+        var report = HoleDesign.RebuildPattern(p, root);
+        Assert.Equal(p.Holes.Count(), report.ClampedIds.Count);
+        Assert.All(p.Holes, h => Assert.Equal(11 + 1, h.Length, 9));
+        Assert.All(p.Holes, h => Assert.Null(h.ToLevel));
+        root.HoleDefaults.Depth.Level = 91;
+        report = HoleDesign.RebuildPattern(p, root);
+        Assert.Empty(report.ClampedIds);
+        Assert.All(p.Holes, h => Assert.Equal(9 + 1, h.Length, 9));
+    }
+
+    [Fact]
+    public void TheQuantities_HaveTheTotalsOfEachSegment()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var q = Quantities.Compute(p);
+        Assert.Equal(2, q.Segments.Count);
+        Assert.Equal(new[] { "A", "B" }, q.Segments.Select(s => s.Segment.Name));
+        Assert.Equal(q.HoleCount, q.Segments.Sum(s => s.Holes));
+        Assert.Equal(p.Holes.Sum(h => h.EffectiveLength), q.Segments.Sum(s => s.DrilledMetres), 6);
+        Assert.Contains("Pattern,Segment,Holes", TextFiles.ExportQuantities(q));
+    }
+
     [Fact]
     public void DissolvingTheParent_TakesItsSegments()
     {

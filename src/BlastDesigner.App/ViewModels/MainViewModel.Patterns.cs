@@ -174,7 +174,8 @@ public sealed partial class MainViewModel
         if (report.DeletedIds.Count > 0 || (whole && report.AddedIds.Count > 0))
             Doc.Select(Doc.Selection.Except(report.DeletedIds).Concat(whole ? report.AddedIds : Enumerable.Empty<Guid>()).ToList(), record: false);
         SetStatus(Loc.T(undoName) + ": " + Loc.F("{0} moved, {1} deleted, {2} added", report.Moved, report.Deleted, report.Added)
-            + (report.TiesLost > 0 ? "; " + Loc.F("{0} ties removed", report.TiesLost) : ""));
+            + (report.TiesLost > 0 ? "; " + Loc.F("{0} ties removed", report.TiesLost) : "")
+            + (report.ClampedIds.Count > 0 ? "; " + Loc.F("{0} holes held at an end of the depth range", report.ClampedIds.Distinct().Count()) : ""));
         return true;
     }
 

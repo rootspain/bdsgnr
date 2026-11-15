@@ -1,4 +1,5 @@
 using BlastDesigner.App.Services;
+using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
 
@@ -23,7 +24,7 @@ public sealed partial class MainViewModel
         if (count == now) return false;
         if (count < now)
         {
-            var going = PatternTree.Children(Project, root).Where(s => (count == 1 || s.Order >= count) && !s.Overrides.IsEmpty).Select(s => s.Name).ToList();
+            var going = PatternTree.LineSegments(Project, root).Where(s => (count == 1 || s.Order >= count) && !s.Overrides.IsEmpty).Select(s => s.Name).ToList();
             if (going.Count > 0 && !await Dialogs.Confirm(Loc.F("Segments {0} set parameters of their own, which will be lost. Continue?", string.Join(", ", going)), Loc.T("Segments")))
                 return false;
         }
@@ -141,6 +142,32 @@ public sealed partial class MainViewModel
             && !await Dialogs.Confirm(Loc.F("Segments {0} set parameters of their own, which will be lost. Continue?", behind.Name), Loc.T("Segments")))
             return false;
         return await LayOutTree(rootId, $"{root.Name}: {Loc.T("segments")}", (p, r, o) => PatternTree.RemoveLine(p, r, index, o));
+    }
+
+    /// <summary>
+    /// Cuts an island out of the pattern of the selected holes by the selected closed polyline inside it (Pattern ▸ Island
+    /// from polygon); the island is a segment of its own.
+    /// </summary>
+    public async Task AddIslandFromSelection()
+    {
+        if (SelectedPattern is not { } root || Doc == null) { await Dialogs.Info(Loc.T("Select a hole of a pattern first.")); return; }
+        var polygon = Doc.SelectedEntities.OfType<PolylineEntity>().FirstOrDefault(l => l.Closed && l.Points.Count >= 3 && l.Id != root.PolygonId);
+        if (polygon == null || !polygon.Points.Any(q => GeoMath.PointInPolygon(root.Outline, q.X, q.Y)))
+        {
+            await Dialogs.Info(Loc.T("Select a closed polyline inside the pattern together with a hole of it."), Loc.T("Island from polygon"));
+            return;
+        }
+        var points = polygon.Points.ToList();
+        var id = polygon.Id;
+        await LayOutTree(root.Id, $"{root.Name}: {Loc.T("island")}", (p, r, o) => PatternTree.AddIsland(p, r, points, id, o));
+    }
+
+    /// <summary>Takes an island away: its holes go to the segments around it.</summary>
+    public async Task<bool> RemoveIsland(Guid islandId)
+    {
+        if (Project?.FindPattern(islandId) is not { IsIsland: true } island || PatternTree.Parent(Project, island) is not { } root) return false;
+        if (!island.Overrides.IsEmpty && !await Dialogs.Confirm(Loc.F("Segments {0} set parameters of their own, which will be lost. Continue?", island.Name), Loc.T("Segments"))) return false;
+        return await LayOutTree(PatternTree.Root(Project, root).Id, $"{root.Name}: {Loc.T("island")}", (p, r, o) => PatternTree.RemoveIsland(p, r, islandId, o));
     }
 
     /// <summary>Selects the holes of one segment (a row of the list of segments).</summary>

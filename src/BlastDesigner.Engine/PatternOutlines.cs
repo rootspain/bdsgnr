@@ -22,10 +22,14 @@ public static class PatternOutlines
         foreach (var pat in project.Patterns.Where(x => x.ParentId == null))
             if (pat.PolygonId is Guid id && project.FindEntity(id) is PolylineEntity { Closed: true } line)
                 (watched ??= new()).Add((pat, id, line.Points.ToArray(), pat.Revision));
-        if (watched == null) return null;
+        List<(HolePattern Island, Guid Polygon, Vec3[] Points, int Revision)>? islands = null;
+        foreach (var s in project.Patterns)
+            if (s.IslandPolygonId is Guid iid && project.FindEntity(iid) is PolylineEntity { Closed: true } il)
+                (islands ??= new()).Add((s, iid, il.Points.ToArray(), s.Revision));
+        if (watched == null && islands == null) return null;
         return () =>
         {
-            foreach (var (pat, id, before, revision) in watched)
+            foreach (var (pat, id, before, revision) in watched ?? new())
             {
                 // a pattern the change laid out itself (made, resized, turned) or took away is left to it
                 if (!project.Patterns.Contains(pat) || pat.Revision != revision) continue;
@@ -35,6 +39,17 @@ public static class PatternOutlines
                 if (pat.Outline.Count == line.Points.Count && pat.Outline.Zip(line.Points).All(x => Vec3.Distance2D(x.First, x.Second) < 1e-6)) continue;
                 var report = pat.IsContainer ? PatternTree.FitToOutline(project, pat, line.Points) : HoleDesign.FitToOutline(project, pat, line.Points);
                 if (report.Refusal is { } no) Refused?.Invoke(pat, no);
+            }
+            // the polygon of an island edited: the island takes its new shape and the pattern is cut again
+            foreach (var (island, id, before, revision) in islands ?? new())
+            {
+                if (!project.Patterns.Contains(island) || island.Revision != revision) continue;
+                if (project.FindEntity(id) is not PolylineEntity { Closed: true, Points.Count: >= 3 } line || line.Points.SequenceEqual(before)) continue;
+                if (island.IslandOutline is { } now && now.Count == line.Points.Count && now.Zip(line.Points).All(x => Vec3.Distance2D(x.First, x.Second) < 1e-6)) continue;
+                if (project.FindPattern(island.ParentId) is not { } root) continue;
+                island.IslandOutline = line.Points.Select(q => q.WithZ(root.Center.Z)).ToList();
+                var report = PatternTree.Relayout(project, PatternTree.Root(project, root));
+                if (report.Refusal is { } no) Refused?.Invoke(root, no);
             }
         };
     }

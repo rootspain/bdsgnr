@@ -10,9 +10,29 @@ namespace BlastDesigner.Engine;
 /// </summary>
 public static partial class PatternTree
 {
-    /// <summary>The segments of a pattern, from the face back.</summary>
+    /// <summary>The segments of a pattern, from the face back, its islands after them.</summary>
     public static List<HolePattern> Children(BlastProject p, HolePattern pat) =>
         p.Patterns.Where(s => s.ParentId == pat.Id).OrderBy(s => s.Order).ToList();
+
+    /// <summary>The segments of a pattern between its cut lines (not its islands), from the face back: segment k between lines k − 1 and k.</summary>
+    public static List<HolePattern> LineSegments(BlastProject p, HolePattern pat) =>
+        Children(p, pat).Where(s => !s.IsIsland).ToList();
+
+    /// <summary>
+    /// Whether a point is in the part of a segment, without the edge offset: inside the outline of the parent, on the kept
+    /// side of each cut, inside its island polygon (an island) and out of the islands taken out of it.
+    /// </summary>
+    public static bool InPart(HolePattern seg, Vec3 pt)
+    {
+        var outline = seg.EdgeOutline is { Count: >= 3 } edge ? edge : seg.Outline;
+        if (outline.Count < 3 || !GeoMath.PointInPolygon(outline, pt.X, pt.Y)) return false;
+        foreach (var c in seg.Cuts)
+            if (!c.Keeps(pt.X, pt.Y)) return false;
+        if (seg.IslandOutline is { Count: >= 3 } island && !GeoMath.PointInPolygon(island, pt.X, pt.Y)) return false;
+        foreach (var x in seg.Excluded)
+            if (x.Count >= 3 && GeoMath.PointInPolygon(x, pt.X, pt.Y)) return false;
+        return true;
+    }
 
     /// <summary>The parent of a segment; null for a pattern of its own (or one whose parent is gone).</summary>
     public static HolePattern? Parent(BlastProject p, HolePattern pat) => pat.ParentId is Guid id ? p.FindPattern(id) : null;
@@ -123,6 +143,8 @@ public static partial class PatternTree
         {
             pat.Outline = Moved(pat.Outline);
             pat.OutlineParts = pat.OutlineParts.Select(Moved).ToList();
+            pat.Excluded = pat.Excluded.Select(Moved).ToList();
+            if (pat.IslandOutline != null) pat.IslandOutline = Moved(pat.IslandOutline);
             if (pat.EdgeOutline != null) pat.EdgeOutline = Moved(pat.EdgeOutline);
             foreach (var c in pat.Cuts)
             {
@@ -142,7 +164,7 @@ public static partial class PatternTree
     /// to a level, or one depth), which may have been set by code that knows only them.
     /// </summary>
     public static DepthMode EffectiveDepthMode(HolePattern pat) =>
-        pat.HoleDefaults.Depth.UsesRectangle ? pat.HoleDefaults.Depth.Mode
+        pat.HoleDefaults.Depth.IsOwnMode ? pat.HoleDefaults.Depth.Mode
         : pat.ToSurface ? DepthMode.ToSurface
         : pat.ToLevel != null ? DepthMode.ToLevel
         : DepthMode.Fixed;

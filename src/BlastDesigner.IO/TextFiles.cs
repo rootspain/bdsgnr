@@ -288,6 +288,12 @@ public static class TextFiles
         sb.AppendLine();
         sb.AppendLine("Product,Amount,Unit,Cost");
         foreach (var p in q.Products) sb.AppendLine($"{Csv(p.Product.Name)},{F(p.Amount)},{p.Unit},{p.Cost:0.00}");
+        if (q.Segments.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("Pattern,Segment,Holes,Drilled m,Volume m3,Explosive kg");
+            foreach (var s in q.Segments) sb.AppendLine($"{Csv(s.Pattern.Name)},{Csv(s.Segment.Name)},{s.Holes},{F(s.DrilledMetres)},{F(s.Volume)},{F(s.ExplosiveKg)}");
+        }
         return sb.ToString();
     }
 

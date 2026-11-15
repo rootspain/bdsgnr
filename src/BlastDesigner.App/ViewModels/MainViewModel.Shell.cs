@@ -317,7 +317,8 @@ public sealed partial class MainViewModel
                     Item("Create points at toe", () => CreatePointsAt("toe"), W), Item("Create polyline of bore track", CreateBoreTrackPolylines, W), Item("Reset design tracks", Run(ResetDesignTracks), W)),
                 Sub("Pattern grid", Item("Rotate pattern with the mouse", PatternRotateTool, W),
                     Item("Rotate pattern…", Run(RotatePatternDialog), () => W() && SelectedPattern != null), Item("Rebuild pattern", Run(RebuildSelectedPattern), () => W() && SelectedPattern != null),
-                    Item("Detach from pattern", Run(DetachSelectedFromPattern), () => W() && SelectedPattern != null)),
+                    Item("Detach from pattern", Run(DetachSelectedFromPattern), () => W() && SelectedPattern != null),
+                    Item("Island from polygon", Run(AddIslandFromSelection), () => W() && SelectedPattern != null)),
                 Separator, Item("Show only selected", ShowOnlySelected)
             }.Concat(edit),
             "polyline" => new[]
