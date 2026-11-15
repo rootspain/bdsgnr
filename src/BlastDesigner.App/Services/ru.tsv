@@ -3213,3 +3213,60 @@ line type:DOT	Точечная
 line type:DASHDOT	Штрихпунктирная
 line type:BORDER	Граница
 line type:DIVIDE	Разделительная
+Transform	Трансформация
+Scale, tilt and mirror the selected objects: the corners of the frame scale in proportion (Shift each axis, Alt from the centre), the sides along one axis, the knob above turns (Shift 15°, Ctrl 1°), the cross is the base point. Type a number while dragging and press Enter for an exact value. Done applies. Holes and patterns are left: they have their own tool.	Масштаб, наклон и зеркало выделенных объектов: углы рамки масштабируют пропорционально (Shift — по осям отдельно, Alt — от центра), стороны — по одной оси, кружок над рамкой поворачивает (Shift — шаг 15°, Ctrl — 1°), перекрестье — базовая точка. Во время перетаскивания введите число и нажмите Enter — значение станет точным. «Готово» применяет. Скважины и сетки скважин не меняются: у них свой инструмент.
+Select the objects to transform (a click on an object selects it, Shift adds).	Выделите объекты для трансформации (щелчок по объекту выделяет его, с Shift — добавляет).
+Holes are not transformed: {0}	Скважины не трансформируются: {0}
+The scale must be above 0	Масштаб должен быть больше 0
+A tilt about X or Y must be below 89°	Наклон по X или Y должен быть меньше 89°
+Mirror X	Зеркало по X
+Mirror Y	Зеркало по Y
+Reset	Сбросить
+Tilt Z {0}°	Наклон Z {0}°
+Tilt X {0}°	Наклон X {0}°
+Tilt Y {0}°	Наклон Y {0}°
+Base point	Базовая точка
+Scale {0}	Масштаб {0}
+holes and patterns {0}	скважины и сетки {0}
+on locked layers {0}	на заблокированных слоях {0}
+Transformed: {0}	Трансформировано: {0}
+left	не изменены
+ui:Transform: scale, tilt, mirror	Трансформация: масштаб, наклон, зеркало
+ui:Scale X	Масштаб X
+ui:Scale Y	Масштаб Y
+ui:Scale Z	Масштаб Z
+ui:In proportion	Пропорционально
+ui:A circle is selected: the scale is only in proportion	В выделении окружность: масштаб только пропорциональный
+ui:On: one scale along every axis. Off: a scale along each axis	Вкл.: один масштаб по всем осям. Выкл.: свой масштаб по каждой оси
+ui:Tilt X, °	Наклон X, °
+ui:Tilt Y, °	Наклон Y, °
+ui:Tilt Z, °	Наклон Z, °
+ui:About the X axis of the frame, by the right-hand rule: north goes up	Вокруг оси X рамки, по правилу правой руки: север поднимается вверх
+ui:About the Y axis of the frame, by the right-hand rule: up goes east	Вокруг оси Y рамки, по правилу правой руки: верх уходит на восток
+ui:About the vertical, clockwise seen from above, as bearings go	Вокруг вертикали, по часовой стрелке при взгляде сверху, как азимут
+ui:Mirror X	Зеркало по X
+ui:Mirror Y	Зеркало по Y
+ui:Mirror across the X axis of the frame, through the base point: X changes its sign. Again takes it off	Отражение поперёк оси X рамки через базовую точку: X меняет знак. Повторное нажатие снимает отражение
+ui:Mirror across the Y axis of the frame, through the base point: Y changes its sign. Again takes it off	Отражение поперёк оси Y рамки через базовую точку: Y меняет знак. Повторное нажатие снимает отражение
+ui:Move X, m	Сдвиг X, м
+ui:Move Y, m	Сдвиг Y, м
+ui:Move Z, m	Сдвиг Z, м
+ui:Of the world	Мировые
+ui:Of the object	Объекта
+ui:Of the world: X east, Y north. Of the object: along a block, a line, a text or a dimension (the first selected)	Мировые: X — восток, Y — север. Объекта: вдоль блока, линии, текста или размера (первого выделенного)
+ui:Axes	Оси
+ui:Centre of the frame	Центр рамки
+ui:Centre of the bottom	Центр низа
+ui:South-west corner	Юго-западный угол
+ui:South-east corner	Юго-восточный угол
+ui:North-east corner	Северо-восточный угол
+ui:North-west corner	Северо-западный угол
+ui:A point of its own	Своя точка
+ui:What the scale, the tilts and the mirrors go about. Drag the cross on the plan to put it anywhere (it snaps to objects)	Относительно чего идут масштаб, наклоны и зеркало. Перетащите перекрестье на плане, чтобы поставить точку куда угодно (с привязкой к объектам)
+ui:Base point	Базовая точка
+ui:Base X	База X
+ui:Base Y	База Y
+ui:Base Z	База Z
+ui:Reset	Сбросить
+ui:Back to no change: scale 1, no tilt, no mirror, no move	Вернуть без изменений: масштаб 1, без наклона, зеркала и сдвига
+ui:Transform coordinates	Преобразование координат

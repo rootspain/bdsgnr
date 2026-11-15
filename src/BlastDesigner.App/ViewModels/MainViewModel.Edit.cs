@@ -470,35 +470,6 @@ public sealed partial class MainViewModel
         if (idx is int i && await Dialogs.Confirm(Loc.F("Delete template {0}?", names[i]))) Templates.Delete(names[i]);
     }
 
-    public async void TransformCoordinates()
-    {
-        if (Doc == null) return;
-        var t = await Dialogs.EditObject("Transform coordinates", new TransformParameters());
-        if (t == null) return;
-        var ids = Doc.Selection.ToHashSet();
-        var sel = Doc.SelectedEntities.ToList();
-        var pivot = t.PivotAtCentre ? GeoMath.Centroid(sel.SelectMany(e => e.GetVertices()).ToList()) : new Vec3(t.PivotX, t.PivotY, 0);
-        var f = GeneralOps.MakeTransform(new Vec3(t.MoveX, t.MoveY, t.MoveZ), t.RotateDegrees, pivot, t.Scale);
-        var timed = 0;
-        Change("Transform coordinates", p => timed = ReprogramTimingLines(p, ids, () =>
-        {
-            foreach (var e in p.Entities.Where(e => ids.Contains(e.Id)))
-            {
-                e.Transform(f);
-            }
-        }));
-        ReportReprogrammed(timed);
-    }
-}
-
-public sealed class TransformParameters
-{
-    public double MoveX { get; set; }
-    public double MoveY { get; set; }
-    public double MoveZ { get; set; }
-    public double RotateDegrees { get; set; }
-    public bool PivotAtCentre { get; set; } = true;
-    public double PivotX { get; set; }
-    public double PivotY { get; set; }
-    public double Scale { get; set; } = 1;
+    /// <summary>Transform coordinates (menu, ribbon): the Transform tool, whose panel has the move, the turn and the scale of the old window.</summary>
+    public void TransformCoordinates() => TransformTool();
 }

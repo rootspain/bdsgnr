@@ -134,6 +134,35 @@ try
             Console.WriteLine($"{args[2]}: {features.Count} segments");
             return 0;
         }
+        case "segments" when args.Length >= 4:
+        {
+            // "features" of a drawing and, from the same import (the line ids are new at every import), the length and the
+            // layer of every segment: to weigh a model against the rules by metres and to read the layer names as hints of
+            // the class (customer data: keep both in samples/)
+            var drawing = CadFiles.ReadCad(args[1], new CadImportOptions { HiddenLayers = CadHiddenLayers.Skip });
+            var lines = drawing.Items.Where(x => x.Entity is PolylineEntity).Select(x => ((PolylineEntity)x.Entity, x.Layer)).ToList();
+            var all = drawing.Items.Select(x => x.Entity).OfType<PointEntity>().ToList();
+            var features = SurveyFeatures.Compute(lines, all.Where(p => Math.Abs(p.Position.Z) > 1e-6).Select(p => p.Position).ToList(), Array.Empty<Vec3>());
+            var rules = SurveyRecognizer.Recognize(lines, all, Array.Empty<Vec3>(), features).Segments.ToDictionary(g => g.Segment, g => g.Class);
+            using (var f = new StreamWriter(args[2], false, new UTF8Encoding(false)))
+            {
+                f.WriteLine("scene,trap,line,from,to,label,rule," + string.Join(",", SurveyFeatures.Names));
+                foreach (var (seg, values) in features)
+                    f.WriteLine(string.Join(",", new[] { "0", "None", seg.LineId.ToString("N")[..8], seg.From.ToString(ci), seg.To.ToString(ci), "", rules[seg].ToString() }.Concat(values.Select(v => v.ToString("0.####", ci)))));
+            }
+            var byId = lines.ToDictionary(l => l.Item1.Id, l => l);
+            using var w = new StreamWriter(args[3], false, new UTF8Encoding(false));
+            w.WriteLine("line,from,to,length,z,layer");
+            foreach (var (seg, _) in features)
+            {
+                var (pl, layer) = byId[seg.LineId];
+                var z = pl.Points.Skip(seg.From).Take(seg.To - seg.From + 1).Average(v => v.Z);
+                w.WriteLine(string.Join(",", seg.LineId.ToString("N")[..8], seg.From.ToString(ci), seg.To.ToString(ci),
+                    SurveyRecognition.Length(pl.Points, seg).ToString("0.##", ci), z.ToString("0.##", ci), "\"" + layer.Replace("\"", "'") + "\""));
+            }
+            Console.WriteLine($"{args[2]}, {args[3]}: {features.Count} segments");
+            return 0;
+        }
         case "recognize" when args.Length >= 2:
         {
             // a real drawing has no true classes: print what was found, to judge by eye (stays in this terminal)

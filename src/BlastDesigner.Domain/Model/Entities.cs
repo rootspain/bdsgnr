@@ -44,6 +44,22 @@ public abstract class Entity
     /// <summary>Applies an arbitrary point transform to every vertex.</summary>
     public abstract void Transform(Func<Vec3, Vec3> f);
 
+    /// <summary>
+    /// Whether the Transform tool changes this object with <paramref name="t"/>: holes and ties never (holes have their pattern
+    /// and their properties), a block not when tilted about X or Y (its walls stay vertical).
+    /// </summary>
+    public virtual bool Takes(SpatialTransform t) => true;
+
+    /// <summary>
+    /// The Transform tool: scale, tilt, mirror and move. Every vertex by the map; the objects that keep sizes and angles
+    /// (circle, text, block, dimension) and those with a side (chevron, surface) override it.
+    /// </summary>
+    public virtual void Transform(SpatialTransform t)
+    {
+        var m = t.Matrix;
+        Transform(m.Apply);
+    }
+
     /// <summary>Deep copy with a fresh id.</summary>
     public Entity CloneWithNewId()
     {
@@ -160,6 +176,18 @@ public sealed class TextEntity : Entity
     public override IEnumerable<Vec3> GetVertices() { yield return Position; }
     public override void Translate(Vec3 d) => Position += d;
     public override void Transform(Func<Vec3, Vec3> f) => Position = f(Position);
+
+    /// <summary>The position by the map, the height by the scale in plan, the direction of the line turned (and mirrored) with
+    /// the plan; the letters themselves are never mirrored, the text stays readable.</summary>
+    public override void Transform(SpatialTransform t)
+    {
+        var m = t.Matrix;
+        Position = m.Apply(Position);
+        Height *= t.PlanScale;
+        var a = Rotation * Math.PI / 180;
+        var d = m.ApplyVector(new Vec3(Math.Cos(a), Math.Sin(a), 0));
+        if (d.Length2D > 1e-9) Rotation = Math.Atan2(d.Y, d.X) * 180 / Math.PI;
+    }
 }
 
 public sealed class CircleEntity : Entity, ILineStyled
@@ -185,6 +213,14 @@ public sealed class CircleEntity : Entity, ILineStyled
     public override void Translate(Vec3 d) => Center += d;
     public override void Transform(Func<Vec3, Vec3> f) => Center = f(Center);
     public override double PickDistance(Vec3 p) => Math.Abs(Vec3.Distance2D(Center, p) - Radius);
+
+    /// <summary>A circle stays a circle: the centre by the map, the radius by the scale in plan (the tool keeps it the same
+    /// along every axis while a circle is selected); a tilt moves the centre only.</summary>
+    public override void Transform(SpatialTransform t)
+    {
+        Center = t.Apply(Center);
+        Radius *= t.PlanScale;
+    }
 
     public List<Vec3> ToPolygon(int segments = 36) =>
         Enumerable.Range(0, segments)
@@ -223,6 +259,21 @@ public sealed class DimensionEntity : Entity, ILineStyled
     public override void Translate(Vec3 d) { Start += d; End += d; }
     public override void Transform(Func<Vec3, Vec3> f) { Start = f(Start); End = f(End); }
     public override double PickDistance(Vec3 p) => Drawn().Min(s => GeoMath.DistanceToPolyline2D(s, p, false));
+
+    /// <summary>The measured points by the map; the dimension line stays where the map takes it, so a mirror puts it on the
+    /// mirrored side and a scale across moves it out with the plan.</summary>
+    public override void Transform(SpatialTransform t)
+    {
+        var m = t.Matrix;
+        var (a, _) = Line();
+        var a2 = m.Apply(a);
+        Start = m.Apply(Start);
+        End = m.Apply(End);
+        var dir = new Vec3(End.X - Start.X, End.Y - Start.Y, 0);
+        if (dir.Length2D < 1e-12) return;
+        dir = dir.Normalized();
+        Offset = Vec3.Dot(a2 - Start, new Vec3(-dir.Y, dir.X, 0));
+    }
 
     /// <summary>The ends of the dimension line: the measured points moved square to them by <see cref="Offset"/> in plan.</summary>
     public (Vec3 A, Vec3 B) Line()
@@ -265,6 +316,15 @@ public sealed class SurfaceEntity : Entity
     public override IEnumerable<Vec3> GetVertices() => Vertices;
     public override void Translate(Vec3 d) { for (int i = 0; i < Vertices.Count; i++) Vertices[i] += d; InvalidateIndex(); }
     public override void Transform(Func<Vec3, Vec3> f) { for (int i = 0; i < Vertices.Count; i++) Vertices[i] = f(Vertices[i]); InvalidateIndex(); }
+
+    /// <summary>The vertices by the map; a mirror turns every triangle round, so the surface still faces up.</summary>
+    public override void Transform(SpatialTransform t)
+    {
+        var m = t.Matrix;
+        Transform(m.Apply);
+        if (m.IsMirror)
+            for (int i = 0; i + 2 < Triangles.Count; i += 3) (Triangles[i + 1], Triangles[i + 2]) = (Triangles[i + 2], Triangles[i + 1]);
+    }
 
     public override double PickDistance(Vec3 p) => ElevationAt(p.X, p.Y).HasValue ? 0.5 : double.MaxValue;
 
@@ -365,6 +425,8 @@ public sealed class TieEntity : Entity
     public override IEnumerable<Vec3> GetVertices() { yield return FromPos; yield return ToPos; }
     public override void Translate(Vec3 d) { }
     public override void Transform(Func<Vec3, Vec3> f) { }
+    /// <summary>A tie goes with its holes, which the Transform tool leaves.</summary>
+    public override bool Takes(SpatialTransform t) => false;
     public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(new[] { FromPos, ToPos }, p, false);
 }
 

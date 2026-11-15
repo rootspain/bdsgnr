@@ -59,17 +59,9 @@ public static class GeneralOps
     }
 
     /// <summary>Similarity transform: translate, rotate about a pivot in plan, and scale.</summary>
-    public static Func<Vec3, Vec3> MakeTransform(Vec3 translate, double rotateDeg, Vec3 pivot, double scale)
-    {
-        var c = Math.Cos(-rotateDeg * GeoMath.Deg);
-        var s = Math.Sin(-rotateDeg * GeoMath.Deg);
-        return p =>
-        {
-            var d = p - pivot;
-            var r = new Vec3(d.X * c - d.Y * s, d.X * s + d.Y * c, d.Z) * scale;
-            return pivot + r + translate;
-        };
-    }
+    public static Func<Vec3, Vec3> MakeTransform(Vec3 translate, double rotateDeg, Vec3 pivot, double scale) =>
+        // a turn clockwise in plan and one scale along every axis, about the pivot, then the move: the Transform tool's map
+        new SpatialTransform { Pivot = pivot, TiltZ = rotateDeg, ScaleX = scale, ScaleY = scale, ScaleZ = scale, Move = translate }.Matrix.Apply;
 
     /// <summary>Two-point coordinate transformation: maps a1→b1 and a2→b2 (translation, rotation, scale in plan).</summary>
     public static Func<Vec3, Vec3> TwoPointTransform(Vec3 a1, Vec3 a2, Vec3 b1, Vec3 b2, bool allowScale)

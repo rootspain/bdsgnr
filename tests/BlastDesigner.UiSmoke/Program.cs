@@ -122,6 +122,179 @@ Step("bench surface", () => vm.Change("Create surface", p =>
     s.Name = "Bench";
     p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces));
 }));
+Step("transform tool: scale 2 along X typed in its panel shows on the plan, Done applies it as one step of undo, holes stay, Esc goes back", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var c = vm.View.Camera.Target;
+    var line = new PolylineEntity { Points = { new Vec3(c.X - 10, c.Y, c.Z), new Vec3(c.X + 10, c.Y + 4, c.Z) } };
+    var hole = new Hole { Collar = new Vec3(c.X, c.Y - 6, c.Z), Length = 10 };
+    vm.Change("Smoke transform", pr => { pr.Add(line); pr.Add(hole); });
+    vm.Doc!.Select(new[] { line.Id, hole.Id }); Pump();
+    // the button of the tool rail
+    var railButton = window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => ToolTip.GetTip(b) is string tip && tip.StartsWith(BlastDesigner.App.Services.Loc.Ui("Transform: scale, tilt, mirror")))
+        ?? throw new Exception("no Transform button on the tool rail");
+    railButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    var tool = vm.ActiveTool as BlastDesigner.App.Tools.TransformTool ?? throw new Exception("the rail button did not start the Transform tool: " + vm.ActiveTool?.Name);
+    if (tool.Taken.Count != 1 || tool.Taken[0].Id != line.Id) throw new Exception("the tool takes the hole too, or not the line");
+    var proportional = window.GetLogicalDescendants().OfType<CheckBox>().First(b => b.Name == "transformProportional" && b.IsEffectivelyVisible);
+    proportional.IsChecked = false; Pump();
+    var sx = window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(b => b.Name == "transformScaleX" && b.IsEffectivelyVisible) ?? throw new Exception("no Scale X field once out of proportion");
+    sx.Text = "2";
+    sx.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    var want = tool.Current.Apply(line.Points[1]);
+    if (Math.Abs(tool.Current.ScaleX - 2) > 1e-9 || Math.Abs(tool.Current.ScaleY - 1) > 1e-9) throw new Exception($"scale {tool.Current.ScaleX} × {tool.Current.ScaleY}");
+    if (vm.View.Preview.Replaced?.TryGetValue(line.Id, out var copy) != true || Vec3.Distance(((PolylineEntity)copy!).Points[1], want) > 1e-6) throw new Exception("the plan does not show the line scaled");
+    if (Math.Abs(line.Points[1].X - (c.X + 10)) > 1e-9) throw new Exception("the line changed before Done");
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    Shot("50_transform_panel");
+    var lastBefore = vm.Doc.UndoNames[0];
+    var collar = hole.Collar;
+    vm.CompleteTool(); Pump();
+    var now = (PolylineEntity)vm.Project!.FindEntity(line.Id)!;
+    if (Vec3.Distance(now.Points[1], want) > 1e-6) throw new Exception("Done did not scale the line: " + now.Points[1]);
+    if (((Hole)vm.Project.FindEntity(hole.Id)!).Collar != collar) throw new Exception("the hole was transformed");
+    // the newest first; the stack is capped, so its count says nothing
+    if (vm.Doc.UndoNames[0] != BlastDesigner.App.Services.Loc.T("Transform") || vm.Doc.UndoNames[1] != lastBefore) throw new Exception("not one step of undo named Transform: " + string.Join(", ", vm.Doc.UndoNames.Take(3)));
+    if (!tool.Current.IsIdentity || vm.ActiveTool != tool) throw new Exception("after Done the tool should stay with no change set");
+    vm.Undo(); Pump();
+    if (Math.Abs(((PolylineEntity)vm.Project.FindEntity(line.Id)!).Points[1].X - (c.X + 10)) > 1e-9) throw new Exception("one undo did not take the transform back");
+    // Esc: back to no change, the line as it was
+    tool = (BlastDesigner.App.Tools.TransformTool)vm.ActiveTool!;
+    tool.SetTilt(2, 30); Pump();
+    if (!tool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None) || !tool.Current.IsIdentity) throw new Exception("Esc did not take the change back");
+    if (vm.View.Preview.Replaced is { Count: > 0 }) throw new Exception("the preview stays after Esc");
+    vm.SelectTool(); Pump();
+    while (vm.Project!.FindEntity(line.Id) != null) vm.Undo();
+});
+Step("transform tool: corners, sides, the knob and the cross of its frame on the plan; a number typed while dragging; the mirror; a circle keeps the scale in proportion", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var c = vm.View.Camera.Target;
+    var line = new PolylineEntity { Points = { new Vec3(c.X - 10, c.Y - 5, c.Z), new Vec3(c.X + 10, c.Y + 5, c.Z) } };
+    vm.Change("Smoke transform frame", pr => pr.Add(line));
+    vm.Doc!.Select(new[] { line.Id }); Pump();
+    vm.TransformTool(); Pump();
+    var tool = (BlastDesigner.App.Tools.TransformTool)vm.ActiveTool!;
+    var cam = vm.View.Camera;
+    BlastDesigner.App.Controls.ToolPointer At(Vec3 w, bool left = true, Avalonia.Input.KeyModifiers mods = Avalonia.Input.KeyModifiers.None)
+    {
+        var (x, y) = cam.ToScreen(w);
+        return new BlastDesigner.App.Controls.ToolPointer { X = x, Y = y, World = w, Snapped = w, Left = left, Modifiers = mods, ClickCount = 1 };
+    }
+    Vec3 World(BlastDesigner.App.Tools.TransformTool.Handle h)
+    {
+        var (x, y) = tool.HandleAt(h) ?? throw new Exception("no handle " + h);
+        // the plan: the screen back to the ground through the camera's own map
+        var a = cam.ToScreen(new Vec3(c.X, c.Y, c.Z)); var b = cam.ToScreen(new Vec3(c.X + 1, c.Y, c.Z)); var d = cam.ToScreen(new Vec3(c.X, c.Y + 1, c.Z));
+        double ux = b.X - a.X, uy = b.Y - a.Y, vx = d.X - a.X, vy = d.Y - a.Y, det = ux * vy - uy * vx;
+        double rx = x - a.X, ry = y - a.Y;
+        return new Vec3(c.X + (rx * vy - ry * vx) / det, c.Y + (ux * ry - uy * rx) / det, c.Z);
+    }
+    void Drag(BlastDesigner.App.Tools.TransformTool.Handle h, Vec3 to, Avalonia.Input.KeyModifiers mods = Avalonia.Input.KeyModifiers.None)
+    {
+        var from = World(h);
+        if (tool.HandleUnder(cam.ToScreen(from).X, cam.ToScreen(from).Y) != h) throw new Exception("the handle under the cursor is not " + h);
+        tool.PointerPressed(At(from, true, mods)); Pump();
+        tool.PointerMoved(At(to, true, mods)); Pump();
+        tool.PointerReleased(At(to, false, mods)); Pump();
+    }
+    // the north-east corner twice as far from the south-west one: twice the size, in proportion
+    var sw = World(BlastDesigner.App.Tools.TransformTool.Handle.Corner0);
+    var ne = World(BlastDesigner.App.Tools.TransformTool.Handle.Corner2);
+    Drag(BlastDesigner.App.Tools.TransformTool.Handle.Corner2, sw + (ne - sw) * 2);
+    if (Math.Abs(tool.Current.ScaleX - 2) > 0.02 || Math.Abs(tool.Current.ScaleY - 2) > 0.02) throw new Exception($"the corner gave {tool.Current.ScaleX} × {tool.Current.ScaleY}, 2 × 2 expected");
+    if (Vec3.Distance(tool.Current.Apply(line.Points[0]), line.Points[0]) > 0.05) throw new Exception("the opposite corner did not stay");
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    Shot("50b_transform_frame");
+    tool.Reset(); Pump();
+    // the east side, out of proportion: X only
+    tool.SetProportional(false); Pump();
+    var east = World(BlastDesigner.App.Tools.TransformTool.Handle.Side1);
+    var west = World(BlastDesigner.App.Tools.TransformTool.Handle.Side3);
+    Drag(BlastDesigner.App.Tools.TransformTool.Handle.Side1, west + (east - west) * 1.5);
+    if (Math.Abs(tool.Current.ScaleX - 1.5) > 0.02 || Math.Abs(tool.Current.ScaleY - 1) > 1e-9) throw new Exception($"the side gave {tool.Current.ScaleX} × {tool.Current.ScaleY}, 1.5 × 1 expected");
+    tool.Reset(); Pump();
+    // the knob a quarter round the base point
+    var pivot = tool.Current.Pivot;
+    var knob = World(BlastDesigner.App.Tools.TransformTool.Handle.Turn);
+    var r = knob - pivot;
+    Drag(BlastDesigner.App.Tools.TransformTool.Handle.Turn, pivot + new Vec3(r.Y, -r.X, 0), Avalonia.Input.KeyModifiers.Shift);
+    if (Math.Abs(Math.Abs(tool.Current.TiltZ) - 90) > 1e-6) throw new Exception("the knob gave a turn of " + tool.Current.TiltZ);
+    tool.Reset(); Pump();
+    // a number typed while dragging a corner: exactly 1.5
+    var corner = World(BlastDesigner.App.Tools.TransformTool.Handle.Corner1);
+    tool.PointerPressed(At(corner)); Pump();
+    tool.PointerMoved(At(corner + new Vec3(3, -3, 0))); Pump();
+    foreach (var key in new[] { Avalonia.Input.Key.D1, Avalonia.Input.Key.OemPeriod, Avalonia.Input.Key.D5 }) tool.KeyDown(key, Avalonia.Input.KeyModifiers.None);
+    if (!tool.DragText().Contains("1.5")) throw new Exception("the typed number is not shown: " + tool.DragText());
+    tool.KeyDown(Avalonia.Input.Key.Enter, Avalonia.Input.KeyModifiers.None); Pump();
+    if (tool.Dragging != BlastDesigner.App.Tools.TransformTool.Handle.None || Math.Abs(tool.Current.ScaleX - 1.5) > 1e-9 || Math.Abs(tool.Current.ScaleY - 1.5) > 1e-9) throw new Exception($"the typed number gave {tool.Current.ScaleX} × {tool.Current.ScaleY}");
+    tool.Reset(); Pump();
+    // the cross: the base point where it is dropped
+    var target = new Vec3(c.X + 30, c.Y + 30, c.Z);
+    Drag(BlastDesigner.App.Tools.TransformTool.Handle.Pivot, target);
+    if (Vec3.Distance2D(tool.Current.Pivot, target) > 1e-6 || tool.Base != BlastDesigner.App.Tools.TransformTool.BasePoint.Custom) throw new Exception("the cross did not move the base point");
+    // the mirror chip of the panel
+    window.ShowInspectorTab(0); Pump();
+    var mirror = window.GetLogicalDescendants().OfType<Control>().First(b => b.Name == "transformMirrorX" && b.IsEffectivelyVisible);
+    if (mirror is Button mb) mb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    else if (mirror is Avalonia.Controls.Primitives.ToggleButton tb) tb.IsChecked = !tb.IsChecked;
+    Pump();
+    if (!tool.Current.MirrorX) throw new Exception("the Mirror X chip did not mirror");
+    tool.Reset(); Pump();
+    // a circle: the scale stays in proportion
+    var circle = new CircleEntity { Center = new Vec3(c.X, c.Y, c.Z), Radius = 3 };
+    vm.Change("Smoke transform circle", pr => pr.Add(circle));
+    vm.Doc.Select(new[] { line.Id, circle.Id }); Pump();
+    var box = window.GetLogicalDescendants().OfType<CheckBox>().First(b => b.Name == "transformProportional" && b.IsEffectivelyVisible);
+    if (box.IsEnabled || box.IsChecked != true || !tool.Proportional) throw new Exception("with a circle the scale is not kept in proportion");
+    tool.SetScale(0, 2); Pump();
+    if (tool.Current.ScaleY != 2 || tool.Current.ScaleZ != 2) throw new Exception("one axis did not take the others with it");
+    vm.CompleteTool(); Pump();
+    if (Math.Abs(((CircleEntity)vm.Project!.FindEntity(circle.Id)!).Radius - 6) > 1e-9) throw new Exception("the circle did not take the scale");
+    vm.SelectTool(); Pump();
+    while (vm.Project!.FindEntity(line.Id) != null) vm.Undo();
+});
+Step("transform tool in a 3D view: axes from the base point, a cube scales along its axis, an arc tilts; Ctrl+T starts the tool", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var c = vm.View.Camera.Target;
+    var line = new PolylineEntity { Points = { new Vec3(c.X - 10, c.Y, c.Z), new Vec3(c.X + 10, c.Y, c.Z + 4) } };
+    vm.Change("Smoke transform 3D", pr => pr.Add(line));
+    vm.Doc!.Select(new[] { line.Id }); Pump();
+    window.Focus();
+    window.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.T, KeyModifiers = Avalonia.Input.KeyModifiers.Control }); Pump();
+    var tool = vm.ActiveTool as BlastDesigner.App.Tools.TransformTool ?? throw new Exception("Ctrl+T did not start the Transform tool: " + vm.ActiveTool?.Name);
+    var cam = vm.View.Camera;
+    cam.Pitch = 35; cam.Yaw = 30; vm.View.Redraw(); Pump();
+    if (tool.HandleAt(BlastDesigner.App.Tools.TransformTool.Handle.ScaleZ) is not var (zx, zy)) throw new Exception("no cube of the Z axis in the 3D view");
+    if (tool.HandleUnder(zx, zy) != BlastDesigner.App.Tools.TransformTool.Handle.ScaleZ) throw new Exception("the cube of Z is not under the cursor");
+    var (bx, by) = cam.ToScreen(tool.Current.Pivot);
+    BlastDesigner.App.Controls.ToolPointer Ptr(double x, double y, bool left = true) =>
+        new() { X = x, Y = y, World = tool.Current.Pivot, Snapped = tool.Current.Pivot, Left = left, ClickCount = 1 };
+    tool.PointerPressed(Ptr(zx, zy)); Pump();
+    // twice as far out along the axis
+    tool.PointerMoved(Ptr(bx + (zx - bx) * 2, by + (zy - by) * 2)); Pump();
+    tool.PointerReleased(Ptr(bx + (zx - bx) * 2, by + (zy - by) * 2, false)); Pump();
+    if (Math.Abs(tool.Current.ScaleZ - 2) > 0.05 || Math.Abs(tool.Current.ScaleX - 2) > 0.05) throw new Exception($"the Z cube (in proportion) gave {tool.Current.ScaleX} × {tool.Current.ScaleZ}");
+    tool.Reset(); Pump();
+    // the arc of X: a point on it, dragged round the base point
+    var arc = tool.Arc(0).Select(v => cam.ToScreen(v)).ToList();
+    var (ax, ay) = arc[6];
+    if (tool.HandleUnder(ax, ay) is not (BlastDesigner.App.Tools.TransformTool.Handle.TiltX or BlastDesigner.App.Tools.TransformTool.Handle.TiltY or BlastDesigner.App.Tools.TransformTool.Handle.TiltZ)) throw new Exception("no arc under the cursor");
+    var handle = tool.HandleUnder(ax, ay);
+    var (qx, qy) = arc[14];
+    tool.PointerPressed(Ptr(ax, ay)); Pump();
+    tool.PointerMoved(Ptr(qx, qy)); Pump();
+    var tilted = handle switch { BlastDesigner.App.Tools.TransformTool.Handle.TiltX => tool.Current.TiltX, BlastDesigner.App.Tools.TransformTool.Handle.TiltY => tool.Current.TiltY, _ => tool.Current.TiltZ };
+    if (Math.Abs(tilted) < 1) throw new Exception("the arc did not tilt: " + handle);
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    Shot("50c_transform_3d");
+    tool.PointerReleased(Ptr(qx, qy, false)); Pump();
+    tool.Reset();
+    vm.SelectTool(); vm.PlanView(); Pump();
+    while (vm.Project!.FindEntity(line.Id) != null) vm.Undo();
+});
 Step("a line and a dimension have a colour field (picker with OK, By layer); the line types are listed in Russian", () =>
 {
     vm.SelectTool(); vm.PlanView(); Pump();
@@ -4725,7 +4898,6 @@ Step("The edit windows, tables and messages have the look of the input forms and
     Opens("70j_layer", () => vm.EditLayer(vm.Project!.Layers[0]));
     Opens("71b_loading_rules", vm.EditLoadingRules);
     Opens("71c_initiation_rules", vm.EditInitiationRules);
-    Opens("72_transform", () => BlastDesigner.App.Services.Dialogs.EditObject("Transform coordinates", new BlastDesigner.App.ViewModels.TransformParameters()));
     Opens("72b_pattern", () => BlastDesigner.App.Services.Dialogs.EditObject("Pattern properties", new BlastDesigner.Engine.PatternParameters()));
     Opens("72c_las", () => BlastDesigner.App.Services.Dialogs.EditObject("LIDAR import", new BlastDesigner.App.ViewModels.MainViewModel.LasImportOptions()));
     Opens("73_prompt", () => BlastDesigner.App.Services.Dialogs.Prompt("Text", "Text", "abc"));

@@ -309,6 +309,22 @@ public sealed class TimingLineEntity : Entity, IHoleTimer
     public override IEnumerable<Vec3> GetVertices() => Points;
     public override void Translate(Vec3 d) { for (int i = 0; i < Points.Count; i++) Points[i] += d; }
     public override void Transform(Func<Vec3, Vec3> f) { for (int i = 0; i < Points.Count; i++) Points[i] = f(Points[i]); }
+
+    /// <summary>
+    /// The points by the map. A mirror swaps the segments of a chevron, with their delays, so its left one stays on the left;
+    /// the type follows the shape (a scale across may open a chevron or bend a straight one).
+    /// </summary>
+    public override void Transform(SpatialTransform t)
+    {
+        var m = t.Matrix;
+        Transform(m.Apply);
+        if (Front == TimingFrontShape.Chevron && Points.Count == 3 && m.PlanDeterminant < 0)
+        {
+            Points.Reverse();
+            if (Segments.Count == 2) Segments.Reverse();
+        }
+        TypeByShape();
+    }
     public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(Points, p, false);
 
     /// <summary>End of the left (1) or right (2) advanced-burn angle arm, drawn from the first point.</summary>

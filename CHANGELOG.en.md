@@ -6,6 +6,12 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.6 — 2026-11-15
+
+### New
+- **The Transform tool** (a button of the tool rail on the left, Ctrl+T, an item of the context menu): a scale along each axis or in proportion, a tilt about X, Y and Z, mirrors across X and Y, a move — about a base point, along the axes of the world or of an object (a block, a line, a text, a dimension). The plan shows the result at once, Done (Enter) applies it as one step of undo, Esc takes it back. On the plan a frame round the selection: the corners scale in proportion (Shift each axis, Alt from the centre), the sides along one axis, the knob above turns (Shift 15° steps, Ctrl 1°), the cross moves the base point; a number typed while dragging is taken with Enter. In a 3D view axes from the base point: the cubes scale, the arcs tilt. Holes and anything of a pattern of holes are left: they have their own tool. A circle is scaled in proportion only, a block is not tilted about X or Y. The Transform coordinates window now opens this tool.
+- **The hole table is Ctrl+Shift+T:** Ctrl+T now starts the Transform tool.
+
 ## 0.3.5 — 2026-11-14
 
 ### New

@@ -189,6 +189,34 @@ public sealed class BlockEntity : Entity
         Origin = o;
     }
 
+    /// <summary>A block is not tilted about X or Y: its walls stay vertical.</summary>
+    public override bool Takes(SpatialTransform t) => !t.TiltsVertical;
+
+    /// <summary>
+    /// The Transform tool: the origin by the map, the azimuth turned with the length, the length and the width as long as
+    /// the map makes its sides (a scale along axes of the world other than the block's is taken along the block's), the height
+    /// by the scale up. A mirror puts the origin on the far side, so the width goes on the right of the length as before.
+    /// </summary>
+    public override void Transform(SpatialTransform t)
+    {
+        if (!Takes(t)) return;
+        var m = t.Matrix;
+        var u = m.ApplyVector(U * Length).WithZ(0);
+        var v = m.ApplyVector(V * Width).WithZ(0);
+        var origin = m.Apply(Origin);
+        if (u.Length2D < 1e-12) return;
+        Azimuth = Math.Atan2(u.X, u.Y) * 180 / Math.PI;
+        Length = u.Length2D;
+        // the width goes to the right of the length (V); mirrored, it went left: the origin comes from the far side
+        var right = Vec3.Dot(v, V);  // V of the new azimuth
+        Width = v.Length2D;
+        Origin = right >= 0 ? origin : origin + v;
+        Height *= t.ScaleZ;
+        Length = Math.Max(MinSize, Length);
+        Width = Math.Max(MinSize, Width);
+        Height = Math.Max(MinSize, Height);
+    }
+
     public override double PickDistance(Vec3 p) =>
         Edges.Min(e => GeoMath.DistanceToPolyline2D(new[] { Corner(e.A), Corner(e.B) }, p, false));
 }

@@ -32,10 +32,13 @@ public sealed class PreviewOverlay : IOverlay
     /// <summary>Objects being dragged: the scene draws them shifted by <see cref="MoveOffset"/> until the move is applied.</summary>
     public IReadOnlyCollection<Guid>? Moving { get; set; }
     public Vec3 MoveOffset { get; set; }
+    /// <summary>Objects the scene draws as these copies of them, by id, until a change is applied (the Transform tool).</summary>
+    public IReadOnlyDictionary<Guid, Entity>? Replaced { get; set; }
 
     public void Clear()
     {
         Moving = null;
+        Replaced = null;
         MoveOffset = Vec3.Zero;
         Lines.Clear();
         Guides.Clear();

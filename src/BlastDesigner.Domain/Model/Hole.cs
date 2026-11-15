@@ -146,6 +146,9 @@ public sealed class Hole : Entity
 
     public override double PickDistance(Vec3 p) => Math.Max(0, Vec3.Distance2D(Collar, p) - RadiusM);
 
+    /// <summary>The Transform tool leaves holes: a pattern has its own tool, a single hole its properties.</summary>
+    public override bool Takes(SpatialTransform t) => false;
+
     /// <summary>Makes the hole one of its own: no longer on a pattern grid.</summary>
     public void DetachFromPattern()
     {

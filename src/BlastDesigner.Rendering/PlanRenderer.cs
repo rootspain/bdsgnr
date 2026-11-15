@@ -70,6 +70,11 @@ public sealed record SceneOptions
     /// <summary>Objects drawn shifted by <see cref="MoveOffset"/> (live preview while they are dragged).</summary>
     public ISet<Guid>? MovedEntities { get; init; }
     public Vec3 MoveOffset { get; init; }
+    /// <summary>
+    /// Objects drawn as other copies of them, by id (the preview of the Transform tool): the copy takes the place of the
+    /// object in the scene, selected as it is.
+    /// </summary>
+    public IReadOnlyDictionary<Guid, Entity>? Replaced { get; init; }
     /// <summary>The block under the cursor: drawn with all its edges, not only the short ones at its corners.</summary>
     public Guid? HotBlock { get; init; }
     /// <summary>The camera is moving: what is behind a surface is not worked out until it stops (<see cref="ViewState.FadeHidden"/>).</summary>
@@ -211,7 +216,8 @@ public static class PlanRenderer
         // a sheet of a section asks for its grid: the views on the screen go by the switch of the plan, and have none
         if (!opt.HaloPass && opt.ShowGrid == true && opt.SliceHalfWidth != null && cam.Pitch == 0) DrawSectionGrid(canvas, cam, stroke, text);
 
-        var entities = project.Entities.Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity) && (!opt.HaloPass || opt.Selection.Contains(e.Id))).ToList();
+        var replaced = opt.Replaced is { Count: > 0 } swap ? swap : null;
+        var entities = (replaced == null ? project.Entities : project.Entities.Select(e => replaced.TryGetValue(e.Id, out var c) ? c : e)).Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity) && (!opt.HaloPass || opt.Selection.Contains(e.Id))).ToList();
         if (clip != null) entities = entities.SelectMany(e => CutByBlocks(clip, e)).ToList();
         if (view.ReverseDrawOrder) entities.Reverse();
 
@@ -604,9 +610,10 @@ public static class PlanRenderer
         var box = SKRect.Empty;
         if (opt.MovedEntities is { Count: > 0 }) box = screen;
         else
-            foreach (var e in project.Entities)
+            foreach (var original in project.Entities)
             {
-                if (!opt.Selection.Contains(e.Id)) continue;
+                if (!opt.Selection.Contains(original.Id)) continue;
+                var e = opt.Replaced?.TryGetValue(original.Id, out var copy) == true ? copy : original;
                 var b = e.GetBounds();
                 if (b.IsEmpty) continue;
                 for (int i = 0; i < 8; i++)

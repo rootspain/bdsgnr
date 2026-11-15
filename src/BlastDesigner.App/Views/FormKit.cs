@@ -173,7 +173,6 @@ public static class FormLayouts
         [typeof(DesignTolerances)] = Of("m: CollarXY, ToeXY, Depth", S("Position", "CollarXY ToeXY Depth"), S("Direction", "AngleDeg BearingDeg"), S("Redrilling", "RedrillFraction")),
         [typeof(FlyrockModel)] = Of("m: MinimumClearance", S("Flyrock", "SiteK SafetyFactor MinimumClearance")),
         [typeof(SiteCoordinateSystem)] = Of("m: OffsetEasting, OffsetNorthing, OffsetElevation", S("UTM", "UtmZone SouthernHemisphere"), S("Shift", "OffsetEasting OffsetNorthing OffsetElevation")),
-        [typeof(TransformParameters)] = Of("m: MoveX, MoveY, MoveZ, PivotX, PivotY", S("Move", "MoveX MoveY MoveZ"), S("Rotate", "RotateDegrees PivotX PivotY PivotAtCentre"), S("Scale", "Scale")),
         [typeof(MoveCopyParameters)] = Of("m: DeltaX, DeltaY, DeltaZ", S("Shift", "DeltaX DeltaY DeltaZ Copies")),
         [typeof(BatterParameters)] = Of("m: Height; °: FaceAngle", S("Batter", "Height FaceAngle Outwards")),
         [typeof(LaserParameters)] = Of("m: StationX, StationY, StationZ, InstrumentHeight, TargetHeight", S("Station", "StationX StationY StationZ"), S("Heights", "InstrumentHeight TargetHeight")),

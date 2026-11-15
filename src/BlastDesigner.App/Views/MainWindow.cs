@@ -237,7 +237,7 @@ public sealed class MainWindow : Window
         Grid.SetColumn(rail, 0);
         _body.Children.Add(rail);
 
-        // the plan, then the hole table (Ctrl+T) at a fixed height under it, with no splitter between
+        // the plan, then the hole table (Ctrl+Shift+T) at a fixed height under it, with no splitter between
         _center.RowDefinitions = new RowDefinitions("*,0,0");
         var plan = new Panel { ClipToBounds = true };
         plan.Children.Add(new Border { Child = _viewport, Background = Look.Field });
@@ -656,7 +656,7 @@ public sealed class MainWindow : Window
         {
             Key.K => OpenSearch,
             Key.G => _vm.GroupSelected,
-            Key.T => ToggleTable,
+            Key.T => _vm.TransformTool,
             Key.E => () => _ = _vm.FindHole("empty"),
             Key.M => () => _ = _vm.FindHole("misfire"),
             Key.F => () => _ = _vm.FindHole("label"),
@@ -666,6 +666,7 @@ public sealed class MainWindow : Window
         };
         else if (m == shiftCtrl) a = e.Key switch
         {
+            Key.T => ToggleTable,
             Key.V => () => Cmd("Calculations/Visualize timing"),
             Key.Q => () => Cmd("Calculations/Quantities"),
             Key.L => () => Cmd("View/Loading"),

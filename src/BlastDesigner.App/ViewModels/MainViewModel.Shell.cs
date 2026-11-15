@@ -102,7 +102,7 @@ public sealed partial class MainViewModel
                 M("Contours", "iso", "Tools/Surfaces/Create contours…"), M("Volume", "cube", "Tools/Surfaces/Volume…"),
                 M("Recognize (AI)", "wand", "Tools/Surfaces/Recognize bench elements…")),
             G("Lines and polygons", M("Convert", "convert", "Tools/Convert"), M("Move / copy", "pan", "Tools/General functions/Move/copy entities…"),
-                M("Transform", "orbit", "Tools/General functions/Transform coordinates…"), M("Expand polygon", "polygon", "Tools/General functions/Expand polygon…"),
+                M("Transform coordinates", "transform", "Tools/General functions/Transform coordinates…"), M("Expand polygon", "polygon", "Tools/General functions/Expand polygon…"),
                 M("Clip lines", "edit", "Tools/General functions/Clip polylines to be inside polygon"), M("Offset", "polyline", "Tools/General functions/Polyline offset…"),
                 M("Midpoints", "point", "Tools/General functions/Create midpoints of selected segments"), M("Centre of mass", "point", "Tools/General functions/Create centre of mass for polygons"),
                 M("Extend to intersection", "polyline", "Tools/General functions/Extend line to intersection"), M("Clearance zone", "exclusion", "Tools/General functions/Mark clearance zone…"))
@@ -122,7 +122,7 @@ public sealed partial class MainViewModel
                 M("Dummy → holes", "hole", "Tools/Convert/Selected dummy holes to holes")),
             G("Markout and tracks", M("Markout", "markout", "View/Markout"), Tb("Distance at depth", "measure", "Hole measure"), M("Reset design tracks", "bore", "Tools/Holes/Reset design tracks"),
                 M("Collars onto surface", "slice", "Tools/Holes/Move collars onto surface…"), M("Lengths to grade", "slice", "Tools/Holes/Set lengths to grade surface…")),
-            G("Data", M("Table", "table", "View/Table view", "Ctrl T", true))
+            G("Data", M("Table", "table", "View/Table view", "Ctrl⇧T", true))
         }),
         new Stage("Loading", new()
         {
@@ -193,6 +193,7 @@ public sealed partial class MainViewModel
         ("prev", "Previous view", "⇧Z", false, UndoZoom, null),
         ("orbit", "Rotate 3D", "O", true, () => SetTool(new RotateTool(this, false)), "Rotate"),
         ("north", "North up / rotate plan", "N", false, () => SetTool(new RotateTool(this, true)), "North"),
+        ("transform", "Transform: scale, tilt, mirror", "Ctrl+T", false, TransformTool, "Transform"),
         ("measure", "Measure", "M", true, MeasureTool, "Measure"),
         ("polyline", "Drawing: polyline (others in the list)", "W", false, RunDrawingTool, "Polyline"),
         ("snap", "Snap to objects", "S", true, ToggleSnap, null),
@@ -283,7 +284,8 @@ public sealed partial class MainViewModel
         {
             Separator,
             Item("Cut", Cut, W, "Ctrl+X"), Item("Copy", Copy, null, "Ctrl+C"), Item("Delete", DeleteSelected, W, "Delete"),
-            Item("Group", GroupSelected, W, "Ctrl+G"), Item("Ungroup", UngroupSelected, W), Item("Hide layers", HideSelectedLayers)
+            Item("Group", GroupSelected, W, "Ctrl+G"), Item("Ungroup", UngroupSelected, W), Item("Hide layers", HideSelectedLayers),
+            Item("Transform", TransformTool, W, "Ctrl+T")
         };
         var props = Item("Properties…", () => Window.ShowInspectorTab(0), null, "Enter");
         if (sel.Count == 0)
@@ -355,9 +357,9 @@ public sealed partial class MainViewModel
             "straight front" => new[]
             {
                 props, Item("Convert line to chevron", ConvertSelectedLinesToChevrons, W), Separator,
-                Item("Select like", SelectLike), Item("Select exact", SelectExact), Item("Transform coordinates..", TransformCoordinates, W)
+                Item("Select like", SelectLike), Item("Select exact", SelectExact)
             }.Concat(edit),
-            _ => new[] { props, Item("Select like", SelectLike), Item("Select exact", SelectExact), Item("Transform coordinates..", TransformCoordinates, W) }.Concat(edit)
+            _ => new[] { props, Item("Select like", SelectLike), Item("Select exact", SelectExact) }.Concat(edit)
         };
     }
 

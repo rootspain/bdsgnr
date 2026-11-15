@@ -635,9 +635,78 @@ public sealed class ToolPanel : Border
             _fields.Children.Add(Labelled("Shape", shapes));
         }
         if (tool is PatternRotateTool rotate) RotateFields(rotate);
+        if (tool is TransformTool transform) TransformFields(transform);
         if (tool.Name is "Set" or "Row set")
             _fields.Children.Add(Field("Step, ms", _vm.Project.Electronic.HoleIntervalMs, v => _vm.Change("Electronic settings", p => p.Electronic.HoleIntervalMs = v)));
         _fieldsScroll.IsVisible = _fields.Children.Count > 0;
+    }
+
+    /// <summary>
+    /// Panel of the Transform tool: the scale (one field in proportion, else one an axis), the tilts, the mirrors, the move,
+    /// the axes, the base point (with its coordinates when it is one of the user's) and Reset.
+    /// </summary>
+    private void TransformFields(TransformTool tool)
+    {
+        var t = tool.Current;
+        if (tool.Proportional) _fields.Children.Add(Field("Scale", t.ScaleX, v => { if (!tool.SetScale(0, v)) _vm.RefreshToolPanel(); }, "transformScale"));
+        else
+            foreach (var (axis, label) in new[] { (0, "Scale X"), (1, "Scale Y"), (2, "Scale Z") })
+            {
+                var a = axis;
+                var value = axis switch { 0 => t.ScaleX, 1 => t.ScaleY, _ => t.ScaleZ };
+                _fields.Children.Add(Field(label, value, v => { if (!tool.SetScale(a, v)) _vm.RefreshToolPanel(); }, "transformScale" + "XYZ"[axis]));
+            }
+        var lockBox = new CheckBox { Content = Loc.Ui("In proportion"), IsChecked = tool.Proportional, IsEnabled = !tool.HasCircle, Name = "transformProportional", VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(lockBox, Loc.Ui(tool.HasCircle ? "A circle is selected: the scale is only in proportion" : "On: one scale along every axis. Off: a scale along each axis"));
+        lockBox.IsCheckedChanged += (_, _) => { if ((lockBox.IsChecked == true) != tool.Proportional) tool.SetProportional(lockBox.IsChecked == true); };
+        _fields.Children.Add(lockBox);
+        foreach (var (axis, label, tip) in new[]
+        {
+            (0, "Tilt X, °", "About the X axis of the frame, by the right-hand rule: north goes up"),
+            (1, "Tilt Y, °", "About the Y axis of the frame, by the right-hand rule: up goes east"),
+            (2, "Tilt Z, °", "About the vertical, clockwise seen from above, as bearings go")
+        })
+        {
+            var a = axis;
+            var value = axis switch { 0 => t.TiltX, 1 => t.TiltY, _ => t.TiltZ };
+            _fields.Children.Add(Field(label, value, v => { if (!tool.SetTilt(a, v)) _vm.RefreshToolPanel(); }, "transformTilt" + "XYZ"[axis], Loc.Ui(tip)));
+        }
+        foreach (var (axis, label, tip, on) in new[]
+        {
+            (0, "Mirror X", "Mirror across the X axis of the frame, through the base point: X changes its sign. Again takes it off", t.MirrorX),
+            (1, "Mirror Y", "Mirror across the Y axis of the frame, through the base point: Y changes its sign. Again takes it off", t.MirrorY)
+        })
+        {
+            var a = axis;
+            var chip = Ui.Chip(Loc.Ui(label), () => tool.ToggleMirror(a), on, Loc.Ui(tip));
+            chip.Name = "transformMirror" + "XY"[axis];
+            _fields.Children.Add(Labelled(" ", chip));
+        }
+        foreach (var (axis, label) in new[] { (0, "Move X, m"), (1, "Move Y, m"), (2, "Move Z, m") })
+        {
+            var a = axis;
+            var value = axis switch { 0 => t.Move.X, 1 => t.Move.Y, _ => t.Move.Z };
+            _fields.Children.Add(Field(label, value, v => tool.SetMove(a, v), "transformMove" + "XYZ"[axis]));
+        }
+        var axes = new ComboBox { ItemsSource = new[] { "Of the world", "Of the object" }.Select(Loc.Ui).ToList(), SelectedIndex = tool.ObjectAxes ? 1 : 0, Width = 120, Height = 26, Name = "transformAxes", IsEnabled = tool.ObjectAxesAvailable };
+        ToolTip.SetTip(axes, Loc.Ui("Of the world: X east, Y north. Of the object: along a block, a line, a text or a dimension (the first selected)"));
+        axes.SelectionChanged += (_, _) => { if (axes.SelectedIndex >= 0 && (axes.SelectedIndex == 1) != tool.ObjectAxes) tool.SetObjectAxes(axes.SelectedIndex == 1); };
+        _fields.Children.Add(Labelled("Axes", axes));
+        var bases = new[] { "Centre of the frame", "Centre of the bottom", "South-west corner", "South-east corner", "North-east corner", "North-west corner", "A point of its own" };
+        var basePoint = new ComboBox { ItemsSource = bases.Select(Loc.Ui).ToList(), SelectedIndex = (int)tool.Base, Width = 170, Height = 26, Name = "transformBase" };
+        ToolTip.SetTip(basePoint, Loc.Ui("What the scale, the tilts and the mirrors go about. Drag the cross on the plan to put it anywhere (it snaps to objects)"));
+        basePoint.SelectionChanged += (_, _) => { if (basePoint.SelectedIndex >= 0 && basePoint.SelectedIndex != (int)tool.Base) tool.SetBase((TransformTool.BasePoint)basePoint.SelectedIndex); };
+        _fields.Children.Add(Labelled("Base point", basePoint));
+        if (tool.Base == TransformTool.BasePoint.Custom)
+            foreach (var (axis, label) in new[] { (0, "Base X"), (1, "Base Y"), (2, "Base Z") })
+            {
+                var a = axis;
+                var value = axis switch { 0 => t.Pivot.X, 1 => t.Pivot.Y, _ => t.Pivot.Z };
+                _fields.Children.Add(Field(label, value, v => tool.SetPivotCoordinate(a, v), "transformPivot" + "XYZ"[axis]));
+            }
+        var reset = Ui.Chip(Loc.Ui("Reset"), tool.Reset, false, Loc.Ui("Back to no change: scale 1, no tilt, no mirror, no move"));
+        reset.Name = "transformReset";
+        _fields.Children.Add(Labelled(" ", reset));
     }
 
     /// <summary>Panel of the rotate tool: a turn typed in or by a quarter, along a line, and how the pattern follows.</summary>

@@ -147,6 +147,7 @@ public sealed class Viewport : Control
             AnalysisOverlays = opt.AnalysisOverlays,
             MovedEntities = Preview.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null,
             MoveOffset = Preview.MoveOffset,
+            Replaced = Preview.Replaced,
             HotBlock = HotBlock,
             // what is behind a surface is worked out once the camera stops
             CameraMoving = System.Diagnostics.Stopwatch.GetElapsedTime(_cameraMovedAt).TotalMilliseconds < SettleMs

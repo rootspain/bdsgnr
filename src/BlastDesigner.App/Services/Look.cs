@@ -108,6 +108,8 @@ public static class Look
         ["prev"] = "M3 12a9 9 0 1 0 3-6.7 M3 4v4h4",
         ["orbit"] = "M12 3l8 4.5v9L12 21l-8-4.5v-9z M12 12l8-4.5 M12 12v9 M12 12L4 7.5",
         ["north"] = "M12 3l5 18-5-4-5 4z",
+        // a frame with two of its handles and the arrow of a turn: the Transform tool
+        ["transform"] = "M6 8h10v10H6z M4 6h4v4H4z M14 16h4v4h-4z M14 3a7 7 0 0 1 7 7 M21 10l-2.6-1.1 M21 10l1.1-2.6",
         ["snap"] = "M6 4v8a6 6 0 0 0 12 0V4 M6 4h4v8a2 2 0 0 0 4 0V4h4 M6 8h4 M14 8h4",
         ["gridi"] = "M4 4h16v16H4z M4 12h16 M12 4v16",
         ["layers"] = "M12 3l9 5-9 5-9-5z M3 12l9 5 9-5 M3 16l9 5 9-5",
