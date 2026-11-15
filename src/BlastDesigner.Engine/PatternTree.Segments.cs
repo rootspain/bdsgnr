@@ -289,6 +289,8 @@ public static partial class PatternTree
             }
             else gone.Add(h.Id);
         }
+        // what the seam rule did at the last layout is taken back; it is applied again below
+        gone.AddRange(PatternSeams.Reset(p, root, leaves));
         DeleteHoles(p, gone);
         report.DeletedIds.AddRange(gone);
         // a value a segment now makes its holes with differently goes to the holes it has (they can all be laid out again)
@@ -311,6 +313,19 @@ public static partial class PatternTree
             report.DeletedIds.AddRange(r.DeletedIds);
             foreach (var id in r.AddedIds) added.Add(id);
         }
+        // the seam rule: the segments whose holes it took away or moved are laid out again
+        foreach (var leaf in PatternSeams.Apply(p, root, o))
+        {
+            var r = HoleDesign.RebuildPattern(p, leaf, o);
+            report.Moved += r.Moved;
+            report.Deleted += r.Deleted;
+            report.TiesLost += r.TiesLost;
+            report.DeletedIds.AddRange(r.DeletedIds);
+            report.AddedIds.AddRange(r.AddedIds);
+        }
+        report.AddedIds.AddRange(root.SeamAdded);
+        report.Added += root.SeamAdded.Count;
+        foreach (var id in root.SeamAdded) added.Add(id);
         // rows the holes left (of the parent before the cut, of segments joined to others) go
         var kept = leaves.SelectMany(l => l.RowIds.Values).ToHashSet();
         p.Rows.RemoveAll(r => treeRows.Contains(r.Id) && !kept.Contains(r.Id) && r.HoleIds.Count == 0);
@@ -360,6 +375,8 @@ public static partial class PatternTree
         }
         MoveRows(p, rows.Select(r => r.Id).ToList(), rowsAt);
         var ordered = rows.SelectMany(r => r.HoleIds).Select(p.FindEntity).OfType<Hole>().ToList();
+        // the holes the seam rule put in gaps are in no row: they take the numbers after the others
+        ordered.AddRange(root.SeamAdded.Select(p.FindEntity).OfType<Hole>());
         HoleDesign.Number(p, root, ordered, added ?? new HashSet<Guid>());
     }
 
@@ -645,6 +662,26 @@ public static partial class PatternTree
             if (d < bestD) { bestD = d; best = c; }
         }
         return best.WithZ(root.Center.Z);
+    }
+
+    /// <summary>
+    /// Lays a pattern cut into segments out on its polygon again after the polygon was edited, as
+    /// <see cref="HoleDesign.FitToOutline"/> does for one that is not: the outline of the parent is cut again, the segments follow it.
+    /// </summary>
+    public static PatternRebuildReport FitToOutline(BlastProject p, HolePattern root, IReadOnlyList<Vec3> polygon, PatternRebuildOptions? o = null)
+    {
+        o ??= PatternRebuildOptions.For(p);
+        if (TreeRefusal(p, root, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        root.Outline = polygon.Select(q => q.WithZ(root.Center.Z)).ToList();
+        if (root.FaceEdge != null || root.Alignment != RowAlignment.Left)
+        {
+            if (root.FaceEdge is int k && k >= polygon.Count) root.FaceEdge = HoleDesign.LongestEdge(polygon);
+            root.Center = HoleDesign.AreaCentre(polygon).WithZ(root.Center.Z);
+            var before = root.Azimuth;
+            HoleDesign.Anchor(root);
+            o.BearingDelta = PatternTurn.Turn(before, root.Azimuth);
+        }
+        return Relayout(p, root, o);
     }
 
     /// <summary>A new burden and spacing for a pattern and its tree: the grid of the parent placed again, its segments following.</summary>

@@ -100,8 +100,12 @@ public sealed partial class MainViewModel
             if (p.FindPattern(patternId) is not { } x) return new PatternRebuildReport();
             var leaves = PatternTree.Leaves(p, r);
             var before = leaves.ToDictionary(l => l.Id, l => (PatternTree.EffectiveDepthMode(l), l.ToLevel, l.HoleDefaults.BenchHeight));
+            var depths = leaves.ToDictionary(l => l.Id, l => l.HoleDefaults.Depth.Clone());
             set(x);
             PatternTree.Resolve(p, r);
+            // a new depth of a segment is taken by all its holes, those edited by hand too
+            foreach (var leaf in leaves.Where(l => !depths[l.Id].SameAs(l.HoleDefaults.Depth)))
+                foreach (var h in HoleDesign.PatternHoles(p, leaf)) h.DepthManual = false;
             foreach (var leaf in leaves)
                 if (before[leaf.Id] != (PatternTree.EffectiveDepthMode(leaf), leaf.ToLevel, leaf.HoleDefaults.BenchHeight) && (always || before[leaf.Id].Item1 != PatternTree.EffectiveDepthMode(leaf) || before[leaf.Id].Item2 != leaf.ToLevel))
                     PatternTree.FollowDepthMode(p, leaf, o);

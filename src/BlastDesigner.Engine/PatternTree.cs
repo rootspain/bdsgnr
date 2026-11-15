@@ -107,6 +107,36 @@ public static partial class PatternTree
         return grid != (s.Burden, s.Spacing, s.Type, s.Azimuth, s.Alignment, s.EdgeOffset);
     }
 
+    /// <summary>Whether a hole is one the seam rule of its pattern added in a gap (it has no node).</summary>
+    public static bool IsSeamHole(BlastProject p, Hole h) =>
+        p.FindPattern(h.PatternId) is { } pat && Root(p, pat).SeamAdded.Contains(h.Id);
+
+    /// <summary>
+    /// Moves or turns a pattern cut into segments with all its holes (<see cref="HoleDesign.FollowPatterns"/>): its outline
+    /// and centre, those of its segments, the sides of their cuts and their directions; the cut lines go along, being in the
+    /// axes of its grid.
+    /// </summary>
+    public static void Transform(BlastProject p, HolePattern root, Func<Vec3, Vec3> f, double turn)
+    {
+        List<Vec3> Moved(List<Vec3> pts) => pts.Select(x => f(x).WithZ(x.Z)).ToList();
+        foreach (var pat in new[] { root }.Concat(Descendants(p, root)))
+        {
+            pat.Outline = Moved(pat.Outline);
+            pat.OutlineParts = pat.OutlineParts.Select(Moved).ToList();
+            if (pat.EdgeOutline != null) pat.EdgeOutline = Moved(pat.EdgeOutline);
+            foreach (var c in pat.Cuts)
+            {
+                var at = f(new Vec3(c.X, c.Y, 0));
+                var tip = f(new Vec3(c.X + c.NX, c.Y + c.NY, 0));
+                (c.X, c.Y, c.NX, c.NY) = (at.X, at.Y, tip.X - at.X, tip.Y - at.Y);
+            }
+            pat.Center = f(pat.Center).WithZ(pat.Center.Z);
+            pat.Azimuth = GeoMath.NormalizeBearing(pat.Azimuth + turn);
+            pat.InitialAzimuth = GeoMath.NormalizeBearing(pat.InitialAzimuth + turn);
+            if (pat.Overrides.Azimuth is double az) pat.Overrides.Azimuth = GeoMath.NormalizeBearing(az + turn);
+        }
+    }
+
     /// <summary>
     /// The depth mode of a pattern in effect: a rectangle mode as set, else the one its older fields give (to the surface,
     /// to a level, or one depth), which may have been set by code that knows only them.

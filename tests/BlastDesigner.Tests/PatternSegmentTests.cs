@@ -399,6 +399,195 @@ public class PatternSegmentTests
         Assert.Equal(straight.V1, straight.V2);
     }
 
+    // ---- stage 4: seams and what follows a change ----
+
+    /// <summary>A pattern cut in two in a document, its polygon in the project.</summary>
+    private static (Document Doc, Guid Root, Guid Polygon) CutInDocument(IReadOnlyList<Vec3> outline, int count = 2)
+    {
+        var (p, root) = Make(outline, PatternType.Staggered);
+        var polygon = new PolylineEntity { Closed = true, Points = outline.ToList() };
+        p.Add(polygon, p.DefaultLayer);
+        root.OutlineEntityId = polygon.Id;
+        PatternTree.Split(p, root, count);
+        return (new Document(p), root.Id, polygon.Id);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    public void MovingOrTurningAllTheHoles_TakesTheParentItsSegmentsAndLinesAlong(double turn)
+    {
+        var (doc, rootId, _) = CutInDocument(Field, 3);
+        var p0 = doc.Project;
+        var root0 = p0.FindPattern(rootId)!;
+        var lines = root0.SegmentLines.Select(l => (l.U1, l.V1, l.U2, l.V2)).ToList();
+        var labels = p0.Holes.ToDictionary(h => h.Id, h => (h.Label, h.PatternId));
+        var f = GeneralOps.MakeTransform(new Vec3(12, -7, 0), turn, root0.Center, 1);
+        doc.Execute("Move", pr =>
+        {
+            foreach (var h in PatternTree.TreeHoles(pr, pr.FindPattern(rootId)!).ToList()) h.Transform(f);
+            // the polygon goes with them, as when the selection is moved
+            foreach (var l in pr.Entities.OfType<PolylineEntity>()) l.Transform(f);
+        });
+        var p = doc.Project;
+        var root = p.FindPattern(rootId)!;
+        Assert.True(root.IsContainer);
+        Assert.Equal(lines, root.SegmentLines.Select(l => (l.U1, l.V1, l.U2, l.V2)).ToList());
+        Assert.Equal(GeoMath.NormalizeBearing(turn), root.Azimuth, 9);
+        Assert.All(PatternTree.Children(p, root), s => Assert.Equal(root.Azimuth, s.Azimuth, 9));
+        Assert.All(p.Holes, h => Assert.Null(h.GridOffset));
+        // laid out again where it is now, nothing moves
+        var collars = p.Holes.ToDictionary(h => h.Id, h => h.Collar);
+        var report = PatternTree.Relayout(p, root);
+        Assert.Equal(0, report.Moved + report.Added + report.Deleted);
+        Assert.All(p.Holes, h => Assert.True(Vec3.Distance2D(collars[h.Id], h.Collar) < 1e-6));
+        Assert.All(p.Holes, h => Assert.Equal(labels[h.Id], (h.Label, h.PatternId)));
+    }
+
+    [Fact]
+    public void MovingTheHolesOfOneSegment_KeepsThemAsOffsets_TheSegmentStaysInItsPart()
+    {
+        var (doc, rootId, _) = CutInDocument(Rectangle);
+        var seg = PatternTree.Children(doc.Project, doc.Project.FindPattern(rootId)!)[0];
+        var centre = seg.Center;
+        doc.Execute("Move", pr =>
+        {
+            foreach (var h in HoleDesign.PatternHoles(pr, pr.FindPattern(seg.Id)!).ToList()) h.Collar += new Vec3(0.5, 0, 0);
+        });
+        var s = doc.Project.FindPattern(seg.Id)!;
+        Assert.Equal(centre, s.Center);
+        Assert.All(HoleDesign.PatternHoles(doc.Project, s), h => Assert.Equal(0.5, h.GridOffset!.Value.Length2D, 9));
+    }
+
+    [Fact]
+    public void EditingThePolygonOfTheParent_CutsItAgain()
+    {
+        var (doc, rootId, polygonId) = CutInDocument(Rectangle);
+        var segments = PatternTree.Children(doc.Project, doc.Project.FindPattern(rootId)!).Count;
+        var before = doc.Project.Holes.Count();
+        // the north side moved 8 m further out
+        doc.Execute("Move vertex", pr =>
+        {
+            var line = (PolylineEntity)pr.FindEntity(polygonId)!;
+            line.Points[2] = line.Points[2] + new Vec3(0, 8, 0);
+            line.Points[3] = line.Points[3] + new Vec3(0, 8, 0);
+        });
+        var p = doc.Project;
+        var root = p.FindPattern(rootId)!;
+        Assert.True(root.IsContainer);
+        Assert.Equal(segments, PatternTree.Children(p, root).Count);
+        Assert.Equal(31, root.Outline.Max(q => q.Y), 9);
+        Assert.True(p.Holes.Count() > before);
+        Assert.All(p.Holes, h => Assert.NotEqual(root.Id, h.PatternId));
+        // north is the face here (the blast goes north): the new rows are in the front segment
+        Assert.True(PatternTree.Children(p, root)[0].Outline.Max(q => q.Y) > 30);
+    }
+
+    [Fact]
+    public void ALengthEditedByHand_IsKeptThroughALayout_UntilTheDepthChanges()
+    {
+        var (p, root) = Make(Rectangle);
+        root.HoleDefaults.Depth = new DepthSpec { Mode = DepthMode.SurfaceToRect, Front = new DepthPair(90, 90), Back = new DepthPair(88, 88) };
+        PatternTree.SyncLegacyDepth(root);
+        HoleDesign.RebuildPattern(p, root);
+        var doc = new Document(p);
+        var id = p.Holes.First().Id;
+        doc.Execute("Hole length", pr => { var h = (Hole)pr.FindEntity(id)!; h.ToLevel = 85; h.Length = HoleLevel.Length(h)!.Value; });
+        var hand = (Hole)doc.Project.FindEntity(id)!;
+        Assert.True(hand.DepthManual);
+        HoleDesign.RebuildPattern(doc.Project, doc.Project.Patterns[0]);
+        Assert.Equal(85, hand.ToLevel);
+        Assert.Equal(100 - 85 + 1, hand.Length, 9);
+        Assert.All(doc.Project.Holes.Where(h => h.Id != id), h => Assert.False(h.DepthManual));
+    }
+
+    /// <summary>
+    /// Two segments whose holes come close at the seam: the cut line half a metre in front of a row of the back segment, the
+    /// front one finer (2.5 × 3) laid from its back side, so its last row is 1.25 m in front of the line.
+    /// </summary>
+    private static (BlastProject P, HolePattern Root, List<HolePattern> Seg) CloseSeam()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var v = root.PhaseV + 3 * root.Burden - 0.5;
+        root.SegmentLines[0] = new SegmentLine { U1 = -50, V1 = v, U2 = 50, V2 = v };
+        var seg = PatternTree.Children(p, root);
+        seg[0].Overrides.Burden = 2.5;
+        seg[0].Overrides.Spacing = 3;
+        seg[0].AnchorSide = PatternAnchorSide.Back;
+        PatternTree.Relayout(p, root);
+        return (p, root, seg);
+    }
+
+    [Fact]
+    public void Seams_FindTheHolesTooClose_AndTheRuleTakesTheCoarserOnesAway()
+    {
+        var (p, root, seg) = CloseSeam();
+        var close = PatternSeams.Check(p, root).Where(x => x.Kind == SeamIssueKind.Close).ToList();
+        Assert.NotEmpty(close);
+        Assert.All(close, x => Assert.True(x.Distance < Math.Max(0.6 * 3, 2)));
+        var count = p.Holes.Count();
+
+        root.SeamRule = SeamRule.Drop;
+        PatternTree.Relayout(p, root);
+        Assert.Empty(PatternSeams.Check(p, root).Where(x => x.Kind == SeamIssueKind.Close));
+        Assert.True(p.Holes.Count() < count);
+        // the coarser grid (the back segment) lost them
+        Assert.NotEmpty(seg[1].SeamDropped);
+        Assert.Empty(seg[0].SeamDropped);
+        // back to a warning: the holes come back
+        root.SeamRule = SeamRule.Warn;
+        PatternTree.Relayout(p, root);
+        Assert.Equal(count, p.Holes.Count());
+        Assert.Empty(seg[1].SeamDropped);
+        Assert.Equal(p.Holes.Count(), p.Holes.Select(h => h.Label).Distinct().Count());
+    }
+
+    [Fact]
+    public void Seams_OneHoleInTheMiddle_IsTakenBackByTheNextLayout()
+    {
+        var (p, root, seg) = CloseSeam();
+        var count = p.Holes.Count();
+        var close = PatternSeams.Check(p, root).Count(x => x.Kind == SeamIssueKind.Close);
+        root.SeamRule = SeamRule.Merge;
+        PatternTree.Relayout(p, root);
+        // the finer front segment keeps its hole of each pair, moved to the middle
+        Assert.NotEmpty(seg[0].SeamOffsets);
+        Assert.True(p.Holes.Count() < count);
+        Assert.True(PatternSeams.Check(p, root).Count(x => x.Kind == SeamIssueKind.Close) < close);
+        root.SeamRule = SeamRule.Warn;
+        PatternTree.Relayout(p, root);
+        Assert.Empty(seg[0].SeamOffsets);
+        Assert.Equal(count, p.Holes.Count());
+        Assert.All(p.Holes, h => Assert.Null(h.GridOffset));
+    }
+
+    [Fact]
+    public void Seams_AGap_GetsAHoleInTheMiddle_TakenAwayByTheNextLayout()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var seg = PatternTree.Children(p, root);
+        // the first row of the back segment emptied by hand: nothing across the seam within 1.5 burdens
+        var first = HoleDesign.PatternHoles(p, seg[1]).Min(h => h.GridJ!.Value);
+        foreach (var h in HoleDesign.PatternHoles(p, seg[1]).Where(h => h.GridJ == first)) seg[1].Suppressed.Add(new GridIndex { I = h.GridI!.Value, J = first });
+        PatternTree.Relayout(p, root);
+        Assert.Contains(PatternSeams.Check(p, root), x => x.Kind == SeamIssueKind.Gap);
+        var count = p.Holes.Count();
+        root.SeamFillGaps = true;
+        PatternTree.Relayout(p, root);
+        Assert.NotEmpty(root.SeamAdded);
+        Assert.Equal(count + root.SeamAdded.Count, p.Holes.Count());
+        var added = root.SeamAdded.Select(id => H(p, id)).ToList();
+        Assert.All(added, h => Assert.False(string.IsNullOrEmpty(h.Label)));
+        Assert.All(added, h => Assert.Null(h.GridI));
+        Assert.Equal(p.Holes.Count(), p.Holes.Select(h => h.Label).Distinct().Count());
+        root.SeamFillGaps = false;
+        PatternTree.Relayout(p, root);
+        Assert.Empty(root.SeamAdded);
+        Assert.Equal(count, p.Holes.Count());
+    }
+
     [Fact]
     public void DissolvingTheParent_TakesItsSegments()
     {

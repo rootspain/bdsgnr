@@ -3309,3 +3309,18 @@ ui:Back edge	Задний край
 ui:Level, m	Уровень, м
 ui:Depth, m	Глубина, м
 ui:Pattern segments	Сегменты
+seams	стыки
+ui:no problems	без замечаний
+ui:{0} close pairs, {1} gaps, {2} crossings	близких пар: {0}, зазоров: {1}, сближений стволов: {2}
+ui:Seams	Стыки
+ui:Warn	Предупреждать
+ui:Remove the hole of the coarser grid	Убирать скважину более редкой сетки
+ui:One hole in the middle	Одна скважина посередине
+ui:Two holes of different segments closer than 0.6 of the smaller spacing (or 2 m)	Две скважины разных сегментов ближе 0,6 меньшего расстояния (или 2 м)
+ui:Holes too close	Близкие скважины
+ui:A hole in the middle of a gap at a seam	Скважина посередине зазора на стыке
+Rows laid from	Ряды от
+ui:Rows laid from	Ряды от
+ui:the face side	забоя
+ui:the back side	тыльной стороны
+ui:With a burden of its own, the first row of the segment is half a burden inside this side	При собственной ЛНС первый ряд сегмента стоит на половину ЛНС внутрь от этой стороны

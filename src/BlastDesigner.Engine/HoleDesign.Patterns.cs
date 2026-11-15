@@ -128,7 +128,7 @@ public static partial class HoleDesign
     private static List<Vec3> FlatOutline(IReadOnlyList<Vec3> polygon, double z) => polygon.Select(p => p.WithZ(z)).ToList();
 
     /// <summary>Centre of the area of a polygon, worked out from its first point (map coordinates are large); Z is the mean.</summary>
-    private static Vec3 AreaCentre(IReadOnlyList<Vec3> polygon)
+    internal static Vec3 AreaCentre(IReadOnlyList<Vec3> polygon)
     {
         var o = polygon[0];
         var c = GeoMath.Centroid(polygon.Select(p => new Vec3(p.X - o.X, p.Y - o.Y, p.Z)).ToList());
@@ -353,7 +353,8 @@ public static partial class HoleDesign
     public static PatternPlan PlanPattern(BlastProject p, HolePattern pat)
     {
         var plan = new PatternPlan();
-        var suppressed = pat.Suppressed.Select(s => (s.I, s.J)).ToHashSet();
+        // nodes emptied by hand, and those the seam rule of a segment emptied
+        var suppressed = pat.Suppressed.Concat(pat.SeamDropped).Select(s => (s.I, s.J)).ToHashSet();
         var free = new Dictionary<(int, int), PatternNode>();
         foreach (var n in PatternNodes(pat))
             if (!suppressed.Contains((n.I, n.J))) free[(n.I, n.J)] = n;
@@ -446,8 +447,10 @@ public static partial class HoleDesign
 
         foreach (var (h, node, target) in plan.Moves)
         {
-            var rd = RectDepth(node.I, node.J);
+            // a depth edited by hand stays as it is, its collar elevation with it
+            var rd = h.DepthManual ? null : RectDepth(node.I, node.J);
             var collar = depth.Mode == DepthMode.RectToLevel && rd is double dz ? target.WithZ(depth.Level + dz)
+                : depth.Mode == DepthMode.RectToLevel && h.DepthManual ? target.WithZ(h.Collar.Z)
                 : o.CollarSurface?.ElevationAt(target.X, target.Y) is double cz ? target.WithZ(cz) : target;
             var shift = collar - h.Collar;
             if (shift.Length2D > 1e-9) report.Moved++;
@@ -583,20 +586,44 @@ public static partial class HoleDesign
     /// Follows a change of a document (<see cref="Domain.Document.Followers"/>) for the patterns it did not lay out itself:
     /// a pattern hole deleted by hand leaves its node empty from then on; one moved by hand keeps its offset from the node;
     /// all the holes of a pattern moved or turned together take the grid with them; a copy of a pattern hole is a hole of its own.
+    /// A pattern cut into segments goes along only when all the holes of all its segments moved together (its segments and
+    /// cut lines with it); the holes of one segment moved together keep their offsets, as the segment stays in its part.
+    /// The length or level of a hole with a depth from/to edited by hand is kept from then on (<see cref="Hole.DepthManual"/>).
     /// </summary>
     public static Action? FollowPatterns(BlastProject project)
     {
         if (project.Patterns.Count == 0) return null;
         var holesBefore = project.Patterns.ToDictionary(pat => pat.Id, _ => new Dictionary<Guid, (Vec3 Collar, int? I, int? J)>());
+        var depthBefore = new Dictionary<Guid, (double Length, double? Level, double Z, double Angle, double Subdrill)>();
         foreach (var h in project.Holes)
-            if (h.PatternId is Guid id && holesBefore.TryGetValue(id, out var list)) list[h.Id] = (h.Collar, h.GridI, h.GridJ);
+        {
+            if (h.PatternId is not Guid id || !holesBefore.TryGetValue(id, out var list)) continue;
+            list[h.Id] = (h.Collar, h.GridI, h.GridJ);
+            if (project.FindPattern(id)!.HoleDefaults.Depth.UsesRectangle) depthBefore[h.Id] = (h.Length, h.ToLevel, h.Collar.Z, h.Angle, h.Subdrill);
+        }
         var before = project.Patterns.Select(pat => (pat, pat.Revision)).ToList();
+        var revisions = before.ToDictionary(x => x.pat.Id, x => x.Revision);
         return () =>
         {
             var now = project.Holes.ToDictionary(h => h.Id);
+            // a pattern cut into segments with all its holes moved or turned together: the whole tree goes along
+            var handled = new HashSet<Guid>();
+            foreach (var (root, revision) in before.Where(x => x.pat.IsContainer && x.pat.ParentId == null))
+            {
+                if (!project.Patterns.Contains(root) || root.Revision != revision) continue;
+                var tree = PatternTree.Descendants(project, root);
+                if (tree.Any(s => !revisions.TryGetValue(s.Id, out var r) || r != s.Revision)) continue;
+                var was = tree.SelectMany(s => holesBefore[s.Id]).ToList();
+                if (was.Count == 0 || was.Any(x => !now.ContainsKey(x.Key))) continue;
+                var moved = was.Select(x => (Hole: now[x.Key], From: x.Value.Collar)).ToList();
+                if (moved.Any(m => Vec3.Distance2D(m.From, m.Hole.Collar) <= 1e-6) || Rigid(moved) is not var (turn, pivotFrom, pivotTo)) continue;
+                PatternTree.Transform(project, root, GeneralOps.MakeTransform(pivotTo - pivotFrom, turn, pivotFrom, 1), turn);
+                handled.Add(root.Id);
+                foreach (var s in tree) handled.Add(s.Id);
+            }
             foreach (var (pat, revision) in before)
             {
-                if (!project.Patterns.Contains(pat) || pat.Revision != revision) continue;
+                if (handled.Contains(pat.Id) || !project.Patterns.Contains(pat) || pat.Revision != revision) continue;
                 var was = holesBefore[pat.Id];
                 var moved = new List<(Hole Hole, Vec3 From)>();
                 var present = 0;
@@ -613,9 +640,15 @@ public static partial class HoleDesign
                     present++;
                     if (Vec3.Distance2D(from, h.Collar) > 1e-6) moved.Add((h, from));
                 }
-                foreach (var h in now.Values.Where(h => h.PatternId == pat.Id && !was.ContainsKey(h.Id))) h.DetachFromPattern();
+                foreach (var h in now.Values.Where(h => h.PatternId == pat.Id && !was.ContainsKey(h.Id) && !PatternTree.IsSeamHole(project, h))) h.DetachFromPattern();
+                // a length or a level of a hole with a depth from/to edited by hand: kept when the pattern is laid out again
+                foreach (var id in was.Keys)
+                    if (now.TryGetValue(id, out var h) && h.PatternId == pat.Id && depthBefore.TryGetValue(id, out var d)
+                        && (h.ToLevel != d.Level || (Math.Abs(h.Length - d.Length) > 1e-9 && h.Collar.Z == d.Z && h.Angle == d.Angle && h.Subdrill == d.Subdrill)))
+                        h.DepthManual = true;
                 if (moved.Count == 0) continue;
-                if (moved.Count == present && present == was.Count && Rigid(moved) is var (turn, pivotFrom, pivotTo))
+                // a segment stays in its part of the pattern: its holes moved together keep their offsets from their nodes
+                if (pat.ParentId == null && moved.Count == present && present == was.Count && Rigid(moved) is var (turn, pivotFrom, pivotTo))
                 {
                     var f = GeneralOps.MakeTransform(pivotTo - pivotFrom, turn, pivotFrom, 1);
                     pat.Outline = pat.Outline.Select(x => f(x).WithZ(x.Z)).ToList();

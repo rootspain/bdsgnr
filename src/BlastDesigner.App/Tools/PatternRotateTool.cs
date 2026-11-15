@@ -194,6 +194,18 @@ public sealed class PatternOverlay : IOverlay
         using var small = new SKPaint { IsAntialias = true, Color = colour, TextSize = 11 };
         var leaves = PatternTree.Leaves(project, root);
         if (root.IsContainer)
+        {
+            // the problems at the seams: red between holes too close (or crossing under the ground), orange across a gap
+            using var close = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2.5f, Color = new SKColor(0xFFEF4444) };
+            using var gap = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2f, Color = new SKColor(0xFFF59E0B), PathEffect = SKPathEffect.CreateDash(new[] { 4f, 3f }, 0) };
+            foreach (var issue in PatternSeams.Check(project, root))
+            {
+                var (ax, ay) = cam.ToScreen(issue.From);
+                var (bx, by) = cam.ToScreen(issue.To);
+                c.DrawLine(ax, ay, bx, by, issue.Kind == SeamIssueKind.Gap ? gap : close);
+            }
+        }
+        if (root.IsContainer)
             foreach (var s in PatternTree.Children(project, root))
             {
                 foreach (var part in new[] { s.Outline }.Concat(s.OutlineParts))

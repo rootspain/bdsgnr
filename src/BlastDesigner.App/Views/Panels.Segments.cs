@@ -89,6 +89,34 @@ public sealed partial class PropertiesPanel
                 list.Children.Add(row);
             }
             yield return list;
+
+            // the seams between the segments: how many problems, and what is done with holes too close
+            var issues = PatternSeams.Check(p, root);
+            int close = issues.Count(x => x.Kind == SeamIssueKind.Close), gaps = issues.Count(x => x.Kind == SeamIssueKind.Gap), crossing = issues.Count(x => x.Kind == SeamIssueKind.Crossing);
+            var said = close + gaps + crossing == 0 ? Loc.Ui("no problems") : Loc.F(Loc.Ui("{0} close pairs, {1} gaps, {2} crossings"), close, gaps, crossing);
+            yield return Row("Seams", new TextBlock { Text = said, FontSize = 12, Foreground = close + gaps + crossing == 0 ? Look.Muted : new SolidColorBrush(Color.FromUInt32(0xFFF87171)), VerticalAlignment = VerticalAlignment.Center, Name = "patternSeams" });
+            var rules = new[] { SeamRule.Warn, SeamRule.Drop, SeamRule.Merge };
+            var rule = new ComboBox
+            {
+                ItemsSource = new[] { "Warn", "Remove the hole of the coarser grid", "One hole in the middle" }.Select(Loc.Ui).ToList(), SelectedIndex = Array.IndexOf(rules, root.SeamRule),
+                Width = 190, Height = 26, MinHeight = 26, FontSize = 12, Name = "patternSeamRule", IsEnabled = !ro
+            };
+            ToolTip.SetTip(rule, Loc.Ui("Two holes of different segments closer than 0.6 of the smaller spacing (or 2 m)"));
+            var rid = root.Id;
+            rule.SelectionChanged += (_, _) =>
+            {
+                if (rule.SelectedIndex < 0 || rules[rule.SelectedIndex] == root.SeamRule) return;
+                var r = rules[rule.SelectedIndex];
+                Done(_vm.SetPatternDefaults(rid, "seams", x => x.SeamRule = r));
+            };
+            yield return Row("Holes too close", rule);
+            var fill = new CheckBox { Content = Loc.Ui("A hole in the middle of a gap at a seam"), IsChecked = root.SeamFillGaps, Name = "patternSeamGaps", IsEnabled = !ro };
+            fill.IsCheckedChanged += (_, _) =>
+            {
+                var on = fill.IsChecked == true;
+                if (on != root.SeamFillGaps) Done(_vm.SetPatternDefaults(rid, "seams", x => x.SeamFillGaps = on));
+            };
+            yield return fill;
         }
 
         // the fields of one segment, each taken from the parent unless set here
@@ -122,6 +150,19 @@ public sealed partial class PropertiesPanel
             yield return Own("Diameter, mm", "segmentDiameter", o.Diameter, seg.HoleDefaults.Diameter, (x, v) => x.Diameter = v, "0.#");
             yield return Own("Subdrill, m", "segmentSubdrill", o.Subdrill, seg.HoleDefaults.Subdrill, (x, v) => x.Subdrill = v);
             yield return Own("Angle, °", "segmentAngle", o.Angle, seg.HoleDefaults.Angle, (x, v) => x.Angle = v, "0.#");
+            // with a burden of its own, the side of the segment its rows are laid from
+            var side = new ComboBox
+            {
+                ItemsSource = new[] { Loc.Ui("the face side"), Loc.Ui("the back side") }, SelectedIndex = seg.AnchorSide == PatternAnchorSide.Back ? 1 : 0, Width = 120, Height = 26,
+                MinHeight = 26, FontSize = 12, Name = "segmentAnchorSide", IsEnabled = !ro && o.Burden != null
+            };
+            ToolTip.SetTip(side, Loc.Ui("With a burden of its own, the first row of the segment is half a burden inside this side"));
+            side.SelectionChanged += (_, _) =>
+            {
+                var s = side.SelectedIndex == 1 ? PatternAnchorSide.Back : PatternAnchorSide.Face;
+                if (s != seg.AnchorSide) Done(_vm.SetPatternDefaults(sid, "Rows laid from", x => x.AnchorSide = s));
+            };
+            yield return Row("Rows laid from", side);
         }
         else if (root.IsContainer)
         {

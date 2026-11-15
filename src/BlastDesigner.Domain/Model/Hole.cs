@@ -69,6 +69,11 @@ public sealed class Hole : Entity
     public List<Deck> Decks { get; set; } = new();
     /// <summary>When set, the column was edited by hand and auto-loading leaves it alone.</summary>
     public bool ManualLoading { get; set; }
+    /// <summary>
+    /// The length or level of a hole of a pattern with a depth from/to was edited by hand: laying the pattern out again
+    /// keeps it (until the depth of the pattern is changed).
+    /// </summary>
+    public bool DepthManual { get; set; }
     /// <summary>Programmed time for electronic detonators, ms; null when the hole uses pyrotechnic delays.</summary>
     public double? ElectronicTimeMs { get; set; }
     public bool ElectronicTimeManual { get; set; }
@@ -155,6 +160,7 @@ public sealed class Hole : Entity
         PatternId = null;
         GridI = GridJ = null;
         GridOffset = null;
+        DepthManual = false;
     }
 
     /// <summary>Re-derives angle, bearing and length from a target toe point.</summary>

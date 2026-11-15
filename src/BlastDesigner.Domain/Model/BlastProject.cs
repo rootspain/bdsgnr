@@ -292,12 +292,42 @@ public sealed class HolePattern
     public List<List<Vec3>> OutlineParts { get; set; } = new();
     /// <summary>Of a segment with a grid of its own: the side its rows are laid from, half a burden inside it.</summary>
     public PatternAnchorSide AnchorSide { get; set; }
+    /// <summary>Of a pattern cut into segments: what is done with two holes of different segments too close to each other.</summary>
+    public SeamRule SeamRule { get; set; }
+    /// <summary>Of a pattern cut into segments: a gap across a seam gets a hole of its own in the middle.</summary>
+    public bool SeamFillGaps { get; set; }
+    /// <summary>Of a segment: nodes the seam rule left without a hole at the last layout (they get one again when the seam allows).</summary>
+    public List<GridIndex> SeamDropped { get; set; } = new();
+    /// <summary>Of a segment: holes the seam rule moved to the middle of a pair, with the offset it gave them (taken back before the next layout).</summary>
+    public List<SeamOffset> SeamOffsets { get; set; } = new();
+    /// <summary>Of a pattern cut into segments: the holes the seam rule added in gaps (taken away before the next layout).</summary>
+    public List<Guid> SeamAdded { get; set; } = new();
     /// <summary>The pattern is cut into segments and has no holes of its own.</summary>
     [JsonIgnore] public bool IsContainer => SegmentLines.Count > 0;
     /// <summary>The polygon the outline follows: that of a container or of a pattern of its own.</summary>
     [JsonIgnore] public Guid? PolygonId => OutlineEntityId ?? SourceOutlineId;
 
     public bool IsSuppressed(int i, int j) => Suppressed.Any(s => s.I == i && s.J == j);
+}
+
+/// <summary>What is done with two holes of different segments closer than the seam allows.</summary>
+public enum SeamRule
+{
+    /// <summary>Shown on the plan and counted, nothing more.</summary>
+    Warn,
+    /// <summary>The hole of the segment with the coarser grid goes (its node stays empty).</summary>
+    Drop,
+    /// <summary>The two become one in the middle between them.</summary>
+    Merge
+}
+
+/// <summary>The offset from its node the seam rule gave the hole at node (I, J) of a segment, in the axes of its grid.</summary>
+public sealed class SeamOffset
+{
+    public int I { get; set; }
+    public int J { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
 }
 
 /// <summary>The side of a segment its rows are laid from: the one towards the face, or the one behind.</summary>

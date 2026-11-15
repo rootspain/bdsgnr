@@ -18,8 +18,9 @@ public static class PatternOutlines
     public static Action? Follow(BlastProject project)
     {
         List<(HolePattern Pattern, Guid Polygon, Vec3[] Points, int Revision)>? watched = null;
-        foreach (var pat in project.Patterns)
-            if (pat.OutlineEntityId is Guid id && project.FindEntity(id) is PolylineEntity { Closed: true } line)
+        // a pattern cut into segments keeps its polygon as SourceOutlineId (an older version leaves it alone)
+        foreach (var pat in project.Patterns.Where(x => x.ParentId == null))
+            if (pat.PolygonId is Guid id && project.FindEntity(id) is PolylineEntity { Closed: true } line)
                 (watched ??= new()).Add((pat, id, line.Points.ToArray(), pat.Revision));
         if (watched == null) return null;
         return () =>
@@ -32,7 +33,7 @@ public static class PatternOutlines
                 if (line.Points.SequenceEqual(before)) continue;
                 // moved with all its holes: the grid went along already (HoleDesign.FollowPatterns)
                 if (pat.Outline.Count == line.Points.Count && pat.Outline.Zip(line.Points).All(x => Vec3.Distance2D(x.First, x.Second) < 1e-6)) continue;
-                var report = HoleDesign.FitToOutline(project, pat, line.Points);
+                var report = pat.IsContainer ? PatternTree.FitToOutline(project, pat, line.Points) : HoleDesign.FitToOutline(project, pat, line.Points);
                 if (report.Refusal is { } no) Refused?.Invoke(pat, no);
             }
         };
