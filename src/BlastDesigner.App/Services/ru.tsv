@@ -3270,3 +3270,42 @@ ui:Base Z	База Z
 ui:Reset	Сбросить
 ui:Back to no change: scale 1, no tilt, no mirror, no move	Вернуть без изменений: масштаб 1, без наклона, зеркала и сдвига
 ui:Transform coordinates	Преобразование координат
+segments	сегменты
+Segments	Сегменты
+Segments {0} set parameters of their own, which will be lost. Continue?	Сегменты {0} имеют собственные параметры, они будут потеряны. Продолжить?
+as the parent	как у родителя
+depth	глубина
+segment line	линия сегментов
+Rename…	Переименовать…
+Rename segment	Переименовать сегмент
+As the parent	Как у родителя
+Drag: move the cut line (Ctrl: free of the rows); double click: along the rows again	Перетащить: сдвинуть линию разреза (Ctrl: без привязки к рядам); двойной щелчок: снова вдоль рядов
+Drag: move the end of the cut line along the outline (Shift: across the rows only, Ctrl: free of the rows)	Перетащить: сдвинуть конец линии разреза по контуру (Shift: только поперёк рядов, Ctrl: без привязки к рядам)
+Along the rows	Вдоль рядов
+Remove the cut line	Удалить линию разреза
+Burden, m	ЛНС, м
+Spacing, m	Расстояние, м
+Diameter, mm	Диаметр, мм
+Subdrill, m	Перебур, м
+Angle, °	Угол, °
+ui:Segments the pattern is cut into, 1 to {0} (its number of rows): the cut lines are shown on the plan and can be dragged	На сколько сегментов разделена сетка, от 1 до {0} (число её рядов): линии разреза видны на плане, их можно перетаскивать
+ui:Click: select the holes of the segment	Щелчок: выделить скважины сегмента
+ui:Segment {0}	Сегмент {0}
+ui:Subdrill, m	Перебур, м
+ui:Taken from the parent pattern; a value typed in is the segment's own	Взято у родительской сетки; введённое значение станет собственным для сегмента
+ui:Take the value of the parent pattern again	Снова взять значение родительской сетки
+ui:surface	поверхность
+ui:One depth	Постоянная
+ui:Collars on the rectangle, to a level	Устья на прямоугольнике, до уровня
+ui:Collars on the surface, to the rectangle	Устья на поверхности, до условной поверхности
+ui:To a level	До уровня
+ui:What the holes go down to; with the rectangle, four numbers at its corners: the front edge along the first row, the back edge along the last, each from the left end of the row to the right, looking along the blast	До чего бурятся скважины; с прямоугольником — четыре числа в его углах: передний край по первому ряду, задний по последнему, каждый от левого конца ряда к правому, если смотреть по направлению взрыва
+ui:from	от
+ui:to	до
+ui:Swap from and to	Поменять местами «от» и «до»
+ui:The back edge as the front one	Задний край как передний
+ui:Front edge	Передний край
+ui:Back edge	Задний край
+ui:Level, m	Уровень, м
+ui:Depth, m	Глубина, м
+ui:Pattern segments	Сегменты

@@ -124,7 +124,7 @@ public static partial class PatternTree
         switch (d.Mode)
         {
             case DepthMode.ToSurface: pat.ToSurface = true; break;
-            case DepthMode.ToLevel: pat.ToSurface = false; pat.ToLevel ??= d.Level; break;
+            case DepthMode.ToLevel: pat.ToSurface = false; pat.ToLevel = d.Level; break;
             case DepthMode.Fixed: pat.ToSurface = false; pat.ToLevel = null; break;
             // the holes carry their own levels (Hole.ToLevel), which is what an older version reads
             default: pat.ToSurface = false; pat.ToLevel = null; break;

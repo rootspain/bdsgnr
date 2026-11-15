@@ -169,6 +169,7 @@ public sealed class PatternOverlay : IOverlay
         foreach (var pat in shown)
         {
             if (pat.Outline.Count >= 3) PlanRenderer.DrawPolyline(c, cam, pat.Outline, true, dashed);
+            DrawSegments(c, cam, project, pat, colour);
             var (cx, cy) = cam.ToScreen(pat.Center);
             c.DrawCircle(cx, cy, 4, fill);
             if (pat.Id == HiddenArrow) continue;
@@ -181,11 +182,48 @@ public sealed class PatternOverlay : IOverlay
         }
     }
 
-    /// <summary>The patterns whose grid is drawn: those of the selected holes.</summary>
+    /// <summary>
+    /// The parts of a pattern cut into segments, each dotted with its name at its middle, and the conditional rectangle of
+    /// each part (or of the pattern itself) whose depth has four numbers, with the numbers at its corners.
+    /// </summary>
+    private static void DrawSegments(SKCanvas c, Camera cam, BlastProject project, HolePattern root, SKColor colour)
+    {
+        using var dotted = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = colour.WithAlpha(0xB0), PathEffect = SKPathEffect.CreateDash(new[] { 2f, 3f }, 0) };
+        using var frame = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = colour.WithAlpha(0x90), PathEffect = SKPathEffect.CreateDash(new[] { 10f, 3f, 2f, 3f }, 0) };
+        using var text = new SKPaint { IsAntialias = true, Color = colour, TextSize = 12, Typeface = SKTypeface.FromFamilyName(null, SKFontStyle.Bold) };
+        using var small = new SKPaint { IsAntialias = true, Color = colour, TextSize = 11 };
+        var leaves = PatternTree.Leaves(project, root);
+        if (root.IsContainer)
+            foreach (var s in PatternTree.Children(project, root))
+            {
+                foreach (var part in new[] { s.Outline }.Concat(s.OutlineParts))
+                    if (part.Count >= 3) PlanRenderer.DrawPolyline(c, cam, part, true, dotted);
+                if (s.Outline.Count < 3) continue;
+                var (x, y) = cam.ToScreen(GeoMath.Centroid(s.Outline.Select(q => q - s.Outline[0]).ToList()) + s.Outline[0]);
+                c.DrawText(s.Name, x - text.MeasureText(s.Name) / 2, y + 4, text);
+            }
+        foreach (var leaf in leaves)
+        {
+            var d = leaf.HoleDefaults.Depth;
+            if (!d.UsesRectangle || DepthRectangle.Of(leaf) is not { } rect) continue;
+            var corners = rect.Corners(leaf);
+            PlanRenderer.DrawPolyline(c, cam, corners, true, frame);
+            // front left, front right, back right, back left
+            var numbers = new[] { d.Front.From, d.Front.To, d.Back.To, d.Back.From };
+            for (int k = 0; k < 4; k++)
+            {
+                var (x, y) = cam.ToScreen(corners[k]);
+                var label = numbers[k].ToString("0.0#", System.Globalization.CultureInfo.CurrentCulture);
+                c.DrawText(label, x + 4, y - 4, small);
+            }
+        }
+    }
+
+    /// <summary>The patterns whose grid is drawn: those of the selected holes (for a segment, the pattern it is cut from).</summary>
     public static List<HolePattern> Shown(Document? doc)
     {
         if (doc is not { Selection.Count: > 0 } || doc.Project.Patterns.Count == 0) return new();
-        var shown = doc.SelectedHoles.Select(h => h.PatternId).OfType<Guid>().ToHashSet();
+        var shown = doc.SelectedHoles.Select(h => doc.Project.FindPattern(h.PatternId)).OfType<HolePattern>().Select(p => PatternTree.Root(doc.Project, p).Id).ToHashSet();
         return doc.Project.Patterns.Where(p => shown.Contains(p.Id)).ToList();
     }
 }

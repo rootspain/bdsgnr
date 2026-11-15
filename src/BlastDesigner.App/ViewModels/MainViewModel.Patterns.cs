@@ -19,9 +19,26 @@ public sealed partial class MainViewModel
     /// <summary>How the bearings of the inclined holes follow a turn of the grid (rotate tool panel).</summary>
     public PatternBearingMode PatternBearing { get; set; } = PatternBearingMode.Rotate;
 
-    /// <summary>The pattern of the selected holes: the one of the first selected hole that has one.</summary>
+    /// <summary>
+    /// The pattern of the selected holes: the one of the first selected hole that has one, or the pattern a segment of it is
+    /// cut from (it is turned, laid out again and dissolved as a whole).
+    /// </summary>
     public HolePattern? SelectedPattern =>
-        Doc is { } doc ? doc.SelectedHoles.Select(h => doc.Project.FindPattern(h.PatternId)).FirstOrDefault(p => p != null) : null;
+        Doc is { } doc && doc.SelectedHoles.Select(h => doc.Project.FindPattern(h.PatternId)).FirstOrDefault(p => p != null) is { } pat ? PatternTree.Root(doc.Project, pat) : null;
+
+    /// <summary>The segment all the selected holes are in; null when they are in none or in several.</summary>
+    public HolePattern? SelectedSegment
+    {
+        get
+        {
+            if (Doc is not { } doc) return null;
+            var ids = doc.SelectedHoles.Select(h => h.PatternId).Distinct().ToList();
+            return ids.Count == 1 && doc.Project.FindPattern(ids[0]) is { ParentId: not null } seg ? seg : null;
+        }
+    }
+
+    /// <summary>Whether a pattern is cut into segments or is one: it is laid out with its whole tree.</summary>
+    private static bool InTree(HolePattern pat) => pat.IsContainer || pat.ParentId != null;
 
     private PatternRebuildOptions PatternOptions(BlastProject p) => PatternRebuildOptions.For(p, PatternBearing);
 
@@ -45,9 +62,13 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Turns a pattern grid by <paramref name="delta"/> degrees as one undo step; false when nothing was done.</summary>
-    public Task<bool> RotatePattern(Guid patternId, double delta) =>
-        LayOutPattern(patternId, "Rotate pattern", pat => pat.Azimuth = GeoMath.NormalizeBearing(pat.Azimuth + delta),
+    public Task<bool> RotatePattern(Guid patternId, double delta)
+    {
+        if (Project?.FindPattern(patternId) is { } tree && InTree(tree))
+            return LayOutTree(PatternTree.Root(Project, tree).Id, "Rotate pattern", (p, root, o) => PatternTree.Rotate(p, root, delta, o));
+        return LayOutPattern(patternId, "Rotate pattern", pat => pat.Azimuth = GeoMath.NormalizeBearing(pat.Azimuth + delta),
             (p, pat, o) => HoleDesign.RotatePattern(p, pat, delta, o));
+    }
 
     /// <summary>The smallest burden or spacing a pattern takes, m.</summary>
     public const double MinPatternStep = 0.1;
@@ -67,6 +88,15 @@ public sealed partial class MainViewModel
         if (Math.Abs(burden - pat.Burden) < 1e-9 && Math.Abs(spacing - pat.Spacing) < 1e-9) return false;
         try
         {
+            // a segment sets its own burden and spacing; a pattern cut into segments takes its segments along
+            if (pat.ParentId != null)
+                return await LayOutTree(PatternTree.Root(Project, pat).Id, $"{pat.Name}: {Loc.T("Pattern size")}", (p, root, o) =>
+                {
+                    if (p.FindPattern(patternId) is { } seg) { seg.Overrides.Burden = burden; seg.Overrides.Spacing = spacing; }
+                    return PatternTree.Relayout(p, root, o);
+                });
+            if (pat.IsContainer)
+                return await LayOutTree(patternId, "Pattern size", (p, root, o) => PatternTree.Resize(p, root, burden, spacing, o));
             return await LayOutPattern(patternId, "Pattern size", x => HoleDesign.Resize(x, burden, spacing),
                 (p, x, o) => HoleDesign.ResizePattern(p, x, burden, spacing, o));
         }
@@ -82,7 +112,12 @@ public sealed partial class MainViewModel
     {
         if (SelectedPattern is not { } pat) { await Dialogs.Info(Loc.T("Select a hole of a pattern first.")); return; }
         // the outline is taken again from its polygon, which may have been edited since
-        var outline = Project!.FindEntity(pat.OutlineEntityId ?? Guid.Empty) is PolylineEntity { Closed: true, Points.Count: >= 3 } line ? line.Points.ToList() : null;
+        var outline = Project!.FindEntity(pat.PolygonId ?? Guid.Empty) is PolylineEntity { Closed: true, Points.Count: >= 3 } line ? line.Points.ToList() : null;
+        if (pat.IsContainer)
+        {
+            await LayOutTree(pat.Id, "Rebuild pattern", (p, x, o) => { if (outline != null) x.Outline = outline.ToList(); return PatternTree.Relayout(p, x, o); });
+            return;
+        }
         await LayOutPattern(pat.Id, "Rebuild pattern", plan => { if (outline != null) plan.Outline = outline; },
             (p, x, o) => { if (outline != null) x.Outline = outline.ToList(); return HoleDesign.RebuildPattern(p, x, o); });
     }
@@ -103,9 +138,34 @@ public sealed partial class MainViewModel
         var copy = ProjectJson.DeepClone(pat);
         preview(copy);
         var byHand = HoleDesign.PlanPattern(Project, copy).Deletes.Count(h => h.ManualLoading || h.ElectronicTimeManual);
+        return await LayOut(patternId, undoName, byHand, HoleDesign.PatternHoles(Project, pat), run);
+    }
+
+    /// <summary>
+    /// Lays the tree of a pattern cut into segments out again in one undo step, as <see cref="LayOutPattern"/>: what would go
+    /// is seen by running the change on a copy of the tree.
+    /// </summary>
+    internal async Task<bool> LayOutTree(Guid rootId, string undoName, Func<BlastProject, HolePattern, PatternRebuildOptions, PatternRebuildReport> run)
+    {
+        if (Doc == null || Project!.FindPattern(rootId) is not { } root) return false;
+        if (PatternTree.TreeRefusal(Project, root, PatternOptions(Project)) is { } no)
+        {
+            await Dialogs.Info(Loc.F(no.Reason, no.HoleLabel) + "\n" + Loc.T("The pattern cannot be laid out again."), Loc.T(undoName));
+            return false;
+        }
+        int byHand;
+        try { byHand = PatternTree.Plan(Project, root, (q, r) => run(q, r, PatternOptions(q))).Deletes.Count(h => h.ManualLoading || h.ElectronicTimeManual); }
+        catch (InvalidOperationException ex) { await Dialogs.Info(Loc.T(ex.Message), Loc.T(undoName)); return false; }
+        return await LayOut(rootId, undoName, byHand, PatternTree.TreeHoles(Project, root), run);
+    }
+
+    /// <summary>The common end of laying out a pattern or a tree: asks before holes done by hand go, runs the change, keeps the selection.</summary>
+    private async Task<bool> LayOut(Guid patternId, string undoName, int byHand, IEnumerable<Hole> before, Func<BlastProject, HolePattern, PatternRebuildOptions, PatternRebuildReport> run)
+    {
+        if (Doc == null) return false;
         if (byHand > 0 && !await Dialogs.Confirm(Loc.F("{0} holes loaded or timed by hand leave the outline and will be deleted. Continue?", byHand), Loc.T(undoName))) return false;
         // the whole pattern selected stays selected with its new holes
-        var holes = HoleDesign.PatternHoles(Project, pat).Select(h => h.Id).ToList();
+        var holes = before.Select(h => h.Id).ToList();
         var whole = holes.Count > 0 && holes.All(Doc.Selection.Contains);
         PatternRebuildReport? report = null;
         if (!Change(undoName, p => { if (p.FindPattern(patternId) is { } x) report = run(p, x, PatternOptions(p)); })) return false;
@@ -156,7 +216,7 @@ public sealed partial class MainViewModel
     public void SelectPatternHoles()
     {
         if (SelectedPattern is not { } pat) return;
-        Doc!.Select(HoleDesign.PatternHoles(Project!, pat).Where(IsSelectable).Select(h => h.Id));
+        Doc!.Select(PatternTree.TreeHoles(Project!, pat).Where(IsSelectable).Select(h => h.Id));
     }
 
     public async Task DetachSelectedFromPattern()

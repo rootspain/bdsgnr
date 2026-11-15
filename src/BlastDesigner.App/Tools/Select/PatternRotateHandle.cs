@@ -83,7 +83,7 @@ public sealed class PatternRotateHandle : ISelectGesture
         if (_refusals.TryGetValue(pat.Id, out var known)) return known;
         // the layer new holes go to, without making it
         var layer = project.Layers.FirstOrDefault(l => string.Equals(l.Name, StandardLayers.Holes, StringComparison.OrdinalIgnoreCase));
-        return _refusals[pat.Id] = HoleDesign.RebuildRefusal(project, pat, new PatternRebuildOptions { Layer = layer });
+        return _refusals[pat.Id] = PatternTree.TreeRefusal(project, pat, new PatternRebuildOptions { Layer = layer });
     }
 
     /// <summary>The circle at a screen point: the nearest one within reach.</summary>
@@ -212,7 +212,11 @@ public sealed class PatternRotateHandle : ISelectGesture
     private void AlongLine(Guid id)
     {
         if (_vm.Doc is not { } doc) return;
-        if (_vm.SelectedPattern?.Id != id) doc.Select(doc.SelectedHoles.Where(h => h.PatternId == id).Select(h => h.Id).ToList());
+        if (_vm.SelectedPattern?.Id != id && _vm.Project?.FindPattern(id) is { } pat)
+        {
+            var tree = PatternTree.TreeHoles(_vm.Project, pat).Select(h => h.Id).ToHashSet();
+            doc.Select(doc.SelectedHoles.Where(h => tree.Contains(h.Id)).Select(h => h.Id).ToList());
+        }
         _vm.PatternRotateTool();
         if (_vm.ActiveTool is PatternRotateTool tool) tool.ByLine = true;
     }

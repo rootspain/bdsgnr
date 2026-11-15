@@ -337,6 +337,68 @@ public class PatternSegmentTests
         Assert.Equal(76, hand.Diameter);
     }
 
+    // ---- stage 3: what the panel and the cut lines on the plan use ----
+
+    [Fact]
+    public void RemovingAMiddleLine_JoinsTheTwoSegmentsBesideIt()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 3);
+        var seg = PatternTree.Children(p, root);
+        seg[1].Overrides.Diameter = 89;
+        PatternTree.Relayout(p, root);
+        var before = p.Holes.ToDictionary(h => h.Id, h => h.Collar);
+        PatternTree.RemoveLine(p, root, 0);
+        var now = PatternTree.Children(p, root);
+        Assert.Equal(2, now.Count);
+        Assert.Equal(new[] { "A", "B" }, now.Select(s => s.Name));
+        // the front segment keeps its parameters and takes the holes of the one behind the line
+        Assert.Null(now[0].Overrides.Diameter);
+        Assert.All(HoleDesign.PatternHoles(p, now[0]), h => Assert.Equal(102, h.Diameter));
+        Assert.Equal(before.Count, p.Holes.Count());
+        Assert.All(p.Holes, h => Assert.Equal(before[h.Id], h.Collar));
+    }
+
+    [Fact]
+    public void CutLines_MustNotCrossInsideTheOutline()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 3);
+        Assert.True(PatternTree.LinesInOrder(root, root.SegmentLines));
+        var lines = root.SegmentLines.Select(l => l.Clone()).ToList();
+        // the first line tilted past the second one at one end
+        lines[0].V2 = lines[1].V2 + 1;
+        Assert.False(PatternTree.LinesInOrder(root, lines));
+        // a line across the rows is no cut line
+        lines = root.SegmentLines.Select(l => l.Clone()).ToList();
+        lines[0].U2 = lines[0].U1;
+        Assert.False(PatternTree.LinesInOrder(root, lines));
+    }
+
+    [Fact]
+    public void AMovedLine_TakesTheHolesOfTheRowItPassed_AndThePlanSaysSoWithoutChangingTheProject()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var seg = PatternTree.Children(p, root);
+        var a = HoleDesign.PatternHoles(p, seg[0]).Count();
+        var line = root.SegmentLines[0].Clone();
+        line.V1 = line.V2 = line.V1 + root.Burden;
+        line.Row++;
+        var plan = PatternTree.Plan(p, root, (q, r) => { r.SegmentLines[0] = line.Clone(); return PatternTree.Relayout(q, r); }, out var copy);
+        Assert.Empty(plan.Adds);
+        Assert.Empty(plan.Deletes);
+        Assert.Equal(a, HoleDesign.PatternHoles(p, seg[0]).Count());
+        Assert.True(HoleDesign.PatternHoles(copy, copy.FindPattern(seg[0].Id)!).Count() > a);
+
+        root.SegmentLines[0] = line;
+        PatternTree.Relayout(p, root);
+        Assert.True(HoleDesign.PatternHoles(p, seg[0]).Count() > a);
+        var straight = PatternTree.Straightened(root, new SegmentLine { U1 = -10, V1 = line.V1 - 0.7, U2 = 10, V2 = line.V1 + 0.9 });
+        Assert.True(straight.Snapped);
+        Assert.Equal(straight.V1, straight.V2);
+    }
+
     [Fact]
     public void DissolvingTheParent_TakesItsSegments()
     {

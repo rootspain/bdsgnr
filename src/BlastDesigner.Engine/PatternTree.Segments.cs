@@ -1,3 +1,4 @@
+using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using Clipper2Lib;
@@ -136,11 +137,13 @@ public static partial class PatternTree
     }
 
     /// <summary>Takes the last line away: the last segment joins the one before it (or the parent, when it was the only line).</summary>
-    private static void JoinLast(BlastProject p, HolePattern root, List<Guid> deleted)
+    private static void JoinLast(BlastProject p, HolePattern root, List<Guid> deleted) => RemoveLineAt(p, root, root.SegmentLines.Count - 1, deleted);
+
+    /// <summary>Takes line <paramref name="index"/> away: the segment behind it joins the one before it, which keeps its parameters.</summary>
+    private static void RemoveLineAt(BlastProject p, HolePattern root, int index, List<Guid> deleted)
     {
         var segments = Children(p, root);
-        var last = segments[^1];
-        root.SegmentLines.RemoveAt(root.SegmentLines.Count - 1);
+        root.SegmentLines.RemoveAt(index);
         if (root.SegmentLines.Count == 0)
         {
             // one segment left: the parent holds the holes again, with its own parameters
@@ -148,7 +151,45 @@ public static partial class PatternTree
             if (root.SourceOutlineId != null) { root.OutlineEntityId = root.SourceOutlineId; root.SourceOutlineId = null; }
             return;
         }
-        Absorb(p, last, segments[^2], deleted);
+        Absorb(p, segments[index + 1], segments[index], deleted);
+        foreach (var s in segments.Skip(index + 2)) s.Order--;
+        Rename(p, root);
+    }
+
+    /// <summary>
+    /// Takes cut line <paramref name="index"/> of a pattern away (from the menu of the line): the two segments it divides
+    /// become one with the parameters of the front one, and the tree is laid out again.
+    /// </summary>
+    public static PatternRebuildReport RemoveLine(BlastProject p, HolePattern root, int index, PatternRebuildOptions? o = null)
+    {
+        o ??= PatternRebuildOptions.For(p);
+        if (index < 0 || index >= root.SegmentLines.Count) return new PatternRebuildReport();
+        if (TreeRefusal(p, root, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        var rows = TreeRowIds(p, root);
+        var deleted = new List<Guid>();
+        RemoveLineAt(p, root, index, deleted);
+        var report = Relayout(p, root, o, rows);
+        report.DeletedIds.AddRange(deleted);
+        report.Deleted += deleted.Count;
+        return report;
+    }
+
+    /// <summary>
+    /// Whether the cut lines of a pattern keep their order everywhere over its outline (each behind the one before it), so
+    /// that segment k lies between lines k − 1 and k; no line may run across the rows.
+    /// </summary>
+    public static bool LinesInOrder(HolePattern root, IReadOnlyList<SegmentLine> lines)
+    {
+        if (root.Outline.Count < 3) return true;
+        var us = root.Outline.Select(q => WorldToGrid(root, q).U).ToList();
+        double a0 = us.Min(), a1 = us.Max();
+        double? V(SegmentLine l, double a) => Math.Abs(l.U2 - l.U1) < 1e-9 ? null : l.V1 + (l.V2 - l.V1) * (a - l.U1) / (l.U2 - l.U1);
+        foreach (var l in lines)
+            if (V(l, a0) == null) return false;
+        for (int k = 0; k + 1 < lines.Count; k++)
+            foreach (var a in new[] { a0, a1 })
+                if (V(lines[k + 1], a)!.Value - V(lines[k], a)!.Value < 1e-6) return false;
+        return true;
     }
 
     /// <summary>Gives the holes of a segment to another pattern (keeping them where that grid has a node, else deleting them) and takes the segment away.</summary>
@@ -159,6 +200,8 @@ public static partial class PatternTree
         {
             if (NodeAt(into, NodeLocation(from, h)) is var (i, j))
             {
+                // what the two patterns make their holes with differently, the hole takes from the one it goes to
+                Defaults.Of(into.HoleDefaults).ApplyChanged(h, Defaults.Of(from.HoleDefaults));
                 h.PatternId = into.Id;
                 h.GridI = i;
                 h.GridJ = j;
@@ -457,6 +500,151 @@ public static partial class PatternTree
         p.Entities.RemoveAll(e => e is TieEntity t && (gone.Contains(t.FromId) || gone.Contains(t.ToId)));
         p.Entities.RemoveAll(e => gone.Contains(e.Id));
         foreach (var r in p.Rows) r.HoleIds.RemoveAll(gone.Contains);
+    }
+
+    /// <summary>
+    /// What a change of the tree of a pattern would do to its holes, the project left as it is: the change is made on a copy
+    /// of the tree, its holes and rows. Moves are the holes that stay (with where they go), adds the nodes that get new holes.
+    /// </summary>
+    public static PatternPlan Plan(BlastProject p, HolePattern root, Func<BlastProject, HolePattern, PatternRebuildReport> change) => Plan(p, root, change, out _);
+
+    /// <inheritdoc cref="Plan(BlastProject, HolePattern, Func{BlastProject, HolePattern, PatternRebuildReport})"/>
+    /// <param name="copy">The copy the change was made on (its patterns show the segments as they would be).</param>
+    public static PatternPlan Plan(BlastProject p, HolePattern root, Func<BlastProject, HolePattern, PatternRebuildReport> change, out BlastProject copy)
+    {
+        var tree = new List<HolePattern> { root };
+        tree.AddRange(Descendants(p, root));
+        var holes = TreeHoles(p, root).ToList();
+        var q = new BlastProject
+        {
+            Header = ProjectJson.DeepClone(p.Header), Layers = ProjectJson.DeepClone(p.Layers), Rows = ProjectJson.DeepClone(p.Rows), Patterns = ProjectJson.DeepClone(tree),
+            DefaultLayerId = p.DefaultLayerId
+        };
+        foreach (var h in ProjectJson.DeepClone(holes)) q.Entities.Add(h);
+        copy = q;
+        var plan = new PatternPlan();
+        var r = q.FindPattern(root.Id)!;
+        if (change(q, r).Refusal != null) return plan;
+        var now = TreeHoles(q, r).ToDictionary(h => h.Id);
+        foreach (var h in holes)
+        {
+            if (now.Remove(h.Id, out var to)) plan.Moves.Add((h, new PatternNode(to.GridI ?? 0, to.GridJ ?? 0, to.Collar), to.Collar));
+            else plan.Deletes.Add(h);
+        }
+        plan.Adds.AddRange(now.Values.Select(h => new PatternNode(h.GridI ?? 0, h.GridJ ?? 0, h.Collar)));
+        return plan;
+    }
+
+    /// <summary>
+    /// The holes of a pattern whose depth mode just changed leave what the old mode gave them: with one depth they lose
+    /// their level and take the bench height (to the grade when there is one), with a level they go down to it. The surface
+    /// and the rectangle modes give every hole its level when it is laid out.
+    /// </summary>
+    public static void FollowDepthMode(BlastProject p, HolePattern leaf, PatternRebuildOptions o)
+    {
+        var mode = EffectiveDepthMode(leaf);
+        foreach (var h in HoleDesign.PatternHoles(p, leaf))
+        {
+            if (mode == DepthMode.Fixed)
+            {
+                h.ToLevel = null;
+                HoleDesign.SetLengthToGrade(h, o.GradeSurface, leaf.HoleDefaults.BenchHeight);
+            }
+            else if (mode == DepthMode.ToLevel && leaf.ToLevel is double z) h.ToLevel = HoleLevel.Reaches(h, z) ? z : null;
+        }
+    }
+
+    /// <summary>The middle between two grid rows of a pattern nearest to <paramref name="v"/> (across the rows, about its centre), and the row before it.</summary>
+    public static double SnapV(HolePattern root, double v, out int row)
+    {
+        row = (int)Math.Round((v - root.PhaseV) / root.Burden - 0.5);
+        return root.PhaseV + (row + 0.5) * root.Burden;
+    }
+
+    /// <summary>A cut line turned back along the rows, in the middle between the rows nearest to its middle.</summary>
+    public static SegmentLine Straightened(HolePattern root, SegmentLine line)
+    {
+        var v = SnapV(root, (line.V1 + line.V2) / 2, out var row);
+        var r = Reach(root);
+        return new SegmentLine { U1 = -r, V1 = v, U2 = r, V2 = v, Snapped = true, Row = row };
+    }
+
+    /// <summary>A point of a pattern in plan from its grid axes (along the rows, across them) about its centre.</summary>
+    public static Vec3 GridToWorld(HolePattern pat, double a, double b)
+    {
+        var (u, v) = HoleDesign.PatternAxes(pat.Azimuth);
+        return new Vec3(pat.Center.X + u.X * a + v.X * b, pat.Center.Y + u.Y * a + v.Y * b, pat.Center.Z);
+    }
+
+    /// <summary>A point in plan in the grid axes of a pattern about its centre.</summary>
+    public static (double U, double V) WorldToGrid(HolePattern pat, Vec3 pt)
+    {
+        var (u, v) = HoleDesign.PatternAxes(pat.Azimuth);
+        var d = pt - pat.Center;
+        return (d.X * u.X + d.Y * u.Y, d.X * v.X + d.Y * v.Y);
+    }
+
+    /// <summary>
+    /// Where a cut line crosses the outline of its pattern: the first and the last crossing along it (left end of the rows
+    /// first), in plan; the ends kept in the line when it does not reach the outline.
+    /// </summary>
+    public static (Vec3 A, Vec3 B) LineEnds(HolePattern root, SegmentLine line)
+    {
+        var (a1, b1, a2, b2) = line.U1 <= line.U2 ? (line.U1, line.V1, line.U2, line.V2) : (line.U2, line.V2, line.U1, line.V1);
+        var p1 = GridToWorld(root, a1, b1);
+        var p2 = GridToWorld(root, a2, b2);
+        var ts = new List<double>();
+        var o = root.Outline;
+        double dx = p2.X - p1.X, dy = p2.Y - p1.Y;
+        for (int k = 0; k < o.Count; k++)
+        {
+            var q1 = o[k];
+            var q2 = o[(k + 1) % o.Count];
+            double ex = q2.X - q1.X, ey = q2.Y - q1.Y;
+            var den = dx * ey - dy * ex;
+            if (Math.Abs(den) < 1e-12) continue;
+            double fx = q1.X - p1.X, fy = q1.Y - p1.Y;
+            var t = (fx * ey - fy * ex) / den;
+            var s = (fx * dy - fy * dx) / den;
+            if (s >= -1e-9 && s <= 1 + 1e-9) ts.Add(t);
+        }
+        if (ts.Count < 2) return (p1, p2);
+        Vec3 At(double t) => new(p1.X + dx * t, p1.Y + dy * t, root.Center.Z);
+        return (At(ts.Min()), At(ts.Max()));
+    }
+
+    /// <summary>Where the outline of a pattern crosses the line across the blast at <paramref name="v"/> (grid axes), the crossing nearest to <paramref name="near"/>; null when it does not.</summary>
+    public static Vec3? OutlineAtV(HolePattern root, double v, Vec3 near)
+    {
+        var o = root.Outline;
+        Vec3? best = null;
+        var bestD = double.MaxValue;
+        for (int k = 0; k < o.Count; k++)
+        {
+            var (a1, b1) = WorldToGrid(root, o[k]);
+            var (a2, b2) = WorldToGrid(root, o[(k + 1) % o.Count]);
+            if (Math.Abs(b2 - b1) < 1e-12 || (v - b1) * (v - b2) > 0) continue;
+            var a = a1 + (a2 - a1) * (v - b1) / (b2 - b1);
+            var pt = GridToWorld(root, a, v);
+            var d = Vec3.Distance2D(pt, near);
+            if (d < bestD) { bestD = d; best = pt; }
+        }
+        return best;
+    }
+
+    /// <summary>The point of the outline of a pattern nearest to a point, in plan.</summary>
+    public static Vec3 NearestOnOutline(HolePattern root, Vec3 pt)
+    {
+        var best = pt;
+        var bestD = double.MaxValue;
+        var o = root.Outline;
+        for (int k = 0; k < o.Count; k++)
+        {
+            var c = GeoMath.ClosestOnSegment2D(o[k], o[(k + 1) % o.Count], pt).Point;
+            var d = Vec3.Distance2D(c, pt);
+            if (d < bestD) { bestD = d; best = c; }
+        }
+        return best.WithZ(root.Center.Z);
     }
 
     /// <summary>A new burden and spacing for a pattern and its tree: the grid of the parent placed again, its segments following.</summary>

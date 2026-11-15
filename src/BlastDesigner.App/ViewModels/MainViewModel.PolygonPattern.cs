@@ -89,7 +89,7 @@ public partial class MainViewModel
                     int r0 = p.Rows.Count;
                     foreach (var r in rows) r.Name = $"Row {++r0}";
                     p.Rows.AddRange(rows);
-                    pattern.Name = Loc.F("Pattern {0}", p.Patterns.Count + 1);
+                    pattern.Name = Loc.F("Pattern {0}", p.Patterns.Count(x => x.ParentId == null) + 1);
                     pattern.OutlineEntityId = id;
                     pattern.ToLevel = toLevel;
                     pattern.ToSurface = toSurface;

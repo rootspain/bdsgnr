@@ -130,7 +130,7 @@ public sealed class LayersPanel : DockPanel
 }
 
 /// <summary>Right-hand panel: properties of the selection, applied immediately as undoable edits.</summary>
-public sealed class PropertiesPanel : DockPanel
+public sealed partial class PropertiesPanel : DockPanel
 {
     private readonly MainViewModel _vm;
     private readonly ContentControl _content = new();
@@ -453,8 +453,13 @@ public sealed class PropertiesPanel : DockPanel
     /// </summary>
     private Control? PatternSection(Document doc, List<Hole> holes)
     {
+        // the holes of the segments of one pattern are holes of that pattern; the segment of them all shows its fields too
         var ids = holes.Select(h => h.PatternId).Distinct().ToList();
-        if (ids.Count != 1 || doc.Project.FindPattern(ids[0]) is not { } pat) return null;
+        if (ids.Any(x => doc.Project.FindPattern(x) == null)) return null;
+        var roots = ids.Select(x => PatternTree.Root(doc.Project, doc.Project.FindPattern(x)!)).Distinct().ToList();
+        if (roots.Count != 1) return null;
+        var pat = roots[0];
+        var segment = ids.Count == 1 && doc.Project.FindPattern(ids[0]) is { ParentId: not null } one ? one : null;
         const string key = "Pattern";
         var body = new StackPanel { Spacing = 6, IsVisible = !_collapsed.Contains(key), Name = "holePattern" };
         var chevron = new TextBlock { Text = body.IsVisible ? "▾" : "▸", Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
@@ -519,6 +524,7 @@ public sealed class PropertiesPanel : DockPanel
         var rotate = new Button { Content = Loc.T("Rotate pattern"), Height = 28, Name = "rotatePattern", IsEnabled = !doc.IsReadOnly };
         rotate.Click += (_, _) => _vm.PatternRotateTool();
         body.Children.Add(Ui.Row(6, select, rotate));
+        foreach (var control in SegmentControls(doc, pat, segment)) body.Children.Add(control);
         return new StackPanel { Spacing = 8, Children = { head, body } };
     }
 

@@ -1833,6 +1833,103 @@ Step("the grid of a pattern is turned by the circle at the tip of its arrow", ()
     Pump();
     if (vm.Project!.FindPattern(patId) != null) throw new Exception("the smoke pattern was not taken away");
 });
+Step("a pattern is cut into segments: the field, a segment of its own, its depth, a cut line dragged, saved, opened, undone", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var snapping = vm.View.SnapEnabled;
+    vm.View.SnapEnabled = false;
+    var none = Avalonia.Input.KeyModifiers.None;
+    var outline = new[] { new Vec3(1200, 2000, 300), new Vec3(1241, 2000, 300), new Vec3(1241, 2023, 300), new Vec3(1200, 2023, 300) };
+    var rootId = Guid.Empty;
+    vm.Change("Smoke pattern", p =>
+    {
+        var made = HoleDesign.FillPolygon(outline, new PatternParameters { Burden = 4, Spacing = 4.5, Pattern = PatternType.Rectangular, Orientation = 0, LabelPrefix = "S", StartNumber = 1 }, vm.NewHoleParameters(), out var rows, out var pattern);
+        foreach (var h in made) p.Add(h, vm.HoleLayer);
+        p.Rows.AddRange(rows);
+        p.Patterns.Add(pattern);
+        rootId = pattern.Id;
+    });
+    // the undo list is full by now: room for the steps counted here
+    var maxUndo = vm.Doc!.MaxUndo;
+    vm.Doc.MaxUndo = 1000;
+    HolePattern Root() => vm.Project!.FindPattern(rootId)!;
+    List<Hole> Tree() => PatternTree.TreeHoles(vm.Project!, Root()).ToList();
+    var collars = Tree().ToDictionary(h => h.Id, h => h.Collar);
+    vm.Doc.Select(Tree().Select(h => h.Id)); vm.ZoomSelection(); window.ShowPropertiesTab(); Pump();
+    var start = vm.Doc.UndoNames.Count;
+    T Find<T>(string name) where T : Control => window.GetLogicalDescendants().OfType<T>().FirstOrDefault(b => b.Name == name && b.IsEffectivelyVisible) ?? throw new Exception("no " + name + " in the panel");
+    void Enter(TextBox box, string text)
+    {
+        box.Text = text;
+        box.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
+    }
+    // three segments from the field under the buttons: no hole moves
+    if (Find<TextBox>("patternSegments").Text != "1") throw new Exception("a pattern of its own should show 1 segment");
+    Enter(Find<TextBox>("patternSegments"), "3");
+    if (!Root().IsContainer || PatternTree.Children(vm.Project!, Root()).Count != 3) throw new Exception("the field did not cut the pattern into 3 segments");
+    if (vm.Doc.UndoNames.Count != start + 1) throw new Exception($"cutting should be one undo step: {start} → {vm.Doc.UndoNames.Count}: " + string.Join(" | ", vm.Doc.UndoNames.Take(4)));
+    if (Tree().Count != collars.Count || Tree().Any(h => collars[h.Id] != h.Collar)) throw new Exception("cutting moved holes");
+    vm.View.Redraw(); Pump(); Shot("83_pattern_segments");
+    // segment B gets a diameter of its own
+    var b = PatternTree.Children(vm.Project!, Root())[1];
+    vm.SelectSegmentHoles(b.Id); Pump();
+    if (vm.SelectedSegment?.Id != b.Id) throw new Exception("the row of the segment did not select its holes");
+    Find<TextBlock>("segmentDiameterInherited");
+    Enter(Find<TextBox>("segmentDiameter"), "89");
+    if (HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Any(h => h.Diameter != 89)) throw new Exception("the holes of segment B did not take the diameter");
+    if (HoleDesign.PatternHoles(vm.Project!, PatternTree.Children(vm.Project!, Root())[0]).Any(h => h.Diameter == 89)) throw new Exception("segment A took the diameter of B");
+    Find<Button>("segmentDiameterReset");
+    // and a depth from/to: collars on the surface, the holes down to the levels at the corners
+    var mode = Find<ComboBox>("patternDepthMode");
+    mode.SelectedIndex = 2; Pump();
+    var bd = vm.Project!.FindPattern(b.Id)!;
+    if (bd.HoleDefaults.Depth.Mode != DepthMode.SurfaceToRect || bd.Overrides.Depth == null) throw new Exception("the depth mode did not go to segment B");
+    Enter(Find<TextBox>("depthFrontFrom"), "291");
+    Enter(Find<TextBox>("depthFrontTo"), "291");
+    Enter(Find<TextBox>("depthBackFrom"), "288");
+    Enter(Find<TextBox>("depthBackTo"), "288");
+    var levels = HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Select(h => h.ToLevel).Distinct().ToList();
+    if (!levels.Contains(291) || !levels.Contains(288)) throw new Exception("the holes of B did not go down to the levels: " + string.Join(", ", levels));
+    vm.View.Redraw(); Pump(); Shot("84_pattern_segment_depth");
+    // the first cut line dragged one row back: one undo step
+    var cam = vm.View.Camera;
+    var line = Root().SegmentLines[0];
+    var (ga, gb) = SegmentLineGrips.Grips(cam, Root(), line);
+    double mx = (ga.X + gb.X) / 2, my = (ga.Y + gb.Y) / 2;
+    var back = cam.ToScreen(PatternTree.GridToWorld(Root(), 0, line.V1 + Root().Burden));
+    var front = cam.ToScreen(PatternTree.GridToWorld(Root(), 0, line.V1));
+    double dx = back.Item1 - front.Item1, dy = back.Item2 - front.Item2;
+    ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = none };
+    var steps = vm.Doc.UndoNames.Count;
+    var v0 = line.V1;
+    vm.ActiveTool.PointerMoved(At(mx, my));
+    vm.ActiveTool.PointerPressed(At(mx, my));
+    for (int k = 1; k <= 4; k++) vm.ActiveTool.PointerMoved(At(mx + dx * k / 4, my + dy * k / 4));
+    if (vm.View.Preview.Markers.Count == 0) throw new Exception("dragging a cut line shows no preview");
+    vm.ActiveTool.PointerReleased(At(mx + dx, my + dy)); Pump();
+    if (vm.Doc.UndoNames.Count != steps + 1 || Math.Abs(Root().SegmentLines[0].V1 - (v0 + Root().Burden)) > 1e-6)
+        throw new Exception($"the cut line did not go one row back: {v0} → {Root().SegmentLines[0].V1}");
+    // saved and opened again: the segments, what B sets and the depth come back
+    var path = Path.Combine(outDir, "segments.bdp");
+    ProjectFile.Save(vm.Project!, path, 0);
+    var opened = ProjectFile.Load(path);
+    var or = opened.FindPattern(rootId)!;
+    var ob = opened.FindPattern(b.Id)!;
+    if (!or.IsContainer || PatternTree.Children(opened, or).Count != 3 || ob.Overrides.Diameter != 89 || ob.HoleDefaults.Depth.Mode != DepthMode.SurfaceToRect)
+        throw new Exception("the segments did not come back from the file");
+    if (opened.Holes.Count() != vm.Project!.Holes.Count()) throw new Exception("the file lost holes");
+    // every step undone, back to the pattern of its own
+    while (vm.Doc.UndoNames.Count > start) vm.Undo();
+    Pump();
+    if (Root().IsContainer || vm.Project!.Patterns.Count(x => x.ParentId == rootId) != 0) throw new Exception("undo did not take the segments away");
+    if (Tree().Count != collars.Count || Tree().Any(h => collars[h.Id] != h.Collar || h.PatternId != rootId)) throw new Exception("undo did not bring the holes back");
+    for (int i = 0; i < 10 && vm.Project!.FindPattern(rootId) != null; i++) vm.Undo();
+    Pump();
+    if (vm.Project!.FindPattern(rootId) != null) throw new Exception("the smoke pattern was not taken away");
+    vm.Doc.MaxUndo = maxUndo;
+    vm.View.SnapEnabled = snapping;
+    vm.Doc.ClearSelection();
+});
 Step("analysis maps toggle and clear", () =>
 {
     vm.ClearOverlays();

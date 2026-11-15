@@ -288,7 +288,7 @@ public sealed partial class MainViewModel
             // the grid is kept, so the pattern can be turned or laid out again later
             if (holes.Count > 0)
             {
-                pattern.Name = Loc.F("Pattern {0}", p.Patterns.Count + 1);
+                pattern.Name = Loc.F("Pattern {0}", p.Patterns.Count(x => x.ParentId == null) + 1);
                 pattern.OutlineEntityId = outlineId;
                 pattern.ToLevel = toLevel;
                 pattern.ToSurface = toSurface;

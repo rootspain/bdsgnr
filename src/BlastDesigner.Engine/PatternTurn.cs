@@ -23,6 +23,9 @@ public static class PatternTurn
     /// <summary>What turning the grid by <paramref name="delta"/> degrees would do to its holes, the pattern left as it is.</summary>
     public static PatternPlan Plan(BlastProject p, HolePattern pat, double delta)
     {
+        // a pattern cut into segments turns as a whole, its cut lines with it
+        if (pat.IsContainer || pat.ParentId != null)
+            return PatternTree.Plan(p, PatternTree.Root(p, pat), (q, r) => PatternTree.Rotate(q, r, delta, PatternRebuildOptions.For(q)));
         var copy = ProjectJson.DeepClone(pat);
         copy.Azimuth = GeoMath.NormalizeBearing(copy.Azimuth + delta);
         return HoleDesign.PlanPattern(p, copy);

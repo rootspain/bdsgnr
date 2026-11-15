@@ -22,7 +22,7 @@ public static class SpatialTransforms
 
     /// <summary>The polygons patterns of holes are laid out in: changing one would lay its pattern out again.</summary>
     public static HashSet<Guid> PatternOutlineIds(BlastProject p) =>
-        p.Patterns.Where(x => x.OutlineEntityId != null).Select(x => x.OutlineEntityId!.Value).ToHashSet();
+        p.Patterns.Where(x => x.PolygonId != null).Select(x => x.PolygonId!.Value).ToHashSet();
 
     /// <summary>The selected objects the tool changes with <paramref name="t"/>.</summary>
     public static List<Entity> Taken(BlastProject p, IEnumerable<Guid> ids, SpatialTransform t)
