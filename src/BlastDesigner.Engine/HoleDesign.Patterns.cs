@@ -92,6 +92,15 @@ public static partial class HoleDesign
     /// <summary>Whether a point gets a hole: inside the outline and not nearer to it than the edge offset.</summary>
     public static bool NodeInside(HolePattern pat, Vec3 pt)
     {
+        if (pat.EdgeOutline is { Count: >= 3 } edge)
+        {
+            // a segment: inside the outline of its parent (the edge offset from it, not from the cuts) and on its side of each cut
+            if (pat.Outline.Count < 3 || !GeoMath.PointInPolygon(edge, pt.X, pt.Y)) return false;
+            foreach (var c in pat.Cuts)
+                if (!c.Keeps(pt.X, pt.Y)) return false;
+            var de = GeoMath.DistanceToPolyline2D(edge, pt, true);
+            return de > OnOutline && (pat.EdgeOffset <= 0 || de >= pat.EdgeOffset);
+        }
         if (!GeoMath.PointInPolygon(pat.Outline, pt.X, pt.Y)) return false;
         var d = GeoMath.DistanceToPolyline2D(pat.Outline, pt, true);
         return d > OnOutline && (pat.EdgeOffset <= 0 || d >= pat.EdgeOffset);
@@ -102,7 +111,7 @@ public static partial class HoleDesign
     {
         var nodes = new List<PatternNode>();
         if (pat.Outline.Count < 3 || pat.Burden <= 0 || pat.Spacing <= 0) return nodes;
-        var r = pat.Outline.Max(p => Vec3.Distance2D(p, pat.Center));
+        var r = (pat.EdgeOutline is { Count: >= 3 } edge ? edge : pat.Outline).Max(p => Vec3.Distance2D(p, pat.Center));
         long i0 = (long)Math.Floor((-r - pat.Spacing - pat.PhaseU) / pat.Spacing), i1 = (long)Math.Ceiling((r - pat.PhaseU) / pat.Spacing);
         long j0 = (long)Math.Floor((-r - pat.PhaseV) / pat.Burden), j1 = (long)Math.Ceiling((r - pat.PhaseV) / pat.Burden);
         if ((i1 - i0 + 1) * (j1 - j0 + 1) > 4_000_000) throw new InvalidOperationException("The pattern is too dense for its outline.");
@@ -213,20 +222,29 @@ public static partial class HoleDesign
     /// else the first row half a burden from the face side of the outline. Along a row the holes start half a spacing from the
     /// left end of the outline, from its right end, or with the same room at both (<see cref="HolePattern.Alignment"/>).
     /// </summary>
-    public static void Anchor(HolePattern pat)
+    public static void Anchor(HolePattern pat) => Anchor(pat, true, true);
+
+    /// <summary>
+    /// <see cref="Anchor(HolePattern)"/> across the rows (where the first row goes), along them (where the first hole of a row
+    /// goes), or both. A segment laid from its back side (<see cref="HolePattern.AnchorSide"/>) has its last row half a
+    /// burden inside its back side instead.
+    /// </summary>
+    public static void Anchor(HolePattern pat, bool along, bool across)
     {
         if (pat.Outline.Count < 3 || pat.Burden <= 0 || pat.Spacing <= 0) return;
         if (pat.FaceEdge is int k && (k < 0 || k >= pat.Outline.Count)) pat.FaceEdge = null;
         if (pat.FaceEdge is int edge) pat.Azimuth = OutwardBearing(pat.Outline, edge);
         var (u, v) = PatternAxes(pat.Azimuth);
-        double minU = double.MaxValue, maxU = double.MinValue, minV = double.MaxValue;
-        foreach (var q in pat.Outline)
+        double minU = double.MaxValue, maxU = double.MinValue, minV = double.MaxValue, maxV = double.MinValue;
+        foreach (var q in pat.Outline.Concat(pat.OutlineParts.SelectMany(x => x)))
         {
             var d = q - pat.Center;
             var du = d.X * u.X + d.Y * u.Y;
+            var dv = d.X * v.X + d.Y * v.Y;
             minU = Math.Min(minU, du);
             maxU = Math.Max(maxU, du);
-            minV = Math.Min(minV, d.X * v.X + d.Y * v.Y);
+            minV = Math.Min(minV, dv);
+            maxV = Math.Max(maxV, dv);
         }
         if (pat.FaceEdge is int f)
         {
@@ -234,7 +252,17 @@ public static partial class HoleDesign
             var d = pat.Outline[f] - pat.Center;
             minV = d.X * v.X + d.Y * v.Y;
         }
-        pat.PhaseV = minV + pat.Burden / 2;
+        if (across)
+        {
+            if (pat.AnchorSide == PatternAnchorSide.Back && pat.ParentId != null)
+            {
+                // the last row half a burden inside the back side, row 0 still the one nearest the face
+                var rows = Math.Floor(Math.Max(0, maxV - minV - pat.Burden) / pat.Burden + 1e-9);
+                pat.PhaseV = maxV - pat.Burden / 2 - rows * pat.Burden;
+            }
+            else pat.PhaseV = minV + pat.Burden / 2;
+        }
+        if (!along) return;
         // between the holes half a spacing in from both ends: what is left over goes to the right, both sides or the left
         var span = maxU - minU - pat.Spacing;
         var count = span >= 0 ? Math.Floor(span / pat.Spacing + 1e-9) + 1 : 1;
@@ -465,6 +493,15 @@ public static partial class HoleDesign
 
         var rows = RebuildRows(p, pat);
         var ordered = rows.SelectMany(r => r.HoleIds).Select(p.FindEntity).OfType<Hole>().ToList();
+        // the holes of a segment are numbered through its whole tree (PatternTree.Renumber)
+        if (pat.ParentId == null) Number(p, pat, ordered, added);
+        pat.Revision++;
+        return report;
+    }
+
+    /// <summary>The holes of a pattern numbered in row order, or only the new ones with the next free numbers when the numbers are kept.</summary>
+    internal static void Number(BlastProject p, HolePattern pat, List<Hole> ordered, HashSet<Guid> added)
+    {
         if (!pat.KeepLabels)
         {
             int n = pat.StartNumber;
@@ -475,15 +512,13 @@ public static partial class HoleDesign
             var next = p.Holes.Where(h => !added.Contains(h.Id)).Select(h => int.TryParse(new string(h.Label.Where(char.IsDigit).ToArray()), out var k) ? k : 0).DefaultIfEmpty(0).Max() + 1;
             foreach (var h in ordered.Where(h => added.Contains(h.Id))) h.Label = pat.LabelPrefix + next++;
         }
-        pat.Revision++;
-        return report;
     }
 
     /// <summary>
     /// The rows of the pattern made again by grid row, each keeping its row id: the row furthest along the blast orientation
     /// first, the holes of a row from left to right looking along it. They take the place of the old rows in the list.
     /// </summary>
-    private static List<HoleRow> RebuildRows(BlastProject p, HolePattern pat)
+    internal static List<HoleRow> RebuildRows(BlastProject p, HolePattern pat)
     {
         var holes = PatternHoles(p, pat).Where(h => h.GridJ != null).ToList();
         var ids = holes.Select(h => h.Id).ToHashSet();
@@ -534,6 +569,12 @@ public static partial class HoleDesign
     /// <summary>Removes the grid of a pattern; its holes stay as holes of their own.</summary>
     public static void DissolvePattern(BlastProject p, HolePattern pat)
     {
+        // a pattern cut into segments takes its segments with it
+        foreach (var s in PatternTree.Descendants(p, pat))
+        {
+            foreach (var h in PatternHoles(p, s).ToList()) h.DetachFromPattern();
+            p.Patterns.Remove(s);
+        }
         foreach (var h in PatternHoles(p, pat).ToList()) h.DetachFromPattern();
         p.Patterns.Remove(pat);
     }

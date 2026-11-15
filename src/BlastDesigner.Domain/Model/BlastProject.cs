@@ -281,12 +281,47 @@ public sealed class HolePattern
     /// does not lay the whole container out again when the polygon is edited.
     /// </summary>
     public Guid? SourceOutlineId { get; set; }
+    /// <summary>
+    /// Of a segment: the outline of its parent, which a node of the segment has to be inside (and the edge offset is measured
+    /// from); null for a pattern of its own. The <see cref="Outline"/> of a segment is its piece of it, as drawn.
+    /// </summary>
+    public List<Vec3>? EdgeOutline { get; set; }
+    /// <summary>Of a segment: the sides of the cut lines it keeps; a node of the segment is on the kept side of each.</summary>
+    public List<CutPlane> Cuts { get; set; } = new();
+    /// <summary>Of a segment of a bent outline that a strip cuts into several pieces: the pieces besides <see cref="Outline"/>.</summary>
+    public List<List<Vec3>> OutlineParts { get; set; } = new();
+    /// <summary>Of a segment with a grid of its own: the side its rows are laid from, half a burden inside it.</summary>
+    public PatternAnchorSide AnchorSide { get; set; }
     /// <summary>The pattern is cut into segments and has no holes of its own.</summary>
     [JsonIgnore] public bool IsContainer => SegmentLines.Count > 0;
     /// <summary>The polygon the outline follows: that of a container or of a pattern of its own.</summary>
     [JsonIgnore] public Guid? PolygonId => OutlineEntityId ?? SourceOutlineId;
 
     public bool IsSuppressed(int i, int j) => Suppressed.Any(s => s.I == i && s.J == j);
+}
+
+/// <summary>The side of a segment its rows are laid from: the one towards the face, or the one behind.</summary>
+public enum PatternAnchorSide
+{
+    Face,
+    Back
+}
+
+/// <summary>The kept side of a cut line, in plan: a point P is on it when (P − (X, Y)) · (NX, NY) ≥ 0 (> 0 when strict).</summary>
+public sealed class CutPlane
+{
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double NX { get; set; }
+    public double NY { get; set; }
+    /// <summary>A point on the line itself is not on the kept side: it goes to the segment on the other side.</summary>
+    public bool Strict { get; set; }
+
+    public bool Keeps(double x, double y)
+    {
+        var s = (x - X) * NX + (y - Y) * NY;
+        return Strict ? s > 1e-9 : s >= -1e-9;
+    }
 }
 
 /// <summary>What the new holes of a pattern are made with.</summary>

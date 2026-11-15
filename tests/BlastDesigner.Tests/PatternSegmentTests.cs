@@ -160,4 +160,190 @@ public class PatternSegmentTests
         Assert.Equal(1.5, seg.HoleDefaults.Subdrill);
         Assert.Same(root, PatternTree.Root(p, seg));
     }
+
+    // ---- stage 2: cut and lay out again ----
+
+    private static readonly Vec3[] Field = { new(0, 0, 100), new(47, -3, 100), new(53, 31, 100), new(21, 44, 100), new(-6, 27, 100) };
+
+    private static Hole H(BlastProject p, Guid id) => (Hole)p.FindEntity(id)!;
+
+    [Theory]
+    [InlineData(PatternType.Staggered, 0, 3)]
+    [InlineData(PatternType.Rectangular, 37, 2)]
+    [InlineData(PatternType.Staggered, 200, 4)]
+    public void Cutting_WithoutChangingParameters_MovesNoHole(PatternType type, double orientation, int count)
+    {
+        var (p, root) = Make(Field, type, orientation, prefix: "A", start: 5);
+        var before = p.Holes.ToDictionary(h => h.Id, h => (h.Collar, h.Label));
+        var rowCount = p.Rows.Count;
+        var report = PatternTree.Split(p, root, count);
+        Assert.Null(report.Refusal);
+        Assert.Equal(0, report.Moved + report.Added + report.Deleted);
+        Assert.True(root.IsContainer);
+        Assert.Equal(count - 1, root.SegmentLines.Count);
+        var segments = PatternTree.Children(p, root);
+        Assert.Equal(count, segments.Count);
+        Assert.Empty(HoleDesign.PatternHoles(p, root));
+        Assert.All(segments, s => Assert.NotEmpty(HoleDesign.PatternHoles(p, s)));
+        Assert.Equal(before.Count, p.Holes.Count());
+        foreach (var h in p.Holes)
+        {
+            Assert.Equal(before[h.Id].Collar, h.Collar);
+            Assert.Equal(before[h.Id].Label, h.Label);
+        }
+        // the rows are split by segment, as many as before, named Row 1, Row 2… in order
+        Assert.Equal(rowCount, p.Rows.Count);
+        Assert.Equal(Enumerable.Range(1, p.Rows.Count).Select(k => $"Row {k}"), p.Rows.Select(r => r.Name));
+        Assert.Null(root.OutlineEntityId);
+    }
+
+    [Fact]
+    public void Cutting_SharesTheRowsEvenly_TheExtraOnesTowardsTheFace()
+    {
+        var (p, root) = Make(Rectangle);
+        Assert.Equal(6, PatternTree.MaxSegments(root));
+        PatternTree.Split(p, root, 4);
+        var rows = PatternTree.Children(p, root).Select(s => HoleDesign.PatternHoles(p, s).Select(h => h.GridJ).Distinct().Count()).ToList();
+        Assert.Equal(new[] { 2, 2, 1, 1 }, rows);
+    }
+
+    [Fact]
+    public void TheNumbers_RunThroughTheParent_SegmentBySegment()
+    {
+        var (p, root) = Make(Rectangle, prefix: "P", start: 10);
+        PatternTree.Split(p, root, 2);
+        var seg = PatternTree.Children(p, root);
+        // the back segment gets a smaller spacing: more holes, numbered after all those of the front one
+        seg[1].Overrides.Spacing = 3;
+        PatternTree.Relayout(p, root);
+        var labels = p.Rows.SelectMany(r => r.HoleIds).Select(id => H(p, id).Label).ToList();
+        Assert.Equal(Enumerable.Range(10, labels.Count).Select(k => "P" + k), labels);
+        var front = HoleDesign.PatternHoles(p, seg[0]).Select(h => int.Parse(h.Label[1..])).ToList();
+        var back = HoleDesign.PatternHoles(p, seg[1]).Select(h => int.Parse(h.Label[1..])).ToList();
+        Assert.True(front.Max() < back.Min());
+        Assert.Equal(p.Holes.Count(), labels.Count);
+        Assert.Equal(Enumerable.Range(1, p.Rows.Count).Select(k => $"Row {k}"), p.Rows.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void ANewBurdenOfTheParent_LaysOutOnlyTheSegmentsThatTakeIt()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var seg = PatternTree.Children(p, root);
+        seg[0].Overrides.Burden = 3;
+        seg[0].Overrides.Spacing = 3.5;
+        PatternTree.Relayout(p, root);
+        var own = HoleDesign.PatternHoles(p, seg[0]).ToDictionary(h => h.Id, h => h.Collar);
+        var taking = HoleDesign.PatternHoles(p, seg[1]).ToDictionary(h => h.Id, h => h.Collar);
+        Assert.Equal(3, seg[0].Burden);
+
+        var report = PatternTree.Resize(p, root, 5, 4.5);
+        Assert.Null(report.Refusal);
+        Assert.Equal(3, seg[0].Burden);
+        Assert.Equal(5, seg[1].Burden);
+        // the segment with a burden of its own: none of its holes moved
+        foreach (var h in HoleDesign.PatternHoles(p, seg[0]))
+            if (own.TryGetValue(h.Id, out var was)) Assert.Equal(was, h.Collar);
+        // the one that takes the burden of the parent was laid out again
+        Assert.Contains(HoleDesign.PatternHoles(p, seg[1]), h => !taking.TryGetValue(h.Id, out var was) || Vec3.Distance2D(was, h.Collar) > 1e-6);
+        Assert.All(HoleDesign.PatternHoles(p, seg[1]), h => Assert.Equal(5, p.Rows.First(r => r.Id == h.RowId).Burden));
+    }
+
+    [Fact]
+    public void BackToOneSegment_TheParentHoldsTheHolesAgain()
+    {
+        var (p, root) = Make(Field, PatternType.Staggered);
+        var polygon = new PolylineEntity { Closed = true, Points = Field.ToList() };
+        p.Add(polygon, p.DefaultLayer);
+        root.OutlineEntityId = polygon.Id;
+        var before = p.Holes.ToDictionary(h => h.Id, h => (h.Collar, h.Label));
+        var rows = p.Rows.Count;
+        PatternTree.Split(p, root, 3);
+        Assert.Equal(polygon.Id, root.SourceOutlineId);
+        PatternTree.Split(p, root, 2);
+        Assert.Equal(2, PatternTree.Children(p, root).Count);
+        PatternTree.Split(p, root, 1);
+        Assert.False(root.IsContainer);
+        Assert.Empty(PatternTree.Children(p, root));
+        Assert.Single(p.Patterns);
+        Assert.Equal(polygon.Id, root.OutlineEntityId);
+        Assert.Null(root.SourceOutlineId);
+        Assert.Equal(rows, p.Rows.Count);
+        Assert.Equal(before.Count, p.Holes.Count());
+        Assert.All(p.Holes, h => Assert.Equal(before[h.Id], (h.Collar, h.Label)));
+        Assert.All(p.Holes, h => Assert.Equal(root.Id, h.PatternId));
+    }
+
+    [Fact]
+    public void MoreSegments_HalveTheBiggest_KeepingWhatItSets()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var seg = PatternTree.Children(p, root);
+        seg[0].Overrides.Diameter = 89;
+        PatternTree.Relayout(p, root);
+        PatternTree.Split(p, root, 3);
+        var now = PatternTree.Children(p, root);
+        Assert.Equal(3, now.Count);
+        Assert.Equal(new[] { "A", "B", "C" }, now.Select(s => s.Name));
+        Assert.Equal(new[] { 0, 1, 2 }, now.Select(s => s.Order));
+        // both segments have 3 rows: the front one is halved, both halves keep its diameter
+        Assert.Equal(89, now[0].Overrides.Diameter);
+        Assert.Equal(89, now[1].Overrides.Diameter);
+        Assert.Null(now[2].Overrides.Diameter);
+        Assert.All(HoleDesign.PatternHoles(p, now[1]), h => Assert.Equal(89, h.Diameter));
+    }
+
+    [Fact]
+    public void Turning_TheParent_TurnsItsSegmentsAndLines()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var count = p.Holes.Count();
+        var report = PatternTree.Rotate(p, root, 30);
+        Assert.Null(report.Refusal);
+        Assert.All(PatternTree.Children(p, root), s => Assert.Equal(30, s.Azimuth, 9));
+        Assert.Empty(HoleDesign.PatternHoles(p, root));
+        PatternTree.Rotate(p, root, -30);
+        Assert.Equal(count, p.Holes.Count());
+    }
+
+    [Fact]
+    public void ASegmentWithItsOwnDepth_DrillsToIt()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var seg = PatternTree.Children(p, root);
+        seg[1].Overrides.Depth = new DepthSpec { Mode = DepthMode.SurfaceToRect, Front = new DepthPair(90, 90), Back = new DepthPair(85, 85) };
+        PatternTree.Relayout(p, root);
+        Assert.All(HoleDesign.PatternHoles(p, seg[0]), h => Assert.Null(h.ToLevel));
+        var back = HoleDesign.PatternHoles(p, seg[1]).ToList();
+        Assert.Contains(back, h => h.ToLevel == 90);
+        Assert.Contains(back, h => h.ToLevel == 85);
+    }
+
+    [Fact]
+    public void AHoleChangedByHand_KeepsItsValues_ThroughCutsAndHalvings()
+    {
+        var (p, root) = Make(Rectangle);
+        root.HoleDefaults.Diameter = 115;
+        var hand = p.Holes.First();
+        hand.Diameter = 76;
+        PatternTree.Split(p, root, 2);
+        PatternTree.Split(p, root, 3);
+        Assert.Equal(76, hand.Diameter);
+        PatternTree.Split(p, root, 1);
+        Assert.Equal(76, hand.Diameter);
+    }
+
+    [Fact]
+    public void DissolvingTheParent_TakesItsSegments()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 3);
+        HoleDesign.DissolvePattern(p, root);
+        Assert.Empty(p.Patterns);
+        Assert.All(p.Holes, h => Assert.Null(h.PatternId));
+    }
 }

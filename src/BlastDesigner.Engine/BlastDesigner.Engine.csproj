@@ -4,6 +4,10 @@
     <ProjectReference Include="..\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- polygon clipping for the segments of a pattern (Boost licence); SHOTPlus ships the same library -->
+    <PackageReference Include="Clipper2" Version="1.5.4" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="Calc\Formulas.bdcalc" LogicalName="Formulas.bdcalc" />
   </ItemGroup>
 </Project>
