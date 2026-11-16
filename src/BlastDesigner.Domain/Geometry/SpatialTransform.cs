@@ -104,6 +104,9 @@ public sealed record SpatialTransform
     /// <summary>Whether it mirrors (one mirror; both together are a half turn).</summary>
     public bool Mirrors => MirrorX != MirrorY;
 
+    /// <summary>It changes sizes: a scale other than 1 along an axis, or a mirror.</summary>
+    public bool Scales => ScaleX != 1 || ScaleY != 1 || ScaleZ != 1 || MirrorX || MirrorY;
+
     /// <summary>Why it cannot be applied, or null: no scale of 0 or below (mirrors do that), no tilt about X or Y of 89° or more.</summary>
     public string? Problem =>
         ScaleX <= 0 || ScaleY <= 0 || ScaleZ <= 0 ? "The scale must be above 0" :

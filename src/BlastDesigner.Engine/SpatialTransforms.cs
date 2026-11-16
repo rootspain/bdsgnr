@@ -8,15 +8,15 @@ public sealed record TransformOutcome(int Changed, int Holes, int PatternOutline
 
 /// <summary>
 /// The Transform tool on a project: scale, tilt, mirror and move of the selected objects (doc/transform-tool-plan.md).
-/// Holes, ties and anything of a pattern of holes are left (a pattern has its own tool), so are the outlines of patterns and
-/// the objects of locked layers; a block is left when tilted about X or Y.
+/// Holes, ties and anything inside a pattern of holes are left (a pattern has its own tool), so are the objects of locked
+/// layers; the outline of a pattern is only tilted (and moved), never scaled or mirrored; a block is left when tilted about X or Y.
 /// </summary>
 public static class SpatialTransforms
 {
     /// <summary>Why the tool leaves an object, or null when it takes it.</summary>
     public static string? Left(BlastProject p, Entity e, SpatialTransform t) =>
         e is Hole ? "hole" :
-        PatternOutlineIds(p).Contains(e.Id) ? "pattern outline" :
+        t.Scales && PatternOutlineIds(p).Contains(e.Id) ? "pattern outline" :
         p.FindLayer(e.LayerId) is { Locked: true } or { Frozen: true } ? "locked" :
         !e.Takes(t) ? "not taken" : null;
 
@@ -28,9 +28,7 @@ public static class SpatialTransforms
     public static List<Entity> Taken(BlastProject p, IEnumerable<Guid> ids, SpatialTransform t)
     {
         var set = ids as ISet<Guid> ?? ids.ToHashSet();
-        var outlines = PatternOutlineIds(p);
-        return p.Entities.Where(e => set.Contains(e.Id) && e is not Hole && !outlines.Contains(e.Id)
-            && p.FindLayer(e.LayerId) is not ({ Locked: true } or { Frozen: true }) && e.Takes(t)).ToList();
+        return p.Entities.Where(e => set.Contains(e.Id) && Left(p, e, t) == null).ToList();
     }
 
     /// <summary>Changes the selected objects the tool takes, in place; what it left is counted by why.</summary>

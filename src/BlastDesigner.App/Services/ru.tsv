@@ -3214,7 +3214,7 @@ line type:DASHDOT	Штрихпунктирная
 line type:BORDER	Граница
 line type:DIVIDE	Разделительная
 Transform	Трансформация
-Scale, tilt and mirror the selected objects: the corners of the frame scale in proportion (Shift each axis, Alt from the centre), the sides along one axis, the knob above turns (Shift 15°, Ctrl 1°), the cross is the base point. Type a number while dragging and press Enter for an exact value. Done applies. Holes and patterns are left: they have their own tool.	Масштаб, наклон и зеркало выделенных объектов: углы рамки масштабируют пропорционально (Shift — по осям отдельно, Alt — от центра), стороны — по одной оси, кружок над рамкой поворачивает (Shift — шаг 15°, Ctrl — 1°), перекрестье — базовая точка. Во время перетаскивания введите число и нажмите Enter — значение станет точным. «Готово» применяет. Скважины и сетки скважин не меняются: у них свой инструмент.
+Scale, tilt and mirror the selected objects: the corners of the frame scale in proportion (Shift each axis, Alt from the centre), the sides along one axis, the knob above turns (Shift 15°, Ctrl 1°), the cross is the base point. Type a number while dragging and press Enter for an exact value. Done applies. Holes and the inside of a pattern are left: they have their own tool; the outline of a pattern is only tilted.	Масштаб, наклон и зеркало выделенных объектов: углы рамки масштабируют пропорционально (Shift — по осям отдельно, Alt — от центра), стороны — по одной оси, кружок над рамкой поворачивает (Shift — шаг 15°, Ctrl — 1°), перекрестье — базовая точка. Во время перетаскивания введите число и нажмите Enter — значение станет точным. «Готово» применяет. Скважины и внутренность сетки не меняются: у них свой инструмент; контур сетки только наклоняется.
 Select the objects to transform (a click on an object selects it, Shift adds).	Выделите объекты для трансформации (щелчок по объекту выделяет его, с Shift — добавляет).
 Holes are not transformed: {0}	Скважины не трансформируются: {0}
 The scale must be above 0	Масштаб должен быть больше 0
@@ -3349,7 +3349,7 @@ Elevation, m	Отметка, м
 Elevation…	Отметка…
 From the vertices beside it	По соседним вершинам
 ui:Collars	Устья
-ui:The project surface	Поверхность проекта
+ui:On the grid	На сетке
 ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), or on the collar polygon on the vertices of the outline	Где устья: на поверхности устьев проекта (без неё — на отметке сетки) или на полигоне устьев по вершинам контура
 ui:What the holes go down to; the depth polygon has an elevation at each vertex of the outline, flat triangles between them	До чего бурятся скважины; у полигона глубин своя отметка в каждой вершине контура, между ними плоские треугольники
 ui:Vertex	Вершина
@@ -3370,3 +3370,6 @@ Value, m	Значение, м
 ui:polygon	полигон
 ui:Toe elevation, m	Отметка забоя, м
 The toe elevation {0:0.00} m is not below the collar ({1:0.00} m). The depth polygon holds elevations, not depths.	Отметка забоя {0:0.00} м не ниже устья ({1:0.00} м). В полигоне глубин задаются отметки, а не глубины.
+ui:The outline of a pattern is only tilted: it is not scaled or mirrored	Контур сетки только наклоняется: масштаб и зеркало к нему не применяются
+Click: select (Ctrl+click: add or take away); drag: up or down, with the selected ones (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation	Щелчок — выделить (Ctrl+щелчок — добавить или убрать); перетаскивание — вверх или вниз вместе с выделенными (Ctrl — шаг 0,01 м, Shift — весь полигон); двойной щелчок — ввести отметку
+Only vertices of one polygon of one segment are selected together	Вместе выделяются только вершины одного полигона одной секции

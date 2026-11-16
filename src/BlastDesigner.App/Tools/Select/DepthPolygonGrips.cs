@@ -16,6 +16,8 @@ namespace BlastDesigner.App.Tools;
 /// round grip on each: a drag moves its vertex in Z (0.1 m steps, Ctrl 0.01 m), with Shift the whole polygon; the drag
 /// shows where the holes would go, the release is one undo step. A double click on a grip, or on the plan on the elevation
 /// written at a vertex (the collar above, the depth below), asks for the elevation. A vertex two segments share is one grip.
+/// A click selects a vertex, Ctrl+click adds one or takes it away: only vertices of one polygon (collar or depth) of one
+/// segment go together. A drag of a selected vertex moves them all, a double click gives them all the elevation typed.
 /// </summary>
 public sealed class DepthPolygonGrips : ISelectGesture
 {
@@ -32,14 +34,26 @@ public sealed class DepthPolygonGrips : ISelectGesture
     {
         _vm = vm;
         _visible = visible;
-        Overlay = new DepthPolygonGripsOverlay(this, () => (new SKColor(vm.Settings.PatternCollarPolygonColor), new SKColor(vm.Settings.PatternDepthPolygonColor)));
+        Overlay = new DepthPolygonGripsOverlay(this, () => (new SKColor(vm.Settings.PatternCollarPolygonColor), new SKColor(vm.Settings.PatternDepthPolygonColor)),
+            () => PlanRenderer.Adapt(new SKColor(vm.Settings.SelectionColor)));
     }
 
     public DepthPolygonGripsOverlay Overlay { get; }
     IOverlay? ISelectGesture.Overlay => Overlay;
 
     /// <summary>A vertex of a polygon: its pattern, its name, collar (true) or depth, where it is and its elevation.</summary>
-    public sealed record Grip(Guid Root, string Key, bool Collar, Vec3 Point, double Z);
+    /// <param name="Leaves">The segments (or the pattern itself) the vertex belongs to: two at a seam.</param>
+    public sealed record Grip(Guid Root, string Key, bool Collar, Vec3 Point, double Z, IReadOnlySet<Guid> Leaves);
+
+    /// <summary>The selected vertices: of one pattern, one polygon and one segment.</summary>
+    private readonly HashSet<(Guid Root, string Key, bool Collar)> _selected = new();
+    public bool IsSelected(Grip g) => _selected.Contains((g.Root, g.Key, g.Collar));
+    /// <summary>The grips of the selected vertices there are now.</summary>
+    public List<Grip> Selected() => Grips().Where(IsSelected).ToList();
+    /// <summary>The change of elevation the drag gives (the pressed vertex and the selected ones with it).</summary>
+    public double? DraggedDz { get; private set; }
+    /// <summary>The drag moves the selected vertices, not the pressed one alone.</summary>
+    public bool DragsSelection { get; private set; }
 
     public Grip? Hot { get; private set; }
     public Grip? Pressed { get; private set; }
@@ -47,21 +61,38 @@ public sealed class DepthPolygonGrips : ISelectGesture
     public double? DraggedZ { get; private set; }
     public bool Active => Pressed != null;
 
+    /// <summary>
+    /// The view shows the vertical well enough to drag up and down: a 3D view from the side or at a slant, down to 75° from
+    /// the horizon (the more from the side, the plainer the drag). On the plan the elevations written at the vertices are typed in.
+    /// </summary>
+    public static bool SeesTheVertical(Camera cam) => cam.IsPlan || Math.Abs(cam.Up.Z) > 0.26;
+
     /// <summary>The vertices with a grip: of the patterns of the selected holes whose segments use a polygon, while nothing is moved.</summary>
     public List<Grip> Grips()
     {
         var grips = new List<Grip>();
-        if (!_visible() || _vm.Project is not { } project || !PatternRotateHandle.SeesTheGround(_vm.View.Camera)) return grips;
+        if (!_visible() || _vm.Project is not { } project || !SeesTheVertical(_vm.View.Camera)) return grips;
         var bench = project.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench);
-        var seen = new HashSet<(string, bool)>();
-        foreach (var root in PatternOverlay.Shown(_vm.Doc).Select(x => PatternTree.Root(project, x)).Distinct())
-            foreach (var leaf in PatternTree.Leaves(project, root).Where(l => l.HoleDefaults.Depth.UsesPolygons))
+        var seen = new Dictionary<(Guid, string, bool), HashSet<Guid>>();
+        void Add(HolePattern root, HolePattern leaf, SurfaceVertex v, bool collar)
+        {
+            if (!seen.TryGetValue((root.Id, v.Key!, collar), out var leaves))
+            {
+                seen[(root.Id, v.Key!, collar)] = leaves = new HashSet<Guid>();
+                grips.Add(new Grip(root.Id, v.Key!, collar, v.On(collar), v.Z(collar), leaves));
+            }
+            leaves.Add(leaf.Id);
+        }
+        var shown = PatternOverlay.Shown(_vm.Doc);
+        foreach (var root in shown.Select(x => PatternTree.Root(project, x)).Distinct())
+            // a selected segment: the vertices of its own polygons only
+            foreach (var leaf in PatternOverlay.DepthLeaves(project, root, shown).Where(l => l.HoleDefaults.Depth.UsesPolygons))
             {
                 var spec = leaf.HoleDefaults.Depth;
                 foreach (var v in PatternSurfaces.Polygons(project, leaf, bench).SelectMany(x => x).Where(v => v.Key != null))
                 {
-                    if (spec.Collars == CollarSource.Polygon && seen.Add((v.Key!, true))) grips.Add(new Grip(root.Id, v.Key!, true, v.On(true), v.Z(true)));
-                    if (spec.Mode == DepthMode.Polygon && seen.Add((v.Key!, false))) grips.Add(new Grip(root.Id, v.Key!, false, v.On(false), v.Z(false)));
+                    if (spec.Collars == CollarSource.Polygon) Add(root, leaf, v, true);
+                    if (spec.Mode == DepthMode.Polygon) Add(root, leaf, v, false);
                 }
             }
         return grips;
@@ -100,7 +131,7 @@ public sealed class DepthPolygonGrips : ISelectGesture
         var what = Loc.T(hit.Collar ? "Collar polygon" : "Depth polygon");
         var tip = _vm.View.Camera.IsPlan
             ? Loc.T("Double click: type the elevation")
-            : Loc.T("Drag: up or down (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation");
+            : Loc.T("Click: select (Ctrl+click: add or take away); drag: up or down, with the selected ones (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation");
         _vm.View.Preview.Labels.Add((hit.Point, $"{what}: {hit.Z:0.00} — {tip}"));
     }
 
@@ -114,7 +145,37 @@ public sealed class DepthPolygonGrips : ISelectGesture
         _down = p;
         _dragging = false;
         DraggedZ = null;
+        DraggedDz = null;
+        DragsSelection = IsSelected(hit) && _selected.Count > 1;
         return true;
+    }
+
+    /// <summary>Whether a vertex may join the selection: of the same pattern and polygon, and of a segment all the selected share.</summary>
+    private bool Joins(Grip g)
+    {
+        var selected = Selected();
+        if (selected.Count == 0) return true;
+        if (selected.Any(x => x.Root != g.Root || x.Collar != g.Collar)) return false;
+        var common = new HashSet<Guid>(g.Leaves);
+        foreach (var x in selected) common.IntersectWith(x.Leaves);
+        return common.Count > 0;
+    }
+
+    /// <summary>A click on a vertex: it alone selected, or with Ctrl added to the selection (taken away when it was in it).</summary>
+    public void Click(Grip hit, bool add)
+    {
+        var key = (hit.Root, hit.Key, hit.Collar);
+        // the selected vertices that are gone (another selection of holes, a polygon taken away) are no longer selected
+        _selected.IntersectWith(Grips().Select(g => (g.Root, g.Key, g.Collar)));
+        if (add && _selected.Remove(key)) { _vm.View.Redraw(); return; }
+        if (add && !Joins(hit))
+        {
+            _vm.SetStatus(Loc.T("Only vertices of one polygon of one segment are selected together"));
+            return;
+        }
+        if (!add) _selected.Clear();
+        _selected.Add(key);
+        _vm.View.Redraw();
     }
 
     /// <summary>The change of elevation a drag from the press gives: the screen movement along the vertical at the vertex, in steps.</summary>
@@ -140,6 +201,7 @@ public sealed class DepthPolygonGrips : ISelectGesture
         var all = p.Modifiers.HasFlag(KeyModifiers.Shift);
         var values = Values(hit, dz, all);
         DraggedZ = hit.Z + dz;
+        DraggedDz = dz;
         preview.Clear();
         if (_vm.Project is { } project && project.FindPattern(hit.Root) is { } root && Math.Abs(dz) > 1e-9)
         {
@@ -147,6 +209,7 @@ public sealed class DepthPolygonGrips : ISelectGesture
             {
                 var plan = PatternTree.Plan(project, root, (q, r) =>
                 {
+                    PatternSurfaces.FixVertices(q, r, hit.Collar, PatternRebuildOptions.For(q).CollarSurface);
                     foreach (var (key, z) in values) PatternSurfaces.SetVertex(r, key, hit.Collar ? z : null, hit.Collar ? null : z);
                     return PatternTree.Relayout(q, r, PatternRebuildOptions.For(q));
                 });
@@ -167,6 +230,12 @@ public sealed class DepthPolygonGrips : ISelectGesture
     private Dictionary<string, double> Values(Grip hit, double dz, bool all)
     {
         var values = new Dictionary<string, double>();
+        if (!all && DragsSelection)
+        {
+            foreach (var g in Selected()) values[g.Key] = g.Z + dz;
+            values[hit.Key] = hit.Z + dz;
+            return values;
+        }
         if (!all) { values[hit.Key] = hit.Z + dz; return values; }
         foreach (var g in Grips().Where(g => g.Root == hit.Root && g.Collar == hit.Collar)) values[g.Key] = g.Z + dz;
         return values;
@@ -175,20 +244,29 @@ public sealed class DepthPolygonGrips : ISelectGesture
     public void Release(ToolPointer p)
     {
         if (Pressed is not { } hit) return;
-        var dz = _dragging ? Dz(p) : 0;
+        if (!_dragging)
+        {
+            Reset();
+            Click(hit, p.Modifiers.HasFlag(KeyModifiers.Control));
+            return;
+        }
+        var dz = Dz(p);
         var values = Values(hit, dz, p.Modifiers.HasFlag(KeyModifiers.Shift));
+        // a vertex dragged on its own becomes the one selected
+        if (!DragsSelection) { _selected.Clear(); _selected.Add((hit.Root, hit.Key, hit.Collar)); }
         Reset();
         _vm.View.Preview.Clear();
         if (Math.Abs(dz) > 1e-9) _ = Run(_vm.SetPolygonVertices(hit.Root, hit.Collar, values));
         _vm.View.Redraw();
     }
 
-    /// <summary>Asks for the elevation of a vertex and sets it (one undo step).</summary>
+    /// <summary>Asks for the elevation of a vertex (of all the selected ones, when it is one of them) and sets it (one undo step).</summary>
     private async Task Type(Grip hit)
     {
         var title = Loc.T(hit.Collar ? "Collar polygon" : "Depth polygon");
-        if (await Dialogs.PromptNumber(title, Loc.T("Elevation, m"), Math.Round(hit.Z, 3)) is double z && Math.Abs(z - hit.Z) > 1e-9)
-            await Run(_vm.SetPolygonVertices(hit.Root, hit.Collar, new Dictionary<string, double> { [hit.Key] = z }));
+        var keys = IsSelected(hit) ? Selected().Select(g => g.Key).ToList() : new List<string> { hit.Key };
+        if (await Dialogs.PromptNumber(title, Loc.T("Elevation, m"), Math.Round(hit.Z, 3)) is double z && (keys.Count > 1 || Math.Abs(z - hit.Z) > 1e-9))
+            await Run(_vm.SetPolygonVertices(hit.Root, hit.Collar, keys.ToDictionary(k => k, _ => z)));
     }
 
     private async Task Run(Task<bool> change)
@@ -215,6 +293,8 @@ public sealed class DepthPolygonGrips : ISelectGesture
     {
         Pressed = null;
         DraggedZ = null;
+        DraggedDz = null;
+        DragsSelection = false;
         _down = null;
         _dragging = false;
     }
@@ -238,10 +318,13 @@ public sealed class DepthPolygonGripsOverlay : IOverlay
     private readonly DepthPolygonGrips _grips;
     private readonly Func<(SKColor Collar, SKColor Depth)> _colours;
 
-    public DepthPolygonGripsOverlay(DepthPolygonGrips grips, Func<(SKColor Collar, SKColor Depth)> colours)
+    private readonly Func<SKColor> _ring;
+
+    public DepthPolygonGripsOverlay(DepthPolygonGrips grips, Func<(SKColor Collar, SKColor Depth)> colours, Func<SKColor> ring)
     {
         _grips = grips;
         _colours = colours;
+        _ring = ring;
     }
 
     public DepthPolygonGrips Owner => _grips;
@@ -255,15 +338,20 @@ public sealed class DepthPolygonGripsOverlay : IOverlay
         using var collar = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = PlanRenderer.Adapt(collarColour) };
         using var depth = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = PlanRenderer.Adapt(depthColour) };
         using var edge = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White };
+        using var ring = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2, Color = _ring() };
         foreach (var g in grips)
         {
             var pressed = _grips.Pressed is { } pr && pr.Root == g.Root && pr.Key == g.Key && pr.Collar == g.Collar;
-            var at = pressed && _grips.DraggedZ is double z ? g.Point.WithZ(z) : g.Point;
+            var selected = _grips.IsSelected(g);
+            var moving = pressed || selected && _grips.DragsSelection;
+            var at = moving && _grips.DraggedDz is double dz ? g.Point.WithZ(g.Z + dz) : g.Point;
             var (x, y) = cam.ToScreen(at);
             var hot = pressed || _grips.Hot is { } h && h.Root == g.Root && h.Key == g.Key && h.Collar == g.Collar;
             var r = VertexGripsOverlay.Radius + (hot ? 2 : 0);
             c.DrawCircle(x, y, r, g.Collar ? collar : depth);
             c.DrawCircle(x, y, r, edge);
+            // a selected vertex: a ring round it in the selection colour
+            if (selected) c.DrawCircle(x, y, r + 3, ring);
         }
     }
 }

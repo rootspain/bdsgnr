@@ -45,7 +45,7 @@ public sealed class TransformTool : Tool
     public TransformTool(MainViewModel vm) : base(vm) => _overlay = new FrameOverlay(this);
 
     public override string Name => "Transform";
-    public override string Hint => "Scale, tilt and mirror the selected objects: the corners of the frame scale in proportion (Shift each axis, Alt from the centre), the sides along one axis, the knob above turns (Shift 15°, Ctrl 1°), the cross is the base point. Type a number while dragging and press Enter for an exact value. Done applies. Holes and patterns are left: they have their own tool.";
+    public override string Hint => "Scale, tilt and mirror the selected objects: the corners of the frame scale in proportion (Shift each axis, Alt from the centre), the sides along one axis, the knob above turns (Shift 15°, Ctrl 1°), the cross is the base point. Type a number while dragging and press Enter for an exact value. Done applies. Holes and the inside of a pattern are left: they have their own tool; the outline of a pattern is only tilted.";
 
     /// <summary>The transform as it is set: the preview shows it, Done applies it.</summary>
     public SpatialTransform Current => _t;
@@ -54,6 +54,10 @@ public sealed class TransformTool : Tool
     public bool ObjectAxes => _objectAxes;
     /// <summary>Whether the selection has a circle: a circle is scaled the same along every axis, so the scale stays in proportion.</summary>
     public bool HasCircle => _taken.Any(e => e is CircleEntity);
+    /// <summary>The outlines of patterns among the objects: they are only tilted, never scaled or mirrored.</summary>
+    private HashSet<Guid> _outlines = new();
+    /// <summary>Only outlines of patterns are taken: the scale, the mirrors and their grips are off.</summary>
+    public bool OnlyTilts => _taken.Count > 0 && _taken.All(e => _outlines.Contains(e.Id));
     public bool Proportional => _proportional || HasCircle;
     /// <summary>Whether the selection gives axes of an object (a block, a line, a text, a dimension).</summary>
     public bool ObjectAxesAvailable => SpatialTransforms.ObjectAxes(_taken) != null;
@@ -92,6 +96,7 @@ public sealed class TransformTool : Tool
         var ids = Vm.Doc.Selection.ToList();
         // the frame is drawn round what a tilt about Z would take: a tilt about X or Y leaves blocks, but they stay in it
         _taken = SpatialTransforms.Taken(p, ids, SpatialTransform.None);
+        _outlines = SpatialTransforms.PatternOutlineIds(p);
         if (!ObjectAxesAvailable) _objectAxes = false;
         _frame = SpatialTransforms.Frame(_taken.SelectMany(SpatialTransforms.FramePoints), Axes);
         var holes = Vm.Doc.SelectedEntities.Count(e => e is Hole);
@@ -133,7 +138,7 @@ public sealed class TransformTool : Tool
             var copies = new Dictionary<Guid, Entity>();
             foreach (var e in _taken)
             {
-                if (!e.Takes(_t)) continue;
+                if (Vm.Project is not { } project || SpatialTransforms.Left(project, e, _t) != null) continue;
                 copies[e.Id] = SpatialTransforms.Preview(e, _t);
                 // where it was, thin
                 var ghost = e switch
@@ -342,9 +347,10 @@ public sealed class TransformTool : Tool
         var reach = Math.Max(8, View.TargetRadius);
         var best = Handle.None;
         var bestD = reach;
+        // the outline of a pattern alone: no grip that scales (the frame, the cubes)
         var handles = View.Camera.IsPlan
-            ? new[] { Handle.Pivot, Handle.Turn, Handle.Corner0, Handle.Corner1, Handle.Corner2, Handle.Corner3, Handle.Side0, Handle.Side1, Handle.Side2, Handle.Side3 }
-            : new[] { Handle.Pivot, Handle.ScaleX, Handle.ScaleY, Handle.ScaleZ };
+            ? OnlyTilts ? new[] { Handle.Pivot, Handle.Turn } : new[] { Handle.Pivot, Handle.Turn, Handle.Corner0, Handle.Corner1, Handle.Corner2, Handle.Corner3, Handle.Side0, Handle.Side1, Handle.Side2, Handle.Side3 }
+            : OnlyTilts ? Array.Empty<Handle>() : new[] { Handle.Pivot, Handle.ScaleX, Handle.ScaleY, Handle.ScaleZ };
         foreach (var h in handles)
             if (HandleAt(h) is var (hx, hy) && Math.Sqrt((hx - x) * (hx - x) + (hy - y) * (hy - y)) is var d && d < bestD) (best, bestD) = (h, d);
         if (best != Handle.None || View.Camera.IsPlan) return best == Handle.Pivot && !View.Camera.IsPlan ? Handle.ScaleAll : best;
@@ -654,7 +660,7 @@ public sealed class TransformTool : Tool
                     path.Close();
                     canvas.DrawPath(path, line);
                 }
-                for (var h = Handle.Corner0; h <= Handle.Side3; h++) Square(h, h <= Handle.Corner3 ? 5 : 4);
+                if (!t.OnlyTilts) for (var h = Handle.Corner0; h <= Handle.Side3; h++) Square(h, h <= Handle.Corner3 ? 5 : 4);
                 if (t.HandleAt(Handle.Turn) is var (kx, ky) && t.HandleAt(Handle.Side2) is var (sx, sy))
                 {
                     canvas.DrawLine((float)sx, (float)sy, (float)kx, (float)ky, solid);
@@ -675,9 +681,9 @@ public sealed class TransformTool : Tool
                     for (int i = 1; i < arc.Count; i++) canvas.DrawLine(arc[i - 1].X, arc[i - 1].Y, arc[i].X, arc[i].Y, arcPaint);
                     using var cube = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = AxisColors[axis] };
                     var r = Hot == Handle.ScaleX + axis || t._drag == Handle.ScaleX + axis ? 7f : 5f;
-                    canvas.DrawRect(new SKRect(ex - r, ey - r, ex + r, ey + r), cube);
+                    if (!t.OnlyTilts) canvas.DrawRect(new SKRect(ex - r, ey - r, ex + r, ey + r), cube);
                 }
-                Square(Handle.ScaleAll, 5);
+                if (!t.OnlyTilts) Square(Handle.ScaleAll, 5);
             }
             // the base point: a cross in a circle
             if (t.HandleAt(Handle.Pivot) is var (px, py))

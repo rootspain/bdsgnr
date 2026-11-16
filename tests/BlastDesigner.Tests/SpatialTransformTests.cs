@@ -104,6 +104,23 @@ public class SpatialTransformTests
     }
 
     [Fact]
+    public void TheOutlineOfAPattern_IsTilted_ButNotScaledOrMirrored()
+    {
+        var p = BlastProject.CreateNew("t");
+        var outline = new PolylineEntity { Closed = true, Points = { new Vec3(0, 0, 0), new Vec3(10, 0, 0), new Vec3(10, 10, 0) } };
+        p.Add(outline);
+        p.Patterns.Add(new HolePattern { OutlineEntityId = outline.Id });
+        var tilt = new SpatialTransform { TiltX = 10 };
+        Assert.Single(SpatialTransforms.Taken(p, new[] { outline.Id }, SpatialTransform.None));
+        Assert.Equal(new TransformOutcome(1, 0, 0, 0), SpatialTransforms.Apply(p, new[] { outline.Id }, tilt));
+        Assert.Equal(10 * Math.Sin(10 * Math.PI / 180), outline.Points[2].Z, 9);
+        var before = outline.Points.ToList();
+        Assert.Equal(new TransformOutcome(0, 0, 1, 0), SpatialTransforms.Apply(p, new[] { outline.Id }, new SpatialTransform { TiltX = 5, ScaleY = 2 }));
+        Assert.Equal(new TransformOutcome(0, 0, 1, 0), SpatialTransforms.Apply(p, new[] { outline.Id }, new SpatialTransform { MirrorX = true }));
+        Assert.Equal(before, outline.Points);
+    }
+
+    [Fact]
     public void AScaleOfNoughtOrATiltOf89IsRefused()
     {
         Assert.NotNull(new SpatialTransform { ScaleY = 0 }.Problem);

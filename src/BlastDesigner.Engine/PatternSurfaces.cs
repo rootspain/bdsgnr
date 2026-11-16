@@ -235,6 +235,20 @@ public static class PatternSurfaces
         root.SurfaceVertices = kept;
     }
 
+    /// <summary>
+    /// Before the first vertex of a polygon is given an elevation: every named vertex of it gets the one it has now. Else a
+    /// vertex set alone would carry all the others with it (a vertex without one takes it from the set ones beside it).
+    /// </summary>
+    public static void FixVertices(BlastProject p, HolePattern root, bool collar, SurfaceEntity? collarSurface)
+    {
+        if (root.SurfaceVertices.Any(v => (collar ? v.Collar : v.Depth) != null)) return;
+        var now = new Dictionary<string, double>();
+        foreach (var leaf in PatternTree.Leaves(p, root))
+            foreach (var v in Polygons(p, leaf, collarSurface).SelectMany(x => x).Where(v => v.Key != null))
+                now.TryAdd(v.Key!, v.Z(collar));
+        foreach (var (key, z) in now) SetVertex(root, key, collar ? z : null, collar ? null : z);
+    }
+
     /// <summary>Sets the elevations of a vertex of a pattern (null leaves that one as it is); <paramref name="clear"/> takes them both away.</summary>
     public static void SetVertex(HolePattern root, string key, double? collar, double? depth, bool clear = false)
     {

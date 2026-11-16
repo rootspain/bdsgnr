@@ -548,7 +548,7 @@ public sealed class ToolPanel : Border
     public void Refresh()
     {
         var tool = _vm.ActiveTool;
-        IsVisible = tool != null && tool is not SelectTool && _vm.Project != null;
+        IsVisible = tool != null && tool is not (SelectTool or PanTool) && _vm.Project != null;
         if (!IsVisible) { _fields.Children.Clear(); return; }
         _title.Text = Loc.T(tool!.Name);
         _hint.Text = Loc.T(tool.Hint);
@@ -648,6 +648,8 @@ public sealed class ToolPanel : Border
     private void TransformFields(TransformTool tool)
     {
         var t = tool.Current;
+        // the outline of a pattern alone is only tilted: the scale and the mirrors are there but off
+        var first = _fields.Children.Count;
         if (tool.Proportional) _fields.Children.Add(Field("Scale", t.ScaleX, v => { if (!tool.SetScale(0, v)) _vm.RefreshToolPanel(); }, "transformScale"));
         else
             foreach (var (axis, label) in new[] { (0, "Scale X"), (1, "Scale Y"), (2, "Scale Z") })
@@ -656,7 +658,7 @@ public sealed class ToolPanel : Border
                 var value = axis switch { 0 => t.ScaleX, 1 => t.ScaleY, _ => t.ScaleZ };
                 _fields.Children.Add(Field(label, value, v => { if (!tool.SetScale(a, v)) _vm.RefreshToolPanel(); }, "transformScale" + "XYZ"[axis]));
             }
-        var lockBox = new CheckBox { Content = Loc.Ui("In proportion"), IsChecked = tool.Proportional, IsEnabled = !tool.HasCircle, Name = "transformProportional", VerticalAlignment = VerticalAlignment.Center };
+        var lockBox = new CheckBox { Content = Loc.Ui("In proportion"), IsChecked = tool.Proportional, IsEnabled = !tool.HasCircle && !tool.OnlyTilts, Name = "transformProportional", VerticalAlignment = VerticalAlignment.Center };
         ToolTip.SetTip(lockBox, Loc.Ui(tool.HasCircle ? "A circle is selected: the scale is only in proportion" : "On: one scale along every axis. Off: a scale along each axis"));
         lockBox.IsCheckedChanged += (_, _) => { if ((lockBox.IsChecked == true) != tool.Proportional) tool.SetProportional(lockBox.IsChecked == true); };
         _fields.Children.Add(lockBox);
@@ -680,8 +682,19 @@ public sealed class ToolPanel : Border
             var a = axis;
             var chip = Ui.Chip(Loc.Ui(label), () => tool.ToggleMirror(a), on, Loc.Ui(tip));
             chip.Name = "transformMirror" + "XY"[axis];
+            if (tool.OnlyTilts)
+            {
+                chip.IsEnabled = false;
+                ToolTip.SetTip(chip, Loc.Ui("The outline of a pattern is only tilted: it is not scaled or mirrored"));
+            }
             _fields.Children.Add(Labelled(" ", chip));
         }
+        if (tool.OnlyTilts)
+            foreach (var c in _fields.Children.Skip(first).Take(tool.Proportional ? 1 : 3))
+            {
+                c.IsEnabled = false;
+                ToolTip.SetTip(c, Loc.Ui("The outline of a pattern is only tilted: it is not scaled or mirrored"));
+            }
         foreach (var (axis, label) in new[] { (0, "Move X, m"), (1, "Move Y, m"), (2, "Move Z, m") })
         {
             var a = axis;

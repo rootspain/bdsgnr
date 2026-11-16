@@ -504,6 +504,131 @@ public class PatternSegmentTests
         Assert.True(PatternTree.Children(p, root)[0].Outline.Max(q => q.Y) > 30);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(25)]
+    public void MovingOnlyThePolygonOfTheParent_TakesItsSegmentsLinesAndIslandsAlong(double turn)
+    {
+        var (doc, rootId, polygonId) = CutInDocument(Field, 3);
+        var islandPolygon = new PolylineEntity { Closed = true, Points = Island.ToList() };
+        doc.Execute("Island", pr =>
+        {
+            pr.Add(islandPolygon, pr.DefaultLayer);
+            PatternTree.AddIsland(pr, pr.FindPattern(rootId)!, Island, islandPolygon.Id);
+        });
+        var p0 = doc.Project;
+        var root0 = p0.FindPattern(rootId)!;
+        var f = GeneralOps.MakeTransform(new Vec3(12, -7, 0), turn, root0.Center, 1);
+        var lines = root0.SegmentLines.Select(l => PatternTree.LineEnds(root0, l)).Select(e => (f(e.Item1), f(e.Item2))).ToList();
+        var parts = PatternTree.Children(p0, root0).ToDictionary(s => s.Id, s => s.Outline.Select(q => f(q)).ToList());
+        var holes = PatternTree.Children(p0, root0).ToDictionary(s => s.Id, s => HoleDesign.PatternHoles(p0, s).Select(h => f(h.Collar)).OrderBy(q => q.X).ThenBy(q => q.Y).ToList());
+        // only the polygon is moved, the holes stay where they are
+        doc.Execute("Move", pr => ((PolylineEntity)pr.FindEntity(polygonId)!).Transform(f));
+        var p = doc.Project;
+        var root = p.FindPattern(rootId)!;
+        Assert.True(root.IsContainer);
+        Assert.Equal(GeoMath.NormalizeBearing(turn), root.Azimuth, 9);
+        foreach (var ((a, b), l) in lines.Zip(root.SegmentLines))
+        {
+            var (na, nb) = PatternTree.LineEnds(root, l);
+            Assert.True(Vec3.Distance2D(a, na) < 1e-6 && Vec3.Distance2D(b, nb) < 1e-6);
+        }
+        foreach (var s in PatternTree.Children(p, root))
+        {
+            // the same part, though its vertices may start elsewhere once it is cut again
+            Assert.Equal(parts[s.Id].Count, s.Outline.Count);
+            Assert.All(s.Outline, q => Assert.Contains(parts[s.Id], w => Vec3.Distance2D(q, w) < 1e-3));
+            var now = HoleDesign.PatternHoles(p, s).Select(h => h.Collar).OrderBy(q => q.X).ThenBy(q => q.Y).ToList();
+            Assert.Equal(holes[s.Id].Count, now.Count);
+            Assert.All(now.Zip(holes[s.Id]), x => Assert.True(Vec3.Distance2D(x.First, x.Second) < 1e-6));
+        }
+        // the polygon of the island goes along, and the island keeps with it
+        var island = PatternTree.Children(p, root).Single(s => s.IsIsland);
+        var line = (PolylineEntity)p.FindEntity(islandPolygon.Id)!;
+        Assert.All(line.Points.Zip(Island), x => Assert.True(Vec3.Distance2D(x.First, f(x.Second)) < 1e-6));
+        Assert.All(island.IslandOutline!.Zip(line.Points), x => Assert.True(Vec3.Distance2D(x.First, x.Second) < 1e-6));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void LiftingOnlyThePolygon_LiftsThePatternItsHolesAndPolygonElevations(int segments)
+    {
+        var (doc, rootId, polygonId) = segments > 1 ? CutInDocument(Rectangle, segments) : Plain();
+        (Document, Guid, Guid) Plain()
+        {
+            var (p, root) = Make(Rectangle);
+            var polygon = new PolylineEntity { Closed = true, Points = Rectangle.ToList() };
+            p.Add(polygon, p.DefaultLayer);
+            root.OutlineEntityId = polygon.Id;
+            return (new Document(p), root.Id, polygon.Id);
+        }
+        doc.Execute("Elevation", pr => PatternSurfaces.SetVertex(pr.FindPattern(rootId)!, "O:0", 101, 89));
+        var p0 = doc.Project;
+        var holes = PatternTree.TreeHoles(p0, p0.FindPattern(rootId)!).ToDictionary(h => h.Id, h => (h.Collar, h.Length, h.ToLevel));
+        var centre = p0.FindPattern(rootId)!.Center;
+        doc.Execute("Move", pr => { var l = (PolylineEntity)pr.FindEntity(polygonId)!; l.Points = l.Points.Select(q => q + new Vec3(0, 0, 7)).ToList(); });
+        var p1 = doc.Project;
+        var root = p1.FindPattern(rootId)!;
+        Assert.Equal(centre.Z + 7, root.Center.Z, 9);
+        Assert.All(root.Outline, q => Assert.Equal(centre.Z + 7, q.Z, 9));
+        var v = root.SurfaceVertices.Single(x => x.Key == "O:0");
+        Assert.Equal((108.0, 96.0), (v.Collar!.Value, v.Depth!.Value));
+        var now = PatternTree.TreeHoles(p1, root).ToList();
+        Assert.Equal(holes.Count, now.Count);
+        foreach (var h in now)
+        {
+            var (collar, length, level) = holes[h.Id];
+            Assert.True(Vec3.Distance(h.Collar, collar + new Vec3(0, 0, 7)) < 1e-9);
+            Assert.Equal(length, h.Length, 9);
+            Assert.Equal(level + 7, h.ToLevel);
+        }
+        // one undo takes it all back
+        doc.Undo();
+        Assert.All(PatternTree.TreeHoles(doc.Project, doc.Project.FindPattern(rootId)!), h => Assert.Equal(holes[h.Id].Collar, h.Collar));
+    }
+
+    [Fact]
+    public void TiltingTheOutlineWithTheTransformTool_TurnsThePatternAboutZ_AndRefitsItAboutX()
+    {
+        var (doc, rootId, polygonId) = CutInDocument(Rectangle, 2);
+        var root0 = doc.Project.FindPattern(rootId)!;
+        var collars = PatternTree.TreeHoles(doc.Project, root0).ToDictionary(h => h.Id, h => h.Collar);
+        var pivot = root0.Center;
+        var turn = new SpatialTransform { Pivot = pivot, TiltZ = 30 };
+        doc.Execute("Transform", pr => SpatialTransforms.Apply(pr, new[] { polygonId }, turn));
+        var p = doc.Project;
+        var root = p.FindPattern(rootId)!;
+        Assert.Equal(30, root.Azimuth, 9);
+        Assert.All(PatternTree.TreeHoles(p, root), h => Assert.True(Vec3.Distance2D(h.Collar, turn.Apply(collars[h.Id])) < 1e-6));
+        doc.Undo();
+        // about X the outline gets shorter in plan: the pattern is laid out again in it
+        doc.Execute("Transform", pr => SpatialTransforms.Apply(pr, new[] { polygonId }, new SpatialTransform { Pivot = pivot, TiltX = 40 }));
+        root = doc.Project.FindPattern(rootId)!;
+        Assert.True(root.IsContainer);
+        Assert.Equal(23 * Math.Cos(40 * Math.PI / 180), root.Outline.Max(q => q.Y) - root.Outline.Min(q => q.Y), 6);
+        Assert.True(PatternTree.TreeHoles(doc.Project, root).Count() < collars.Count);
+    }
+
+    [Fact]
+    public void TheFirstVertexGivenAnElevation_MovesAlone_TheOthersKeepTheirs()
+    {
+        var (p, root) = Make(Rectangle);
+        root.HoleDefaults.Depth.Collars = CollarSource.Polygon;
+        Assert.Empty(root.SurfaceVertices);
+        PatternSurfaces.FixVertices(p, root, true, null);
+        PatternSurfaces.SetVertex(root, "O:2", 105, null);
+        var z = PatternSurfaces.Polygons(p, root, null).Single().ToDictionary(v => v.Key!, v => v.Z(true));
+        Assert.Equal(105, z["O:2"], 9);
+        Assert.All(new[] { "O:0", "O:1", "O:3" }, k => Assert.Equal(100, z[k], 9));
+        // the depth polygon has none set yet: it is not touched
+        Assert.All(root.SurfaceVertices, v => Assert.Null(v.Depth));
+        // once some are set, nothing more is fixed
+        root.SurfaceVertices.RemoveAll(v => v.Key == "O:0");
+        PatternSurfaces.FixVertices(p, root, true, null);
+        Assert.DoesNotContain(root.SurfaceVertices, v => v.Key == "O:0");
+    }
+
     [Fact]
     public void ALengthEditedByHand_IsKeptThroughALayout_UntilTheDepthChanges()
     {

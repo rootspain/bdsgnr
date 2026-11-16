@@ -257,7 +257,7 @@ public sealed partial class PropertiesPanel
         var sources = new[] { CollarSource.ProjectSurface, CollarSource.Polygon };
         var collars = new ComboBox
         {
-            ItemsSource = new[] { "The project surface", "Collar polygon" }.Select(Loc.Ui).ToList(), SelectedIndex = Array.IndexOf(sources, spec.Collars), Width = 190, Height = 26,
+            ItemsSource = new[] { "On the grid", "Collar polygon" }.Select(Loc.Ui).ToList(), SelectedIndex = Array.IndexOf(sources, spec.Collars), Width = 190, Height = 26,
             MinHeight = 26, FontSize = 12, Name = "patternCollars", IsEnabled = !doc.IsReadOnly, FontStyle = inherited ? FontStyle.Italic : FontStyle.Normal
         };
         ToolTip.SetTip(collars, Loc.Ui("Where the collars are: on the collar surface of the project (at the level of the grid without one), or on the collar polygon on the vertices of the outline"));

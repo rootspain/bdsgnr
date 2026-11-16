@@ -141,6 +141,7 @@ public sealed partial class MainViewModel
         if (!collar && ToeAboveCollar(root, values) is { } above) return RefuseToe(above);
         return LayOutTree(root.Id, $"{root.Name}: {Loc.T(collar ? "collar polygon" : "depth polygon")}", (p, r, o) =>
         {
+            PatternSurfaces.FixVertices(p, r, collar, o.CollarSurface);
             foreach (var (key, z) in values) PatternSurfaces.SetVertex(r, key, collar ? z : null, collar ? null : z);
             return PatternTree.Relayout(p, r, o);
         });

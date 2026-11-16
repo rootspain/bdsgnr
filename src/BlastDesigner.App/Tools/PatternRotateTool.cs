@@ -170,8 +170,9 @@ public sealed class PatternOverlay : IOverlay
         foreach (var root in shown.Select(x => PatternTree.Root(project, x)).Distinct())
         {
             if (root.Outline.Count >= 3) PlanRenderer.DrawPolyline(c, cam, root.Outline, true, dashed);
-            DrawSegments(c, cam, project, root, colour);
-            DrawPolygons(c, cam, project, root, new SKColor(_vm.Settings.PatternCollarPolygonColor), new SKColor(_vm.Settings.PatternDepthPolygonColor));
+            var depths = DepthLeaves(project, root, shown);
+            DrawSegments(c, cam, project, root, depths, colour);
+            DrawPolygons(c, cam, project, depths, new SKColor(_vm.Settings.PatternCollarPolygonColor), new SKColor(_vm.Settings.PatternDepthPolygonColor));
         }
         foreach (var pat in shown)
         {
@@ -192,13 +193,12 @@ public sealed class PatternOverlay : IOverlay
     /// The parts of a pattern cut into segments, each dotted with its name at its middle, and the conditional rectangle of
     /// each part (or of the pattern itself) whose depth has four numbers, with the numbers at its corners.
     /// </summary>
-    private static void DrawSegments(SKCanvas c, Camera cam, BlastProject project, HolePattern root, SKColor colour)
+    private static void DrawSegments(SKCanvas c, Camera cam, BlastProject project, HolePattern root, List<HolePattern> leaves, SKColor colour)
     {
         using var dotted = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = colour.WithAlpha(0xB0), PathEffect = SKPathEffect.CreateDash(new[] { 2f, 3f }, 0) };
         using var frame = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = colour.WithAlpha(0x90), PathEffect = SKPathEffect.CreateDash(new[] { 10f, 3f, 2f, 3f }, 0) };
         using var text = new SKPaint { IsAntialias = true, Color = colour, TextSize = 12, Typeface = SKTypeface.FromFamilyName(null, SKFontStyle.Bold) };
         using var small = new SKPaint { IsAntialias = true, Color = colour, TextSize = 11 };
-        var leaves = PatternTree.Leaves(project, root);
         if (root.IsContainer)
         {
             // the problems at the seams: red between holes too close (or crossing under the ground), orange across a gap
@@ -245,9 +245,9 @@ public sealed class PatternOverlay : IOverlay
     /// through its vertices at their elevations and a fill on its triangles, 90 % transparent; on the plan, where both lie on
     /// the outline, the two elevations at each vertex (the collar above, the depth below), once for a vertex two segments share.
     /// </summary>
-    private static void DrawPolygons(SKCanvas c, Camera cam, BlastProject project, HolePattern root, SKColor collarColour, SKColor depthColour)
+    private static void DrawPolygons(SKCanvas c, Camera cam, BlastProject project, List<HolePattern> depths, SKColor collarColour, SKColor depthColour)
     {
-        var leaves = PatternTree.Leaves(project, root).Where(l => l.HoleDefaults.Depth.UsesPolygons).ToList();
+        var leaves = depths.Where(l => l.HoleDefaults.Depth.UsesPolygons).ToList();
         if (leaves.Count == 0) return;
         var bench = project.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench);
         var collarAdapted = PlanRenderer.Adapt(collarColour);
@@ -300,6 +300,17 @@ public sealed class PatternOverlay : IOverlay
             if (spec.Collars == CollarSource.Polygon) Draw(collarSurface, v => v.Z(true), collarFill, collarLine);
             if (spec.Mode == DepthMode.Polygon) Draw(depthSurface, v => v.Z(false), depthFill, depthLine);
         }
+    }
+
+    /// <summary>
+    /// The segments of a pattern whose depths are shown: of the selected segment only, when the holes are all in one; of the
+    /// whole pattern when it is shown itself.
+    /// </summary>
+    public static List<HolePattern> DepthLeaves(BlastProject project, HolePattern root, IEnumerable<HolePattern> shown)
+    {
+        var mine = shown.Where(x => PatternTree.Root(project, x).Id == root.Id).ToList();
+        if (mine.Count == 0 || mine.Any(x => x.Id == root.Id)) return PatternTree.Leaves(project, root);
+        return mine.SelectMany(x => PatternTree.Leaves(project, x)).Distinct().ToList();
     }
 
     /// <summary>

@@ -774,6 +774,33 @@ public static partial class PatternTree
         return Relayout(p, root, o);
     }
 
+    /// <summary>
+    /// Lifts a pattern and its segments by <paramref name="dz"/> metres with its polygon: the centres and outlines, the
+    /// elevations of the collar and depth polygons, the levels the depth goes down to.
+    /// </summary>
+    public static void Lift(BlastProject p, HolePattern root, double dz)
+    {
+        List<Vec3> Up(List<Vec3> pts) => pts.Select(x => x + new Vec3(0, 0, dz)).ToList();
+        void Levels(DepthSpec? d) { if (d != null) d.Level += dz; }
+        foreach (var pat in new[] { root }.Concat(Descendants(p, root)))
+        {
+            pat.Center += new Vec3(0, 0, dz);
+            pat.Outline = Up(pat.Outline);
+            pat.OutlineParts = pat.OutlineParts.Select(Up).ToList();
+            pat.Excluded = pat.Excluded.Select(Up).ToList();
+            if (pat.IslandOutline != null) pat.IslandOutline = Up(pat.IslandOutline);
+            if (pat.EdgeOutline != null) pat.EdgeOutline = Up(pat.EdgeOutline);
+            foreach (var v in pat.SurfaceVertices)
+            {
+                if (v.Collar is double c) v.Collar = c + dz;
+                if (v.Depth is double d) v.Depth = d + dz;
+            }
+            Levels(pat.HoleDefaults.Depth);
+            Levels(pat.Overrides.Depth);
+            if (pat.ToLevel is double z) pat.ToLevel = z + dz;
+        }
+    }
+
     /// <summary>A new burden and spacing for a pattern and its tree: the grid of the parent placed again, its segments following.</summary>
     public static PatternRebuildReport Resize(BlastProject p, HolePattern root, double burden, double spacing, PatternRebuildOptions? o = null)
     {

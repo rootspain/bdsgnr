@@ -261,6 +261,31 @@ Step("transform tool: corners, sides, the knob and the cross of its frame on the
     vm.SelectTool(); Pump();
     while (vm.Project!.FindEntity(line.Id) != null) vm.Undo();
 });
+Step("transform tool on the outline of a pattern: only tilted, the scale and the mirrors off, the scale grips gone", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var c = vm.View.Camera.Target;
+    var outline = new PolylineEntity { Closed = true, Points = { new Vec3(c.X - 10, c.Y - 5, c.Z), new Vec3(c.X + 10, c.Y - 5, c.Z), new Vec3(c.X + 10, c.Y + 5, c.Z), new Vec3(c.X - 10, c.Y + 5, c.Z) } };
+    var pattern = new HolePattern { OutlineEntityId = outline.Id };
+    vm.Change("Smoke outline", pr => { pr.Add(outline); pr.Patterns.Add(pattern); });
+    vm.Doc!.Select(new[] { outline.Id }); Pump();
+    vm.TransformTool(); Pump();
+    var tool = vm.ActiveTool as BlastDesigner.App.Tools.TransformTool ?? throw new Exception("no Transform tool");
+    if (tool.Taken.Count != 1 || !tool.OnlyTilts) throw new Exception("the outline of a pattern is not taken for a tilt");
+    var scale = window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "transformScale" && b.IsVisible);
+    if (scale.IsEffectivelyEnabled) throw new Exception("the scale of the outline of a pattern can be typed");
+    if (window.GetLogicalDescendants().OfType<Control>().First(b => b.Name == "transformMirrorX").IsEffectivelyEnabled) throw new Exception("the outline of a pattern can be mirrored");
+    var tilt = window.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "transformTiltX" && b.IsVisible);
+    if (!tilt.IsEffectivelyEnabled) throw new Exception("the outline of a pattern cannot be tilted");
+    var (kx, ky) = tool.HandleAt(BlastDesigner.App.Tools.TransformTool.Handle.Corner0) ?? throw new Exception("no frame");
+    if (tool.HandleUnder(kx, ky) is BlastDesigner.App.Tools.TransformTool.Handle.Corner0) throw new Exception("a corner of the frame scales the outline of a pattern");
+    tool.SetTilt(0, 10); Pump();
+    if (vm.View.Preview.Replaced?.ContainsKey(outline.Id) != true) throw new Exception("the tilted outline is not shown");
+    vm.View.Redraw(); Pump(); Shot("50d_transform_outline");
+    tool.Cancel(); vm.SelectTool(); Pump();
+    while (vm.Project!.FindEntity(outline.Id) != null) vm.Undo();
+    Pump();
+});
 Step("transform tool in a 3D view: axes from the base point, a cube scales along its axis, an arc tilts; Ctrl+T starts the tool", () =>
 {
     vm.SelectTool(); vm.PlanView(); Pump();
@@ -2029,6 +2054,12 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
         var z = (g.Collar ? cs : ds)!.ElevationAt(g.Point.X, g.Point.Y);
         if (z is not double sz || Math.Abs(sz - g.Point.Z) > 1e-6) throw new Exception($"the grip {g.Key} of the {(g.Collar ? "collar" : "depth")} polygon is at {g.Point.Z:0.00}, the polygon drawn at {z}");
     }
+    // the grips are there from the side and at a slant, not when 3D looks nearly straight down
+    vm.View.Camera.Pitch = 3; vm.View.Redraw(); Pump();
+    if (drawn.Grips().Count == 0) throw new Exception("no polygon grips in a 3D view from the side");
+    vm.View.Camera.Pitch = 85; vm.View.Redraw(); Pump();
+    if (drawn.Grips().Count != 0) throw new Exception("polygon grips in a 3D view that looks straight down, where up and down cannot be dragged");
+    vm.View.Camera.Pitch = 35; vm.ZoomSelection(); vm.View.Redraw(); Pump();
     // a collar vertex dragged 2 m up in 3D: one undo step, the vertex and the collars near it higher
     var polyGrips = vm.View.Overlays.OfType<DepthPolygonGripsOverlay>().Single().Owner;
     var grip = polyGrips.Grips().Single(g => g.Collar && g.Key == "O:2");
@@ -2071,7 +2102,45 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
     }
     vm.View.Redraw(); Pump(); Shot("91_depth_vertex_dragged");
     if (Math.Abs(after.Z - (dgrip.Z - 3)) > 1e-6) throw new Exception($"the depth vertex did not go 3 m down: {dgrip.Z} → {after.Z}");
+    // two depth vertices of segment A selected (a click, a Ctrl+click), one of segment B alone refused, a drag moves both
+    {
+        var segs = PatternTree.Children(vm.Project!, root);
+        var grips = polyGrips.Grips().Where(g => !g.Collar).ToList();
+        var onlyA = grips.Where(g => g.Leaves.Count == 1 && g.Leaves.Contains(segs[0].Id)).Take(2).ToList();
+        var onlyB = grips.FirstOrDefault(g => g.Leaves.Count == 1 && g.Leaves.Contains(segs[1].Id)) ?? throw new Exception("no depth vertex of segment B alone");
+        if (onlyA.Count < 2) throw new Exception("no two depth vertices of segment A alone");
+        polyGrips.Click(onlyA[0], false);
+        polyGrips.Click(onlyA[1], true);
+        polyGrips.Click(onlyB, true);
+        var picked = polyGrips.Selected();
+        if (picked.Count != 2 || picked.Any(g => !onlyA.Any(x => x.Key == g.Key))) throw new Exception("the selection of vertices took one of another segment: " + string.Join(", ", picked.Select(g => g.Key)));
+        if (polyGrips.Grips().FirstOrDefault(g => g.Collar && g.Leaves.Contains(segs[0].Id)) is { } collarOfA)
+        {
+            polyGrips.Click(collarOfA, true);
+            if (polyGrips.Selected().Count != 2) throw new Exception("a vertex of the collar polygon joined vertices of the depth polygon");
+        }
+        var (sx0, sy0) = cam.ToScreen(onlyA[0].Point);
+        var (sx1, sy1) = cam.ToScreen(onlyA[0].Point + new Vec3(0, 0, -1));
+        vm.ActiveTool.PointerMoved(At(sx0, sy0));
+        vm.ActiveTool.PointerPressed(At(sx0, sy0));
+        for (int k = 1; k <= 4; k++) vm.ActiveTool.PointerMoved(At(sx0 + (sx1 - sx0) * k / 4, sy0 + (sy1 - sy0) * k / 4));
+        vm.View.Redraw(); Pump(); Shot("90b_depth_vertices_drag");
+        vm.ActiveTool.PointerReleased(At(sx1, sy1)); Pump();
+        root = vm.Project!.FindPattern(rootId)!;
+        foreach (var g in onlyA)
+            if (root.SurfaceVertices.Single(v => v.Key == g.Key).Depth is not double z || Math.Abs(z - (g.Z - 1)) > 1e-6)
+                throw new Exception($"the selected vertex {g.Key} did not go 1 m down with the other");
+        if (root.SurfaceVertices.FirstOrDefault(v => v.Key == onlyB.Key)?.Depth is double zb && Math.Abs(zb - onlyB.Z) > 1e-6) throw new Exception("a vertex of segment B moved with the selection of A");
+    }
     vm.PlanView(); Pump();
+    // the holes of one segment selected: the depths of that segment only, those of the other segment are not shown
+    var segA = PatternTree.Children(vm.Project!, root)[0];
+    var keysA = PatternSurfaces.Polygons(vm.Project!, segA, null).SelectMany(x => x).Where(v => v.Key != null).Select(v => v.Key!).ToHashSet();
+    var all = polyGrips.Grips().Count;
+    vm.Doc.Select(HoleDesign.PatternHoles(vm.Project!, segA).Select(h => h.Id)); Pump();
+    var own = polyGrips.Grips();
+    if (own.Count == 0 || own.Count >= all || own.Any(g => !keysA.Contains(g.Key))) throw new Exception($"a selected segment shows the depths of another: {own.Count} of {all}");
+    vm.View.Redraw(); Pump(); Shot("91b_segment_depths");
     vm.Doc.ClearSelection();
     for (int i = 0; i < 10 && vm.Project!.FindPattern(rootId) != null; i++) vm.Undo();
     Pump();
@@ -4724,6 +4793,23 @@ Step("pattern from polygon: the first row along the longest side, another side b
     if (Holes().Count <= count) throw new Exception($"the pattern did not follow its polygon: {count} → {Holes().Count}");
     vm.Undo(); Pump();
     if (Holes().Count != count) throw new Exception("undo did not take the pattern back with its polygon");
+    // cut in two, then only the polygon moved 15 m east: the cut line and the segments go along with it
+    vm.Change("Cut", p => PatternTree.Split(p, p.FindPattern(pat.Id)!, 2));
+    var cut = vm.Project.FindPattern(pat.Id)!;
+    if (!cut.IsContainer) throw new Exception("the pattern from a polygon was not cut in two");
+    var (la, lb) = PatternTree.LineEnds(cut, cut.SegmentLines[0]);
+    vm.Change("Move polygon", p => { var l = (PolylineEntity)p.FindEntity(poly.Id)!; l.Points = l.Points.Select(q => q + new Vec3(15, 0, 0)).ToList(); });
+    cut = vm.Project.FindPattern(pat.Id)!;
+    var (na, nb) = PatternTree.LineEnds(cut, cut.SegmentLines[0]);
+    if (Vec3.Distance2D(na, la + new Vec3(15, 0, 0)) > 1e-6 || Vec3.Distance2D(nb, lb + new Vec3(15, 0, 0)) > 1e-6) throw new Exception($"the cut line did not go along with the polygon: {la} → {na}");
+    if (PatternTree.Children(vm.Project, cut).Any(sg => sg.Outline.Min(q => q.X) < c.X + 15 - 1e-3)) throw new Exception("a segment stayed behind the moved polygon");
+    // the polygon lifted 5 m: the holes and the segments go up with it
+    var collarsZ = Holes().ToDictionary(h => h.Id, h => h.Collar.Z);
+    if (collarsZ.Count == 0) collarsZ = PatternTree.TreeHoles(vm.Project, cut).ToDictionary(h => h.Id, h => h.Collar.Z);
+    vm.Change("Lift polygon", p => { var l = (PolylineEntity)p.FindEntity(poly.Id)!; l.Points = l.Points.Select(q => q + new Vec3(0, 0, 5)).ToList(); });
+    cut = vm.Project.FindPattern(pat.Id)!;
+    if (PatternTree.TreeHoles(vm.Project, cut).Any(h => Math.Abs(h.Collar.Z - collarsZ[h.Id] - 5) > 1e-6)) throw new Exception("the holes did not go up with the lifted polygon");
+    if (PatternTree.Children(vm.Project, cut).Any(sg => Math.Abs(sg.Center.Z - cut.Center.Z) > 1e-6)) throw new Exception("a segment stayed below the lifted polygon");
     while (vm.Doc.UndoNames.Count > steps) vm.Undo();
     vm.Doc.ClearSelection(); vm.ZoomAll(); Pump();
 });
