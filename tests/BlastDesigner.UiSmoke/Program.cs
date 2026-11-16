@@ -1885,6 +1885,20 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     if (HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Any(h => h.Diameter != 89)) throw new Exception("the holes of segment B did not take the diameter");
     if (HoleDesign.PatternHoles(vm.Project!, PatternTree.Children(vm.Project!, Root())[0]).Any(h => h.Diameter == 89)) throw new Exception("segment A took the diameter of B");
     Find<Button>("segmentDiameterReset");
+    // a burden of its own lays the segment out again: its holes stay selected and the panel on it, the field keeps the focus
+    var steps = 0;
+    var burdenField = Find<TextBox>("segmentBurden");
+    burdenField.Focus(); Pump();
+    steps = vm.Doc.UndoNames.Count;
+    Enter(burdenField, "3");
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception($"the burden of the segment should be one undo step: {string.Join(" | ", vm.Doc.UndoNames.Take(3))}");
+    var bNow = vm.Project!.FindPattern(b.Id)!;
+    if (bNow.Burden != 3) throw new Exception("the burden of segment B was not taken");
+    if (vm.SelectedSegment?.Id != b.Id || !vm.Doc.Selection.SetEquals(HoleDesign.PatternHoles(vm.Project!, bNow).Select(h => h.Id)))
+        throw new Exception("the holes of segment B did not stay selected after its burden changed");
+    if (window.FocusManager?.GetFocusedElement() is not TextBox { Name: "segmentBurden" }) throw new Exception("the burden field lost the focus: " + window.FocusManager?.GetFocusedElement());
+    vm.Undo(); Pump();
+    vm.SelectSegmentHoles(b.Id); Pump();
     // and a depth from/to: collars on the surface, the holes down to the levels at the corners
     var mode = Find<ComboBox>("patternDepthMode");
     mode.SelectedIndex = 2; Pump();
@@ -1906,7 +1920,7 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     var front = cam.ToScreen(PatternTree.GridToWorld(Root(), 0, line.V1));
     double dx = back.Item1 - front.Item1, dy = back.Item2 - front.Item2;
     ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = none };
-    var steps = vm.Doc.UndoNames.Count;
+    steps = vm.Doc.UndoNames.Count;
     var v0 = line.V1;
     vm.ActiveTool.PointerMoved(At(mx, my));
     vm.ActiveTool.PointerPressed(At(mx, my));
@@ -1918,7 +1932,7 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     // in 3D looking down at an angle the lines and their grips are there too, and a drag moves the line as on the plan (back to the face by a row)
     vm.View3D(); vm.View.Camera.Pitch = 70; vm.View.Redraw(); Pump();
     var grips = vm.View.Overlays.OfType<SegmentLinesOverlay>().Single().Owner;
-    if (grips.Roots().Count != 1) throw new Exception("no cut lines in 3D");
+    if (grips.Roots().Count != 1) throw new Exception($"no cut lines in 3D: {vm.Doc.Selection.Count} selected, shown {string.Join(",", BlastDesigner.App.Tools.PatternOverlay.Shown(vm.Doc).Select(x => x.Name))}, pitch {vm.View.Camera.Pitch}, up {vm.View.Camera.Up}, moving {vm.View.Preview.Moving != null}");
     var cam3 = vm.View.Camera;
     var line3 = Root().SegmentLines[0];
     var (a3, b3) = SegmentLineGrips.Grips(cam3, Root(), line3);

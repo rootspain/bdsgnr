@@ -161,7 +161,9 @@ public sealed partial class PropertiesPanel
             // its own direction of the rows: typed in, it turns the segment about its centre
             var azimuth = Box(N(seg.Azimuth, "0.#"), "segmentAzimuth", v =>
             {
-                if (Metres(v) is double a && Math.Abs(MainViewModel.Turn(seg.Azimuth, a)) > 1e-9) Done(_vm.RotatePattern(sid, MainViewModel.Turn(seg.Azimuth, a)));
+                // the azimuth as it is now: a field taken away with the panel gives its value again after the turn
+                var now = _vm.Project?.FindPattern(sid)?.Azimuth ?? seg.Azimuth;
+                if (Metres(v) is double a && Math.Abs(MainViewModel.Turn(now, a)) > 1e-9) Done(_vm.RotatePattern(sid, MainViewModel.Turn(now, a)));
                 else Refresh();
             });
             ToolTip.SetTip(azimuth, Loc.Ui("Direction of the burden of the segment, degrees from north; a new value turns the segment about its centre"));

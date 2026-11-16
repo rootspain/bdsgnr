@@ -100,7 +100,7 @@ public sealed partial class MainViewModel
                 {
                     if (p.FindPattern(patternId) is { } seg) { seg.Overrides.Burden = burden; seg.Overrides.Spacing = spacing; }
                     return PatternTree.Relayout(p, root, o);
-                });
+                }, pat);
             if (pat.IsContainer)
                 return await LayOutTree(patternId, "Pattern size", (p, root, o) => PatternTree.Resize(p, root, burden, spacing, o));
             return await LayOutPattern(patternId, "Pattern size", x => HoleDesign.Resize(x, burden, spacing),
@@ -144,7 +144,7 @@ public sealed partial class MainViewModel
         var copy = ProjectJson.DeepClone(pat);
         preview(copy);
         var byHand = HoleDesign.PlanPattern(Project, copy).Deletes.Count(h => h.ManualLoading || h.ElectronicTimeManual);
-        return await LayOut(patternId, undoName, byHand, HoleDesign.PatternHoles(Project, pat), run);
+        return await LayOut(patternId, undoName, byHand, pat.Id, run);
     }
 
     /// <summary>
@@ -163,23 +163,30 @@ public sealed partial class MainViewModel
         int byHand;
         try { byHand = PatternTree.Plan(Project, root, (q, r) => run(q, r, PatternOptions(q))).Deletes.Count(h => h.ManualLoading || h.ElectronicTimeManual); }
         catch (InvalidOperationException ex) { await Dialogs.Info(Loc.T(ex.Message), Loc.T(undoName)); return false; }
-        return await LayOut(rootId, undoName, byHand, PatternTree.TreeHoles(Project, scope ?? root), run);
+        return await LayOut(rootId, undoName, byHand, (scope ?? root).Id, run);
     }
 
     /// <summary>The common end of laying out a pattern or a tree: asks before holes done by hand go, runs the change, keeps the selection.</summary>
-    private async Task<bool> LayOut(Guid patternId, string undoName, int byHand, IEnumerable<Hole> before, Func<BlastProject, HolePattern, PatternRebuildOptions, PatternRebuildReport> run)
+    /// <param name="scopeId">The pattern or segment the change is about: selected whole before, it is selected whole after (its holes as they are then).</param>
+    private async Task<bool> LayOut(Guid patternId, string undoName, int byHand, Guid scopeId, Func<BlastProject, HolePattern, PatternRebuildOptions, PatternRebuildReport> run)
     {
         if (Doc == null) return false;
         if (byHand > 0 && !await Dialogs.Confirm(Loc.F("{0} holes loaded or timed by hand leave the outline and will be deleted. Continue?", byHand), Loc.T(undoName))) return false;
-        // the whole pattern selected stays selected with its new holes
-        var holes = before.Select(h => h.Id).ToList();
+        // the whole pattern (or segment) selected stays selected with its new holes, and the panel stays on it
+        var holes = Project!.FindPattern(scopeId) is { } scope ? PatternTree.TreeHoles(Project, scope).Select(h => h.Id).ToList() : new List<Guid>();
         var whole = holes.Count > 0 && holes.All(Doc.Selection.Contains);
         PatternRebuildReport? report = null;
         if (!Change(undoName, p => { if (p.FindPattern(patternId) is { } x) report = run(p, x, PatternOptions(p)); })) return false;
         if (report == null) return false;
+        if (whole && Project.FindPattern(scopeId) is { } after)
+        {
+            var now = PatternTree.TreeHoles(Project, after).Where(IsSelectable).Select(h => h.Id).ToList();
+            var others = Doc.Selection.Where(id => !holes.Contains(id) && !report.DeletedIds.Contains(id));
+            if (!Doc.Selection.SetEquals(others.Concat(now))) Doc.Select(others.Concat(now).ToList(), record: false);
+        }
         // deleted holes leave the selection; the step of the change brings it back on undo
-        if (report.DeletedIds.Count > 0 || (whole && report.AddedIds.Count > 0))
-            Doc.Select(Doc.Selection.Except(report.DeletedIds).Concat(whole ? report.AddedIds : Enumerable.Empty<Guid>()).ToList(), record: false);
+        else if (report.DeletedIds.Count > 0)
+            Doc.Select(Doc.Selection.Except(report.DeletedIds).ToList(), record: false);
         SetStatus(Loc.T(undoName) + ": " + Loc.F("{0} moved, {1} deleted, {2} added", report.Moved, report.Deleted, report.Added)
             + (report.TiesLost > 0 ? "; " + Loc.F("{0} ties removed", report.TiesLost) : "")
             + (report.ClampedIds.Count > 0 ? "; " + Loc.F("{0} holes held at an end of the depth range", report.ClampedIds.Distinct().Count()) : ""));

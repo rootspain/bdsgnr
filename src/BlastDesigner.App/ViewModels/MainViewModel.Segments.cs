@@ -1,4 +1,6 @@
+using System.Text.Json;
 using BlastDesigner.App.Services;
+using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
@@ -35,11 +37,15 @@ public sealed partial class MainViewModel
     public Task<bool> SetSegmentOverride(Guid segmentId, string what, Action<PatternOverrides> set)
     {
         if (Project?.FindPattern(segmentId) is not { ParentId: not null } seg) return Task.FromResult(false);
+        // a field taken away with the panel gives its value again: a change that changes nothing is no step
+        var probe = seg.Overrides.Clone();
+        set(probe);
+        if (Same(probe, seg.Overrides)) return Task.FromResult(false);
         return LayOutTree(PatternTree.Root(Project, seg).Id, $"{seg.Name}: {Loc.T(what)}", (p, r, o) =>
         {
             if (p.FindPattern(segmentId) is { } s) set(s.Overrides);
             return PatternTree.Relayout(p, r, o);
-        });
+        }, seg);
     }
 
     /// <summary>The segment takes everything from its parent again.</summary>
@@ -50,7 +56,7 @@ public sealed partial class MainViewModel
         {
             if (p.FindPattern(segmentId) is { } s) { s.Overrides = new PatternOverrides(); s.AnchorSide = PatternAnchorSide.Face; }
             return PatternTree.Relayout(p, r, o);
-        });
+        }, seg);
     }
 
     /// <summary>
@@ -60,12 +66,15 @@ public sealed partial class MainViewModel
     public Task<bool> SetPatternDefaults(Guid patternId, string what, Action<HolePattern> set)
     {
         if (Project?.FindPattern(patternId) is not { } pat) return Task.FromResult(false);
+        var probe = ProjectJson.DeepClone(pat);
+        set(probe);
+        if (Same(probe, pat)) return Task.FromResult(false);
         var root = PatternTree.Root(Project, pat);
         return LayOutTree(root.Id, $"{pat.Name}: {Loc.T(what)}", (p, r, o) =>
         {
             if (p.FindPattern(patternId) is { } x) set(x);
             return PatternTree.Relayout(p, r, o);
-        });
+        }, pat);
     }
 
     /// <summary>
@@ -95,6 +104,9 @@ public sealed partial class MainViewModel
     private Task<bool> ChangeDepth(Guid patternId, Action<HolePattern> set, bool always = false)
     {
         if (Project?.FindPattern(patternId) is not { } pat) return Task.FromResult(false);
+        var probe = ProjectJson.DeepClone(pat);
+        set(probe);
+        if (Same(probe, pat)) return Task.FromResult(false);
         var root = PatternTree.Root(Project, pat);
         return LayOutTree(root.Id, $"{pat.Name}: {Loc.T("depth")}", (p, r, o) =>
         {
@@ -111,8 +123,11 @@ public sealed partial class MainViewModel
                 if (before[leaf.Id] != (PatternTree.EffectiveDepthMode(leaf), leaf.ToLevel, leaf.HoleDefaults.BenchHeight) && (always || before[leaf.Id].Item1 != PatternTree.EffectiveDepthMode(leaf) || before[leaf.Id].Item2 != leaf.ToLevel))
                     PatternTree.FollowDepthMode(p, leaf, o);
             return PatternTree.Relayout(p, r, o);
-        });
+        }, pat);
     }
+
+    /// <summary>Whether two objects of the project are the same, as they are saved.</summary>
+    private static bool Same<T>(T a, T b) => JsonSerializer.Serialize(a, ProjectJson.Options) == JsonSerializer.Serialize(b, ProjectJson.Options);
 
     /// <summary>Puts cut line <paramref name="index"/> of a pattern where it was dragged to (one undo step).</summary>
     public Task<bool> MoveSegmentLine(Guid rootId, int index, SegmentLine line)
