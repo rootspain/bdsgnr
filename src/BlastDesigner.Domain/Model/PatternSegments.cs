@@ -20,9 +20,8 @@ public enum DepthMode
     /// <summary>Down to the first grade surface in the way of each hole (<see cref="HolePattern.ToSurface"/>).</summary>
     ToSurface,
     /// <summary>
-    /// Down to the depth polygon: a depth from the collar at each vertex of the outline of each segment, kept once for the
-    /// whole pattern (<see cref="HolePattern.SurfaceVertices"/>), flat triangles between them. A hole goes from its collar down
-    /// by the depth there, and the subdrill below that.
+    /// Down to the depth polygon: the elevations of the toes (without the subdrill) at the vertices of the outline of each
+    /// segment, kept once for the whole pattern (<see cref="HolePattern.SurfaceVertices"/>), flat triangles between them.
     /// </summary>
     Polygon,
     /// <summary>
@@ -52,7 +51,7 @@ public sealed class PatternVertex
     public string Key { get; set; } = "";
     /// <summary>Elevation of the collar polygon there; null: worked out from the vertices beside it.</summary>
     public double? Collar { get; set; }
-    /// <summary>The depth of the depth polygon there, from the collar down (the subdrill below it), m; null: worked out from the vertices beside it.</summary>
+    /// <summary>Elevation of the depth polygon there (the toe without the subdrill); null: worked out from the vertices beside it.</summary>
     public double? Depth { get; set; }
 }
 

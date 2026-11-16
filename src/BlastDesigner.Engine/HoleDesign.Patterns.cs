@@ -433,7 +433,7 @@ public static partial class HoleDesign
         var depth = pat.HoleDefaults.Depth;
         var rect = depth.UsesRectangle ? DepthRectangle.Of(pat) : null;
         // the collar and depth polygons, on the vertices of the outline of the pattern (or segment)
-        var (collarPoly, depthPoly, _) = depth.UsesPolygons ? PatternSurfaces.Surfaces(p, pat, o.CollarSurface) : (null, null, null);
+        var (collarPoly, depthPoly) = depth.UsesPolygons ? PatternSurfaces.Surfaces(p, pat, o.CollarSurface) : (null, null);
         Vec3 OnCollarPolygon(Vec3 at) => collarPoly != null && depth.Collars == CollarSource.Polygon ? at.WithZ(PatternSurfaces.At(collarPoly, at.X, at.Y)) : at;
         double? RectDepth(int i, int j) => rect is { } r && r.Relative(pat, i, j) is var (s, t) ? depth.At(s, t) : null;
         void Level(Hole h, bool isNew, double? rd)

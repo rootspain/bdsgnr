@@ -38,15 +38,8 @@ public sealed class DepthPolygonGrips : ISelectGesture
     public DepthPolygonGripsOverlay Overlay { get; }
     IOverlay? ISelectGesture.Overlay => Overlay;
 
-    /// <summary>
-    /// A vertex of a polygon: its pattern, its name, collar (true) or depth, where it is drawn (its elevation <see cref="Z"/>:
-    /// the collar, or the collar less the depth) and the value kept (the collar elevation, or the depth from the collar).
-    /// </summary>
-    public sealed record Grip(Guid Root, string Key, bool Collar, Vec3 Point, double Z, double Value)
-    {
-        /// <summary>The value kept when the vertex is drawn at elevation <paramref name="z"/>: up is a smaller depth.</summary>
-        public double ValueAt(double z) => Collar ? z : Value - (z - Z);
-    }
+    /// <summary>A vertex of a polygon: its pattern, its name, collar (true) or depth, where it is and its elevation.</summary>
+    public sealed record Grip(Guid Root, string Key, bool Collar, Vec3 Point, double Z);
 
     public Grip? Hot { get; private set; }
     public Grip? Pressed { get; private set; }
@@ -67,8 +60,8 @@ public sealed class DepthPolygonGrips : ISelectGesture
                 var spec = leaf.HoleDefaults.Depth;
                 foreach (var v in PatternSurfaces.Polygons(project, leaf, bench).SelectMany(x => x).Where(v => v.Key != null))
                 {
-                    if (spec.Collars == CollarSource.Polygon && seen.Add((v.Key!, true))) grips.Add(new Grip(root.Id, v.Key!, true, v.Point.WithZ(v.Collar), v.Collar, v.Collar));
-                    if (spec.Mode == DepthMode.Polygon && seen.Add((v.Key!, false))) grips.Add(new Grip(root.Id, v.Key!, false, v.Point.WithZ(v.Toe), v.Toe, v.Depth));
+                    if (spec.Collars == CollarSource.Polygon && seen.Add((v.Key!, true))) grips.Add(new Grip(root.Id, v.Key!, true, v.Point.WithZ(v.Collar), v.Collar));
+                    if (spec.Mode == DepthMode.Polygon && seen.Add((v.Key!, false))) grips.Add(new Grip(root.Id, v.Key!, false, v.Point.WithZ(v.Depth), v.Depth));
                 }
             }
         return grips;
@@ -108,7 +101,7 @@ public sealed class DepthPolygonGrips : ISelectGesture
         var tip = _vm.View.Camera.IsPlan
             ? Loc.T("Double click: type the elevation")
             : Loc.T("Drag: up or down (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation");
-        _vm.View.Preview.Labels.Add((hit.Point, $"{what}: {Shown(hit, hit.Z)} — {tip}"));
+        _vm.View.Preview.Labels.Add((hit.Point, $"{what}: {hit.Z:0.00} — {tip}"));
     }
 
     public bool TryPress(ToolPointer p)
@@ -166,7 +159,7 @@ public sealed class DepthPolygonGrips : ISelectGesture
             }
             catch (InvalidOperationException) { }
         }
-        preview.Labels.Add((hit.Point, Shown(hit, hit.Z + dz) + (all ? $" ({dz:+0.00;−0.00} " + Loc.T("the whole polygon") + ")" : "")));
+        preview.Labels.Add((hit.Point, $"{hit.Z + dz:0.00}" + (all ? $" ({dz:+0.00;−0.00} " + Loc.T("the whole polygon") + ")" : "")));
         _vm.View.Redraw();
     }
 
@@ -174,14 +167,10 @@ public sealed class DepthPolygonGrips : ISelectGesture
     private Dictionary<string, double> Values(Grip hit, double dz, bool all)
     {
         var values = new Dictionary<string, double>();
-        if (!all) { values[hit.Key] = hit.ValueAt(hit.Z + dz); return values; }
-        foreach (var g in Grips().Where(g => g.Root == hit.Root && g.Collar == hit.Collar)) values[g.Key] = g.ValueAt(g.Z + dz);
+        if (!all) { values[hit.Key] = hit.Z + dz; return values; }
+        foreach (var g in Grips().Where(g => g.Root == hit.Root && g.Collar == hit.Collar)) values[g.Key] = g.Z + dz;
         return values;
     }
-
-    /// <summary>What a vertex shows at elevation <paramref name="z"/>: the collar elevation, or the depth from the collar with the elevation it reaches.</summary>
-    private static string Shown(Grip g, double z) =>
-        g.Collar ? $"{z:0.00}" : $"{Loc.T("depth")} {g.ValueAt(z):0.00} ({z:0.00})";
 
     public void Release(ToolPointer p)
     {
@@ -198,9 +187,8 @@ public sealed class DepthPolygonGrips : ISelectGesture
     private async Task Type(Grip hit)
     {
         var title = Loc.T(hit.Collar ? "Collar polygon" : "Depth polygon");
-        var label = Loc.T(hit.Collar ? "Elevation, m" : "Depth from the collar, m");
-        if (await Dialogs.PromptNumber(title, label, Math.Round(hit.Value, 3)) is double v && Math.Abs(v - hit.Value) > 1e-9)
-            await Run(_vm.SetPolygonVertices(hit.Root, hit.Collar, new Dictionary<string, double> { [hit.Key] = v }));
+        if (await Dialogs.PromptNumber(title, Loc.T("Elevation, m"), Math.Round(hit.Z, 3)) is double z && Math.Abs(z - hit.Z) > 1e-9)
+            await Run(_vm.SetPolygonVertices(hit.Root, hit.Collar, new Dictionary<string, double> { [hit.Key] = z }));
     }
 
     private async Task Run(Task<bool> change)
@@ -231,7 +219,7 @@ public sealed class DepthPolygonGrips : ISelectGesture
         _dragging = false;
     }
 
-    /// <summary>On a vertex: type its elevation (or depth), or let it take it from its neighbours again.</summary>
+    /// <summary>On a vertex: type its elevation, or let it take its elevation from its neighbours again.</summary>
     public IEnumerable<MenuEntry>? ContextMenu(ToolPointer p)
     {
         if (_busy || GripAt(p.X, p.Y) is not { } hit) return null;
