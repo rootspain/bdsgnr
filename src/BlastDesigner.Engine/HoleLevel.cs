@@ -47,17 +47,12 @@ public static class HoleLevel
     public static (double Distance, SurfaceEntity Surface)? SurfaceHit(BlastProject project, Hole h)
     {
         const double onCollar = 0.05;
-        Vec3 o = h.Collar, dir = h.Direction;
         (double Distance, SurfaceEntity Surface)? grade = null, any = null;
         foreach (var s in project.Entities.OfType<SurfaceEntity>())
         {
-            var v = s.Vertices;
-            for (int i = 0; i + 2 < s.Triangles.Count; i += 3)
-            {
-                if (RayTriangle(o, dir, v[s.Triangles[i]], v[s.Triangles[i + 1]], v[s.Triangles[i + 2]]) is not double t || t <= onCollar) continue;
-                if (any == null || t < any.Value.Distance) any = (t, s);
-                if (s.Kind == SurfaceKind.Grade && (grade == null || t < grade.Value.Distance)) grade = (t, s);
-            }
+            if (Distance(h, s, onCollar) is not double t) continue;
+            if (any == null || t < any.Value.Distance) any = (t, s);
+            if (s.Kind == SurfaceKind.Grade && (grade == null || t < grade.Value.Distance)) grade = (t, s);
         }
         return grade ?? any;
     }
@@ -72,6 +67,20 @@ public static class HoleLevel
     /// </summary>
     public static double? SurfaceLevel(BlastProject project, Hole h) =>
         SurfaceDistance(project, h) is double d ? Round(h.Collar.Z + h.Direction.Z * d) : null;
+
+    /// <summary>
+    /// Distance along the hole from its collar to the first triangle of a surface in its way (going from the collar towards
+    /// the toe and on past it), past <paramref name="from"/> metres; null when it meets none.
+    /// </summary>
+    public static double? Distance(Hole h, SurfaceEntity s, double from = 0)
+    {
+        Vec3 o = h.Collar, dir = h.Direction;
+        double? best = null;
+        var v = s.Vertices;
+        for (int i = 0; i + 2 < s.Triangles.Count; i += 3)
+            if (RayTriangle(o, dir, v[s.Triangles[i]], v[s.Triangles[i + 1]], v[s.Triangles[i + 2]]) is double t && t > from && (best == null || t < best)) best = t;
+        return best;
+    }
 
     /// <summary>Möller–Trumbore: the distance along the ray (unit direction) to the triangle, null when it misses.</summary>
     private static double? RayTriangle(Vec3 o, Vec3 d, Vec3 a, Vec3 b, Vec3 c)

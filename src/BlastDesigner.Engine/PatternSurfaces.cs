@@ -194,23 +194,11 @@ public static class PatternSurfaces
 
     /// <summary>
     /// The elevation where the axis of a hole meets the depth polygon (an inclined hole reaches it away from its collar),
-    /// to the micrometre.
+    /// found as the surfaces of the project are (<see cref="HoleLevel.Distance"/>), to the micrometre. An axis that leaves
+    /// the polygon before it meets it (an inclined hole at its edge) takes the polygon under its collar.
     /// </summary>
-    public static double DepthLevel(Hole h, SurfaceEntity depth)
-    {
-        var dir = h.Direction;
-        var cos = Math.Max(0.05, -dir.Z);
-        var z = At(depth, h.Collar.X, h.Collar.Y);
-        for (int i = 0; i < 12; i++)
-        {
-            var along = (h.Collar.Z - z) / cos;
-            var pt = h.Collar + dir * along;
-            var next = At(depth, pt.X, pt.Y);
-            if (Math.Abs(next - z) < 1e-6) { z = next; break; }
-            z = next;
-        }
-        return HoleLevel.Round(z);
-    }
+    public static double DepthLevel(Hole h, SurfaceEntity depth) =>
+        HoleLevel.Round(HoleLevel.Distance(h, depth) is double t ? h.Collar.Z + h.Direction.Z * t : At(depth, h.Collar.X, h.Collar.Y));
 
     /// <summary>
     /// The names of the crossings of the cut lines after a line was put in at <paramref name="index"/> (+1) or taken away
