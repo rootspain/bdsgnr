@@ -42,7 +42,7 @@ public sealed class PatternRotateTool : Tool
     /// <summary>What is turned: the pattern of the selection, or the selection about its centre.</summary>
     private void Target()
     {
-        var pat = Vm.SelectedPattern;
+        var pat = Vm.TurnTarget;
         _turn.PatternId = pat?.Id;
         if (pat != null) _turn.Pivot = pat.Center;
         else if (Vm.Doc is { Selection.Count: > 0 } doc)
@@ -166,10 +166,15 @@ public sealed class PatternOverlay : IOverlay
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = colour };
         // the burden arrow in its own colour (yellow by default), the outline and the centre in the selection colour
         using var arrow = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.75f, Color = PlanRenderer.Adapt(new SKColor(_vm.Settings.PatternArrowColor)) };
+        // the outline and the segments of each pattern once, the centre and the arrow of what a turn turns (a segment or the pattern)
+        foreach (var root in shown.Select(x => PatternTree.Root(project, x)).Distinct())
+        {
+            if (root.Outline.Count >= 3) PlanRenderer.DrawPolyline(c, cam, root.Outline, true, dashed);
+            DrawSegments(c, cam, project, root, colour);
+        }
         foreach (var pat in shown)
         {
-            if (pat.Outline.Count >= 3) PlanRenderer.DrawPolyline(c, cam, pat.Outline, true, dashed);
-            DrawSegments(c, cam, project, pat, colour);
+            if (pat.ParentId != null && pat.Outline.Count >= 3) PlanRenderer.DrawPolyline(c, cam, pat.Outline, true, solid);
             var (cx, cy) = cam.ToScreen(pat.Center);
             c.DrawCircle(cx, cy, 4, fill);
             if (pat.Id == HiddenArrow) continue;
@@ -231,11 +236,20 @@ public sealed class PatternOverlay : IOverlay
         }
     }
 
-    /// <summary>The patterns whose grid is drawn: those of the selected holes (for a segment, the pattern it is cut from).</summary>
+    /// <summary>
+    /// The patterns whose grid is drawn with its arrow and circle: those of the selected holes. Holes all in one segment show
+    /// that segment (it turns on its own); holes of several segments show the pattern they are cut from.
+    /// </summary>
     public static List<HolePattern> Shown(Document? doc)
     {
         if (doc is not { Selection.Count: > 0 } || doc.Project.Patterns.Count == 0) return new();
-        var shown = doc.SelectedHoles.Select(h => doc.Project.FindPattern(h.PatternId)).OfType<HolePattern>().Select(p => PatternTree.Root(doc.Project, p).Id).ToHashSet();
-        return doc.Project.Patterns.Where(p => shown.Contains(p.Id)).ToList();
+        var p = doc.Project;
+        var shown = new HashSet<Guid>();
+        foreach (var g in doc.SelectedHoles.Select(h => p.FindPattern(h.PatternId)).OfType<HolePattern>().GroupBy(x => PatternTree.Root(p, x).Id))
+        {
+            var mine = g.Select(x => x.Id).Distinct().ToList();
+            shown.Add(mine.Count == 1 && g.First().ParentId != null ? mine[0] : g.Key);
+        }
+        return p.Patterns.Where(x => shown.Contains(x.Id)).ToList();
     }
 }

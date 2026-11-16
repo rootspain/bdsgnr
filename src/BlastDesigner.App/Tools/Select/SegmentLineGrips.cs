@@ -21,7 +21,7 @@ namespace BlastDesigner.App.Tools;
 public sealed class SegmentLineGrips : ISelectGesture
 {
     /// <summary>How far a line stands out of the outline at each end, px; its grips are there.</summary>
-    public const double ExtendPx = 10;
+    public const double ExtendPx = 24;
     /// <summary>How near to a line a press takes it, px.</summary>
     private const double LineReach = 5;
     private const double DragPx = 4;
@@ -61,7 +61,8 @@ public sealed class SegmentLineGrips : ISelectGesture
     /// and in a 3D view that looks down on the ground (as the circle that turns a pattern).
     /// </summary>
     public IReadOnlyList<HolePattern> Roots() =>
-        _visible() && PatternRotateHandle.SeesTheGround(_vm.View.Camera) ? PatternOverlay.Shown(_vm.Doc).Where(r => r.IsContainer).ToList() : new List<HolePattern>();
+        _visible() && PatternRotateHandle.SeesTheGround(_vm.View.Camera) && _vm.Project is { } project
+            ? PatternOverlay.Shown(_vm.Doc).Select(x => PatternTree.Root(project, x)).Distinct().Where(r => r.IsContainer).ToList() : new List<HolePattern>();
 
     /// <summary>Where the cursor is on the horizontal plane through the centre of a pattern: in 3D the drag follows it whatever is under it.</summary>
     private Vec3 OnGround(HolePattern root, ToolPointer p) => _vm.View.Camera.ToWorld(p.X, p.Y, root.Center.Z);

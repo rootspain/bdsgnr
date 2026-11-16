@@ -24,8 +24,10 @@ public static class PatternTurn
     public static PatternPlan Plan(BlastProject p, HolePattern pat, double delta)
     {
         // a pattern cut into segments turns as a whole, its cut lines with it
-        if (pat.IsContainer || pat.ParentId != null)
-            return PatternTree.Plan(p, PatternTree.Root(p, pat), (q, r) => PatternTree.Rotate(q, r, delta, PatternRebuildOptions.For(q)));
+        if (pat.ParentId != null)
+            return PatternTree.Plan(p, PatternTree.Root(p, pat), (q, r) => PatternTree.RotateSegment(q, r, pat.Id, delta, PatternRebuildOptions.For(q)));
+        if (pat.IsContainer)
+            return PatternTree.Plan(p, pat, (q, r) => PatternTree.Rotate(q, r, delta, PatternRebuildOptions.For(q)));
         var copy = ProjectJson.DeepClone(pat);
         copy.Azimuth = GeoMath.NormalizeBearing(copy.Azimuth + delta);
         return HoleDesign.PlanPattern(p, copy);

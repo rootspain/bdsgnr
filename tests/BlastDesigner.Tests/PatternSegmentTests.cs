@@ -683,6 +683,34 @@ public class PatternSegmentTests
     }
 
     [Fact]
+    public void ASegment_TurnsOnItsOwn_TheOthersAndTheLinesStay()
+    {
+        var (p, root) = Make(Rectangle);
+        PatternTree.Split(p, root, 2);
+        var seg = PatternTree.Children(p, root);
+        var front = HoleDesign.PatternHoles(p, seg[0]).ToDictionary(h => h.Id, h => h.Collar);
+        var line = (root.SegmentLines[0].V1, root.SegmentLines[0].V2);
+        var report = PatternTree.RotateSegment(p, root, seg[1].Id, 30);
+        Assert.Null(report.Refusal);
+        Assert.Equal(30, seg[1].Azimuth, 9);
+        Assert.Equal(30, seg[1].Overrides.Azimuth!.Value, 9);
+        Assert.Equal(0, seg[0].Azimuth);
+        Assert.Equal(0, root.Azimuth);
+        Assert.Equal(line, (root.SegmentLines[0].V1, root.SegmentLines[0].V2));
+        // the front segment did not move, the back one is laid in its own part
+        Assert.All(HoleDesign.PatternHoles(p, seg[0]), h => Assert.Equal(front[h.Id], h.Collar));
+        Assert.All(HoleDesign.PatternHoles(p, seg[1]), h => Assert.True(PatternTree.InPart(seg[1], h.Collar)));
+        Assert.NotEmpty(HoleDesign.PatternHoles(p, seg[1]));
+        // turning the whole pattern turns the segment with it; turned back, it takes the direction of the parent again
+        PatternTree.Rotate(p, root, 10);
+        Assert.Equal(40, seg[1].Azimuth, 9);
+        Assert.Equal(10, seg[0].Azimuth, 9);
+        PatternTree.RotateSegment(p, root, seg[1].Id, -30);
+        Assert.Null(seg[1].Overrides.Azimuth);
+        Assert.Equal(10, seg[1].Azimuth, 9);
+    }
+
+    [Fact]
     public void DissolvingTheParent_TakesItsSegments()
     {
         var (p, root) = Make(Rectangle);

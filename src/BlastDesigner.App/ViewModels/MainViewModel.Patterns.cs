@@ -37,6 +37,9 @@ public sealed partial class MainViewModel
         }
     }
 
+    /// <summary>What a turn turns: the segment all the selected holes are in, else the pattern of the selection.</summary>
+    public HolePattern? TurnTarget => SelectedSegment ?? SelectedPattern;
+
     /// <summary>Whether a pattern is cut into segments or is one: it is laid out with its whole tree.</summary>
     private static bool InTree(HolePattern pat) => pat.IsContainer || pat.ParentId != null;
 
@@ -51,7 +54,7 @@ public sealed partial class MainViewModel
     public PatternOverlay PatternGrid => _patternGrid ??= new PatternOverlay(this);
     private PatternOverlay? _patternGrid;
 
-    public Task RotatePatternDialog() => RotatePatternDialog(SelectedPattern?.Id);
+    public Task RotatePatternDialog() => RotatePatternDialog(TurnTarget?.Id);
 
     /// <summary>Asks for an angle and turns a pattern by it (the circle of the Select tool names its pattern).</summary>
     public async Task RotatePatternDialog(Guid? patternId)
@@ -64,8 +67,11 @@ public sealed partial class MainViewModel
     /// <summary>Turns a pattern grid by <paramref name="delta"/> degrees as one undo step; false when nothing was done.</summary>
     public Task<bool> RotatePattern(Guid patternId, double delta)
     {
+        // a segment turns on its own, a pattern cut into segments as a whole
+        if (Project?.FindPattern(patternId) is { ParentId: not null } seg)
+            return LayOutTree(PatternTree.Root(Project, seg).Id, $"{seg.Name}: {Loc.T("Rotate pattern")}", (p, root, o) => PatternTree.RotateSegment(p, root, patternId, delta, o), seg);
         if (Project?.FindPattern(patternId) is { } tree && InTree(tree))
-            return LayOutTree(PatternTree.Root(Project, tree).Id, "Rotate pattern", (p, root, o) => PatternTree.Rotate(p, root, delta, o));
+            return LayOutTree(tree.Id, "Rotate pattern", (p, root, o) => PatternTree.Rotate(p, root, delta, o));
         return LayOutPattern(patternId, "Rotate pattern", pat => pat.Azimuth = GeoMath.NormalizeBearing(pat.Azimuth + delta),
             (p, pat, o) => HoleDesign.RotatePattern(p, pat, delta, o));
     }
@@ -145,7 +151,8 @@ public sealed partial class MainViewModel
     /// Lays the tree of a pattern cut into segments out again in one undo step, as <see cref="LayOutPattern"/>: what would go
     /// is seen by running the change on a copy of the tree.
     /// </summary>
-    internal async Task<bool> LayOutTree(Guid rootId, string undoName, Func<BlastProject, HolePattern, PatternRebuildOptions, PatternRebuildReport> run)
+    /// <param name="scope">The segment the change is about: selected whole, it stays selected with its new holes (else the whole tree).</param>
+    internal async Task<bool> LayOutTree(Guid rootId, string undoName, Func<BlastProject, HolePattern, PatternRebuildOptions, PatternRebuildReport> run, HolePattern? scope = null)
     {
         if (Doc == null || Project!.FindPattern(rootId) is not { } root) return false;
         if (PatternTree.TreeRefusal(Project, root, PatternOptions(Project)) is { } no)
@@ -156,7 +163,7 @@ public sealed partial class MainViewModel
         int byHand;
         try { byHand = PatternTree.Plan(Project, root, (q, r) => run(q, r, PatternOptions(q))).Deletes.Count(h => h.ManualLoading || h.ElectronicTimeManual); }
         catch (InvalidOperationException ex) { await Dialogs.Info(Loc.T(ex.Message), Loc.T(undoName)); return false; }
-        return await LayOut(rootId, undoName, byHand, PatternTree.TreeHoles(Project, root), run);
+        return await LayOut(rootId, undoName, byHand, PatternTree.TreeHoles(Project, scope ?? root), run);
     }
 
     /// <summary>The common end of laying out a pattern or a tree: asks before holes done by hand go, runs the change, keeps the selection.</summary>

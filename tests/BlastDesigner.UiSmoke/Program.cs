@@ -122,6 +122,12 @@ Step("bench surface", () => vm.Change("Create surface", p =>
     s.Name = "Bench";
     p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces));
 }));
+Step("pan tool (H) has no tool panel, like Select", () =>
+{
+    vm.SetTool(new BlastDesigner.App.Tools.PanTool(vm)); Pump();
+    if (window.GetLogicalDescendants().OfType<BlastDesigner.App.Views.ToolPanel>().Any(t => t.IsVisible)) throw new Exception("the Pan tool shows the tool panel");
+    vm.SelectTool(); Pump();
+});
 Step("transform tool: scale 2 along X typed in its panel shows on the plan, Done applies it as one step of undo, holes stay, Esc goes back", () =>
 {
     vm.SelectTool(); vm.PlanView(); Pump();
@@ -1931,7 +1937,17 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     if (vm.Doc.UndoNames.Count != steps + 1 || Math.Abs(Root().SegmentLines[0].V1 - (v3 - Root().Burden)) > 1e-6)
         throw new Exception($"the drag in 3D did not move the cut line one row: {v3} → {Root().SegmentLines[0].V1}");
     vm.PlanView(); Pump();
-    // saved and opened again: the segments, what B sets and the depth come back
+    // the holes of one segment selected: the circle is the segment's, and the azimuth typed in turns it alone
+    var cSeg = PatternTree.Children(vm.Project!, Root())[2];
+    vm.SelectSegmentHoles(cSeg.Id); Pump();
+    if (BlastDesigner.App.Tools.PatternOverlay.Shown(vm.Doc).SingleOrDefault()?.Id != cSeg.Id || vm.TurnTarget?.Id != cSeg.Id) throw new Exception("one segment selected should turn on its own");
+    steps = vm.Doc.UndoNames.Count;
+    Enter(Find<TextBox>("segmentAzimuth"), "20");
+    if (Math.Abs(vm.Project!.FindPattern(cSeg.Id)!.Azimuth - 20) > 1e-9 || Math.Abs(Root().Azimuth) > 1e-9 || vm.Doc.UndoNames.Count != steps + 1)
+        throw new Exception($"the azimuth of segment C did not turn it alone: {vm.Project!.FindPattern(cSeg.Id)!.Azimuth} / {Root().Azimuth}");
+    if (!vm.Doc.Selection.SetEquals(HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(cSeg.Id)!).Select(h => h.Id))) throw new Exception("the turned segment did not stay selected with its new holes");
+    vm.View.Redraw(); Pump(); Shot("86_pattern_segment_turned");
+        // saved and opened again: the segments, what B sets and the depth come back
     var path = Path.Combine(outDir, "segments.bdp");
     ProjectFile.Save(vm.Project!, path, 0);
     var opened = ProjectFile.Load(path);

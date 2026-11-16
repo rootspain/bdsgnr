@@ -468,6 +468,8 @@ public static partial class HoleDesign
             var collar = depth.Mode == DepthMode.RectToLevel && rd is double dz ? target.WithZ(depth.Level + dz)
                 : depth.Mode == DepthMode.RectToLevel && h.DepthManual ? target.WithZ(h.Collar.Z)
                 : o.CollarSurface?.ElevationAt(target.X, target.Y) is double cz ? target.WithZ(cz) : target;
+            // a node where the hole already is (within a nanometre) leaves it as it is, to the last bit
+            if (Vec3.Distance2D(collar, h.Collar) <= 1e-9) collar = new Vec3(h.Collar.X, h.Collar.Y, collar.Z);
             var shift = collar - h.Collar;
             if (shift.Length2D > 1e-9) report.Moved++;
             h.Collar = collar;

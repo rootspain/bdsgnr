@@ -242,8 +242,8 @@ public static partial class PatternTree
 
     /// <summary>Whether two patterns have the same grid: their nodes are at the same points.</summary>
     public static bool SameGrid(HolePattern a, HolePattern b) =>
-        Vec3.Distance2D(a.Center, b.Center) < 1e-9 && Math.Abs(a.Azimuth - b.Azimuth) < 1e-9 && Math.Abs(a.PhaseU - b.PhaseU) < 1e-9 && Math.Abs(a.PhaseV - b.PhaseV) < 1e-9
-        && Math.Abs(a.Burden - b.Burden) < 1e-9 && Math.Abs(a.Spacing - b.Spacing) < 1e-9 && a.Type == b.Type;
+        Math.Abs(a.Azimuth - b.Azimuth) < 1e-9 && Math.Abs(a.Burden - b.Burden) < 1e-9 && Math.Abs(a.Spacing - b.Spacing) < 1e-9 && a.Type == b.Type
+        && Vec3.Distance2D(HoleDesign.NodePoint(a, 0, 0), HoleDesign.NodePoint(b, 0, 0)) < 1e-6 && Vec3.Distance2D(HoleDesign.NodePoint(a, 1, 1), HoleDesign.NodePoint(b, 1, 1)) < 1e-6;
 
     /// <summary>Why the tree of a pattern cannot be laid out again (a hole of any of its patterns); null when it can.</summary>
     public static PatternRefusal? TreeRefusal(BlastProject p, HolePattern root, PatternRebuildOptions? o = null)
@@ -496,9 +496,13 @@ public static partial class PatternTree
     /// </summary>
     private static void Place(HolePattern root, HolePattern s)
     {
-        s.Center = root.Center;
-        s.PhaseU = root.PhaseU;
-        s.PhaseV = root.PhaseV;
+        // the grid of the parent about the middle of the part of the segment: it turns about its own centre
+        var centre = s.Outline.Count >= 3 ? HoleDesign.AreaCentre(s.Outline).WithZ(root.Center.Z) : root.Center;
+        var (u, v) = HoleDesign.PatternAxes(root.Azimuth);
+        var d = centre - root.Center;
+        s.Center = centre;
+        s.PhaseU = root.PhaseU - (d.X * u.X + d.Y * u.Y);
+        s.PhaseV = root.PhaseV - (d.X * v.X + d.Y * v.Y);
         s.FaceEdge = null;
         var o = s.Overrides;
         var turned = o.Azimuth is double az && Math.Abs(GeoMath.NormalizeBearing(az - root.Azimuth)) > 1e-9;
@@ -767,6 +771,26 @@ public static partial class PatternTree
         return Relayout(p, root, o);
     }
 
+    /// <summary>
+    /// Turns one segment by <paramref name="delta"/> degrees (its rows a direction of their own, laid again in its part from
+    /// its face side); the cut lines and the other segments stay. Back to the direction of the parent, it takes it again.
+    /// </summary>
+    public static PatternRebuildReport RotateSegment(BlastProject p, HolePattern root, Guid segmentId, double delta, PatternRebuildOptions? o = null)
+    {
+        o ??= PatternRebuildOptions.For(p);
+        if (p.FindPattern(segmentId) is not { ParentId: not null } seg) return new PatternRebuildReport();
+        if (TreeRefusal(p, root, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        var az = GeoMath.NormalizeBearing(seg.Azimuth + delta);
+        var parent = Parent(p, seg) ?? root;
+        seg.Overrides.Azimuth = Math.Abs(PatternTurn.Turn(parent.Azimuth, az)) < 1e-9 ? null : az;
+        // the inclined holes of the segment follow the turn as those of a pattern do
+        foreach (var h in HoleDesign.PatternHoles(p, seg).Where(h => h.Angle >= 0.1))
+            if (o.Bearing == PatternBearingMode.Rotate) h.Bearing = GeoMath.NormalizeBearing(h.Bearing + delta);
+            else if (o.Bearing == PatternBearingMode.BlastOrientation) h.Bearing = p.Header.BlastOrientation;
+        o.BearingDelta = 0;
+        return Relayout(p, root, o);
+    }
+
     /// <summary>Turns a pattern and its tree by <paramref name="delta"/> degrees about its centre; the cut lines turn with it.</summary>
     public static PatternRebuildReport Rotate(BlastProject p, HolePattern root, double delta, PatternRebuildOptions? o = null)
     {
@@ -775,6 +799,9 @@ public static partial class PatternTree
         if (TreeRefusal(p, root, o) is { } no) return new PatternRebuildReport { Refusal = no };
         root.Azimuth = GeoMath.NormalizeBearing(root.Azimuth + delta);
         root.FaceEdge = null;
+        // segments turned on their own turn with the whole
+        foreach (var s in Descendants(p, root))
+            if (s.Overrides.Azimuth is double az) s.Overrides.Azimuth = GeoMath.NormalizeBearing(az + delta);
         if (root.RotateOrientation) p.Header.BlastOrientation = GeoMath.NormalizeBearing(p.Header.BlastOrientation + delta);
         o.BearingDelta = delta;
         return Relayout(p, root, o);

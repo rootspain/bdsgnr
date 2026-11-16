@@ -3333,3 +3333,4 @@ Select a closed polyline inside the pattern together with a hole of it.	Выде
 ui:To the grade, within from/to	До подошвы, в пределах от/до
 ui:Depth range, m	Диапазон глубины, м
 ui:The depth down to the grade surface (to the level without one), kept between these two; the holes held at an end are counted	Глубина до поверхности подошвы (без неё — до уровня), удерживается между этими числами; скважины на границе подсчитываются
+ui:Direction of the burden of the segment, degrees from north; a new value turns the segment about its centre	Направление ЛНС сегмента, градусы от севера; новое значение поворачивает сегмент вокруг его центра

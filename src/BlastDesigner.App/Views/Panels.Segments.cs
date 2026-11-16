@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using BlastDesigner.App.Services;
+using BlastDesigner.App.ViewModels;
 using BlastDesigner.Domain;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
@@ -157,6 +158,14 @@ public sealed partial class PropertiesPanel
             yield return Own("Diameter, mm", "segmentDiameter", o.Diameter, seg.HoleDefaults.Diameter, (x, v) => x.Diameter = v, "0.#");
             yield return Own("Subdrill, m", "segmentSubdrill", o.Subdrill, seg.HoleDefaults.Subdrill, (x, v) => x.Subdrill = v);
             yield return Own("Angle, °", "segmentAngle", o.Angle, seg.HoleDefaults.Angle, (x, v) => x.Angle = v, "0.#");
+            // its own direction of the rows: typed in, it turns the segment about its centre
+            var azimuth = Box(N(seg.Azimuth, "0.#"), "segmentAzimuth", v =>
+            {
+                if (Metres(v) is double a && Math.Abs(MainViewModel.Turn(seg.Azimuth, a)) > 1e-9) Done(_vm.RotatePattern(sid, MainViewModel.Turn(seg.Azimuth, a)));
+                else Refresh();
+            });
+            ToolTip.SetTip(azimuth, Loc.Ui("Direction of the burden of the segment, degrees from north; a new value turns the segment about its centre"));
+            yield return Row("Burden azimuth, °", Inherit(azimuth, o.Azimuth == null, () => Done(_vm.SetSegmentOverride(sid, "Rotate pattern", x => x.Azimuth = null)), "segmentAzimuth"));
             // with a burden of its own, the side of the segment its rows are laid from
             var side = new ComboBox
             {
