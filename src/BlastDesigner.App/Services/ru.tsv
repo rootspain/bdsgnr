@@ -3318,7 +3318,7 @@ ui:Remove the hole of the coarser grid	Убирать скважину боле�
 ui:One hole in the middle	Одна скважина посередине
 ui:Two holes of different segments closer than 0.6 of the smaller spacing (or 2 m)	Две скважины разных сегментов ближе 0,6 меньшего расстояния (или 2 м)
 ui:Holes too close	Близкие скважины
-ui:A hole in the middle of a gap at a seam	Скважина посередине зазора на стыке
+ui:A hole in the middle of a gap at a seam	Скважина в зазоре на стыке
 Rows laid from	Ряды от
 ui:Rows laid from	Ряды от
 ui:the face side	забоя

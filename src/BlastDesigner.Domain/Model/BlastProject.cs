@@ -294,7 +294,7 @@ public sealed class HolePattern
     public PatternAnchorSide AnchorSide { get; set; }
     /// <summary>Of a pattern cut into segments: what is done with two holes of different segments too close to each other.</summary>
     public SeamRule SeamRule { get; set; }
-    /// <summary>Of a pattern cut into segments: a gap across a seam gets a hole of its own in the middle.</summary>
+    /// <summary>Of a pattern cut into segments: a gap across a seam gets a hole of its own where the hole of the other segment should be.</summary>
     public bool SeamFillGaps { get; set; }
     /// <summary>Of a segment: nodes the seam rule left without a hole at the last layout (they get one again when the seam allows).</summary>
     public List<GridIndex> SeamDropped { get; set; } = new();

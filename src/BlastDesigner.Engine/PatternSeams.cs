@@ -14,7 +14,7 @@ public enum SeamIssueKind
     Crossing
 }
 
-/// <summary>A pair of holes at a seam (for a gap, the hole and the nearest one across, or the point across where there is none).</summary>
+/// <summary>A pair of holes at a seam; for a gap, the hole facing the seam and the point across the cut line where the hole of the other segment should be (B the nearest one there, if any).</summary>
 public sealed record SeamIssue(SeamIssueKind Kind, Guid A, Guid? B, Vec3 From, Vec3 To, double Distance);
 
 /// <summary>
@@ -53,7 +53,8 @@ public static class PatternSeams
                 if (d < limit) issues.Add(new SeamIssue(SeamIssueKind.Close, h.Id, o.Id, h.Collar, o.Collar, d));
             }
 
-        // gaps across the seam between segments k and k + 1, from the holes of either side near the cut line
+        // gaps across the seam between segments k and k + 1: a hole facing the cut line (no hole of its own segment between
+        // it and the line) with no hole of the other segment near where that one's first row should be
         var segments = PatternTree.LineSegments(p, root);
         for (int k = 0; k + 1 < segments.Count; k++)
         {
@@ -65,18 +66,24 @@ public static class PatternSeams
             foreach (var (from, to) in new[] { (a, b), (b, a) })
             {
                 var band = Math.Max(from.Burden, from.Spacing);
+                double Across(Vec3 q) => (q.X - cut.X) * cut.NX + (q.Y - cut.Y) * cut.NY;
                 foreach (var h in holes.Where(h => h.PatternId == from.Id))
                 {
-                    var across = (h.Collar.X - cut.X) * cut.NX + (h.Collar.Y - cut.Y) * cut.NY;
+                    var across = Across(h.Collar);
                     if (Math.Abs(across) > band) continue;
-                    var nearest = index.Near(h.Collar, limit).Where(o => o.PatternId == to.Id).MinBy(o => Vec3.Distance2D(o.Collar, h.Collar));
-                    if (nearest != null && Vec3.Distance2D(nearest.Collar, h.Collar) <= limit) continue;
-                    // across the line by the burden of the other side, where its hole would be
+                    // the foot of the hole on the line, and the way across it to the other side
                     var side = Math.Sign(across) == 0 ? 1 : -Math.Sign(across);
-                    var dist = Math.Abs(across) + to.Burden / 2;
-                    var point = nearest?.Collar ?? new Vec3(h.Collar.X + cut.NX * side * dist, h.Collar.Y + cut.NY * side * dist, h.Collar.Z);
-                    if (issues.Any(x => x.Kind == SeamIssueKind.Gap && x.B == h.Id && x.A == nearest?.Id)) continue;
-                    issues.Add(new SeamIssue(SeamIssueKind.Gap, h.Id, nearest?.Id, h.Collar, point, nearest != null ? Vec3.Distance2D(nearest.Collar, h.Collar) : double.PositiveInfinity));
+                    var foot = new Vec3(h.Collar.X - cut.NX * across, h.Collar.Y - cut.NY * across, h.Collar.Z);
+                    // a hole of its own segment between it and the line faces the seam instead
+                    var shadowed = index.Near(h.Collar, band).Any(q => q.PatternId == from.Id && q.Id != h.Id
+                        && Math.Abs(Across(q.Collar)) < Math.Abs(across) - 1e-6 && GeoMath.ClosestOnSegment2D(h.Collar, foot, q.Collar).Point is var c
+                        && Vec3.Distance2D(c, q.Collar) < from.Spacing / 2);
+                    if (shadowed) continue;
+                    // where the first row of the other segment should be: half its burden behind the line
+                    var expected = new Vec3(foot.X + cut.NX * side * to.Burden / 2, foot.Y + cut.NY * side * to.Burden / 2, h.Collar.Z);
+                    var nearest = index.Near(expected, limit).Where(o => o.PatternId != from.Id).MinBy(o => Vec3.Distance2D(o.Collar, h.Collar));
+                    if (nearest != null && Vec3.Distance2D(nearest.Collar, h.Collar) <= limit) continue;
+                    issues.Add(new SeamIssue(SeamIssueKind.Gap, h.Id, nearest?.Id, h.Collar, expected, nearest != null ? Vec3.Distance2D(nearest.Collar, h.Collar) : double.PositiveInfinity));
                 }
             }
         }
@@ -155,7 +162,8 @@ public static class PatternSeams
             foreach (var issue in issues.Where(x => x.Kind == SeamIssueKind.Gap))
             {
                 if (p.FindEntity(issue.A) is not Hole h || p.FindPattern(h.PatternId) is not { } pat) continue;
-                var at = new Vec3((issue.From.X + issue.To.X) / 2, (issue.From.Y + issue.To.Y) / 2, h.Collar.Z);
+                // where the hole of the other segment should be (the end of the mark of the gap)
+                var at = issue.To.WithZ(h.Collar.Z);
                 if (added.Any(x => Vec3.Distance2D(x, at) < pat.Spacing / 2)) continue;
                 added.Add(at);
                 var d = pat.HoleDefaults;
