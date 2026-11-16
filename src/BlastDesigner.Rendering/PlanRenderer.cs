@@ -75,6 +75,8 @@ public sealed record SceneOptions
     /// object in the scene, selected as it is.
     /// </summary>
     public IReadOnlyDictionary<Guid, Entity>? Replaced { get; init; }
+    /// <summary>Holes drawn by their collars only, without the depth line and the charge along it (the other segments of a pattern while one is selected).</summary>
+    public IReadOnlySet<Guid>? HiddenDepths { get; init; }
     /// <summary>The block under the cursor: drawn with all its edges, not only the short ones at its corners.</summary>
     public Guid? HotBlock { get; init; }
     /// <summary>The camera is moving: what is behind a surface is not worked out until it stops (<see cref="ViewState.FadeHidden"/>).</summary>
@@ -1647,6 +1649,7 @@ public static class PlanRenderer
     {
         var view = project.View;
         if (view.CollarsOnly && !(view.ShowLoading && h.Decks.Count > 0)) return;
+        if (opt.HiddenDepths?.Contains(h.Id) == true) return;
         var (x, y) = cam.ToScreen(h.Collar);
         var (tx, ty) = cam.ToScreen(h.Toe);
         if (Math.Abs(tx - x) + Math.Abs(ty - y) <= 1) return;

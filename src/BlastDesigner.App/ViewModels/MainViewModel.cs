@@ -260,6 +260,25 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Plan background shown while the settings window previews a theme; null outside the preview.</summary>
     public uint? PreviewBackground { get; set; }
 
+    /// <summary>
+    /// The holes whose depth lines are not drawn: with the holes of one segment selected, those of the other segments of
+    /// its pattern (only the depths of the selected segment are shown). Null when there are none.
+    /// </summary>
+    private HashSet<Guid>? OtherSegmentsHoles()
+    {
+        if (Project is not { } project || Doc is null) return null;
+        var shown = PatternOverlay.Shown(Doc);
+        if (!shown.Any(x => x.ParentId != null)) return null;
+        HashSet<Guid>? hidden = null;
+        foreach (var root in shown.Select(x => PatternTree.Root(project, x)).Distinct())
+        {
+            var own = PatternOverlay.DepthLeaves(project, root, shown).Select(l => l.Id).ToHashSet();
+            foreach (var leaf in PatternTree.Leaves(project, root).Where(l => !own.Contains(l.Id)))
+                foreach (var h in HoleDesign.PatternHoles(project, leaf)) (hidden ??= new()).Add(h.Id);
+        }
+        return hidden;
+    }
+
     public SceneOptions BuildSceneOptions()
     {
         var overlays = new List<IOverlay> { Highlight, PatternGrid };
@@ -276,6 +295,7 @@ public sealed partial class MainViewModel : ObservableObject
             // cut to the visible blocks with the blast
             AnalysisOverlays = AnalysisOverlays.ToList(),
             HiddenEntities = HiddenEntities,
+            HiddenDepths = OtherSegmentsHoles(),
             AnimationTimeMs = AnimationTime,
             // the summary box stays on printed plans only; on screen the inspector already shows the totals
             DrawSummaryBlock = false,

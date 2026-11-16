@@ -137,6 +137,7 @@ public sealed class Viewport : Control
             PointCloudAlpha = opt.PointCloudAlpha,
             AnimationTimeMs = opt.AnimationTimeMs,
             HiddenEntities = opt.HiddenEntities,
+            HiddenDepths = opt.HiddenDepths,
             HideGeometry = opt.HideGeometry,
             SliceHalfWidth = opt.SliceHalfWidth,
             TopInset = opt.TopInset,

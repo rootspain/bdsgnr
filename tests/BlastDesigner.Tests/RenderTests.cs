@@ -657,4 +657,28 @@ public class RenderTests
         Assert.True(Lit(d => d.LineWeight = 100, false) > Lit(_ => { }, false) + 1);
         Assert.True(Lit(d => { d.LineType = "DASHED"; d.LineTypeScale = 10; }, true) < Lit(_ => { }, true) * 0.85);
     }
+
+    [Fact]
+    public void AHoleWithItsDepthHidden_IsDrawnByItsCollarOnly()
+    {
+        int Lit(bool hidden)
+        {
+            var p = BlastProject.CreateNew("depth");
+            p.View.CollarsOnly = false;
+            var h = new Hole { Collar = new Vec3(0, 0, 100), Length = 20 };
+            p.Add(h);
+            // from the side: the depth line goes down the screen under the collar
+            var cam = new Camera { Width = 300, Height = 300, Pitch = 0, Scale = 6, Target = new Vec3(0, 0, 90) };
+            var options = new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false, Background = SKColors.White,
+                HiddenDepths = hidden ? new HashSet<Guid> { h.Id } : null };
+            using var bitmap = new SKBitmap(300, 300);
+            using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+            var (x, y0) = cam.ToScreen(new Vec3(0, 0, 95));
+            var (_, y1) = cam.ToScreen(new Vec3(0, 0, 82));
+            return Enumerable.Range((int)Math.Min(y0, y1), (int)Math.Abs(y1 - y0))
+                .Count(y => Enumerable.Range((int)Math.Round(x) - 1, 3).Any(xx => { var c = bitmap.GetPixel(xx, y); return c.Red + c.Green + c.Blue < 650; }));
+        }
+        Assert.True(Lit(false) > 20);
+        Assert.Equal(0, Lit(true));
+    }
 }

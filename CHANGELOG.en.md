@@ -6,12 +6,45 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.3.6 — 2026-11-15
+## 0.3.6 — 2026-11-16
 
 ### New
+- **Pattern segments.** The Segments field in the properties of a pattern cuts it into parts (1 to its number of rows)
+  by cut lines in the middle between rows; the rows are shared evenly, the extra ones towards the face, and no hole
+  moves. Each segment has its own burden, spacing, diameter, angle, subdrill, depth and bearing — by default those of the
+  parent (in italics); a value typed in becomes its own, the button beside it takes the parent's again. The numbers run
+  through the whole pattern, segment by segment. The cut lines are shown on the plan: the grip at an end moves it along
+  the outline (Shift across the rows only, Ctrl free of the rows), the line itself moves parallel to itself; the drag
+  shows which holes would move, go and come. A double click on a line puts it along the rows again, its menu has
+  Remove the cut line. Each segment turns on its own; the rows can be laid from the face or from the back side.
+- **Islands in a pattern.** Island from polygon: a closed polyline inside a pattern (selected with a hole of it) becomes
+  a segment of its own with its own parameters; an edit of the polyline cuts the pattern again.
+- **Seams of segments.** Under the list of segments the Seams line: holes of different segments too close (red on the
+  plan), gaps (orange) and holes crossing under the ground. The Holes too close rule: warn, remove the hole of the
+  coarser grid or put one hole in the middle; a hole can go in the middle of a gap at a seam.
+- **Depth To the grade, within from/to:** a hole goes down to the grade surface (to the level without one) but its depth
+  stays in the range; the message says how many were held at an end. The quantities have totals for each segment.
+- **Collar and depth polygons.** Collars on the collar polygon and the Depth polygon: each vertex of the outline (and
+  each point where a cut line crosses it) has an elevation, flat triangles between them; the collars lie on the collar
+  polygon, the holes go down to the depth polygon. Neighbouring segments share their vertices at a seam. On the plan
+  the elevations are written at the vertices (the collar above, the depth below); a double click on one types it. In 3D
+  the polygons are filled half-clear with a grip at each vertex: a drag moves the vertex up or down (0.1 m steps, Ctrl
+  0.01 m, Shift the whole polygon), a double click types the elevation, its menu has From the vertices beside it. A
+  click on a grip selects the vertex, Ctrl+click adds one: selected vertices of one polygon of one segment are dragged
+  and typed together. The grips are there in 3D from the side and at a slant (a view nearly straight down hides them).
+  The colours of the polygons are in Program settings ▸ View.
+- **A pattern follows its polygon as a whole.** The polygon of the outline moved, turned or lifted: the pattern goes
+  along as it is — holes, segments, cut lines, islands with their polygons, the elevations of the polygons and the
+  depth levels, in one step of undo. Single vertices of the outline edited lay the pattern out on it again, as before.
 - **Pan (H) has no panel at the bottom**, like Select (M): the tool has no fields, the panel only took room.
 - **The Transform tool** (a button of the tool rail on the left, Ctrl+T, an item of the context menu): a scale along each axis or in proportion, a tilt about X, Y and Z, mirrors across X and Y, a move — about a base point, along the axes of the world or of an object (a block, a line, a text, a dimension). The plan shows the result at once, Done (Enter) applies it as one step of undo, Esc takes it back. On the plan a frame round the selection: the corners scale in proportion (Shift each axis, Alt from the centre), the sides along one axis, the knob above turns (Shift 15° steps, Ctrl 1°), the cross moves the base point; a number typed while dragging is taken with Enter. In a 3D view axes from the base point: the cubes scale, the arcs tilt. Holes and the inside of a pattern of holes are left: they have their own tool. The outline of a pattern can be tilted (about X, Y and Z) and moved, the pattern following it; it is not scaled or mirrored. A circle is scaled in proportion only, a block is not tilted about X or Y. The Transform coordinates window now opens this tool.
 - **The hole table is Ctrl+Shift+T:** Ctrl+T now starts the Transform tool.
+
+### Changed
+- **One segment selected shows its own depths only:** the holes of the other segments of the pattern are drawn by
+  their collars, without the line down to the toe and the charge along it; their elevations, polygons and grips are not drawn either.
+- **Collars: On the grid** is the new name of The project surface (on the bench surface, at the level of the grid
+  without one).
 
 ## 0.3.5 — 2026-11-14
 

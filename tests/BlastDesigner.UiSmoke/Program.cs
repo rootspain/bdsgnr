@@ -2141,6 +2141,12 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
     var own = polyGrips.Grips();
     if (own.Count == 0 || own.Count >= all || own.Any(g => !keysA.Contains(g.Key))) throw new Exception($"a selected segment shows the depths of another: {own.Count} of {all}");
     vm.View.Redraw(); Pump(); Shot("91b_segment_depths");
+    // the depth lines of the holes of the other segment are not drawn, those of segment A are
+    var hiddenDepths = vm.BuildSceneOptions().HiddenDepths ?? new HashSet<Guid>();
+    var holesB = PatternTree.Children(vm.Project!, root).Skip(1).SelectMany(sg => HoleDesign.PatternHoles(vm.Project!, sg)).Select(h => h.Id).ToHashSet();
+    if (!hiddenDepths.SetEquals(holesB)) throw new Exception($"with segment A selected the depth lines hidden are {hiddenDepths.Count}, the holes of the other segment {holesB.Count}");
+    vm.Doc.Select(PatternTree.TreeHoles(vm.Project!, root).Select(h => h.Id)); Pump();
+    if (vm.BuildSceneOptions().HiddenDepths is { Count: > 0 }) throw new Exception("with the whole pattern selected some depth lines are hidden");
     vm.Doc.ClearSelection();
     for (int i = 0; i < 10 && vm.Project!.FindPattern(rootId) != null; i++) vm.Undo();
     Pump();
