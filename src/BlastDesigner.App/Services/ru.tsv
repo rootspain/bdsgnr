@@ -3348,3 +3348,23 @@ the whole polygon	весь полигон
 Elevation, m	Отметка, м
 Elevation…	Отметка…
 From the vertices beside it	По соседним вершинам
+ui:Collars	Устья
+ui:The project surface	Поверхность проекта
+ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), or on the collar polygon on the vertices of the outline	Где устья: на поверхности устьев проекта (без неё — на отметке сетки) или на полигоне устьев по вершинам контура
+ui:What the holes go down to; the depth polygon has an elevation at each vertex of the outline, flat triangles between them	До чего бурятся скважины; у полигона глубин своя отметка в каждой вершине контура, между ними плоские треугольники
+ui:Vertex	Вершина
+ui:Collar, m	Устье, м
+ui:Depth polygon, m	Глубина (отм.), м
+ui:line	линия
+ui:All collars =…	Все устья =…
+ui:Collars ±…	Устья ±…
+ui:All depths =…	Все глубины =…
+ui:Depths ±…	Глубины ±…
+ui:Depths = collars −…	Глубины = устья −…
+All collars	Все устья
+Shift the collars	Сдвинуть устья
+All depths	Все глубины
+Shift the depths	Сдвинуть глубины
+Depth below the collars	Глубина ниже устьев
+Value, m	Значение, м
+ui:polygon	полигон

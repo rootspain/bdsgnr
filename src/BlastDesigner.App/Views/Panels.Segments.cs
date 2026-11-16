@@ -229,12 +229,16 @@ public sealed partial class PropertiesPanel
                 $"{N(new[] { d.Front.From, d.Front.To, d.Back.From, d.Back.To }.Min())}…{N(new[] { d.Front.From, d.Front.To, d.Back.From, d.Back.To }.Max())}",
             DepthMode.ToLevel => "→" + N(s.ToLevel ?? d.Level),
             DepthMode.ToSurface => "→" + Loc.Ui("surface"),
+            DepthMode.Polygon => "→" + Loc.Ui("polygon"),
             DepthMode.Range => $"{N(Math.Min(d.Front.From, d.Front.To))}…{N(Math.Max(d.Front.From, d.Front.To))}",
             _ => N(s.HoleDefaults.BenchHeight) + " " + Loc.Ui("m")
         };
     }
 
-    /// <summary>The depth of a pattern or a segment: its mode, and the numbers it needs.</summary>
+    /// <summary>
+    /// The depth of a pattern or a segment: where its collars are (the surface of the project or the collar polygon), what
+    /// its holes go down to, and the numbers that needs; with a polygon, the table of the elevations of its vertices.
+    /// </summary>
     private IEnumerable<Control> DepthControls(Document doc, HolePattern target, Func<string, Control, Control> row, Func<string, string, Action<string>, double, TextBox> box,
         Func<string, string, Action, string, Button> small, Func<string, TextBlock> faint, Action<Task<bool>> done, Func<string, double?> metres, Func<double, string, string> n)
     {
@@ -250,14 +254,29 @@ public sealed partial class PropertiesPanel
             change(next);
             done(_vm.SetPatternDepth(id, next));
         }
-        var modes = new[] { DepthMode.Fixed, DepthMode.RectToLevel, DepthMode.SurfaceToRect, DepthMode.ToLevel, DepthMode.ToSurface, DepthMode.Range };
-        var names = new[] { "One depth", "Collars on the rectangle, to a level", "Collars on the surface, to the rectangle", "To a level", "To the surface", "To the grade, within from/to" };
+        var sources = new[] { CollarSource.ProjectSurface, CollarSource.Polygon };
+        var collars = new ComboBox
+        {
+            ItemsSource = new[] { "The project surface", "Collar polygon" }.Select(Loc.Ui).ToList(), SelectedIndex = Array.IndexOf(sources, spec.Collars), Width = 190, Height = 26,
+            MinHeight = 26, FontSize = 12, Name = "patternCollars", IsEnabled = !doc.IsReadOnly, FontStyle = inherited ? FontStyle.Italic : FontStyle.Normal
+        };
+        ToolTip.SetTip(collars, Loc.Ui("Where the collars are: on the collar surface of the project (at the level of the grid without one), or on the collar polygon on the vertices of the outline"));
+        collars.SelectionChanged += (_, _) =>
+        {
+            if (collars.SelectedIndex < 0 || sources[collars.SelectedIndex] == spec.Collars) return;
+            var c = sources[collars.SelectedIndex];
+            Set(x => x.Collars = c);
+        };
+        yield return row("Collars", seg != null ? Inherit(collars, inherited, () => done(_vm.SetPatternDepth(id, null)), "patternCollars") : collars);
+
+        var modes = new[] { DepthMode.Fixed, DepthMode.ToLevel, DepthMode.ToSurface, DepthMode.Range, DepthMode.Polygon };
+        var names = new[] { "One depth", "To a level", "To the surface", "To the grade, within from/to", "Depth polygon" };
         var mode = new ComboBox
         {
             ItemsSource = names.Select(Loc.Ui).ToList(), SelectedIndex = Array.IndexOf(modes, spec.Mode), Width = 190, Height = 26, MinHeight = 26, FontSize = 12, Name = "patternDepthMode",
             IsEnabled = !doc.IsReadOnly, FontStyle = inherited ? FontStyle.Italic : FontStyle.Normal
         };
-        ToolTip.SetTip(mode, Loc.Ui("What the holes go down to; with the rectangle, four numbers at its corners: the front edge along the first row, the back edge along the last, each from the left end of the row to the right, looking along the blast"));
+        ToolTip.SetTip(mode, Loc.Ui("What the holes go down to; the depth polygon has an elevation at each vertex of the outline, flat triangles between them"));
         mode.SelectionChanged += (_, _) =>
         {
             if (mode.SelectedIndex < 0 || modes[mode.SelectedIndex] == spec.Mode) return;
@@ -278,18 +297,13 @@ public sealed partial class PropertiesPanel
             if (!front) items.Add(small("=", "The back edge as the front one", () => Set(x => x.Back = new DepthPair(x.Front.From, x.Front.To)), name + "Copy"));
             return row(label, Ui.Row(4, items.ToArray()));
         }
-        if (spec.UsesRectangle)
-        {
-            yield return Pair("Front edge", "depthFront", spec.Front, true);
-            yield return Pair("Back edge", "depthBack", spec.Back, false);
-        }
         if (spec.Mode == DepthMode.Range)
         {
             var range = Pair("Depth range, m", "depthRange", spec.Front, true);
             ToolTip.SetTip(range, Loc.Ui("The depth down to the grade surface (to the level without one), kept between these two; the holes held at an end are counted"));
             yield return range;
         }
-        if (spec.Mode is DepthMode.RectToLevel or DepthMode.ToLevel or DepthMode.Range)
+        if (spec.Mode is DepthMode.ToLevel or DepthMode.Range)
             yield return row("Level, m", box(n(spec.Level, "0.###"), "depthLevel", v => { if (metres(v) is double m) Set(x => x.Level = m); else Refresh(); }, 120));
         if (spec.Mode == DepthMode.Fixed)
         {
@@ -301,5 +315,93 @@ public sealed partial class PropertiesPanel
             }, 120);
             yield return row("Depth, m", benchBox);
         }
+        if (spec.UsesPolygons)
+            foreach (var control in PolygonTable(doc, target, spec, box, small, done, metres, n)) yield return control;
+    }
+
+    /// <summary>
+    /// The vertices of the collar and depth polygons of a pattern or a segment: the elevation of the collar and of the depth
+    /// at each (typed in, it is that vertex's; a vertex shared with the next segment is changed for both) and the depth
+    /// between them, with buttons that set or shift them all.
+    /// </summary>
+    private IEnumerable<Control> PolygonTable(Document doc, HolePattern target, DepthSpec spec, Func<string, string, Action<string>, double, TextBox> box,
+        Func<string, string, Action, string, Button> small, Action<Task<bool>> done, Func<string, double?> metres, Func<double, string, string> n)
+    {
+        var p = doc.Project;
+        var root = PatternTree.Root(p, target);
+        var bench = p.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench);
+        var leaves = target.IsContainer ? PatternTree.Leaves(p, target) : new List<HolePattern> { target };
+        var vertices = new List<SurfaceVertex>();
+        foreach (var leaf in leaves)
+            foreach (var v in PatternSurfaces.Polygons(p, leaf, bench).SelectMany(x => x))
+                if (v.Key != null && vertices.All(x => x.Key != v.Key)) vertices.Add(v);
+        if (vertices.Count == 0) yield break;
+        var hasCollar = spec.Collars == CollarSource.Polygon;
+        var hasDepth = spec.Mode == DepthMode.Polygon;
+        var rid = root.Id;
+        void Set(bool collar, Dictionary<string, double> values) => done(_vm.SetPolygonVertices(rid, collar, values));
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,*,Auto"), RowDefinitions = new RowDefinitions(string.Join(",", Enumerable.Repeat("Auto", vertices.Count + 1))), Name = "polygonVertices" };
+        void Cell(Control c, int r, int col) { Grid.SetRow(c, r); Grid.SetColumn(c, col); c.Margin = new Thickness(2); grid.Children.Add(c); }
+        TextBlock Head(string text) => new() { Text = Loc.Ui(text), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
+        Cell(Head("Vertex"), 0, 0);
+        Cell(Head("Collar, m"), 0, 1);
+        Cell(Head("Depth polygon, m"), 0, 2);
+        Cell(Head("Depth"), 0, 3);
+        for (int i = 0; i < vertices.Count; i++)
+        {
+            var v = vertices[i];
+            var key = v.Key!;
+            Cell(new TextBlock { Text = VertexName(p, root, key), FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }, i + 1, 0);
+            var c = box(n(v.Collar, "0.00"), "polygonCollar" + i, s => { if (metres(s) is double z && Math.Abs(z - v.Collar) > 1e-9) Set(true, new() { [key] = z }); else Refresh(); }, 64);
+            var d = box(n(v.Depth, "0.00"), "polygonDepth" + i, s => { if (metres(s) is double z && Math.Abs(z - v.Depth) > 1e-9) Set(false, new() { [key] = z }); else Refresh(); }, 64);
+            c.IsEnabled &= hasCollar;
+            d.IsEnabled &= hasDepth;
+            // a vertex that takes its elevation from its neighbours is shown grey
+            if (!v.CollarSet) { c.FontStyle = FontStyle.Italic; c.Foreground = Look.Muted; }
+            if (!v.DepthSet) { d.FontStyle = FontStyle.Italic; d.Foreground = Look.Muted; }
+            Cell(c, i + 1, 1);
+            Cell(d, i + 1, 2);
+            Cell(new TextBlock { Text = n(v.Collar - v.Depth, "0.00"), FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center }, i + 1, 3);
+        }
+        yield return grid;
+
+        async void Ask(string title, double value, Action<double> apply)
+        {
+            if (await Dialogs.PromptNumber(Loc.T(title), Loc.T("Value, m"), value) is double x) apply(x);
+        }
+        Dictionary<string, double> All(Func<SurfaceVertex, double> f) => vertices.ToDictionary(v => v.Key!, f);
+        var buttons = new WrapPanel { Name = "polygonButtons" };
+        Button Wide(string text, string name, Action click)
+        {
+            var b = new Button { Content = Loc.Ui(text), Height = 26, MinHeight = 26, FontSize = 12, Padding = new Thickness(8, 2), Margin = new Thickness(0, 0, 4, 4), Name = name, IsEnabled = !doc.IsReadOnly };
+            b.Click += (_, _) => click();
+            return b;
+        }
+        if (hasCollar)
+        {
+            buttons.Children.Add(Wide("All collars =…", "polygonCollarsAll", () => Ask("All collars", Math.Round(vertices.Average(v => v.Collar), 2), z => Set(true, All(_ => z)))));
+            buttons.Children.Add(Wide("Collars ±…", "polygonCollarsShift", () => Ask("Shift the collars", 0, dz => Set(true, All(v => v.Collar + dz)))));
+        }
+        if (hasDepth)
+        {
+            buttons.Children.Add(Wide("All depths =…", "polygonDepthsAll", () => Ask("All depths", Math.Round(vertices.Average(v => v.Depth), 2), z => Set(false, All(_ => z)))));
+            buttons.Children.Add(Wide("Depths ±…", "polygonDepthsShift", () => Ask("Shift the depths", 0, dz => Set(false, All(v => v.Depth + dz)))));
+            buttons.Children.Add(Wide("Depths = collars −…", "polygonDepthsBelow", () => Ask("Depth below the collars", target.HoleDefaults.BenchHeight, d => Set(false, All(v => v.Collar - d)))));
+        }
+        yield return buttons;
+    }
+
+    /// <summary>The name of a vertex in the table: its number on the outline, the line and end of a crossing, the island and its vertex.</summary>
+    private static string VertexName(BlastProject p, HolePattern root, string key)
+    {
+        var parts = key.Split(':');
+        return parts[0] switch
+        {
+            "O" => (int.Parse(parts[1]) + 1).ToString(CultureInfo.CurrentCulture),
+            "L" => $"{Loc.Ui("line")} {int.Parse(parts[1]) + 1}·{parts[2]}",
+            "I" => $"{PatternTree.Children(p, root).FirstOrDefault(s => s.Id.ToString("N") == parts[1])?.Name ?? "I"}·{int.Parse(parts[2]) + 1}",
+            _ => key
+        };
     }
 }

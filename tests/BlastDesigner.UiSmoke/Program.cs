@@ -1901,15 +1901,19 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     vm.SelectSegmentHoles(b.Id); Pump();
     // and a depth from/to: collars on the surface, the holes down to the levels at the corners
     var mode = Find<ComboBox>("patternDepthMode");
-    mode.SelectedIndex = 2; Pump();
+    mode.SelectedIndex = 4; Pump();
     var bd = vm.Project!.FindPattern(b.Id)!;
-    if (bd.HoleDefaults.Depth.Mode != DepthMode.SurfaceToRect || bd.Overrides.Depth == null) throw new Exception("the depth mode did not go to segment B");
-    Enter(Find<TextBox>("depthFrontFrom"), "291");
-    Enter(Find<TextBox>("depthFrontTo"), "291");
-    Enter(Find<TextBox>("depthBackFrom"), "288");
-    Enter(Find<TextBox>("depthBackTo"), "288");
-    var levels = HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Select(h => h.ToLevel).Distinct().ToList();
-    if (!levels.Contains(291) || !levels.Contains(288)) throw new Exception("the holes of B did not go down to the levels: " + string.Join(", ", levels));
+    if (bd.HoleDefaults.Depth.Mode != DepthMode.Polygon || bd.Overrides.Depth == null) throw new Exception("the depth polygon did not go to segment B");
+    // the table of its vertices: the first two given depths of their own, the whole table shifted, all one step each
+    var rows0 = window.GetLogicalDescendants().OfType<TextBox>().Count(x => x.Name?.StartsWith("polygonDepth") == true && x.IsEffectivelyVisible);
+    if (rows0 < 4) throw new Exception("the table of the vertices of segment B has " + rows0 + " rows");
+    steps = vm.Doc.UndoNames.Count;
+    Enter(Find<TextBox>("polygonDepth0"), "291");
+    Enter(Find<TextBox>("polygonDepth1"), "288");
+    if (vm.Doc.UndoNames.Count != steps + 2) throw new Exception("each vertex typed in should be one undo step");
+    var levels = HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Select(h => h.ToLevel).ToList();
+    if (levels.Any(l => l == null) || levels.Max() > 291 + 1e-6 || levels.Min() >= 290) throw new Exception("the holes of B did not go down to the depth polygon: " + string.Join(", ", levels.Distinct()));
+    if (!vm.Project!.FindPattern(rootId)!.SurfaceVertices.Any(v => v.Depth == 291)) throw new Exception("the depth of the vertex was not kept with the pattern");
     vm.View.Redraw(); Pump(); Shot("84_pattern_segment_depth");
     // the first cut line dragged one row back: one undo step
     var cam = vm.View.Camera;
@@ -1967,7 +1971,7 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     var opened = ProjectFile.Load(path);
     var or = opened.FindPattern(rootId)!;
     var ob = opened.FindPattern(b.Id)!;
-    if (!or.IsContainer || PatternTree.Children(opened, or).Count != 3 || ob.Overrides.Diameter != 89 || ob.HoleDefaults.Depth.Mode != DepthMode.SurfaceToRect)
+    if (!or.IsContainer || PatternTree.Children(opened, or).Count != 3 || ob.Overrides.Diameter != 89 || ob.HoleDefaults.Depth.Mode != DepthMode.Polygon)
         throw new Exception("the segments did not come back from the file");
     if (opened.Holes.Count() != vm.Project!.Holes.Count()) throw new Exception("the file lost holes");
     // every step undone, back to the pattern of its own
