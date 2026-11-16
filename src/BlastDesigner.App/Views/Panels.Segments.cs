@@ -320,9 +320,9 @@ public sealed partial class PropertiesPanel
     }
 
     /// <summary>
-    /// The vertices of the collar and depth polygons of a pattern or a segment: the elevation of the collar and of the depth
-    /// at each (typed in, it is that vertex's; a vertex shared with the next segment is changed for both) and the depth
-    /// between them, with buttons that set or shift them all.
+    /// The vertices of the collar and depth polygons of a pattern or a segment: the elevation of the collar and the depth from
+    /// the collar at each (typed in, it is that vertex's; a vertex shared with the next segment is changed for both) and the
+    /// elevation the depth reaches, with buttons that set or shift them all.
     /// </summary>
     private IEnumerable<Control> PolygonTable(Document doc, HolePattern target, DepthSpec spec, Func<string, string, Action<string>, double, TextBox> box,
         Func<string, string, Action, string, Button> small, Action<Task<bool>> done, Func<string, double?> metres, Func<double, string, string> n)
@@ -346,8 +346,8 @@ public sealed partial class PropertiesPanel
         TextBlock Head(string text) => new() { Text = Loc.Ui(text), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
         Cell(Head("Vertex"), 0, 0);
         Cell(Head("Collar, m"), 0, 1);
-        Cell(Head("Depth polygon, m"), 0, 2);
-        Cell(Head("Depth"), 0, 3);
+        Cell(Head("Depth from the collar, m"), 0, 2);
+        Cell(Head("Toe, m"), 0, 3);
         for (int i = 0; i < vertices.Count; i++)
         {
             var v = vertices[i];
@@ -362,7 +362,7 @@ public sealed partial class PropertiesPanel
             if (!v.DepthSet) { d.FontStyle = FontStyle.Italic; d.Foreground = Look.Muted; }
             Cell(c, i + 1, 1);
             Cell(d, i + 1, 2);
-            Cell(new TextBlock { Text = n(v.Collar - v.Depth, "0.00"), FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center }, i + 1, 3);
+            Cell(new TextBlock { Text = n(v.Toe, "0.00"), FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center }, i + 1, 3);
         }
         yield return grid;
 
@@ -387,7 +387,6 @@ public sealed partial class PropertiesPanel
         {
             buttons.Children.Add(Wide("All depths =…", "polygonDepthsAll", () => Ask("All depths", Math.Round(vertices.Average(v => v.Depth), 2), z => Set(false, All(_ => z)))));
             buttons.Children.Add(Wide("Depths ±…", "polygonDepthsShift", () => Ask("Shift the depths", 0, dz => Set(false, All(v => v.Depth + dz)))));
-            buttons.Children.Add(Wide("Depths = collars −…", "polygonDepthsBelow", () => Ask("Depth below the collars", target.HoleDefaults.BenchHeight, d => Set(false, All(v => v.Collar - d)))));
         }
         yield return buttons;
     }

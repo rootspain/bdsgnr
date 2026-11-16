@@ -1908,12 +1908,13 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     var rows0 = window.GetLogicalDescendants().OfType<TextBox>().Count(x => x.Name?.StartsWith("polygonDepth") == true && x.IsEffectivelyVisible);
     if (rows0 < 4) throw new Exception("the table of the vertices of segment B has " + rows0 + " rows");
     steps = vm.Doc.UndoNames.Count;
-    Enter(Find<TextBox>("polygonDepth0"), "291");
-    Enter(Find<TextBox>("polygonDepth1"), "288");
+    Enter(Find<TextBox>("polygonDepth0"), "9");
+    Enter(Find<TextBox>("polygonDepth1"), "12");
     if (vm.Doc.UndoNames.Count != steps + 2) throw new Exception("each vertex typed in should be one undo step");
-    var levels = HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Select(h => h.ToLevel).ToList();
-    if (levels.Any(l => l == null) || levels.Max() > 291 + 1e-6 || levels.Min() >= 290) throw new Exception("the holes of B did not go down to the depth polygon: " + string.Join(", ", levels.Distinct()));
-    if (!vm.Project!.FindPattern(rootId)!.SurfaceVertices.Any(v => v.Depth == 291)) throw new Exception("the depth of the vertex was not kept with the pattern");
+    // the depths from the collars: between the 9 and 12 m typed in and the 10 m of the vertices not set
+    var depths = HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Select(h => h.ToLevel is double l ? h.Collar.Z - l : -1).ToList();
+    if (depths.Any(d => d < 9 - 1e-6 || d > 12 + 1e-6) || depths.Distinct().Count() < 2) throw new Exception("the holes of B did not go down by the depth polygon: " + string.Join(", ", depths.Distinct()));
+    if (!vm.Project!.FindPattern(rootId)!.SurfaceVertices.Any(v => v.Depth == 9)) throw new Exception("the depth of the vertex was not kept with the pattern");
     vm.View.Redraw(); Pump(); Shot("84_pattern_segment_depth");
     // the first cut line dragged one row back: one undo step
     var cam = vm.View.Camera;
@@ -2002,9 +2003,9 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
         pattern.HoleDefaults.Depth.Collars = CollarSource.Polygon;
         pattern.HoleDefaults.Depth.Mode = DepthMode.Polygon;
         PatternTree.SyncLegacyDepth(pattern);
-        PatternSurfaces.SetVertex(pattern, "O:0", 296, 284);
-        PatternSurfaces.SetVertex(pattern, "O:2", 304, 292);
-        PatternSurfaces.SetVertex(pattern, "L:0:1", 306, 288);
+        PatternSurfaces.SetVertex(pattern, "O:0", 296, 12);
+        PatternSurfaces.SetVertex(pattern, "O:2", 304, 12);
+        PatternSurfaces.SetVertex(pattern, "L:0:1", 306, 18);
         PatternTree.Relayout(p, pattern);
     });
     var root = vm.Project!.FindPattern(rootId)!;

@@ -243,7 +243,8 @@ public sealed class PatternOverlay : IOverlay
     /// <summary>
     /// The collar and depth polygons of the segments of a pattern (or of the pattern itself) that use them: in 3D each a line
     /// through its vertices at their elevations and a fill on its triangles, 90 % transparent; on the plan, where both lie on
-    /// the outline, the two elevations at each vertex (the collar above, the depth below), once for a vertex two segments share.
+    /// the outline, the collar elevation and the depth from the collar at each vertex (the collar above, the depth below), once
+    /// for a vertex two segments share.
     /// </summary>
     private static void DrawPolygons(SKCanvas c, Camera cam, BlastProject project, HolePattern root, SKColor collarColour, SKColor depthColour)
     {
@@ -275,7 +276,7 @@ public sealed class PatternOverlay : IOverlay
                 }
                 continue;
             }
-            var (collarSurface, depthSurface) = PatternSurfaces.Surfaces(project, leaf, bench);
+            var (collarSurface, _, toeSurface) = PatternSurfaces.Surfaces(project, leaf, bench);
             void Draw(SurfaceEntity? surface, Func<SurfaceVertex, double> z, SKPaint fill, SKPaint line)
             {
                 if (surface == null) return;
@@ -298,7 +299,8 @@ public sealed class PatternOverlay : IOverlay
                     PlanRenderer.DrawPolyline(c, cam, poly.Select(v => v.Point.WithZ(z(v))).ToList(), true, line);
             }
             if (spec.Collars == CollarSource.Polygon) Draw(collarSurface, v => v.Collar, collarFill, collarLine);
-            if (spec.Mode == DepthMode.Polygon) Draw(depthSurface, v => v.Depth, depthFill, depthLine);
+            // the depth polygon where it is: its depths under the collars
+            if (spec.Mode == DepthMode.Polygon) Draw(toeSurface, v => v.Toe, depthFill, depthLine);
         }
     }
 

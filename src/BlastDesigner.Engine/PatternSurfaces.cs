@@ -3,8 +3,12 @@ using BlastDesigner.Domain.Model;
 
 namespace BlastDesigner.Engine;
 
-/// <summary>A vertex of the collar and depth polygons of a segment: what it is (null for one that has no name), where, and its two elevations.</summary>
-public sealed record SurfaceVertex(string? Key, Vec3 Point, double Collar, double Depth, bool CollarSet, bool DepthSet);
+/// <summary>A vertex of the collar and depth polygons of a segment: what it is (null for one that has no name), where, the elevation of the collar and the depth below it.</summary>
+public sealed record SurfaceVertex(string? Key, Vec3 Point, double Collar, double Depth, bool CollarSet, bool DepthSet)
+{
+    /// <summary>Where the depth polygon is at the vertex: the collar less the depth.</summary>
+    public double Toe => Collar - Depth;
+}
 
 /// <summary>
 /// The collar and depth polygons of a pattern or a segment: two polygons on the vertices of its outline, each vertex with
@@ -12,7 +16,7 @@ public sealed record SurfaceVertex(string? Key, Vec3 Point, double Collar, doubl
 /// (<see cref="HolePattern.SurfaceVertices"/>) by the name of the vertex, so neighbouring segments share their vertices at
 /// a seam and a vertex keeps its elevation when the outline is edited or a cut line moved. A vertex without one takes it
 /// from the vertices beside it along the outline of the pattern; with none set, the collar is on the collar surface of the
-/// project (or at the level of the grid) and the depth a bench height below it.
+/// project (or at the level of the grid) and the depth is the bench height. The depth is from the collar down.
 /// </summary>
 public static class PatternSurfaces
 {
@@ -75,7 +79,7 @@ public static class PatternSurfaces
         var byKey = root.SurfaceVertices.ToDictionary(v => v.Key);
         double DefaultCollar(Vec3 pt) => collarSurface?.ElevationAt(pt.X, pt.Y) ?? root.Center.Z;
         var collar = Along(o, i => byKey.TryGetValue($"O:{i}", out var v) ? v.Collar : null, i => DefaultCollar(o[i]));
-        var depth = Along(o, i => byKey.TryGetValue($"O:{i}", out var v) ? v.Depth : null, i => collar[i] - root.HoleDefaults.BenchHeight);
+        var depth = Along(o, i => byKey.TryGetValue($"O:{i}", out var v) ? v.Depth : null, _ => root.HoleDefaults.BenchHeight);
         return new OutlineValues { Collar = collar, Depth = depth };
     }
 
@@ -147,7 +151,7 @@ public static class PatternSurfaces
             else
             {
                 collar = CollarDefault(pt);
-                depth = collar - root.HoleDefaults.BenchHeight;
+                depth = root.HoleDefaults.BenchHeight;
             }
             if (own?.Collar is double oc) collar = oc;
             if (own?.Depth is double od) depth = od;
@@ -159,11 +163,15 @@ public static class PatternSurfaces
         return result;
     }
 
-    /// <summary>The collar and the depth polygon of a pattern or a segment as surfaces (flat triangles on its vertices); null for one it has none of.</summary>
-    public static (SurfaceEntity? Collar, SurfaceEntity? Depth) Surfaces(BlastProject p, HolePattern pat, SurfaceEntity? collarSurface)
+    /// <summary>
+    /// The collar and the depth polygon of a pattern or a segment as surfaces (flat triangles on its vertices): the collar
+    /// elevations, the depths (from the collar down) and, to draw, where the depth polygon is (the collar less the depth).
+    /// Null for one without polygons.
+    /// </summary>
+    public static (SurfaceEntity? Collar, SurfaceEntity? Depth, SurfaceEntity? Toe) Surfaces(BlastProject p, HolePattern pat, SurfaceEntity? collarSurface)
     {
         var polygons = Polygons(p, pat, collarSurface);
-        if (polygons.Count == 0) return (null, null);
+        if (polygons.Count == 0) return (null, null, null);
         SurfaceEntity Build(Func<SurfaceVertex, double> z)
         {
             var points = polygons.SelectMany(x => x).Select(v => v.Point.WithZ(z(v))).ToList();
@@ -172,7 +180,7 @@ public static class PatternSurfaces
                 for (int i = 0; i < poly.Count; i++) edges.Add((poly[i].Point.WithZ(z(poly[i])), poly[(i + 1) % poly.Count].Point.WithZ(z(poly[(i + 1) % poly.Count]))));
             return Engine.Surfaces.Triangulate(points, "Pattern polygon", 0, edges);
         }
-        return (Build(v => v.Collar), Build(v => v.Depth));
+        return (Build(v => v.Collar), Build(v => v.Depth), Build(v => v.Toe));
     }
 
     /// <summary>The elevation of a polygon surface at a point, or that of its nearest vertex when the point is off it.</summary>
@@ -183,24 +191,10 @@ public static class PatternSurfaces
     }
 
     /// <summary>
-    /// The elevation where the axis of a hole meets the depth polygon (an inclined hole reaches it away from its collar),
-    /// to the micrometre.
+    /// The level a hole goes down to by the depth polygon: its collar less the depth of the polygon under its collar (the
+    /// depth is from the collar down; an inclined hole is that much deeper), to the micrometre. The subdrill goes below it.
     /// </summary>
-    public static double DepthLevel(Hole h, SurfaceEntity depth)
-    {
-        var dir = h.Direction;
-        var cos = Math.Max(0.05, -dir.Z);
-        var z = At(depth, h.Collar.X, h.Collar.Y);
-        for (int i = 0; i < 12; i++)
-        {
-            var along = (h.Collar.Z - z) / cos;
-            var pt = h.Collar + dir * along;
-            var next = At(depth, pt.X, pt.Y);
-            if (Math.Abs(next - z) < 1e-6) { z = next; break; }
-            z = next;
-        }
-        return HoleLevel.Round(z);
-    }
+    public static double DepthLevel(Hole h, SurfaceEntity depth) => HoleLevel.Round(h.Collar.Z - At(depth, h.Collar.X, h.Collar.Y));
 
     /// <summary>
     /// The names of the crossings of the cut lines after a line was put in at <paramref name="index"/> (+1) or taken away
@@ -249,8 +243,10 @@ public static class PatternSurfaces
 
     /// <summary>
     /// Converts the depths by four numbers at the corners of the rectangle (before schema 5) to polygons: the value of the
-    /// rectangle at each vertex of each segment is set at that vertex. Collars on the rectangle become the collar polygon;
-    /// in both modes the depth becomes the depth polygon. A vertex shared by two segments takes the value of the later.
+    /// rectangle at each vertex of each segment is set at that vertex. Collars on the rectangle become the collar polygon
+    /// and their numbers (depths from the collar to the level) the depths; with collars on the surface, the numbers were the
+    /// levels of the toes, and the depth at a vertex is its collar less that level. A vertex shared by two segments takes the
+    /// value of the later.
     /// </summary>
     public static void FromRectangles(BlastProject p)
     {
@@ -270,7 +266,7 @@ public static class PatternSurfaces
                     var (s, t) = rect.RelativeAt(leaf, v.Point);
                     var d = (1 - t) * ((1 - s) * spec.Front.From + s * spec.Front.To) + t * ((1 - s) * spec.Back.From + s * spec.Back.To);
                     // the subdrill stays as the spec says (IncludesSubdrill): the polygon is where the numbers were
-                    values.Add(spec.Mode == DepthMode.RectToLevel ? (v.Key!, spec.Level + d, spec.Level) : (v.Key!, null, d));
+                    values.Add(spec.Mode == DepthMode.RectToLevel ? (v.Key!, spec.Level + d, d) : (v.Key!, null, v.Collar - d));
                 }
             }
             foreach (var (key, collar, depth) in values) SetVertex(root, key, collar, depth);

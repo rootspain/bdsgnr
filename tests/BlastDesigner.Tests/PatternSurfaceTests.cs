@@ -15,7 +15,8 @@ public class PatternSurfaceTests
 
     /// <summary>A plane: the polygons of a rectangle with these elevations at its corners are flat, so every point of them is on it.</summary>
     private static double Collar(double x, double y) => 100 + 0.1 * x + 0.05 * y;
-    private static double Depth(double x, double y) => 90 - 0.02 * x + 0.04 * y;
+    /// <summary>The depth from the collar: a plane too.</summary>
+    private static double Depth(double x, double y) => 10 - 0.02 * x + 0.04 * y;
 
     private static (BlastProject P, HolePattern Pat) Make(double angle = 0)
     {
@@ -47,23 +48,23 @@ public class PatternSurfaceTests
         foreach (var h in p.Holes)
         {
             Assert.Equal(Collar(h.Collar.X, h.Collar.Y), h.Collar.Z, 6);
-            Assert.Equal(Depth(h.Collar.X, h.Collar.Y), h.ToLevel!.Value, 5);
-            Assert.Equal(h.Collar.Z - h.ToLevel.Value + h.Subdrill, h.Length, 6);
+            // from the collar down by the depth there, the subdrill below
+            Assert.Equal(h.Collar.Z - Depth(h.Collar.X, h.Collar.Y), h.ToLevel!.Value, 5);
+            Assert.Equal(Depth(h.Collar.X, h.Collar.Y) + h.Subdrill, h.Length, 5);
         }
     }
 
     [Fact]
-    public void AnInclinedHole_ReachesTheDepthPolygonWhereItsAxisMeetsIt()
+    public void AnInclinedHole_GoesDownByTheDepthUnderItsCollar()
     {
         var (p, root) = Make(angle: 20);
         Planes(root);
         HoleDesign.RebuildPattern(p, root);
+        var cos = Math.Cos(20 * Math.PI / 180);
         foreach (var h in p.Holes)
         {
-            var along = (h.Collar.Z - h.ToLevel!.Value) / Math.Cos(20 * Math.PI / 180);
-            var at = h.Collar + h.Direction * along;
-            // inside the outline the axis meets the plane there; near the edge it may leave the polygon (its nearest vertex then)
-            if (GeoMath.PointInPolygon(Rectangle, at.X, at.Y)) Assert.Equal(Depth(at.X, at.Y), h.ToLevel.Value, 4);
+            Assert.Equal(h.Collar.Z - Depth(h.Collar.X, h.Collar.Y), h.ToLevel!.Value, 5);
+            Assert.Equal(Depth(h.Collar.X, h.Collar.Y) / cos + h.Subdrill, h.Length, 5);
         }
     }
 
@@ -73,9 +74,9 @@ public class PatternSurfaceTests
         var (p, root) = Make();
         root.HoleDefaults.Depth.Collars = CollarSource.Polygon;
         root.HoleDefaults.Depth.Mode = DepthMode.Polygon;
-        // none set: collars at the level of the grid, depths a bench height below
+        // none set: collars at the level of the grid, depths the bench height
         var v = Assert.Single(PatternSurfaces.Polygons(p, root, null));
-        Assert.All(v, x => Assert.Equal((100.0, 90.0), (x.Collar, x.Depth)));
+        Assert.All(v, x => Assert.Equal((100.0, 10.0), (x.Collar, x.Depth)));
         // two corners set: the others between them along the perimeter
         PatternSurfaces.SetVertex(root, "O:0", 100, null);
         PatternSurfaces.SetVertex(root, "O:2", 106.4, null);
@@ -92,7 +93,7 @@ public class PatternSurfaceTests
         var (p, root) = Make();
         PatternTree.Split(p, root, 2);
         Planes(root);
-        PatternSurfaces.SetVertex(root, "L:0:1", 112, 95);
+        PatternSurfaces.SetVertex(root, "L:0:1", 112, 15);
         PatternTree.Relayout(p, root);
         var seg = PatternTree.Children(p, root);
         var a = PatternSurfaces.Polygons(p, seg[0], null)[0];
@@ -100,8 +101,8 @@ public class PatternSurfaceTests
         var seamA = a.Single(x => x.Key == "L:0:1");
         var seamB = b.Single(x => x.Key == "L:0:1");
         Assert.Equal(seamA.Point.X, seamB.Point.X, 9);
-        Assert.Equal((112.0, 95.0), (seamA.Collar, seamA.Depth));
-        Assert.Equal((112.0, 95.0), (seamB.Collar, seamB.Depth));
+        Assert.Equal((112.0, 15.0), (seamA.Collar, seamA.Depth));
+        Assert.Equal((112.0, 15.0), (seamB.Collar, seamB.Depth));
         // the other end of the line is not set: it is on the side of the outline between its corners, the same for both
         Assert.Equal(a.Single(x => x.Key == "L:0:2").Collar, b.Single(x => x.Key == "L:0:2").Collar, 9);
         // the holes near the raised end are higher in both segments
@@ -115,12 +116,12 @@ public class PatternSurfaceTests
         var (p, root) = Make();
         PatternTree.Split(p, root, 3);
         Planes(root);
-        PatternSurfaces.SetVertex(root, "L:1:1", 120, 80);
+        PatternSurfaces.SetVertex(root, "L:1:1", 120, 18);
         var line = root.SegmentLines[0];
         line.Row--;
         PatternTree.Relayout(p, root);
         var c = PatternSurfaces.Polygons(p, PatternTree.Children(p, root)[2], null)[0].Single(x => x.Key == "L:1:1");
-        Assert.Equal((120.0, 80.0), (c.Collar, c.Depth));
+        Assert.Equal((120.0, 18.0), (c.Collar, c.Depth));
         // the first line taken away: the second is the first now, its ends with it
         PatternTree.RemoveLine(p, root, 0);
         Assert.Contains(root.SurfaceVertices, v => v.Key == "L:0:1" && v.Collar == 120);
@@ -157,7 +158,8 @@ public class PatternSurfaceTests
         Assert.Equal(DepthMode.Polygon, bp.HoleDefaults.Depth.Mode);
         Assert.Equal(CollarSource.Polygon, bp.HoleDefaults.Depth.Collars);
         Assert.Equal(4, bp.SurfaceVertices.Count);
-        Assert.All(bp.SurfaceVertices, v => Assert.Equal(80, v.Depth));
+        // collars on the rectangle: the numbers were the depths from the collar to the level
+        Assert.All(bp.SurfaceVertices, v => Assert.Equal(v.Collar!.Value - 80, v.Depth!.Value, 6));
         HoleDesign.RebuildPattern(back, bp, PatternRebuildOptions.For(back));
         // the old depth of a node was rounded to 0.1 m, the polygons are not: within 5 cm
         foreach (var h in back.Holes)
