@@ -438,6 +438,8 @@ public sealed partial class MainViewModel
         s.SelectionThick = edited.SelectionThick;
         s.SelectionHaloPx = edited.SelectionHaloPx;
         s.PatternArrowColor = edited.PatternArrowColor;
+        s.PatternCollarPolygonColor = edited.PatternCollarPolygonColor;
+        s.PatternDepthPolygonColor = edited.PatternDepthPolygonColor;
         s.PatternTurnColor = edited.PatternTurnColor;
         s.PatternTurnRefusedColor = edited.PatternTurnRefusedColor;
         s.CollarSizePixels = edited.CollarSizePixels;

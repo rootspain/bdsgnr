@@ -1982,6 +1982,39 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     vm.View.SnapEnabled = snapping;
     vm.Doc.ClearSelection();
 });
+Step("the collar and depth polygons of a cut pattern are drawn: elevations on the plan, filled in 3D", () =>
+{
+    vm.SelectTool(); vm.PlanView(); Pump();
+    var outline = new[] { new Vec3(1200, 2000, 300), new Vec3(1241, 2000, 300), new Vec3(1241, 2023, 300), new Vec3(1200, 2023, 300) };
+    var rootId = Guid.Empty;
+    vm.Change("Smoke pattern", p =>
+    {
+        var made = HoleDesign.FillPolygon(outline, new PatternParameters { Burden = 4, Spacing = 4.5, Pattern = PatternType.Rectangular, Orientation = 0, StartNumber = 1 }, vm.NewHoleParameters(), out var rows, out var pattern);
+        foreach (var h in made) p.Add(h, vm.HoleLayer);
+        p.Rows.AddRange(rows);
+        p.Patterns.Add(pattern);
+        rootId = pattern.Id;
+        PatternTree.Split(p, pattern, 2);
+        pattern.HoleDefaults.Depth.Collars = CollarSource.Polygon;
+        pattern.HoleDefaults.Depth.Mode = DepthMode.Polygon;
+        PatternTree.SyncLegacyDepth(pattern);
+        PatternSurfaces.SetVertex(pattern, "O:0", 296, 284);
+        PatternSurfaces.SetVertex(pattern, "O:2", 304, 292);
+        PatternSurfaces.SetVertex(pattern, "L:0:1", 306, 288);
+        PatternTree.Relayout(p, pattern);
+    });
+    var root = vm.Project!.FindPattern(rootId)!;
+    var holes = PatternTree.TreeHoles(vm.Project!, root).ToList();
+    if (holes.Select(h => Math.Round(h.Collar.Z, 3)).Distinct().Count() < 3) throw new Exception("the collars are not on the collar polygon");
+    vm.Doc!.Select(holes.Select(h => h.Id)); vm.ZoomSelection(); Pump();
+    vm.View.Redraw(); Pump(); Shot("87_pattern_polygons_plan");
+    vm.View3D(); vm.View.Camera.Pitch = 35; vm.ZoomSelection(); vm.View.Redraw(); Pump(); Shot("88_pattern_polygons_3d");
+    vm.PlanView(); Pump();
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 10 && vm.Project!.FindPattern(rootId) != null; i++) vm.Undo();
+    Pump();
+    if (vm.Project!.FindPattern(rootId) != null) throw new Exception("the smoke pattern was not taken away");
+});
 Step("analysis maps toggle and clear", () =>
 {
     vm.ClearOverlays();

@@ -60,6 +60,8 @@ public sealed class SettingsForm : DockPanel
     private static readonly uint[] Highlights = { 0xFF4C9BFF, 0xFFFF00FF, 0xFF22D3EE, 0xFFFACC15, 0xFF4ADE80 };
     private static readonly uint[] Arrows = { ProgramSettings.DefaultPatternArrow, 0xFFF97316, 0xFF22D3EE, 0xFF4C9BFF, 0xFFFFFFFF };
     private static readonly uint[] TurnFree = { ProgramSettings.DefaultPatternTurn, 0xFF4ADE80, 0xFF22D3EE, 0xFF4C9BFF, 0xFFFACC15 };
+    private static readonly uint[] CollarPolygons = { ProgramSettings.DefaultPatternCollarPolygon, 0xFF4ADE80, 0xFF22D3EE, 0xFFFACC15, 0xFFFFFFFF };
+    private static readonly uint[] DepthPolygons = { ProgramSettings.DefaultPatternDepthPolygon, 0xFFEC4899, 0xFF6366F1, 0xFFF97316, 0xFF94A3B8 };
     private static readonly uint[] TurnRefused = { ProgramSettings.DefaultPatternTurnRefused, 0xFFF87171, 0xFFF97316, 0xFF94A3B8, 0xFFFF00FF };
     private static readonly uint[] Geometry = { 0xFFC9CFD6, 0xFF8A929D, 0xFF9B7BFF, 0xFF22B8C8, 0xFF1B1F24 };
     private static readonly uint[] SectionLines = { ProgramSettings.DefaultSectionLine, 0xFFFACC15, 0xFFFF00FF, 0xFF22D3EE, 0xFF4ADE80 };
@@ -423,6 +425,10 @@ public sealed class SettingsForm : DockPanel
         yield return Row("Pattern arrow", ColourPicker("patternArrow", Edited.PatternArrowColor, Arrows, c => Edited.PatternArrowColor = c), "The burden arrow of a selected pattern");
         yield return Row("Pattern turn circle", ColourPicker("patternTurn", Edited.PatternTurnColor, TurnFree, c => Edited.PatternTurnColor = c), "The circle at the tip of the burden arrow of a selected pattern, when the grid can be turned");
         yield return Row("Pattern turn circle, refused", ColourPicker("patternTurnRefused", Edited.PatternTurnRefusedColor, TurnRefused, c => Edited.PatternTurnRefusedColor = c), "The same circle when the grid cannot be turned: a hole of it is drilled, loaded or locked");
+        yield return Row("Collar polygon", ColourPicker("patternCollarPolygon", Edited.PatternCollarPolygonColor, CollarPolygons, c => Edited.PatternCollarPolygonColor = c),
+            "The collar polygon of a pattern or segment: its lines, and its fill 90 % transparent");
+        yield return Row("Depth polygon", ColourPicker("patternDepthPolygon", Edited.PatternDepthPolygonColor, DepthPolygons, c => Edited.PatternDepthPolygonColor = c),
+            "The depth polygon of a pattern or segment: its lines, and its fill 90 % transparent");
 
         var coloring = new WrapPanel();
         foreach (var (key, label) in new[] { (ProgramSettings.SurfaceByType, "By type"), (ProgramSettings.SurfaceByElevation, "By elevation") })

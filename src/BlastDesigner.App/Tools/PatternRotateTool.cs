@@ -171,6 +171,7 @@ public sealed class PatternOverlay : IOverlay
         {
             if (root.Outline.Count >= 3) PlanRenderer.DrawPolyline(c, cam, root.Outline, true, dashed);
             DrawSegments(c, cam, project, root, colour);
+            DrawPolygons(c, cam, project, root, new SKColor(_vm.Settings.PatternCollarPolygonColor), new SKColor(_vm.Settings.PatternDepthPolygonColor));
         }
         foreach (var pat in shown)
         {
@@ -233,6 +234,71 @@ public sealed class PatternOverlay : IOverlay
                 var label = numbers[k].ToString("0.0#", System.Globalization.CultureInfo.CurrentCulture);
                 c.DrawText(label, x + 4, y - 4, small);
             }
+        }
+    }
+
+    /// <summary>Fill of a collar or depth polygon: 90 % transparent.</summary>
+    public const byte PolygonFillAlpha = 0x1A;
+
+    /// <summary>
+    /// The collar and depth polygons of the segments of a pattern (or of the pattern itself) that use them: in 3D each a line
+    /// through its vertices at their elevations and a fill on its triangles, 90 % transparent; on the plan, where both lie on
+    /// the outline, the two elevations at each vertex (the collar above, the depth below), once for a vertex two segments share.
+    /// </summary>
+    private static void DrawPolygons(SKCanvas c, Camera cam, BlastProject project, HolePattern root, SKColor collarColour, SKColor depthColour)
+    {
+        var leaves = PatternTree.Leaves(project, root).Where(l => l.HoleDefaults.Depth.UsesPolygons).ToList();
+        if (leaves.Count == 0) return;
+        var bench = project.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench);
+        var collarAdapted = PlanRenderer.Adapt(collarColour);
+        var depthAdapted = PlanRenderer.Adapt(depthColour);
+        using var collarLine = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, Color = collarAdapted };
+        using var depthLine = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, Color = depthAdapted };
+        using var collarFill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = collarAdapted.WithAlpha(PolygonFillAlpha) };
+        using var depthFill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = depthAdapted.WithAlpha(PolygonFillAlpha) };
+        using var collarText = new SKPaint { IsAntialias = true, Color = collarAdapted, TextSize = 11 };
+        using var depthText = new SKPaint { IsAntialias = true, Color = depthAdapted, TextSize = 11 };
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        var labelled = new HashSet<string>();
+        foreach (var leaf in leaves)
+        {
+            var spec = leaf.HoleDefaults.Depth;
+            var polygons = PatternSurfaces.Polygons(project, leaf, bench);
+            if (cam.IsPlan)
+            {
+                foreach (var v in polygons.SelectMany(x => x))
+                {
+                    if (v.Key != null && !labelled.Add(v.Key)) continue;
+                    var (x, y) = cam.ToScreen(v.Point);
+                    if (spec.Collars == CollarSource.Polygon) c.DrawText(v.Collar.ToString("0.0", culture), x + 5, y - 4, collarText);
+                    if (spec.Mode == DepthMode.Polygon) c.DrawText(v.Depth.ToString("0.0", culture), x + 5, y + 10, depthText);
+                }
+                continue;
+            }
+            var (collarSurface, depthSurface) = PatternSurfaces.Surfaces(project, leaf, bench);
+            void Draw(SurfaceEntity? surface, Func<SurfaceVertex, double> z, SKPaint fill, SKPaint line)
+            {
+                if (surface == null) return;
+                using var path = new SKPath();
+                for (int t = 0; t + 2 < surface.Triangles.Count; t += 3)
+                {
+                    var a = cam.ToScreen(surface.Vertices[surface.Triangles[t]]);
+                    var b = cam.ToScreen(surface.Vertices[surface.Triangles[t + 1]]);
+                    var d = cam.ToScreen(surface.Vertices[surface.Triangles[t + 2]]);
+                    // only the triangles inside the outline (a bent outline has some across its bays)
+                    var mid = (surface.Vertices[surface.Triangles[t]] + surface.Vertices[surface.Triangles[t + 1]] + surface.Vertices[surface.Triangles[t + 2]]) / 3;
+                    if (!polygons.Any(poly => GeoMath.PointInPolygon(poly.Select(v => v.Point).ToList(), mid.X, mid.Y))) continue;
+                    path.MoveTo(a.Item1, a.Item2);
+                    path.LineTo(b.Item1, b.Item2);
+                    path.LineTo(d.Item1, d.Item2);
+                    path.Close();
+                }
+                c.DrawPath(path, fill);
+                foreach (var poly in polygons)
+                    PlanRenderer.DrawPolyline(c, cam, poly.Select(v => v.Point.WithZ(z(v))).ToList(), true, line);
+            }
+            if (spec.Collars == CollarSource.Polygon) Draw(collarSurface, v => v.Collar, collarFill, collarLine);
+            if (spec.Mode == DepthMode.Polygon) Draw(depthSurface, v => v.Depth, depthFill, depthLine);
         }
     }
 

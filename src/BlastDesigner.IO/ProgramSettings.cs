@@ -142,6 +142,12 @@ public sealed class ProgramSettings
     /// <summary>The burden arrow of a selected pattern, from its centre to the circle.</summary>
     public uint PatternArrowColor { get; set; } = DefaultPatternArrow;
     public const uint DefaultPatternArrow = 0xFFFACC15;
+    /// <summary>Lines and fill (90 % transparent) of the collar polygon of a pattern or segment.</summary>
+    public uint PatternCollarPolygonColor { get; set; } = DefaultPatternCollarPolygon;
+    /// <summary>Lines and fill (90 % transparent) of the depth polygon of a pattern or segment.</summary>
+    public uint PatternDepthPolygonColor { get; set; } = DefaultPatternDepthPolygon;
+    public const uint DefaultPatternCollarPolygon = 0xFFA3E635;
+    public const uint DefaultPatternDepthPolygon = 0xFFA855F7;
     public const uint DefaultPatternTurn = 0xFF16A34A;
     public const uint DefaultPatternTurnRefused = 0xFFDC2626;
     /// <summary>Version of the defaults the file was written with; older files are upgraded on load.</summary>
