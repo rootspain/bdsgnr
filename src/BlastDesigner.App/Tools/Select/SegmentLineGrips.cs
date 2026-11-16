@@ -56,9 +56,15 @@ public sealed class SegmentLineGrips : ISelectGesture
 
     public bool Active => Pressed != null;
 
-    /// <summary>The patterns whose lines are shown: those cut into segments with a selected hole, on the plan, while nothing is moved.</summary>
+    /// <summary>
+    /// The patterns whose lines are shown: those cut into segments with a selected hole, while nothing is moved, on the plan
+    /// and in a 3D view that looks down on the ground (as the circle that turns a pattern).
+    /// </summary>
     public IReadOnlyList<HolePattern> Roots() =>
-        _visible() && _vm.View.Camera.IsPlan ? PatternOverlay.Shown(_vm.Doc).Where(r => r.IsContainer).ToList() : new List<HolePattern>();
+        _visible() && PatternRotateHandle.SeesTheGround(_vm.View.Camera) ? PatternOverlay.Shown(_vm.Doc).Where(r => r.IsContainer).ToList() : new List<HolePattern>();
+
+    /// <summary>Where the cursor is on the horizontal plane through the centre of a pattern: in 3D the drag follows it whatever is under it.</summary>
+    private Vec3 OnGround(HolePattern root, ToolPointer p) => _vm.View.Camera.ToWorld(p.X, p.Y, root.Center.Z);
 
     /// <summary>A line on the screen: where it crosses the outline and its two grips beyond.</summary>
     public static ((float X, float Y) A, (float X, float Y) B) Grips(Camera cam, HolePattern root, SegmentLine line)
@@ -185,7 +191,7 @@ public sealed class SegmentLineGrips : ISelectGesture
         var from = _from!;
         if (hit.End < 0)
         {
-            var dv = PatternTree.WorldToGrid(root, p.World).V - PatternTree.WorldToGrid(root, _down!.World).V;
+            var dv = PatternTree.WorldToGrid(root, OnGround(root, p)).V - PatternTree.WorldToGrid(root, OnGround(root, _down!)).V;
             var line = new SegmentLine { U1 = from.U1, V1 = from.V1 + dv, U2 = from.U2, V2 = from.V2 + dv };
             if (free) return line;
             // the first end in the middle between two rows, the line kept as it is turned
@@ -198,7 +204,7 @@ public sealed class SegmentLineGrips : ISelectGesture
         var (a, b) = PatternTree.LineEnds(root, from);
         var keep = PatternTree.WorldToGrid(root, hit.End == 0 ? b : a);
         var moving = PatternTree.WorldToGrid(root, hit.End == 0 ? a : b);
-        var cursor = p.World;
+        var cursor = OnGround(root, p);
         if (p.Modifiers.HasFlag(KeyModifiers.Shift)) cursor = PatternTree.GridToWorld(root, moving.U, PatternTree.WorldToGrid(root, cursor).V);
         Vec3 end;
         if (free) end = PatternTree.NearestOnOutline(root, cursor);
@@ -276,6 +282,9 @@ public sealed class SegmentLinesOverlay : IOverlay
         _grips = grips;
         _colour = colour;
     }
+
+    /// <summary>The gesture whose lines are drawn.</summary>
+    public SegmentLineGrips Owner => _grips;
 
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {

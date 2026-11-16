@@ -1909,6 +1909,28 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     vm.ActiveTool.PointerReleased(At(mx + dx, my + dy)); Pump();
     if (vm.Doc.UndoNames.Count != steps + 1 || Math.Abs(Root().SegmentLines[0].V1 - (v0 + Root().Burden)) > 1e-6)
         throw new Exception($"the cut line did not go one row back: {v0} → {Root().SegmentLines[0].V1}");
+    // in 3D looking down at an angle the lines and their grips are there too, and a drag moves the line as on the plan (back to the face by a row)
+    vm.View3D(); vm.View.Camera.Pitch = 70; vm.View.Redraw(); Pump();
+    var grips = vm.View.Overlays.OfType<SegmentLinesOverlay>().Single().Owner;
+    if (grips.Roots().Count != 1) throw new Exception("no cut lines in 3D");
+    var cam3 = vm.View.Camera;
+    var line3 = Root().SegmentLines[0];
+    var (a3, b3) = SegmentLineGrips.Grips(cam3, Root(), line3);
+    double m3x = (a3.X + b3.X) / 2, m3y = (a3.Y + b3.Y) / 2;
+    var back3 = cam3.ToScreen(PatternTree.GridToWorld(Root(), 0, line3.V1 - Root().Burden));
+    var front3 = cam3.ToScreen(PatternTree.GridToWorld(Root(), 0, line3.V1));
+    ToolPointer At3(double x, double y) => new() { X = x, Y = y, World = cam3.ToWorld(x, y), Snapped = cam3.ToWorld(x, y), Hit = vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = none };
+    vm.ActiveTool.PointerMoved(At3(m3x, m3y));
+    if (grips.Hot == null) throw new Exception("the cut line is not found under the cursor in 3D");
+    vm.View.Redraw(); Pump(); Shot("85_pattern_segment_lines_3d");
+    var v3 = line3.V1;
+    steps = vm.Doc.UndoNames.Count;
+    vm.ActiveTool.PointerPressed(At3(m3x, m3y));
+    for (int k = 1; k <= 4; k++) vm.ActiveTool.PointerMoved(At3(m3x + (back3.Item1 - front3.Item1) * k / 4, m3y + (back3.Item2 - front3.Item2) * k / 4));
+    vm.ActiveTool.PointerReleased(At3(m3x + back3.Item1 - front3.Item1, m3y + back3.Item2 - front3.Item2)); Pump();
+    if (vm.Doc.UndoNames.Count != steps + 1 || Math.Abs(Root().SegmentLines[0].V1 - (v3 - Root().Burden)) > 1e-6)
+        throw new Exception($"the drag in 3D did not move the cut line one row: {v3} → {Root().SegmentLines[0].V1}");
+    vm.PlanView(); Pump();
     // saved and opened again: the segments, what B sets and the depth come back
     var path = Path.Combine(outDir, "segments.bdp");
     ProjectFile.Save(vm.Project!, path, 0);
