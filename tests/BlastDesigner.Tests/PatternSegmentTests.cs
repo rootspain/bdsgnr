@@ -85,6 +85,27 @@ public class PatternSegmentTests
         Assert.Equal(Math.Round(90 - 2 * s, 1), mid.ToLevel!.Value, 9);
     }
 
+    [Theory]
+    [InlineData(DepthMode.Fixed)]
+    [InlineData(DepthMode.SurfaceToRect)]
+    [InlineData(DepthMode.ToLevel)]
+    public void LeavingTheRectangle_TheCollarsGoBackWhereTheHolesWereMade(DepthMode next)
+    {
+        var (p, root) = Make(Rectangle);
+        root.HoleDefaults.Depth = new DepthSpec { Mode = DepthMode.RectToLevel, Level = 80, Front = new DepthPair(10, 12), Back = new DepthPair(11, 13.5) };
+        PatternTree.SyncLegacyDepth(root);
+        HoleDesign.RebuildPattern(p, root);
+        Assert.Contains(p.Holes, h => h.Collar.Z > 91);
+        root.HoleDefaults.Depth = new DepthSpec { Mode = next, Level = 88, Front = new DepthPair(90, 90), Back = new DepthPair(89, 89) };
+        PatternTree.SyncLegacyDepth(root);
+        var o = PatternRebuildOptions.For(p);
+        PatternTree.FollowDepthMode(p, root, o);
+        HoleDesign.RebuildPattern(p, root, o);
+        Assert.All(p.Holes, h => Assert.Equal(100, h.Collar.Z, 9));
+        if (next == DepthMode.Fixed) Assert.All(p.Holes, h => Assert.Equal(10 + 1, h.Length, 9));
+        if (next == DepthMode.ToLevel) Assert.All(p.Holes, h => Assert.Equal(100 - 88 + 1, h.Length, 9));
+    }
+
     [Fact]
     public void Depth_IsBilinear_AndRounded()
     {

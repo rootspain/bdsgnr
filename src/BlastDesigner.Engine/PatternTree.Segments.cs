@@ -579,15 +579,24 @@ public static partial class PatternTree
     }
 
     /// <summary>
-    /// The holes of a pattern whose depth mode just changed leave what the old mode gave them: with one depth they lose
-    /// their level and take the bench height (to the grade when there is one), with a level they go down to it. The surface
-    /// and the rectangle modes give every hole its level when it is laid out.
+    /// The holes of a pattern whose depth mode just changed leave what the old mode gave them: their collars go back where
+    /// the holes were made; with one depth they lose their level and take the bench height (to the grade when there is one),
+    /// with a level they go down to it. The surface and the rectangle modes give every hole its level when it is laid out.
     /// </summary>
     public static void FollowDepthMode(BlastProject p, HolePattern leaf, PatternRebuildOptions o)
     {
         var mode = EffectiveDepthMode(leaf);
         foreach (var h in HoleDesign.PatternHoles(p, leaf))
         {
+            // the collar back where the hole was made: on the collar surface, else at the level of the grid (laying a
+            // pattern out again keeps the elevation of a collar, so one raised onto the rectangle would stay up)
+            var made = o.CollarSurface?.ElevationAt(h.Collar.X, h.Collar.Y) ?? leaf.Center.Z;
+            var shift = new Vec3(0, 0, made - h.Collar.Z);
+            if (Math.Abs(shift.Z) > 1e-9)
+            {
+                h.Collar += shift;
+                if (h.BoreTrack != null) for (int k = 0; k < h.BoreTrack.Count; k++) h.BoreTrack[k] += shift;
+            }
             if (mode == DepthMode.Fixed)
             {
                 h.ToLevel = null;
