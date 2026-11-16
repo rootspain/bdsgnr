@@ -2009,6 +2009,26 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
     vm.Doc!.Select(holes.Select(h => h.Id)); vm.ZoomSelection(); Pump();
     vm.View.Redraw(); Pump(); Shot("87_pattern_polygons_plan");
     vm.View3D(); vm.View.Camera.Pitch = 35; vm.ZoomSelection(); vm.View.Redraw(); Pump(); Shot("88_pattern_polygons_3d");
+    // a collar vertex dragged 2 m up in 3D: one undo step, the vertex and the collars near it higher
+    var polyGrips = vm.View.Overlays.OfType<DepthPolygonGripsOverlay>().Single().Owner;
+    var grip = polyGrips.Grips().Single(g => g.Collar && g.Key == "O:2");
+    var cam = vm.View.Camera;
+    var (gx, gy) = cam.ToScreen(grip.Point);
+    var (ux, uy) = cam.ToScreen(grip.Point + new Vec3(0, 0, 2));
+    ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = Avalonia.Input.KeyModifiers.None };
+    vm.ActiveTool.PointerMoved(At(gx, gy));
+    if (polyGrips.Hot?.Key != "O:2") throw new Exception("the collar vertex is not found under the cursor in 3D");
+    var steps = vm.Doc.UndoNames.Count;
+    var highest = PatternTree.TreeHoles(vm.Project!, root).Max(h => h.Collar.Z);
+    vm.ActiveTool.PointerPressed(At(gx, gy));
+    for (int k = 1; k <= 4; k++) vm.ActiveTool.PointerMoved(At(gx + (ux - gx) * k / 4, gy + (uy - gy) * k / 4));
+    if (vm.View.Preview.Markers.Count == 0) throw new Exception("dragging a vertex shows no preview");
+    vm.View.Redraw(); Pump(); Shot("89_pattern_polygon_vertex_drag");
+    vm.ActiveTool.PointerReleased(At(ux, uy)); Pump();
+    root = vm.Project!.FindPattern(rootId)!;
+    if (vm.Doc.UndoNames.Count != steps + 1 || root.SurfaceVertices.Single(v => v.Key == "O:2").Collar is not double raised || Math.Abs(raised - 306) > 1e-6)
+        throw new Exception($"the vertex did not go 2 m up in one step: {string.Join(" | ", vm.Doc.UndoNames.Take(2))}");
+    if (PatternTree.TreeHoles(vm.Project!, root).Max(h => h.Collar.Z) <= highest) throw new Exception("the collars near the raised vertex did not go up");
     vm.PlanView(); Pump();
     vm.Doc.ClearSelection();
     for (int i = 0; i < 10 && vm.Project!.FindPattern(rootId) != null; i++) vm.Undo();

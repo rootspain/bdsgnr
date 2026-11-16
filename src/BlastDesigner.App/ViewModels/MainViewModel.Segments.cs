@@ -129,6 +129,38 @@ public sealed partial class MainViewModel
     /// <summary>Whether two objects of the project are the same, as they are saved.</summary>
     private static bool Same<T>(T a, T b) => JsonSerializer.Serialize(a, ProjectJson.Options) == JsonSerializer.Serialize(b, ProjectJson.Options);
 
+    /// <summary>
+    /// Sets elevations of vertices of the collar (or depth) polygon of a pattern, by the names of the vertices, and lays the
+    /// pattern out again: one undo step. A vertex shared by two segments is changed for both.
+    /// </summary>
+    public Task<bool> SetPolygonVertices(Guid patternId, bool collar, IReadOnlyDictionary<string, double> values)
+    {
+        if (Project?.FindPattern(patternId) is not { } pat || values.Count == 0) return Task.FromResult(false);
+        var root = PatternTree.Root(Project, pat);
+        return LayOutTree(root.Id, $"{root.Name}: {Loc.T(collar ? "collar polygon" : "depth polygon")}", (p, r, o) =>
+        {
+            foreach (var (key, z) in values) PatternSurfaces.SetVertex(r, key, collar ? z : null, collar ? null : z);
+            return PatternTree.Relayout(p, r, o);
+        });
+    }
+
+    /// <summary>A vertex of the collar (or depth) polygon takes its elevation from the vertices beside it again.</summary>
+    public Task<bool> ClearPolygonVertex(Guid patternId, bool collar, string key)
+    {
+        if (Project?.FindPattern(patternId) is not { } pat) return Task.FromResult(false);
+        var root = PatternTree.Root(Project, pat);
+        if (root.SurfaceVertices.FirstOrDefault(v => v.Key == key) is not { } own || (collar ? own.Collar : own.Depth) == null) return Task.FromResult(false);
+        return LayOutTree(root.Id, $"{root.Name}: {Loc.T(collar ? "collar polygon" : "depth polygon")}", (p, r, o) =>
+        {
+            if (r.SurfaceVertices.FirstOrDefault(v => v.Key == key) is { } x)
+            {
+                if (collar) x.Collar = null; else x.Depth = null;
+                if (x.Collar == null && x.Depth == null) r.SurfaceVertices.Remove(x);
+            }
+            return PatternTree.Relayout(p, r, o);
+        });
+    }
+
     /// <summary>Puts cut line <paramref name="index"/> of a pattern where it was dragged to (one undo step).</summary>
     public Task<bool> MoveSegmentLine(Guid rootId, int index, SegmentLine line)
     {

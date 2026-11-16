@@ -3338,3 +3338,13 @@ ui:Collar polygon	Полигон устьев
 ui:Depth polygon	Полигон глубин
 ui:The collar polygon of a pattern or segment: its lines, and its fill 90 % transparent	Полигон устьев сетки или сегмента: его линии и заливка, прозрачная на 90 %
 ui:The depth polygon of a pattern or segment: its lines, and its fill 90 % transparent	Полигон глубин сетки или сегмента: его линии и заливка, прозрачная на 90 %
+collar polygon	полигон устьев
+depth polygon	полигон глубин
+Collar polygon	Полигон устьев
+Depth polygon	Полигон глубин
+Double click: type the elevation	Двойной щелчок: ввести отметку
+Drag: up or down (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation	Перетащить: вверх или вниз (Ctrl — 0,01 м, Shift — весь полигон); двойной щелчок: ввести отметку
+the whole polygon	весь полигон
+Elevation, m	Отметка, м
+Elevation…	Отметка…
+From the vertices beside it	По соседним вершинам

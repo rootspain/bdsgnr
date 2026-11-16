@@ -34,6 +34,8 @@ public sealed class SelectTool : Tool
     private readonly BlockGrips _blocks;
     /// <summary>The cut lines of the patterns with a selected hole that are cut into segments, with their grips.</summary>
     private readonly SegmentLineGrips _segments;
+    /// <summary>The vertices of the collar and depth polygons, moved up and down.</summary>
+    private readonly DepthPolygonGrips _polygons;
     /// <summary>Gestures that take a press for themselves: nothing else happens with it.</summary>
     private readonly ISelectGesture[] _handles;
     /// <summary>The gestures that share a press: the tool decides between them on the drag and the release.</summary>
@@ -49,11 +51,12 @@ public sealed class SelectTool : Tool
         _pattern = new PatternRotateHandle(vm, () => Preview.Moving == null);
         _blocks = new BlockGrips(vm, () => Preview.Moving == null);
         _segments = new SegmentLineGrips(vm, () => Preview.Moving == null);
+        _polygons = new DepthPolygonGrips(vm, () => Preview.Moving == null);
         _vertices = new VertexGrips(vm, () => Preview.Moving == null);
         _move = new SelectionDrag(vm);
         _rows = new RowPick(vm, _move);
         _box = lasso ? new LassoSelect(vm) : new BoxSelect(vm);
-        _handles = new ISelectGesture[] { _front, _blocks, _pattern, _segments };
+        _handles = new ISelectGesture[] { _front, _blocks, _pattern, _polygons, _segments };
         _shared = new ISelectGesture[] { _vertices, _rows, _move, _box };
         _gestures = _handles.Concat(_shared).ToArray();
     }
@@ -102,7 +105,7 @@ public sealed class SelectTool : Tool
     {
         if (!p.Left) return;
         // a circle of a selected front (turned or reshaped) or of a pattern (its grid turned): nothing else happens with this press
-        if ((!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.TryPress(p)) || _blocks.TryPress(p) || _pattern.TryPress(p) || _segments.TryPress(p)) { _down = null; return; }
+        if ((!p.Modifiers.HasFlag(KeyModifiers.Shift) && p.ClickCount < 2 && _front.TryPress(p)) || _blocks.TryPress(p) || _pattern.TryPress(p) || _polygons.TryPress(p) || _segments.TryPress(p)) { _down = null; return; }
         _down = p;
         _dragging = false;
         // the selection before the row: a selected row hands its drag to the selection
@@ -130,11 +133,12 @@ public sealed class SelectTool : Tool
             _front.Hover(p);
             _blocks.Hover(p);
             _pattern.Hover(p);
+            _polygons.Hover(p);
             _segments.Hover(p);
             // a block under the cursor shows all its edges, and is named by its layer
             var hot = p.Hit is BlockEntity ? p.Hit.Id : (Guid?)null;
             if (View.HotBlock != hot) { View.HotBlock = hot; View.Redraw(); }
-            if (p.Hit != null && !_pattern.Hot && _segments.Hot == null) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m"
+            if (p.Hit != null && !_pattern.Hot && _segments.Hot == null && _polygons.Hot == null) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m"
                 : p.Hit is BlockEntity b ? Vm.Project?.FindLayer(b.LayerId)?.Name ?? Loc.T(b.KindName) : Loc.T(p.Hit.KindName)));
             return;
         }
