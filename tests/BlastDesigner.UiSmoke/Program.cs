@@ -2066,7 +2066,9 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
     {
         var (_, ds) = PatternSurfaces.Surfaces(vm.Project!, leaf, null);
         foreach (var v in PatternSurfaces.Polygons(vm.Project!, leaf, null).SelectMany(x => x).Where(v => v.Key == "O:2"))
-            }
+            if (Math.Abs(v.Z(false) - after.Z) > 1e-6 || Math.Abs((ds!.ElevationAt(v.Point.X, v.Point.Y) ?? 0) - after.Z) > 1e-6)
+                throw new Exception($"segment {leaf.Name}: the depth polygon at the dragged vertex is not where its grip is");
+    }
     vm.View.Redraw(); Pump(); Shot("91_depth_vertex_dragged");
     if (Math.Abs(after.Z - (dgrip.Z - 3)) > 1e-6) throw new Exception($"the depth vertex did not go 3 m down: {dgrip.Z} → {after.Z}");
     vm.PlanView(); Pump();
