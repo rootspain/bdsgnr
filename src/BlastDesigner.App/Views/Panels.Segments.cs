@@ -346,8 +346,8 @@ public sealed partial class PropertiesPanel
         TextBlock Head(string text) => new() { Text = Loc.Ui(text), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
         Cell(Head("Vertex"), 0, 0);
         Cell(Head("Collar, m"), 0, 1);
-        Cell(Head("Depth polygon, m"), 0, 2);
-        Cell(Head("Depth"), 0, 3);
+        Cell(Head("Toe elevation, m"), 0, 2);
+        Cell(Head("Depth, m"), 0, 3);
         for (int i = 0; i < vertices.Count; i++)
         {
             var v = vertices[i];

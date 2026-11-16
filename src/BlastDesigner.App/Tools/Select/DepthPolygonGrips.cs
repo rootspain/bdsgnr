@@ -60,8 +60,8 @@ public sealed class DepthPolygonGrips : ISelectGesture
                 var spec = leaf.HoleDefaults.Depth;
                 foreach (var v in PatternSurfaces.Polygons(project, leaf, bench).SelectMany(x => x).Where(v => v.Key != null))
                 {
-                    if (spec.Collars == CollarSource.Polygon && seen.Add((v.Key!, true))) grips.Add(new Grip(root.Id, v.Key!, true, v.Point.WithZ(v.Collar), v.Collar));
-                    if (spec.Mode == DepthMode.Polygon && seen.Add((v.Key!, false))) grips.Add(new Grip(root.Id, v.Key!, false, v.Point.WithZ(v.Depth), v.Depth));
+                    if (spec.Collars == CollarSource.Polygon && seen.Add((v.Key!, true))) grips.Add(new Grip(root.Id, v.Key!, true, v.On(true), v.Z(true)));
+                    if (spec.Mode == DepthMode.Polygon && seen.Add((v.Key!, false))) grips.Add(new Grip(root.Id, v.Key!, false, v.On(false), v.Z(false)));
                 }
             }
         return grips;

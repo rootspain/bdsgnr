@@ -4,7 +4,17 @@ using BlastDesigner.Domain.Model;
 namespace BlastDesigner.Engine;
 
 /// <summary>A vertex of the collar and depth polygons of a segment: what it is (null for one that has no name), where, and its two elevations.</summary>
-public sealed record SurfaceVertex(string? Key, Vec3 Point, double Collar, double Depth, bool CollarSet, bool DepthSet);
+public sealed record SurfaceVertex(string? Key, Vec3 Point, double Collar, double Depth, bool CollarSet, bool DepthSet)
+{
+    /// <summary>
+    /// The elevation of the vertex on the collar polygon (true) or the depth polygon: the one point its grip, its label and
+    /// the drawn polygon all stand on.
+    /// </summary>
+    public double Z(bool collar) => collar ? Collar : Depth;
+
+    /// <summary>The vertex in space on the collar polygon (true) or the depth polygon.</summary>
+    public Vec3 On(bool collar) => Point.WithZ(Z(collar));
+}
 
 /// <summary>
 /// The collar and depth polygons of a pattern or a segment: two polygons on the vertices of its outline, each vertex with
@@ -172,7 +182,7 @@ public static class PatternSurfaces
                 for (int i = 0; i < poly.Count; i++) edges.Add((poly[i].Point.WithZ(z(poly[i])), poly[(i + 1) % poly.Count].Point.WithZ(z(poly[(i + 1) % poly.Count]))));
             return Engine.Surfaces.Triangulate(points, "Pattern polygon", 0, edges);
         }
-        return (Build(v => v.Collar), Build(v => v.Depth));
+        return (Build(v => v.Z(true)), Build(v => v.Z(false)));
     }
 
     /// <summary>The elevation of a polygon surface at a point, or that of its nearest vertex when the point is off it.</summary>

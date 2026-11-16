@@ -1914,6 +1914,13 @@ Step("a pattern is cut into segments: the field, a segment of its own, its depth
     var levels = HoleDesign.PatternHoles(vm.Project!, vm.Project!.FindPattern(b.Id)!).Select(h => h.ToLevel).ToList();
     if (levels.Any(l => l == null) || levels.Max() > 291 + 1e-6 || levels.Min() >= 290) throw new Exception("the holes of B did not go down to the depth polygon: " + string.Join(", ", levels.Distinct()));
     if (!vm.Project!.FindPattern(rootId)!.SurfaceVertices.Any(v => v.Depth == 291)) throw new Exception("the depth of the vertex was not kept with the pattern");
+    // a toe elevation above the collar (a depth typed in by mistake would be) is refused with a message, no step
+    steps = vm.Doc.UndoNames.Count;
+    Enter(Find<TextBox>("polygonDepth2"), "305");
+    var refused = BlastDesigner.App.Services.Dialogs.LastMessage;
+    if (refused is not { IsVisible: true } || vm.Doc.UndoNames.Count != steps) throw new Exception("a toe elevation above the collar was taken");
+    refused.Close();
+    for (int i = 0; i < 200 && Find<TextBox>("polygonDepth2").Text == "305"; i++) { Thread.Sleep(5); Pump(); }
     vm.View.Redraw(); Pump(); Shot("84_pattern_segment_depth");
     // the first cut line dragged one row back: one undo step
     var cam = vm.View.Camera;
@@ -2013,6 +2020,15 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
     vm.Doc!.Select(holes.Select(h => h.Id)); vm.ZoomSelection(); Pump();
     vm.View.Redraw(); Pump(); Shot("87_pattern_polygons_plan");
     vm.View3D(); vm.View.Camera.Pitch = 35; vm.ZoomSelection(); vm.View.Redraw(); Pump(); Shot("88_pattern_polygons_3d");
+    // every grip stands on the polygon as it is drawn: the depth grips on the depth polygon, the collar grips on the collar polygon
+    var drawn = vm.View.Overlays.OfType<DepthPolygonGripsOverlay>().Single().Owner;
+    foreach (var g in drawn.Grips())
+    {
+        var leaf = PatternTree.Leaves(vm.Project!, root).First(l => PatternSurfaces.Polygons(vm.Project!, l, null).SelectMany(x => x).Any(v => v.Key == g.Key));
+        var (cs, ds) = PatternSurfaces.Surfaces(vm.Project!, leaf, null);
+        var z = (g.Collar ? cs : ds)!.ElevationAt(g.Point.X, g.Point.Y);
+        if (z is not double sz || Math.Abs(sz - g.Point.Z) > 1e-6) throw new Exception($"the grip {g.Key} of the {(g.Collar ? "collar" : "depth")} polygon is at {g.Point.Z:0.00}, the polygon drawn at {z}");
+    }
     // a collar vertex dragged 2 m up in 3D: one undo step, the vertex and the collars near it higher
     var polyGrips = vm.View.Overlays.OfType<DepthPolygonGripsOverlay>().Single().Owner;
     var grip = polyGrips.Grips().Single(g => g.Collar && g.Key == "O:2");

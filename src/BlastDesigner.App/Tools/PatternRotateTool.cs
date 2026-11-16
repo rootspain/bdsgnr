@@ -270,8 +270,8 @@ public sealed class PatternOverlay : IOverlay
                 {
                     if (v.Key != null && !labelled.Add(v.Key)) continue;
                     var (x, y) = cam.ToScreen(v.Point);
-                    if (spec.Collars == CollarSource.Polygon) c.DrawText(v.Collar.ToString("0.0", culture), x + 5, y - 4, collarText);
-                    if (spec.Mode == DepthMode.Polygon) c.DrawText(v.Depth.ToString("0.0", culture), x + 5, y + 10, depthText);
+                    if (spec.Collars == CollarSource.Polygon) c.DrawText(v.Z(true).ToString("0.0", culture), x + 5, y - 4, collarText);
+                    if (spec.Mode == DepthMode.Polygon) c.DrawText(v.Z(false).ToString("0.0", culture), x + 5, y + 10, depthText);
                 }
                 continue;
             }
@@ -297,8 +297,8 @@ public sealed class PatternOverlay : IOverlay
                 foreach (var poly in polygons)
                     PlanRenderer.DrawPolyline(c, cam, poly.Select(v => v.Point.WithZ(z(v))).ToList(), true, line);
             }
-            if (spec.Collars == CollarSource.Polygon) Draw(collarSurface, v => v.Collar, collarFill, collarLine);
-            if (spec.Mode == DepthMode.Polygon) Draw(depthSurface, v => v.Depth, depthFill, depthLine);
+            if (spec.Collars == CollarSource.Polygon) Draw(collarSurface, v => v.Z(true), collarFill, collarLine);
+            if (spec.Mode == DepthMode.Polygon) Draw(depthSurface, v => v.Z(false), depthFill, depthLine);
         }
     }
 

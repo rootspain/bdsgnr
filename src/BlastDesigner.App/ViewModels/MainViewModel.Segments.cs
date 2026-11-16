@@ -138,11 +138,34 @@ public sealed partial class MainViewModel
     {
         if (Project?.FindPattern(patternId) is not { } pat || values.Count == 0) return Task.FromResult(false);
         var root = PatternTree.Root(Project, pat);
+        if (!collar && ToeAboveCollar(root, values) is { } above) return RefuseToe(above);
         return LayOutTree(root.Id, $"{root.Name}: {Loc.T(collar ? "collar polygon" : "depth polygon")}", (p, r, o) =>
         {
             foreach (var (key, z) in values) PatternSurfaces.SetVertex(r, key, collar ? z : null, collar ? null : z);
             return PatternTree.Relayout(p, r, o);
         });
+    }
+
+    /// <summary>
+    /// A vertex whose toe elevation would not be below its collar (the depth polygon holds elevations, not depths: a depth
+    /// typed in by mistake is caught when it is above the collar), with the collar there; null when all are below.
+    /// </summary>
+    private (double Toe, double Collar)? ToeAboveCollar(HolePattern root, IReadOnlyDictionary<string, double> values)
+    {
+        var bench = Project!.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench);
+        var collars = new Dictionary<string, double>();
+        foreach (var leaf in PatternTree.Leaves(Project, root))
+            foreach (var v in PatternSurfaces.Polygons(Project, leaf, bench).SelectMany(x => x))
+                if (v.Key != null) collars[v.Key] = v.Z(true);
+        foreach (var (key, z) in values)
+            if (collars.TryGetValue(key, out var c) && z >= c) return (z, c);
+        return null;
+    }
+
+    private async Task<bool> RefuseToe((double Toe, double Collar) above)
+    {
+        await Dialogs.Info(Loc.F("The toe elevation {0:0.00} m is not below the collar ({1:0.00} m). The depth polygon holds elevations, not depths.", above.Toe, above.Collar), Loc.T("Depth polygon"));
+        return false;
     }
 
     /// <summary>A vertex of the collar (or depth) polygon takes its elevation from the vertices beside it again.</summary>

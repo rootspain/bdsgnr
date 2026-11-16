@@ -3368,3 +3368,5 @@ Shift the depths	Сдвинуть глубины
 Depth below the collars	Глубина ниже устьев
 Value, m	Значение, м
 ui:polygon	полигон
+ui:Toe elevation, m	Отметка забоя, м
+The toe elevation {0:0.00} m is not below the collar ({1:0.00} m). The depth polygon holds elevations, not depths.	Отметка забоя {0:0.00} м не ниже устья ({1:0.00} м). В полигоне глубин задаются отметки, а не глубины.

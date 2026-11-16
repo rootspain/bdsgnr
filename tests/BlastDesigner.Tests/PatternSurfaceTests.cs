@@ -131,6 +131,42 @@ public class PatternSurfaceTests
     }
 
     [Fact]
+    public void TheDrawnPolygons_GoThroughTheElevationsOfTheirVertices_TheSameInNeighbouringSegments()
+    {
+        var (p, root) = Make();
+        PatternTree.Split(p, root, 2);
+        root.HoleDefaults.Depth.Collars = CollarSource.Polygon;
+        root.HoleDefaults.Depth.Mode = DepthMode.Polygon;
+        PatternTree.SyncLegacyDepth(root);
+        // some vertices set, the others between them or from the defaults
+        PatternSurfaces.SetVertex(root, "O:0", 101, 88);
+        PatternSurfaces.SetVertex(root, "O:2", null, 93);
+        PatternSurfaces.SetVertex(root, "L:0:2", 104, 86);
+        PatternTree.Relayout(p, root);
+        var byKey = new Dictionary<(string, bool), double>();
+        foreach (var leaf in PatternTree.Leaves(p, root))
+        {
+            var (collar, depth) = PatternSurfaces.Surfaces(p, leaf, null);
+            foreach (var v in PatternSurfaces.Polygons(p, leaf, null).SelectMany(x => x))
+            {
+                // the grip (On), the label (Z) and the drawn surface stand on the same elevation
+                Assert.Equal(v.Z(true), collar!.ElevationAt(v.Point.X, v.Point.Y)!.Value, 6);
+                Assert.Equal(v.Z(false), depth!.ElevationAt(v.Point.X, v.Point.Y)!.Value, 6);
+                Assert.Equal(v.Z(false), v.On(false).Z);
+                Assert.True(v.Z(false) < v.Z(true));
+                if (v.Key == null) continue;
+                foreach (var c in new[] { true, false })
+                {
+                    if (byKey.TryGetValue((v.Key, c), out var was)) Assert.Equal(was, v.Z(c), 9);
+                    else byKey[(v.Key, c)] = v.Z(c);
+                }
+            }
+        }
+        Assert.Equal(86, byKey[("L:0:2", false)]);
+        Assert.Equal(88, byKey[("O:0", false)]);
+    }
+
+    [Fact]
     public void ASchema4FileWithTheRectangle_OpensWithPolygons_TheHolesWhereTheyWere()
     {
         var (p, root) = Make();
