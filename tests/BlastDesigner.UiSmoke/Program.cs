@@ -2049,6 +2049,26 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
     if (vm.Doc.UndoNames.Count != steps + 1 || root.SurfaceVertices.Single(v => v.Key == "O:2").Collar is not double raised || Math.Abs(raised - 306) > 1e-6)
         throw new Exception($"the vertex did not go 2 m up in one step: {string.Join(" | ", vm.Doc.UndoNames.Take(2))}");
     if (PatternTree.TreeHoles(vm.Project!, root).Max(h => h.Collar.Z) <= highest) throw new Exception("the collars near the raised vertex did not go up");
+    // a depth vertex dragged 3 m down: its grip, the line and the fill of the depth polygon all go down there
+    vm.Doc.Select(PatternTree.TreeHoles(vm.Project!, root).Select(h => h.Id)); Pump();
+    var dgrip = polyGrips.Grips().Single(g => !g.Collar && g.Key == "O:2");
+    var (dx0, dy0) = cam.ToScreen(dgrip.Point);
+    var (dx1, dy1) = cam.ToScreen(dgrip.Point + new Vec3(0, 0, -3));
+    vm.ActiveTool.PointerMoved(At(dx0, dy0));
+    if (polyGrips.Hot?.Key != "O:2" || polyGrips.Hot.Collar) throw new Exception("the depth vertex is not found under the cursor: " + polyGrips.Hot);
+    vm.ActiveTool.PointerPressed(At(dx0, dy0));
+    for (int k = 1; k <= 4; k++) vm.ActiveTool.PointerMoved(At(dx0 + (dx1 - dx0) * k / 4, dy0 + (dy1 - dy0) * k / 4));
+    vm.View.Redraw(); Pump(); Shot("90_depth_vertex_drag");
+    vm.ActiveTool.PointerReleased(At(dx1, dy1)); Pump();
+    root = vm.Project!.FindPattern(rootId)!;
+    var after = polyGrips.Grips().Single(g => !g.Collar && g.Key == "O:2");
+    foreach (var leaf in PatternTree.Leaves(vm.Project!, root))
+    {
+        var (_, ds) = PatternSurfaces.Surfaces(vm.Project!, leaf, null);
+        foreach (var v in PatternSurfaces.Polygons(vm.Project!, leaf, null).SelectMany(x => x).Where(v => v.Key == "O:2"))
+            }
+    vm.View.Redraw(); Pump(); Shot("91_depth_vertex_dragged");
+    if (Math.Abs(after.Z - (dgrip.Z - 3)) > 1e-6) throw new Exception($"the depth vertex did not go 3 m down: {dgrip.Z} → {after.Z}");
     vm.PlanView(); Pump();
     vm.Doc.ClearSelection();
     for (int i = 0; i < 10 && vm.Project!.FindPattern(rootId) != null; i++) vm.Undo();
