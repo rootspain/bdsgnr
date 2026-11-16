@@ -224,6 +224,15 @@ public readonly record struct DepthRectangle(double MinU, double MaxU, double Mi
         return (s, t);
     }
 
+    /// <summary>Relative position of any point in plan, as <see cref="Relative"/> for a node; beyond the rectangle (the outline is wider than its nodes) below 0 or over 1.</summary>
+    public (double S, double T) RelativeAt(HolePattern pat, Vec3 pt)
+    {
+        var (a, b) = PatternTree.WorldToGrid(pat, pt);
+        var s = MaxU - MinU > 1e-9 ? (a - MinU) / (MaxU - MinU) : 0;
+        var t = MaxV - MinV > 1e-9 ? (b - MinV) / (MaxV - MinV) : 0;
+        return (s, t);
+    }
+
     /// <summary>The corners in plan: front left, front right, back right, back left.</summary>
     public Vec3[] Corners(HolePattern pat)
     {

@@ -129,6 +129,7 @@ public static partial class PatternTree
             line = new SegmentLine { U1 = -r, V1 = v, U2 = r, V2 = v };
         }
         root.SegmentLines.Insert(seg.Order, line);
+        PatternSurfaces.ShiftLines(root, seg.Order, +1);
         foreach (var s in segments.Where(s => s.Order > seg.Order)) s.Order++;
         var behind = NewSegment(root, seg.Order + 1, seg.Overrides.Clone(), seg);
         behind.AnchorSide = seg.AnchorSide;
@@ -144,6 +145,7 @@ public static partial class PatternTree
     {
         var segments = LineSegments(p, root);
         root.SegmentLines.RemoveAt(index);
+        PatternSurfaces.ShiftLines(root, index, -1);
         if (root.SegmentLines.Count == 0 && root.Islands.Count > 0)
         {
             // islands keep the pattern cut: one segment around them
@@ -734,6 +736,7 @@ public static partial class PatternTree
         var deleted = new List<Guid>();
         var around = LineSegments(p, root);
         root.Islands.Remove(islandId);
+        root.SurfaceVertices.RemoveAll(v => v.Key.StartsWith($"I:{islandId:N}:"));
         if (around.Count == 0) { Absorb(p, island, root, deleted); }
         else Absorb(p, island, around[0], deleted);
         if (!root.IsContainer)
@@ -758,6 +761,7 @@ public static partial class PatternTree
     {
         o ??= PatternRebuildOptions.For(p);
         if (TreeRefusal(p, root, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        PatternSurfaces.RemapOutline(root, root.Outline, polygon);
         root.Outline = polygon.Select(q => q.WithZ(root.Center.Z)).ToList();
         if (root.FaceEdge != null || root.Alignment != RowAlignment.Left)
         {

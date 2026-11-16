@@ -6,7 +6,7 @@ namespace BlastDesigner.Domain.Model;
 /// <summary>The whole blast design document.</summary>
 public sealed class BlastProject
 {
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -304,6 +304,11 @@ public sealed class HolePattern
     public List<Guid> SeamAdded { get; set; } = new();
     /// <summary>Of a pattern cut into segments: its island segments (cut out by polygons inside it, not counted among its segments).</summary>
     public List<Guid> Islands { get; set; } = new();
+    /// <summary>
+    /// Of a pattern of its own (a root): the elevations of the vertices of the collar and depth polygons of all its segments,
+    /// one entry a vertex, so neighbouring segments share their vertices at a seam.
+    /// </summary>
+    public List<PatternVertex> SurfaceVertices { get; set; } = new();
     /// <summary>Of an island segment: the polygon it is cut out by (a copy of its points); null for the other segments.</summary>
     public List<Vec3>? IslandOutline { get; set; }
     /// <summary>Of an island segment: the polygon of the project its outline is taken from.</summary>

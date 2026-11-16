@@ -280,6 +280,8 @@ public static partial class HoleDesign
     {
         o ??= PatternRebuildOptions.For(p);
         if (RebuildRefusal(p, pat, o) is { } no) return new PatternRebuildReport { Refusal = no };
+        // the elevations of the collar and depth polygons stay with their vertices
+        PatternSurfaces.RemapOutline(pat, pat.Outline, polygon);
         pat.Outline = FlatOutline(polygon, pat.Center.Z);
         if (pat.FaceEdge != null || pat.Alignment != RowAlignment.Left)
         {
@@ -430,9 +432,20 @@ public static partial class HoleDesign
         // the four numbers of the depth at the corners of the conditional rectangle of the grid
         var depth = pat.HoleDefaults.Depth;
         var rect = depth.UsesRectangle ? DepthRectangle.Of(pat) : null;
+        // the collar and depth polygons, on the vertices of the outline of the pattern (or segment)
+        var (collarPoly, depthPoly) = depth.UsesPolygons ? PatternSurfaces.Surfaces(p, pat, o.CollarSurface) : (null, null);
+        Vec3 OnCollarPolygon(Vec3 at) => collarPoly != null && depth.Collars == CollarSource.Polygon ? at.WithZ(PatternSurfaces.At(collarPoly, at.X, at.Y)) : at;
         double? RectDepth(int i, int j) => rect is { } r && r.Relative(pat, i, j) is var (s, t) ? depth.At(s, t) : null;
         void Level(Hole h, bool isNew, double? rd)
         {
+            if (depth.Mode == DepthMode.Polygon && depthPoly != null && !h.DepthManual)
+            {
+                var below = depth.IncludesSubdrill ? h.Subdrill : 0;
+                var z = PatternSurfaces.DepthLevel(h, depthPoly) + below;
+                h.ToLevel = HoleLevel.Reaches(h, z) ? z : null;
+                if (HoleLevel.Length(h) is double polygonLength) h.Length = polygonLength;
+                return;
+            }
             if (depth.Mode == DepthMode.Range && !h.DepthManual)
             {
                 // down to the grade (or the level), the depth held between the two numbers
@@ -465,7 +478,8 @@ public static partial class HoleDesign
         {
             // a depth edited by hand stays as it is, its collar elevation with it
             var rd = h.DepthManual ? null : RectDepth(node.I, node.J);
-            var collar = depth.Mode == DepthMode.RectToLevel && rd is double dz ? target.WithZ(depth.Level + dz)
+            var collar = depth.Collars == CollarSource.Polygon && collarPoly != null ? (h.DepthManual ? target.WithZ(h.Collar.Z) : OnCollarPolygon(target))
+                : depth.Mode == DepthMode.RectToLevel && rd is double dz ? target.WithZ(depth.Level + dz)
                 : depth.Mode == DepthMode.RectToLevel && h.DepthManual ? target.WithZ(h.Collar.Z)
                 : o.CollarSurface?.ElevationAt(target.X, target.Y) is double cz ? target.WithZ(cz) : target;
             // a node where the hole already is (within a nanometre) leaves it as it is, to the last bit
@@ -504,7 +518,8 @@ public static partial class HoleDesign
             h.GridI = n.I;
             h.GridJ = n.J;
             var rd = RectDepth(n.I, n.J);
-            if (depth.Mode == DepthMode.RectToLevel && rd is double dz) h.Collar = h.Collar.WithZ(depth.Level + dz);
+            if (depth.Collars == CollarSource.Polygon && collarPoly != null) h.Collar = OnCollarPolygon(h.Collar);
+            else if (depth.Mode == DepthMode.RectToLevel && rd is double dz) h.Collar = h.Collar.WithZ(depth.Level + dz);
             Level(h, true, rd);
             p.Add(h, layer);
             added.Add(h.Id);
@@ -617,7 +632,7 @@ public static partial class HoleDesign
         {
             if (h.PatternId is not Guid id || !holesBefore.TryGetValue(id, out var list)) continue;
             list[h.Id] = (h.Collar, h.GridI, h.GridJ);
-            if (project.FindPattern(id)!.HoleDefaults.Depth.IsOwnMode) depthBefore[h.Id] = (h.Length, h.ToLevel, h.Collar.Z, h.Angle, h.Subdrill);
+            if (project.FindPattern(id)!.HoleDefaults.Depth is { } ds && (ds.IsOwnMode || ds.UsesPolygons)) depthBefore[h.Id] = (h.Length, h.ToLevel, h.Collar.Z, h.Angle, h.Subdrill);
         }
         var before = project.Patterns.Select(pat => (pat, pat.Revision)).ToList();
         var revisions = before.ToDictionary(x => x.pat.Id, x => x.Revision);

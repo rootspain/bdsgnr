@@ -20,10 +20,39 @@ public enum DepthMode
     /// <summary>Down to the first grade surface in the way of each hole (<see cref="HolePattern.ToSurface"/>).</summary>
     ToSurface,
     /// <summary>
+    /// Down to the depth polygon: the elevations of the toes (without the subdrill) at the vertices of the outline of each
+    /// segment, kept once for the whole pattern (<see cref="HolePattern.SurfaceVertices"/>), flat triangles between them.
+    /// </summary>
+    Polygon,
+    /// <summary>
     /// Down to the grade surface (to <see cref="DepthSpec.Level"/> without one), the depth kept between the two numbers of
     /// the front pair; the holes held at an end are counted (<c>PatternRebuildReport.ClampedIds</c>).
     /// </summary>
     Range
+}
+
+/// <summary>Where the collars of the holes of a pattern are.</summary>
+public enum CollarSource
+{
+    /// <summary>On the collar surface of the project (the bench), else at the level of the grid.</summary>
+    ProjectSurface,
+    /// <summary>On the collar polygon: elevations at the vertices of the outline of each segment, flat triangles between them.</summary>
+    Polygon
+}
+
+/// <summary>
+/// A vertex of the collar and depth polygons of a pattern, kept by what it is (<see cref="Key"/>), not by where it is, so it
+/// lives through a change of the outline or a move of a cut line: <c>O:i</c> vertex i of the outline of the pattern,
+/// <c>L:k:j</c> the j-th crossing of cut line k with the outline (along the line), <c>I:id:i</c> vertex i of an island.
+/// A vertex at a seam is one for both segments.
+/// </summary>
+public sealed class PatternVertex
+{
+    public string Key { get; set; } = "";
+    /// <summary>Elevation of the collar polygon there; null: worked out from the vertices beside it.</summary>
+    public double? Collar { get; set; }
+    /// <summary>Elevation of the depth polygon there (the toe without the subdrill); null: worked out from the vertices beside it.</summary>
+    public double? Depth { get; set; }
 }
 
 /// <summary>Two numbers along an edge of the conditional rectangle: at the left end of a row and at its right end, looking along the blast.</summary>
@@ -45,6 +74,8 @@ public sealed class DepthPair
 public sealed class DepthSpec
 {
     public DepthMode Mode { get; set; }
+    /// <summary>Where the collars are: on the surface of the project or on the collar polygon.</summary>
+    public CollarSource Collars { get; set; }
     public DepthPair Front { get; set; } = new(10, 10);
     public DepthPair Back { get; set; } = new(10, 10);
     /// <summary>The level the holes go down to in <see cref="DepthMode.RectToLevel"/>.</summary>
@@ -57,7 +88,9 @@ public sealed class DepthSpec
     /// <summary>Whether the four numbers of the conditional rectangle are used.</summary>
     public bool UsesRectangle => Mode is DepthMode.RectToLevel or DepthMode.SurfaceToRect;
     /// <summary>A mode the older fields of a pattern cannot say: the holes carry what it gives them.</summary>
-    public bool IsOwnMode => UsesRectangle || Mode == DepthMode.Range;
+    public bool IsOwnMode => UsesRectangle || Mode is DepthMode.Range or DepthMode.Polygon;
+    /// <summary>Whether the collar or the depth polygon is used.</summary>
+    public bool UsesPolygons => Collars == CollarSource.Polygon || Mode == DepthMode.Polygon;
 
     /// <summary>
     /// The value at relative position <paramref name="s"/> (0…1 along a row, left to right) and <paramref name="t"/> (0…1 from
@@ -75,12 +108,12 @@ public sealed class DepthSpec
 
     public DepthSpec Clone() => new()
     {
-        Mode = Mode, Front = new DepthPair(Front.From, Front.To), Back = new DepthPair(Back.From, Back.To), Level = Level, Round = Round,
+        Mode = Mode, Collars = Collars, Front = new DepthPair(Front.From, Front.To), Back = new DepthPair(Back.From, Back.To), Level = Level, Round = Round,
         IncludesSubdrill = IncludesSubdrill
     };
 
     public bool SameAs(DepthSpec o) =>
-        Mode == o.Mode && Front.From == o.Front.From && Front.To == o.Front.To && Back.From == o.Back.From && Back.To == o.Back.To
+        Mode == o.Mode && Collars == o.Collars && Front.From == o.Front.From && Front.To == o.Front.To && Back.From == o.Back.From && Back.To == o.Back.To
         && Level == o.Level && Round == o.Round && IncludesSubdrill == o.IncludesSubdrill;
 }
 
