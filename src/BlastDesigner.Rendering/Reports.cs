@@ -14,6 +14,12 @@ public sealed class FirstMovementSheet
     /// <summary>Which way the plan is turned, degrees.</summary>
     public double Yaw { get; set; }
     public required FirstMovementOverlay Arrows { get; init; }
+    /// <summary>The angle of initiation on a sheet of its own, after the arrows.</summary>
+    public bool AngleSheet { get; set; }
+    /// <summary>The burden relief on a sheet of its own, after the arrows and the angles.</summary>
+    public bool ReliefSheet { get; set; }
+    /// <summary>Top of the scale of the burden relief, ms/m; null: the most relief of the blast.</summary>
+    public double? ReliefLimit { get; set; }
 }
 
 /// <summary>The cross sections on sheets of their own: one per section line of the blast, or one along a line that was only picked.</summary>
@@ -215,9 +221,19 @@ public static class Reports
     public static ReportDocument BuildPlan(BlastProject project, PlanOptions opt, ReportDesign design, DateTime now) =>
         Sheet(project, ReportLayout.Fill(opt.Title, ReportLayout.Fields(project, "", now)), opt.Landscape, opt.Scale, design, now, (c, rect) => DrawPlan(c, rect, project, project.View.TimingLabels, design, opt.Scale));
 
-    /// <summary>The arrows of the first movement on one sheet, of a project whose times are solved.</summary>
-    public static ReportDocument BuildFirstMovement(BlastProject project, FirstMovementSheet opt, ReportDesign design, DateTime now) =>
-        Sheet(project, opt.Title, opt.Landscape, null, design, now, (c, rect) =>
+    /// <summary>
+    /// The arrows of the first movement on a sheet, of a project whose times are solved; then, each on a sheet of its own,
+    /// the angle of initiation and the burden relief when they are asked for. All the sheets frame the plan alike.
+    /// </summary>
+    public static ReportDocument BuildFirstMovement(BlastProject project, FirstMovementSheet opt, ReportDesign design, DateTime now)
+    {
+        var w = opt.Landscape ? A4H : A4W;
+        var h = opt.Landscape ? A4W : A4H;
+        var layout = new ReportLayout(design, w, h);
+        var sheets = new List<(string Title, IOverlay Overlay)> { (opt.Title, opt.Arrows) };
+        if (opt.AngleSheet) sheets.Add((T("Angle of initiation"), TimingVectorOverlay.InitiationAngles(project)));
+        if (opt.ReliefSheet) sheets.Add((T("Burden relief"), new BurdenReliefOverlay { UpperLimit = opt.ReliefLimit, LegendTitle = T("Burden relief, ms/m") }));
+        var pages = sheets.Select((s, i) => SheetPage(project, layout, i, s.Title, w, h, null, now, true, (c, rect) =>
         {
             var hidden = Hidden(project, design.HiddenKinds);
             var unframed = Unframed(project, design.View, hidden);
@@ -227,8 +243,10 @@ public static class Reports
             cam.Fit(b, 0.05);
             cam.Scale *= design.View.Zoom;
             Pan(cam, design.View);
-            DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideGeometry = opt.HideGeometry, HideWireframes = true, HiddenEntities = hidden, ShowGrid = design.ShowGrid, Overlays = new IOverlay[] { opt.Arrows } });
-        });
+            DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideGeometry = opt.HideGeometry, HideWireframes = true, HiddenEntities = hidden, ShowGrid = design.ShowGrid, Overlays = new[] { s.Overlay } });
+        })).ToList();
+        return new ReportDocument(opt.Title, project.Header.Author, layout.Finish(pages, ReportLayout.Fields(project, opt.Title, now)));
+    }
 
     /// <summary>The section lines of a blast, in the order of the blast.</summary>
     /// <remarks>A section goes along the first segment of its line, whatever else the line has.</remarks>

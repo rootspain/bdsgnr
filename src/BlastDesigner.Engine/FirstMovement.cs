@@ -286,13 +286,6 @@ public static class FirstMovement
         return list;
     }
 
-    /// <summary>Small arrow: triangle with its tip at +d, base at −d, half-width 0.7·|d| (any y-up or y-down frame).</summary>
-    public static (double X, double Y)[] SmallArrow(double xs, double ys, double xd, double yd)
-    {
-        const double k = 0.7;
-        return new[] { (xs + xd, ys + yd), (xs - xd - k * yd, ys - yd + k * xd), (xs - xd + k * yd, ys - yd - k * xd) };
-    }
-
     /// <summary>Large 7-point arrow (head of half-width 2/3·|d|, shaft of half-width 1/3·|d|).</summary>
     public static (double X, double Y)[] LargeArrow(double xs, double ys, double xd, double yd)
     {
@@ -302,28 +295,6 @@ public static class FirstMovement
             (xs + xd, ys + yd), (xs - hx, ys + hy), (xs - sx, ys + sy), (xs - xd - sx, ys - yd + sy),
             (xs - xd + sx, ys - yd - sy), (xs + sx, ys - sy), (xs + hx, ys - hy)
         };
-    }
-
-    /// <summary>ColorFromHSV as used for the arrow fill (hue in degrees; negative hues fall to the last sector, as there).</summary>
-    public static (byte R, byte G, byte B) ColorFromHsv(double hue, double saturation, double value)
-    {
-        int sector = Convert.ToInt32(Math.Floor(hue / 60.0)) % 6;
-        double f = hue / 60.0 - Math.Floor(hue / 60.0);
-        value *= 255.0;
-        int v = Convert.ToInt32(value);
-        int p = Convert.ToInt32(value * (1.0 - saturation));
-        int q = Convert.ToInt32(value * (1.0 - f * saturation));
-        int t = Convert.ToInt32(value * (1.0 - (1.0 - f) * saturation));
-        (int r, int g, int b) = sector switch
-        {
-            0 => (v, t, p),
-            1 => (q, v, p),
-            2 => (p, v, t),
-            3 => (p, q, v),
-            4 => (t, p, v),
-            _ => (v, p, q)
-        };
-        return ((byte)r, (byte)g, (byte)b);
     }
 
     /// <summary>CSV export of the original's hidden button: X, Y, dirX, dirY per arrow.</summary>

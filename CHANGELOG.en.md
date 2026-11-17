@@ -9,6 +9,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.7 — 2026-11-16
 
 ### Changed
+- **First movement window:** in place of the Shape and Colour switches (the arrows are now always of one shape,
+  yellow), the chips Angle of initiation and Burden relief, each turned on by itself. The layers turned on show in the
+  window, on the main plan with Show on plan, and in print, each on a sheet of its own after the sheet of the arrows.
 - **Ribbon group names** stand upright at the start of each group instead of a line under the buttons: the ribbon is
   lower. The former look is back with Settings ▸ Ribbon group names at the side.
 - **The exclusion zone is built by sources:** charged holes standing together are one source, each with its own

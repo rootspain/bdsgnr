@@ -432,18 +432,21 @@ public sealed partial class MainViewModel
     /// <summary>First movement: opens the First Movement window, which also puts the arrows on the plan.</summary>
     public void FirstMovement() { if (Doc != null) AnalysisWindows.FirstMovementWindow(this); }
 
-    /// <summary>Shows (as the one analysis display, like the others) or hides the first-movement arrows on the main plan.</summary>
-    public void ShowFirstMovementOnPlan(FirstMovementOverlay overlay, bool show)
+    /// <summary>
+    /// Shows (as the one analysis display, like the others) the layers of the first-movement window on the main plan: the
+    /// arrows and what its chips have turned on; or takes them off.
+    /// </summary>
+    public void ShowFirstMovementOnPlan(IReadOnlyList<IOverlay> layers, bool show)
     {
         if (show) AnalysisOverlays.Clear();
-        else AnalysisOverlays.RemoveAll(o => o is FirstMovementOverlay);
-        if (show) AnalysisOverlays.Add(overlay);
+        else AnalysisOverlays.RemoveAll(o => o is FirstMovementOverlay || layers.Contains(o));
+        if (show) AnalysisOverlays.AddRange(layers);
         View.Redraw();
         OverlaysChanged?.Invoke();
     }
     /// <summary>Burden relief: opens its window, which also fills the triangles of the main plan.</summary>
     public void BurdenRelief() { if (Doc != null) AnalysisWindows.BurdenReliefWindow(this); }
-    private double NeighbourRadius => Math.Max(Project!.Design.Burden, Project.Design.Spacing) * 1.6;
+    private double NeighbourRadius => TimingVectorOverlay.RadiusFor(Project!);
 
     private void VectorOverlay(TimingVectorOverlay.Mode mode)
     {

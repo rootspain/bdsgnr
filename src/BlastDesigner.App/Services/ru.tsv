@@ -2433,9 +2433,6 @@ Show on plan	Показать на плане
 ui:Depths	Глубины
 Arrows	Стрелки
 Triangles	Треугольники
-One colour	Один цвет
-Gradient	Градиент
-Colour by direction	Цвет по направлению
 {0:0.0} m	{0:0.0} м
 Shape	Форма
 Arrow size	Размер стрелки
@@ -3410,3 +3407,9 @@ Exclusion zone arrows	Стрелки опасной зоны
 Hide exclusion zone	Скрыть опасную зону
 ui:Ribbon group names at the side	Названия групп ленты сбоку
 ui:Upright at the start of each group; off — under the buttons	Вертикально в начале каждой группы; выключено — под кнопками
+Show	Показать
+Burden relief	Разгрузка ЛНС
+The angle at which each hole is initiated, from the times of its neighbours	Угол, под которым инициируется каждая скважина, по времени её соседей
+The burden relief of the triangles between the holes, under the arrows, with its legend	Разгрузка ЛНС по треугольникам между скважинами, под стрелками, с легендой
+ui:Sheet of the angle of initiation	Лист угла инициирования
+ui:Sheet of the burden relief	Лист разгрузки ЛНС

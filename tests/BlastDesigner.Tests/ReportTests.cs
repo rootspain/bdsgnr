@@ -1018,6 +1018,27 @@ public class ReportTests
     }
 
     [Fact]
+    public void TheAngleAndTheReliefOfTheFirstMovementWindowEachHaveASheetOfTheirOwn()
+    {
+        var p = Blast(60);
+        foreach (var h in p.Holes) h.ElectronicTimeMs = h.Collar.X * 3 + h.Collar.Y * 2;
+        Timing.Solve(p);
+        FirstMovementSheet Sheet(bool angle, bool relief) => new() { Title = "Arrows", Arrows = new FirstMovementOverlay(), AngleSheet = angle, ReliefSheet = relief };
+        using var arrows = Reports.BuildFirstMovement(p, Sheet(false, false), new ReportDesign(), Now);
+        using var all = Reports.BuildFirstMovement(p, Sheet(true, true), new ReportDesign(), Now);
+        using var reliefOnly = Reports.BuildFirstMovement(p, Sheet(false, true), new ReportDesign(), Now);
+        Assert.Single(arrows.Pages);
+        Assert.Equal(3, all.Pages.Count);
+        Assert.Equal(2, reliefOnly.Pages.Count);
+        // the arrows first, as alone; the other sheets differ from it and from each other
+        static byte[] Pixels(ReportDocument d, int i) { using var b = d.Rasterize(i, 36); return b.Bytes; }
+        Assert.Equal(Pixels(arrows, 0), Pixels(all, 0));
+        Assert.NotEqual(Pixels(all, 0), Pixels(all, 1));
+        Assert.NotEqual(Pixels(all, 1), Pixels(all, 2));
+        Assert.Equal(Pixels(all, 2), Pixels(reliefOnly, 1));
+    }
+
+    [Fact]
     public void ADisposedDocumentDrawsNothing()
     {
         var report = Reports.BuildPlan(Blast(5), new PlanOptions(), new ReportDesign(), Now);

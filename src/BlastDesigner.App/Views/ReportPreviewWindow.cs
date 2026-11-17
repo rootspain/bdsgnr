@@ -468,6 +468,8 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         {
             FormKit.Labeled(Loc.T("Title"), TitleBox(arrows.Title, v => arrows.Title = v)),
             Flag(Loc.Ui("Hide geometry"), arrows.HideGeometry, on => arrows.HideGeometry = on),
+            Flag(Loc.Ui("Sheet of the angle of initiation"), arrows.AngleSheet, on => arrows.AngleSheet = on, "angleSheet"),
+            Flag(Loc.Ui("Sheet of the burden relief"), arrows.ReliefSheet, on => arrows.ReliefSheet = on, "reliefSheet"),
             Flag(Loc.T("Landscape"), arrows.Landscape, on => arrows.Landscape = on)
         }
     };

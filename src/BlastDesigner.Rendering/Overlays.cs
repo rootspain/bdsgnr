@@ -449,22 +449,13 @@ public sealed class TimingContourOverlay : IOverlay
 
 /// <summary>
 /// First movement: one arrow per valid triangle of the timing triangulation, at its centroid, pointing down
-/// the time gradient; fill yellow, or with <see cref="Gradient"/> the hue of the screen direction and a legend of it;
-/// black outline; size in metres. Clipped to closed blast boundaries.
+/// the time gradient; a yellow arrow with a black outline, its size in metres. Clipped to closed blast boundaries.
 /// </summary>
 public sealed class FirstMovementOverlay : IMovePreviewOverlay
 {
-    public enum ArrowShape { Arrow, Triangle }
-
     private static readonly SKColor SingleColour = new(0xFFFACC15);
 
     public double ArrowSize { get; set; } = FirstMovement.DefaultArrowSize;
-    /// <summary>Arrow: the 7-point arrow; Triangle: the small triangle.</summary>
-    public ArrowShape Shape { get; set; } = ArrowShape.Arrow;
-    /// <summary>Each arrow in the colour of its direction, with the legend of the colours; otherwise all yellow.</summary>
-    public bool Gradient { get; set; }
-    /// <summary>Caption of the legend of the colours.</summary>
-    public string LegendTitle { get; set; } = "";
     /// <summary>Draw in the main plan's style (line arrows) instead of the filled arrows.</summary>
     public bool PlanStyle { get; set; }
 
@@ -496,7 +487,6 @@ public sealed class FirstMovementOverlay : IMovePreviewOverlay
     {
         Delaunay(project, moved, offset);
         if (_arrows.Count == 0) return;
-        var large = Shape == ArrowShape.Arrow;
         var bounds = project.Entities.OfType<PolylineEntity>().Where(p => p.Closed && p.Kind == LineKind.Boundary && p.Points.Count > 2).ToList();
         var saved = c.Save();
         if (bounds.Count > 0)
@@ -532,8 +522,8 @@ public sealed class FirstMovementOverlay : IMovePreviewOverlay
             if (len < 1e-9) continue;
             dx /= len; dy /= len;
             var size = ArrowSize * cam.Scale;
-            var pts = large ? FirstMovement.LargeArrow(sx, sy, dx * size, dy * size) : FirstMovement.SmallArrow(sx, sy, dx * size, dy * size);
-            fill.Color = Gradient ? DirectionColour(dx, dy) : SingleColour;
+            var pts = FirstMovement.LargeArrow(sx, sy, dx * size, dy * size);
+            fill.Color = SingleColour;
             using var path = new SKPath();
             path.MoveTo((float)pts[0].X, (float)pts[0].Y);
             for (int i = 1; i < pts.Length; i++) path.LineTo((float)pts[i].X, (float)pts[i].Y);
@@ -542,34 +532,6 @@ public sealed class FirstMovementOverlay : IMovePreviewOverlay
             c.DrawPath(path, outline);
         }
         c.RestoreToCount(saved);
-        if (Gradient) DrawLegend(c);
-    }
-
-    /// <summary>The colour of a direction on the screen; the hue comes from it with y up.</summary>
-    private static SKColor DirectionColour(double dx, double dy)
-    {
-        var (r, g, b) = FirstMovement.ColorFromHsv(Math.Atan2(-dy, dx) * 180 / Math.PI, 1, 1);
-        return new SKColor(r, g, b);
-    }
-
-    /// <summary>Top left of the view: a ring of the colours, each where an arrow of that colour points on the screen.</summary>
-    private void DrawLegend(SKCanvas c)
-    {
-        const float left = 12, top = 12, radius = 30;
-        using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = SKColors.White, TextAlign = SKTextAlign.Center };
-        var width = Math.Max(96, text.MeasureText(LegendTitle) + 20);
-        using var back = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = new SKColor(0xB8101215) };
-        c.DrawRoundRect(new SKRect(left, top, left + width, top + 104), 8, 8, back);
-        float x = left + width / 2, y = top + 44;
-        using var ring = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 11 };
-        var oval = new SKRect(x - radius, y - radius, x + radius, y + radius);
-        for (int a = -180; a < 180; a += 2)
-        {
-            var angle = a * Math.PI / 180;
-            ring.Color = DirectionColour(Math.Cos(angle), -Math.Sin(angle));
-            c.DrawArc(oval, -a - 1.5f, 3, false, ring);
-        }
-        c.DrawText(LegendTitle, x, top + 94, text);
     }
 }
 
@@ -661,6 +623,12 @@ public sealed class TimingVectorOverlay : IOverlay
     public enum Mode { InitiationAngle, FirstMovement }
     public Mode Show { get; set; } = Mode.FirstMovement;
     public double NeighbourRadius { get; set; } = 8;
+
+    /// <summary>How far the neighbours of a hole are looked for: 1.6 times the larger of the burden and the spacing.</summary>
+    public static double RadiusFor(BlastProject project) => Math.Max(project.Design.Burden, project.Design.Spacing) * 1.6;
+
+    /// <summary>The angle of initiation of every hole, its neighbours looked for as far as the blast wants.</summary>
+    public static TimingVectorOverlay InitiationAngles(BlastProject project) => new() { Show = Mode.InitiationAngle, NeighbourRadius = RadiusFor(project) };
 
     // The analysis of the last holes: rebuilt only when a hole moves or changes time, not on every frame of panning.
     private readonly object _lock = new();

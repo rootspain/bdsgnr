@@ -841,31 +841,43 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
     hideGeometry.IsChecked = true; Pump();
     if (view.Camera.Scale <= wide) throw new Exception($"the blast should fill the plan: scale {wide} to {view.Camera.Scale}");
     if (!w.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "print")) throw new Exception("no print button");
+    // the chips Angle of initiation and Burden relief: each on its own, off at first; the relief under the arrows, the
+    // angles over them, in the window and on the main plan (on through the switch), and a print sheet for each
+    {
+        var angle = w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "show:angle");
+        var relief = w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "show:relief");
+        string Layers(IEnumerable<BlastDesigner.Rendering.IOverlay> list) => string.Join(",", list.Select(o => o.GetType().Name));
+        string Window() => Layers(view.OptionsSource!().Overlays);
+        if (Window() != "FirstMovementOverlay") throw new Exception($"the window should show only the arrows at first: {Window()}");
+        if (!angle.IsEnabled || !relief.IsEnabled) throw new Exception("the chips should be there to turn on");
+        void Click(Button b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+        Click(angle);
+        if (Window() != "FirstMovementOverlay,TimingVectorOverlay" || angle.Foreground != BlastDesigner.App.Services.Look.Accent) throw new Exception($"the angle chip: {Window()}");
+        Click(relief);
+        if (Window() != "BurdenReliefOverlay,FirstMovementOverlay,TimingVectorOverlay") throw new Exception($"both chips: {Window()}");
+        if (Layers(vm.AnalysisOverlays) != "BurdenReliefOverlay,FirstMovementOverlay,TimingVectorOverlay") throw new Exception($"the main plan should take the chips' layers: {Layers(vm.AnalysisOverlays)}");
+        var page = BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage();
+        if (!page.AngleSheet || !page.ReliefSheet) throw new Exception("the print should have a sheet for each chip on");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06g_first_movement_angle_relief.png"));
+        Click(angle);
+        if (Window() != "BurdenReliefOverlay,FirstMovementOverlay" || Layers(vm.AnalysisOverlays) != "BurdenReliefOverlay,FirstMovementOverlay") throw new Exception($"the angle chip off: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
+        Click(relief);
+        if (Window() != "FirstMovementOverlay" || Layers(vm.AnalysisOverlays) != "FirstMovementOverlay") throw new Exception($"both chips off: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
+        if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage() is { AngleSheet: true } or { ReliefSheet: true }) throw new Exception("no extra sheets with the chips off");
+    }
     // the plan keeps its own arrow style; the window's settings show on its chips and size field
     var buttons = w.GetLogicalDescendants().OfType<Button>().ToList();
-    if (buttons.Any(b => (b.Tag as string) == "shape:2")) throw new Exception("the Auto shape is still offered");
+    // arrows only, in one colour: no shape or colour to choose
+    if (buttons.Any(b => b.Tag is string t && (t.StartsWith("shape:") || t.StartsWith("colour:")))) throw new Exception("the shape or colour chips are still there");
     if (w.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "arrowSize").Text != BlastDesigner.App.Services.Loc.F("{0:0.0} m", 1.2)) throw new Exception("the arrows should start at 1.2 m");
-    // one colour first; the gradient colours the arrows by direction and shows its legend
-    var arrows = view.OptionsSource!().Overlays.OfType<BlastDesigner.Rendering.FirstMovementOverlay>().First();
-    if (arrows.Gradient || buttons.First(b => (b.Tag as string) == "colour:0").Foreground != BlastDesigner.App.Services.Look.Accent) throw new Exception("the arrows should start in one colour");
-    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
-    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06c_first_movement_one_colour.png"));
-    buttons.First(b => (b.Tag as string) == "colour:1").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
-    if (!arrows.Gradient) throw new Exception("the gradient chip did not switch");
-    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
-    w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06d_first_movement_gradient.png"));
-    buttons.First(b => (b.Tag as string) == "colour:0").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
-    var triangles = buttons.First(b => (b.Tag as string) == "shape:1");
-    triangles.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
-    if (triangles.Foreground != BlastDesigner.App.Services.Look.Accent || buttons.First(b => (b.Tag as string) == "shape:0").Foreground == BlastDesigner.App.Services.Look.Accent) throw new Exception("shape chip did not switch to triangles");
     var sizeText = w.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "arrowSize");
     var size0 = sizeText.Text;
     buttons.First(b => b.Name == "bigger").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     if (sizeText.Text == size0) throw new Exception($"arrow size stayed {size0}");
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06b_first_movement_window.png"));
-    buttons.First(b => b.Name == "smaller").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-    buttons.First(b => (b.Tag as string) == "shape:0").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    buttons.First(b => b.Name == "smaller").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     w.GetLogicalDescendants().OfType<ToggleSwitch>().First(t => t.Name == "onPlan").IsChecked = false; Pump();
     if (vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.FirstMovementOverlay>().Any()) throw new Exception("arrows left on the plan after switching off");
     // the arrows follow an initiation point moved with its hole, and the hole moved under its point

@@ -647,23 +647,30 @@ public static class AnalysisWindows
     // ---- first movement ---------------------------------------------------------------
 
     static double _firstMovementArrowSize = BlastDesigner.Engine.FirstMovement.DefaultArrowSize;
-    static bool _firstMovementGradient;
-    static FirstMovementOverlay.ArrowShape _firstMovementShape;
     static bool _firstMovementHideGeometry = true;
-    static FirstMovementOverlay? _firstMovementOpen;
+    /// <summary>Puts the layers of the open first-movement window back on the main plan.</summary>
+    static Action? _firstMovementReshow;
     static bool _firstMovementOnPlan;
+    /// <summary>The chips of the window: the angle of initiation and the burden relief over the arrows, each on its own.</summary>
+    static bool _firstMovementAngles, _firstMovementRelief;
 
     /// <summary>Why a blast has no arrows of the first movement.</summary>
     public static string NoFirstMovement(BlastProject p) =>
         Loc.T(BlastDesigner.Engine.FirstMovement.AllAtOnce(p) ? "All holes fire at the same time, the direction cannot be determined." : "No hole is initiated. Add an initiation point and ties, or electronic times.");
 
-    /// <summary>The sheet of the first movement with the choices last made in its window, whether it is open or not.</summary>
+    /// <summary>
+    /// The sheets of the first movement with the choices last made in its window, whether it is open or not: the arrows,
+    /// and a sheet for each chip turned on.
+    /// </summary>
     public static FirstMovementSheet FirstMovementPage(double yaw = 0) => new()
     {
         Title = Loc.T("First movement"),
         HideGeometry = _firstMovementHideGeometry,
         Yaw = yaw,
-        Arrows = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize, Shape = _firstMovementShape, Gradient = _firstMovementGradient, LegendTitle = Loc.T("Colour by direction") }
+        Arrows = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize },
+        AngleSheet = _firstMovementAngles,
+        ReliefSheet = _firstMovementRelief,
+        ReliefLimit = _burdenReliefLimit
     };
 
     /// <summary>
@@ -676,16 +683,27 @@ public static class AnalysisWindows
         // already open: bring it forward and put its arrows back on the plan if another analysis replaced them
         if (Dialogs.ActivateExisting("First movement"))
         {
-            if (_firstMovementOpen is { } open && _firstMovementOnPlan) vm.ShowFirstMovementOnPlan(open, true);
+            if (_firstMovementOnPlan) _firstMovementReshow?.Invoke();
             return;
         }
         var p = vm.Project!;
         Timing.Solve(p);
-        var overlay = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize, Shape = _firstMovementShape, Gradient = _firstMovementGradient, LegendTitle = Loc.T("Colour by direction") };
+        var overlay = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize };
         if (overlay.Arrows(p).Count == 0)
         {
             _ = Dialogs.Info(NoFirstMovement(p));
             return;
+        }
+        // the chips' layers: the relief under the arrows, the angles over them
+        var angles = TimingVectorOverlay.InitiationAngles(p);
+        var relief = new BurdenReliefOverlay { UpperLimit = _burdenReliefLimit, LegendTitle = Loc.T("Burden relief, ms/m") };
+        IOverlay[] Layers(IOverlay arrows, IOverlay angle, IOverlay relief_)
+        {
+            var list = new List<IOverlay>();
+            if (_firstMovementRelief) list.Add(relief_);
+            list.Add(arrows);
+            if (_firstMovementAngles) list.Add(angle);
+            return list.ToArray();
         }
         var view = SecondaryViewport(vm, () =>
         {
@@ -694,23 +712,17 @@ public static class AnalysisWindows
             var drag = vm.View.Preview;
             return new SceneOptions
             {
-                Selection = o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, Overlays = new IOverlay[] { overlay }, HideGeometry = _firstMovementHideGeometry,
+                Selection = o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, Overlays = Layers(overlay, angles, relief), HideGeometry = _firstMovementHideGeometry,
                 MovedEntities = drag.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null, MoveOffset = drag.MoveOffset
             };
         });
         vm.DragPreview += view.Redraw;
         var arrowCount = overlay.Arrows(p).Count;
         var size = new TextBlock { VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center, MinWidth = 54, TextAlignment = TextAlignment.Center, FontFamily = Look.Mono, Foreground = Look.Text, Name = "arrowSize" };
-        var shapeChips = new List<Button>();
-        var colourChips = new List<Button>();
         void Refresh()
         {
             _firstMovementArrowSize = overlay.ArrowSize;
-            _firstMovementGradient = overlay.Gradient;
-            _firstMovementShape = overlay.Shape;
-            for (var i = 0; i < colourChips.Count; i++) Ui.SetChip(colourChips[i], overlay.Gradient == (i == 1));
             size.Text = Loc.F("{0:0.0} m", overlay.ArrowSize);
-            for (var i = 0; i < shapeChips.Count; i++) Ui.SetChip(shapeChips[i], (int)overlay.Shape == i);
             view.Redraw();
             vm.View.Redraw();
         }
@@ -729,28 +741,6 @@ public static class AnalysisWindows
         static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(2, 0, 0, 5) };
         static Control Group(string caption, Control content) => new StackPanel { Margin = new Thickness(0, 0, 22, 6), Children = { Caption(caption), content } };
         static Control IconText(string icon, string text) => Ui.Row(6, Look.Icon(icon, 16, Look.TextSoft), new TextBlock { Text = Loc.T(text), VerticalAlignment = VerticalAlignment.Center });
-
-        // shape: one segmented row of chips
-        var shapes = Ui.Row(6);
-        foreach (var (shapeName, i) in new[] { "Arrows", "Triangles" }.Select((n, i) => (n, i)))
-        {
-            var chip = Ui.Chip(Loc.T(shapeName), () => { overlay.Shape = (FirstMovementOverlay.ArrowShape)i; Refresh(); }, (int)overlay.Shape == i);
-            chip.Height = 32;
-            chip.Tag = "shape:" + i;
-            shapeChips.Add(chip);
-            shapes.Children.Add(chip);
-        }
-
-        // colour: one for all the arrows, or the colour of each direction with its legend on the plan
-        var colours = Ui.Row(6);
-        foreach (var (colourName, gradient) in new[] { ("One colour", false), ("Gradient", true) })
-        {
-            var chip = Ui.Chip(Loc.T(colourName), () => { overlay.Gradient = gradient; Refresh(); }, overlay.Gradient == gradient);
-            chip.Height = 32;
-            chip.Tag = "colour:" + (gradient ? 1 : 0);
-            colourChips.Add(chip);
-            colours.Children.Add(chip);
-        }
 
         // arrow size: − value + in one field-like pill
         var smaller = Ui.Flat(new TextBlock { Text = "−", FontSize = 16 }, Loc.T("Decrease arrow"), () => Resize(-0.2), 32, 30);
@@ -775,11 +765,48 @@ public static class AnalysisWindows
         var viewGroup = new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(1), Child = Ui.Row(0, reset, fit) };
 
         var onPlan = new ToggleSwitch { IsChecked = _firstMovementOnPlan, OnContent = "", OffContent = "", Name = "onPlan", VerticalAlignment = VerticalAlignment.Center };
-        // Same calculation on the main plan, drawn in its usual arrow style (orange line arrows).
+        // Same calculation on the main plan, drawn in its usual arrow style (orange line arrows), with the chips' layers;
+        // the relief there without a legend over the plan's own corner
         var planOverlay = new FirstMovementOverlay { PlanStyle = true };
-        onPlan.IsCheckedChanged += (_, _) => { _firstMovementOnPlan = onPlan.IsChecked == true; vm.ShowFirstMovementOnPlan(planOverlay, _firstMovementOnPlan); };
-        _firstMovementOpen = planOverlay;
-        if (_firstMovementOnPlan) vm.ShowFirstMovementOnPlan(planOverlay, true);
+        var planAngles = TimingVectorOverlay.InitiationAngles(p);
+        var planRelief = new BurdenReliefOverlay { UpperLimit = _burdenReliefLimit, ShowLegend = false };
+        IOverlay[]? shownOnPlan = null;
+        void OnPlan()
+        {
+            // what was put there goes, the layers now chosen come
+            if (shownOnPlan != null) vm.ShowFirstMovementOnPlan(shownOnPlan, false);
+            shownOnPlan = _firstMovementOnPlan ? Layers(planOverlay, planAngles, planRelief) : null;
+            if (shownOnPlan != null) vm.ShowFirstMovementOnPlan(shownOnPlan, true);
+        }
+        onPlan.IsCheckedChanged += (_, _) => { _firstMovementOnPlan = onPlan.IsChecked == true; OnPlan(); };
+        Action reshow = () => { shownOnPlan = null; OnPlan(); };
+        _firstMovementReshow = reshow;
+        if (_firstMovementOnPlan) OnPlan();
+
+        // what is shown over the arrows: independent chips; one with nothing to show is off and says why
+        var shows = Ui.Row(6);
+        void Chip(string text, string tag, Func<bool> on, Action<bool> set, string? none)
+        {
+            Button chip = null!;
+            chip = Ui.Chip(Loc.T(text), () =>
+            {
+                if (none != null) return;
+                set(!on());
+                Ui.SetChip(chip, on());
+                view.Redraw();
+                if (_firstMovementOnPlan) OnPlan();
+            }, on() && none == null);
+            chip.Height = 32;
+            chip.Tag = tag;
+            chip.IsEnabled = none == null;
+            ToolTip.SetTip(chip, none ?? Loc.T(tag == "show:angle" ? "The angle at which each hole is initiated, from the times of its neighbours" : "The burden relief of the triangles between the holes, under the arrows, with its legend"));
+            ToolTip.SetShowOnDisabled(chip, true);
+            shows.Children.Add(chip);
+        }
+        Chip("Angle of initiation", "show:angle", () => _firstMovementAngles, v => _firstMovementAngles = v,
+            angles.Analysis(p).Count == 0 ? NoFirstMovement(p) : null);
+        Chip("Burden relief", "show:relief", () => _firstMovementRelief, v => _firstMovementRelief = v,
+            !BlastDesigner.Engine.BurdenRelief.Valid(relief.Delaunay(p)).Any() ? NoFirstMovement(p) : null);
         var export = new Button
         {
             Content = IconText("export", "Export CSV…"),
@@ -816,7 +843,7 @@ public static class AnalysisWindows
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(14, 10, 14, 4),
-            Child = new WrapPanel { Children = { Group("Shape", shapes), Group("Color", colours), Group("Arrow size", stepper), Group("View", viewGroup) } }
+            Child = new WrapPanel { Children = { Group("Show", shows), Group("Arrow size", stepper), Group("View", viewGroup) } }
         };
 
         // action bar: what the arrows are, and what to do with them
@@ -855,7 +882,7 @@ public static class AnalysisWindows
         var w = Dialogs.ShowWindow("First movement", dock, 900, 640);
         w.MinWidth = 560;
         w.MinHeight = 360;
-        w.Closed += (_, _) => { if (_firstMovementOpen == planOverlay) _firstMovementOpen = null; vm.DragPreview -= view.Redraw; };
+        w.Closed += (_, _) => { if (_firstMovementReshow == reshow) _firstMovementReshow = null; vm.DragPreview -= view.Redraw; };
     }
 
     /// <summary>Upper limit of the burden relief window, kept for the next time it opens (null: the most relief of the blast).</summary>

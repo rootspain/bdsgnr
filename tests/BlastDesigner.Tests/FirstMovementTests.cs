@@ -87,15 +87,11 @@ public class FirstMovementTests
     }
 
     [Fact]
-    public void ArrowShapesAndColourMatchReference()
+    public void ArrowShapeMatchesReference()
     {
-        var small = FirstMovement.SmallArrow(0, 0, 2, 0);
-        Assert.Equal((2.0, 0.0), small[0]);
-        Assert.Equal((-2.0, 1.4), small[1]);
-        Assert.Equal((-2.0, -1.4), small[2]);
-        Assert.Equal(7, FirstMovement.LargeArrow(0, 0, 2, 0).Length);
-        Assert.Equal(((byte)255, (byte)0, (byte)0), FirstMovement.ColorFromHsv(0, 1, 1));
-        Assert.Equal(((byte)0, (byte)255, (byte)255), FirstMovement.ColorFromHsv(180, 1, 1));
+        var arrow = FirstMovement.LargeArrow(0, 0, 2, 0);
+        Assert.Equal(7, arrow.Length);
+        Assert.Equal((2.0, 0.0), arrow[0]);
     }
 
     [Fact]
