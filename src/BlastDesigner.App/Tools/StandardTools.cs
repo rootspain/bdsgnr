@@ -354,7 +354,8 @@ public sealed class TieTool : Tool
         if (Target(p) is not { } hit) return;
         // the last hole again finishes the entry; the next click starts a new chain
         if (hit.Id == _from.Id) { Finish(); return; }
-        Connect(_from, hit);
+        // refused: the entry stays where it was
+        if (!Connect(_from, hit)) return;
         GoOnOrFinish(hit, p);
     }
 
@@ -379,11 +380,19 @@ public sealed class TieTool : Tool
     /// are then pointed away from the initiation point, whichever way the line was drawn (<see cref="Timing.OrientTiesFromInitiation"/>),
     /// and so are the ties they join to it: those of an entry so far and others no point reached before.
     /// </summary>
-    private void Connect(Entity from, Entity to)
+    /// <returns>False when no tie was made: a hole with an electronic detonator it goes to has a tie already.</returns>
+    private bool Connect(Entity from, Entity to)
     {
         var chain = new List<Guid> { from.Id };
         if (Vm.TieChain) chain.AddRange(HolesOnTheWay(from, to).Select(h => h.Id));
         chain.Add(to.Id);
+        // a chain of holes with an electronic detonator: a tie only to its start, never branching, never a ring
+        for (int i = 1; i < chain.Count; i++)
+            if (RouteNumbers.Refusal(Vm.Project!, chain[i - 1], chain[i]) is { } why)
+            {
+                Vm.SetStatus(Loc.F(why.Format, why.Hole));
+                return false;
+            }
         // a user-defined delay goes on the tie itself, without a product
         var delay = Vm.ActiveTieDelayMs;
         var connector = delay == null ? Vm.ActiveConnector : null;
@@ -391,9 +400,12 @@ public sealed class TieTool : Tool
         {
             var reached = Timing.ReachedTies(pr);
             for (int i = 1; i < chain.Count; i++) Timing.Connect(pr, chain[i - 1], chain[i], connector, delay);
+            // the route numbers in the order the holes were tied, before the ties are turned from the initiation point
+            RouteNumbers.Number(pr, chain.Zip(chain.Skip(1)));
             Timing.OrientTiesFromInitiation(pr, pr.Ties.Select(t => t.Id).Where(id => !reached.Contains(id)).ToHashSet());
         });
         if (chain.Count > 2) Vm.SetStatus(Loc.F("{0} ties added through the holes on the line", chain.Count - 1));
+        return true;
     }
 
     /// <summary>Shown holes whose collar lies within the pick radius of the screen line between the two, ordered along it.</summary>
@@ -442,8 +454,7 @@ public sealed class TieTool : Tool
         // Drag release on another hole creates the tie too, and finishes or goes on like a click.
         if (_from != null && Target(p) is Hole h && h.Id != _from.Id && Preview.Lines.Count > 0)
         {
-            Connect(_from, h);
-            GoOnOrFinish(h, p);
+            if (Connect(_from, h)) GoOnOrFinish(h, p);
         }
     }
 

@@ -583,13 +583,18 @@ public sealed class ViewState
     /// </summary>
     public List<HoleLabel> LabelsLeft { get; set; } = HoleLabelLayout.DefaultLeft.ToList();
     public List<HoleLabel> LabelsRight { get; set; } = HoleLabelLayout.DefaultRight.ToList();
+    /// <summary>
+    /// The colours chosen for hole labels (ARGB), on the plan, in 3D and in print; a label not in it keeps its own colour
+    /// (the number blue, the times red, the others the colour of the text).
+    /// </summary>
+    public Dictionary<HoleLabel, uint> LabelColors { get; set; } = new();
 }
 
 /// <summary>A value written next to a hole on the plan.</summary>
 public enum HoleLabel
 {
     Number, Length, Diameter, Elevation, Angle, Bearing, Temperature, ExplosiveMass, DeckMasses, DeckSequence, DetonatorId, Type,
-    HoleOrder, SurfaceTime, InholeDelay, HoleTime
+    HoleOrder, SurfaceTime, InholeDelay, HoleTime, RouteNumber
 }
 
 /// <summary>Which side of the collar each hole label is on and in what order, and whether it is switched on.</summary>
@@ -598,7 +603,7 @@ public static class HoleLabelLayout
     public static readonly HoleLabel[] DefaultLeft =
     {
         HoleLabel.HoleOrder, HoleLabel.HoleTime, HoleLabel.SurfaceTime, HoleLabel.InholeDelay, HoleLabel.DeckSequence,
-        HoleLabel.DetonatorId, HoleLabel.Type, HoleLabel.Temperature
+        HoleLabel.DetonatorId, HoleLabel.RouteNumber, HoleLabel.Type, HoleLabel.Temperature
     };
     public static readonly HoleLabel[] DefaultRight =
     {
@@ -652,6 +657,7 @@ public static class HoleLabelLayout
         HoleLabel.DeckMasses => HoleLabelMode.DeckMasses,
         HoleLabel.DeckSequence => HoleLabelMode.DeckSequence,
         HoleLabel.DetonatorId => HoleLabelMode.DetonatorId,
+        HoleLabel.RouteNumber => HoleLabelMode.RouteNumber,
         HoleLabel.Type => HoleLabelMode.Type,
         _ => null
     };
@@ -694,7 +700,9 @@ public enum HoleLabelMode
     DeckMasses = 512,
     /// <summary>Order in which the decks of the hole fire (top to bottom).</summary>
     DeckSequence = 1024,
-    Temperature = 2048
+    Temperature = 2048,
+    /// <summary>Place of a hole with an electronic detonator in its chain of ties (<see cref="Hole.RouteNumber"/>).</summary>
+    RouteNumber = 4096
 }
 
 public enum TimingLabelMode

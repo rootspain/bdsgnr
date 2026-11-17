@@ -989,7 +989,7 @@ public sealed class Inspector : DockPanel
             cb.IsCheckedChanged += (_, _) => { if (cb.IsChecked != get(p.View)) _vm.ToggleView(toggle); };
             Add(cb);
         }
-        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Show"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
+        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Show"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         grid = Columns();
         Check("Ties", v => v.ShowTies, v => v.ShowTies = !v.ShowTies);
         Check("Rows", v => v.ShowRows, v => v.ShowRows = !v.ShowRows);
@@ -1003,7 +1003,7 @@ public sealed class Inspector : DockPanel
         _visibility.Children.Add(_labelHost);
         BuildLabelColumns();
 
-        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Holes"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
+        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Holes"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         grid = Columns();
         Check("Hole track", v => !v.CollarsOnly, v => v.CollarsOnly = !v.CollarsOnly, ui: true,
             tip: "Plan and 3D: the line from collar to toe with a dot at the toe. Shows the direction and inclination of the holes; display only, the calculations use the hole data whether it is on or off.");
@@ -1024,7 +1024,7 @@ public sealed class Inspector : DockPanel
         Check("MWD profile", v => v.ShowProfile, v => v.ShowProfile = !v.ShowProfile, ui: true,
             tip: "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.");
         _visibility.Children.Add(grid);
-        _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole types"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
+        _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole types"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         foreach (var t in p.Design.HoleTypes)
         {
             var idx = t.Index;
@@ -1075,6 +1075,7 @@ public sealed class Inspector : DockPanel
         [HoleLabel.DeckSequence] = ("Deck sequence", "Plan and 3D: the firing order of the decks in the hole, top to bottom (\"2-1\" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes."),
         [HoleLabel.InholeDelay] = ("In-hole delay", "Plan and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time."),
         [HoleLabel.SurfaceTime] = ("Surface time", "Plan and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time."),
+        [HoleLabel.RouteNumber] = ("Route no.", "Plan and 3D: \"R\" and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted takes the numbers of the holes after it back."),
         [HoleLabel.DetonatorId] = ("Detonator ID", "Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator."),
         [HoleLabel.HoleTime] = ("Hole time", "Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it."),
         [HoleLabel.Type] = ("Hole type", "Plan and 3D: \"T\" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.")
@@ -1095,7 +1096,7 @@ public sealed class Inspector : DockPanel
     {
         var reset = Ui.Chip(Loc.Ui("Default order"), () => ChangeLabels(HoleLabelLayout.Reset), tip: Loc.Ui("Put every label back on its usual side and in its usual order"));
         reset.Height = 24;
-        var title = new TextBlock { Text = Loc.Ui("Hole labels"), Foreground = Look.Faint, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        var title = new TextBlock { Text = Loc.Ui("Hole labels"), Foreground = Look.Blue, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
         var hint = new TextBlock
         {
             Text = Loc.Ui("Drag a label to the other side or along its side: the order is the order at the hole, top to bottom."),
@@ -1194,7 +1195,32 @@ public sealed class Inspector : DockPanel
         var check = new CheckBox { IsChecked = on, MinWidth = 0, MinHeight = 0, Width = 20, Height = 22, Padding = new Thickness(0), Margin = new Thickness(0, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetName(check, Loc.Ui(name));
         check.IsCheckedChanged += (_, _) => { if (check.IsChecked != HoleLabelLayout.IsShown(_vm.Project!.View, label)) ToggleLabel(label); };
-        var dot = new Border { Width = 6, Height = 6, CornerRadius = new CornerRadius(3), Background = LabelColor(label), Opacity = on ? 1 : 0.4, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center };
+        // the colour of the label: a click picks one, the right button puts its own back
+        var own = view.LabelColors.TryGetValue(label, out var chosen) ? chosen : (uint?)null;
+        var dot = new Button
+        {
+            Name = "labelColour" + label,
+            Width = 14, Height = 14, MinWidth = 0, MinHeight = 0, Padding = new Thickness(0), CornerRadius = new CornerRadius(7),
+            Background = own is uint c0 ? new SolidColorBrush(Color.FromUInt32(c0)) : LabelColor(label),
+            BorderBrush = own != null ? Look.Text : Look.LineStrong, BorderThickness = new Thickness(1),
+            Opacity = on ? 1 : 0.5, Margin = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        uint Current() => own ?? (LabelColor(label) is ISolidColorBrush b ? b.Color.ToUInt32() : 0xFFC9CFD6);
+        void SetColour(uint? c)
+        {
+            _vm.SetHoleLabelColor(label, c);
+            Avalonia.Threading.Dispatcher.UIThread.Post(BuildLabelColumns);
+        }
+        dot.Flyout = ColourFlyout.Make(Current, c => SetColour(c));
+        ToolTip.SetTip(dot, Loc.Ui(own != null ? "The colour of the label: click to change it, right click for its own colour" : "The colour of the label: click to change it"));
+        AutomationProperties.SetName(dot, Loc.Ui("Label colour"));
+        if (own != null)
+        {
+            var reset = new MenuItem { Header = Loc.Ui("Default colour"), Name = "labelColourReset" + label };
+            reset.Click += (_, _) => SetColour(null);
+            dot.ContextMenu = new ContextMenu { Items = { reset } };
+        }
         var text = new TextBlock { Text = Loc.Ui(name), FontSize = 12, Foreground = on ? Look.Text : Look.Muted, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3) };
         var grip = new TextBlock { Text = "⋮⋮", FontSize = 9, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 1, 0) };
         var line = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,*") };
@@ -1320,7 +1346,7 @@ public sealed class Inspector : DockPanel
     /// <summary>One check box per object kind with its count, and quick isolate / hide / show-all actions.</summary>
     private void BuildObjectVisibility(BlastProject p)
     {
-        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Objects"), Foreground = Look.Faint, FontSize = 11, Margin = new Thickness(0, 4) });
+        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Objects"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 4) });
         foreach (var kind in p.Entities.GroupBy(e => e.KindName).OrderBy(g => g.Key))
         {
             var ids = kind.Select(e => e.Id).ToList();

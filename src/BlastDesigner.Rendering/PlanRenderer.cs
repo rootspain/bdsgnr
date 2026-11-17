@@ -1625,6 +1625,9 @@ public static class PlanRenderer
         return result.ToArray();
     }
 
+    /// <summary>Length of the head of a tie's arrow on the screen, px.</summary>
+    public const float TieArrowHead = 11;
+
     private static void DrawTies(SKCanvas c, Camera cam, BlastProject project, IEnumerable<TieEntity> ties, IReadOnlyDictionary<Guid, Entity> byId, SceneOptions opt, SKPaint text)
     {
         static Vec3? PositionOf(IReadOnlyDictionary<Guid, Entity> byId, Guid id) => byId.TryGetValue(id, out var e) ? e switch
@@ -1640,7 +1643,8 @@ public static class PlanRenderer
         var arrows = new LineMesh();
         var labels = new TextBatch();
         float w = (float)cam.Width, h = (float)cam.Height;
-        const float head = 8;
+        // the head of the arrow, px: large enough to tell the way of a tie at a glance
+        const float head = TieArrowHead;
         {
             foreach (var t in ties)
             {
@@ -1664,7 +1668,8 @@ public static class PlanRenderer
                 arrows.Triangle(col, new SKPoint(x1, y1),
                     new SKPoint((float)(x1 - head * Math.Cos(ang - 0.4)), (float)(y1 - head * Math.Sin(ang - 0.4))),
                     new SKPoint((float)(x1 - head * Math.Cos(ang + 0.4)), (float)(y1 - head * Math.Sin(ang + 0.4))));
-                if (cam.Scale > 4)
+                // the ties of electronic detonators (EBS) carry no delay: no number on them
+                if (cam.Scale > 4 && product?.Kind != ProductKind.ElectronicDetonator)
                 {
                     var (x, y) = cam.ToScreen(Vec3.Lerp(a, b, 0.5));
                     labels.Add(Timing.TieDelay(project, t, a, b).ToString("0"), x + 2, y - 2, col, 9);
@@ -1721,6 +1726,9 @@ public static class PlanRenderer
             c.DrawCircle(tx, ty, 1.5f, fill);
         }
     }
+
+    /// <summary>The ring round a selected hole: how far out of the collar, and how thick, px.</summary>
+    public const float SelectedRingGap = 4, SelectedRingWidth = 2;
 
     private static void DrawHole(SKCanvas c, Camera cam, BlastProject project, Hole h, SceneOptions opt, SKPaint stroke, SKPaint fill)
     {
@@ -1780,6 +1788,14 @@ public static class PlanRenderer
             stroke.StrokeWidth = 1.5f;
             c.DrawCircle(x, y, r + 3, stroke);
         }
+        // a selected hole: a ring round the collar in the colour of the selection, seen at any zoom; outside the ring of
+        // the exceptions when there is one
+        if (selected)
+        {
+            stroke.Color = opt.SelectionColor;
+            stroke.StrokeWidth = SelectedRingWidth;
+            c.DrawCircle(x, y, r + (h.Exceptions != HoleException.None ? 6.5f : SelectedRingGap), stroke);
+        }
         if (h.Locked)
         {
             fill.Color = new SKColor(0xFF6B7280);
@@ -1798,6 +1814,8 @@ public static class PlanRenderer
         if (layer is { ShowText: false }) return;
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
         var selected = opt.Selection.Contains(h.Id);
+        // the labels of a selected hole stand clear of its ring
+        if (selected) r += SelectedRingGap + SelectedRingWidth / 2 + (h.Exceptions != HoleException.None ? 2.5f : 0);
         text.Color = selected ? opt.SelectionColor : Ink;
         var size = Math.Clamp(view.HoleLabelFontSize, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize);
         text.TextSize = size;
@@ -1813,7 +1831,9 @@ public static class PlanRenderer
             foreach (var l in side)
                 if (HoleLabelLayout.IsShown(view, l))
                     foreach (var t in LabelText(project, h, l))
-                        lines.Add((t, l == HoleLabel.Number ? number : l is HoleLabel.SurfaceTime or HoleLabel.InholeDelay or HoleLabel.HoleTime ? timing : ink));
+                        lines.Add((t, selected ? opt.SelectionColor
+                            : view.LabelColors.TryGetValue(l, out var own) ? Adapt(new SKColor(own))
+                            : l == HoleLabel.Number ? number : l is HoleLabel.SurfaceTime or HoleLabel.InholeDelay or HoleLabel.HoleTime ? timing : ink));
             // the calculated properties chosen in Edit ▸ Calculations go under the labels of the right side
             if (onRight && view.CalcLabels is { Count: > 0 } calc && !h.IsDummy)
                 foreach (var id in calc) lines.Add((CalcService.Format(project, id, h), ink));
@@ -1850,6 +1870,7 @@ public static class PlanRenderer
             case HoleLabel.DeckSequence: if (DeckSequence(project, h) is string seq) yield return F("Decks: {0}", seq); break;
             case HoleLabel.Temperature: if (h.Temperature is double temp) yield return $"{temp:0} °C"; break;
             case HoleLabel.DetonatorId: if (!string.IsNullOrWhiteSpace(h.DetonatorId)) yield return h.DetonatorId; break;
+            case HoleLabel.RouteNumber: if (h.RouteNumber is int route) yield return F("R {0}", route); break;
             case HoleLabel.Type: yield return $"T{h.HoleType}"; break;
             case HoleLabel.HoleOrder: if (h.FiringSequence is int sequence) yield return sequence.ToString(); break;
             case HoleLabel.SurfaceTime: if (h.SurfaceTimeMs is double s) yield return $"{s:0}"; break;

@@ -3411,3 +3411,13 @@ The angle at which each hole is initiated, from the times of its neighbours	Уг
 The burden relief of the triangles between the holes, under the arrows, with its legend	Разгрузка ЛНС по треугольникам между скважинами, под стрелками, с легендой
 ui:Sheet of the angle of initiation	Лист угла инициирования
 ui:Sheet of the burden relief	Лист разгрузки ЛНС
+R {0}	М {0}
+Route number	Марш. номер
+ui:Route no.	Марш. номер
+ui:Plan and 3D: "R" and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted takes the numbers of the holes after it back.	План и 3D: «М» и маршрутный номер скважины с электронным детонатором — её место в цепочке связей по порядку связывания: 1 — первая скважина, каждая следующая на 1 больше той, от которой к ней провели связь. При удалении связи номера у всех последующих скважин сбрасываются.
+Hole {0} has an electronic detonator: a tie comes into it already, or this one would close a ring. A tie goes to the start of a chain only	У скважины {0} электронный детонатор: в неё уже входит связь или эта связь замкнёт кольцо. Связь можно провести только к началу цепочки
+ui:Default colour	Цвет по умолчанию
+ui:Label colour	Цвет подписи
+ui:The colour of the label: click to change it, right click for its own colour	Цвет подписи: щелчок — изменить, правый щелчок — вернуть цвет по умолчанию
+ui:The colour of the label: click to change it	Цвет подписи: щелчок — изменить
+Hole {0} has an electronic detonator and a tie going out of it already: a chain does not branch	У скважины {0} электронный детонатор, и из неё уже выходит связь: цепочка не ветвится

@@ -176,6 +176,8 @@ public sealed class ProgramSettings
     public double CollarSizePixels { get; set; } = 6;
     /// <summary>Font size of the hole labels last chosen: a new blast starts with it, the project keeps its own.</summary>
     public int HoleLabelFontSize { get; set; } = BlastDesigner.Domain.Model.ViewState.DefaultHoleLabelFontSize;
+    /// <summary>Colours of the hole labels last chosen: a new blast starts with them, the project keeps its own.</summary>
+    public Dictionary<BlastDesigner.Domain.Model.HoleLabel, uint> HoleLabelColors { get; set; } = new();
     public bool ShowCoordinatesBox { get; set; } = true;
     /// <summary>The names of the ribbon groups upright at the start of each group; off — under the buttons, as before.</summary>
     public bool RibbonCaptionsAside { get; set; } = true;

@@ -6,7 +6,7 @@ namespace BlastDesigner.Rendering;
 /// Labels collected for one draw per colour and size. Hundreds of hole numbers and tie delays drawn one by one took a
 /// large part of a frame; as one text blob they are a single draw. Glyphs are placed by their advances, as DrawText does.
 /// </summary>
-internal sealed class TextBatch
+public sealed class TextBatch
 {
     private readonly Dictionary<(SKColor Color, float Size), List<(string Text, float X, float Y)>> _groups = new();
 
@@ -19,6 +19,18 @@ internal sealed class TextBatch
         if (string.IsNullOrEmpty(text)) return;
         if (!_groups.TryGetValue((color, size), out var list)) _groups[(color, size)] = list = new();
         list.Add((text, x, y));
+    }
+
+    /// <summary>
+    /// Whether text of the colour reads better outlined in black than in white: by the contrast ratio of the relative
+    /// luminance (sRGB made linear), so that a light pink or violet, low in green, still gets the black outline.
+    /// </summary>
+    public static bool DarkOutline(SKColor c)
+    {
+        static double Lin(byte v) { var x = v / 255.0; return x <= 0.04045 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4); }
+        var l = 0.2126 * Lin(c.Red) + 0.7152 * Lin(c.Green) + 0.0722 * Lin(c.Blue);
+        // contrast with black (l + 0.05) / 0.05 against contrast with white 1.05 / (l + 0.05)
+        return (l + 0.05) * (l + 0.05) > 0.05 * 1.05;
     }
 
     /// <summary>
@@ -60,7 +72,7 @@ internal sealed class TextBatch
             if (blob == null) continue;
             if (halo)
             {
-                var light = (0.2126 * col.Red + 0.7152 * col.Green + 0.0722 * col.Blue) / 255 > 0.45;
+                var light = DarkOutline(col);
                 using var outline = paint.Clone();
                 outline.Style = SKPaintStyle.Stroke;
                 outline.StrokeJoin = SKStrokeJoin.Round;

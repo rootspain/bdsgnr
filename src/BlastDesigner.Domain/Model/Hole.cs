@@ -79,6 +79,11 @@ public sealed class Hole : Entity
     public bool ElectronicTimeManual { get; set; }
     /// <summary>Identifier of the logged electronic detonator.</summary>
     public string DetonatorId { get; set; } = string.Empty;
+    /// <summary>
+    /// Route number of a hole with an electronic detonator: its place in its chain of ties, in the order they were made
+    /// (1 the first); null when it is on no chain. Set by the ties made, see RouteNumbers of the engine.
+    /// </summary>
+    public int? RouteNumber { get; set; }
     public Guid? RowId { get; set; }
     /// <summary>The pattern grid the hole was laid out on (<see cref="HolePattern"/>); null for a hole of its own.</summary>
     public Guid? PatternId { get; set; }

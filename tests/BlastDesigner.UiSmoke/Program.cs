@@ -4675,6 +4675,146 @@ Step("tie tool: a line from one hole to another ties every hole on the way, in o
     vm.Undo();
     vm.SelectTool();
 });
+Step("tie tool: holes with an electronic detonator take route numbers in the order they are tied, a tie only to the start of a chain, no branch, no ring; a tie deleted takes the numbers after it back", () =>
+{
+    var x0 = vm.Project!.Holes.Max(h => h.Collar.X) + 160;
+    var y0 = vm.Project.Holes.Min(h => h.Collar.Y);
+    var ids = new List<Guid>();
+    vm.Change("Smoke electronic holes", p =>
+    {
+        var det = p.Products.First(d => d.Kind == ProductKind.ElectronicDetonator).Id;
+        var explosive = p.Products.First(e => e.IsExplosive).Id;
+        for (int i = 0; i < 4; i++)
+        {
+            var h = new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + i * 6, y0 + (i == 3 ? 8 : 0), 100), Label = "E" + (i + 1), Length = 10 };
+            h.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = explosive, Primers = { new Primer { Depth = 9.5, DetonatorId = det } } });
+            p.Add(h); ids.Add(h.Id);
+        }
+    });
+    vm.Doc!.Select(ids); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
+    vm.SetTool(new TieTool(vm)); Pump();
+    void Click(Guid id, bool shift = false)
+    {
+        var h = (Hole)vm.Project!.FindEntity(id)!;
+        var (x, y) = vm.View.Camera.ToScreen(h.Collar);
+        vm.ActiveTool!.PointerMoved(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar });
+        vm.ActiveTool.PointerPressed(new ToolPointer { X = x, Y = y, World = h.Collar, Snapped = h.Collar, Left = true, ClickCount = 1, Modifiers = shift ? Avalonia.Input.KeyModifiers.Shift : Avalonia.Input.KeyModifiers.None });
+        Pump();
+    }
+    int? N(int i) => ((Hole)vm.Project!.FindEntity(ids[i])!).RouteNumber;
+    try
+    {
+        // E1 → E2 → E3, one entry with Shift: 1, 2, 3
+        Click(ids[0]); Click(ids[1], shift: true); Click(ids[2]);
+        if (N(0) != 1 || N(1) != 2 || N(2) != 3) throw new Exception($"route numbers {N(0)}, {N(1)}, {N(2)} instead of 1, 2, 3");
+        // E4 → E2: a tie comes into E2, no other one
+        var ties = vm.Project.Ties.Count();
+        Click(ids[3]); Click(ids[1]);
+        if (vm.Project.Ties.Count() != ties) throw new Exception("a tie was made to a hole with an electronic detonator that has a tie coming in");
+        vm.ActiveTool!.Cancel();
+        // E1 → E4: a tie goes out of E1 to E2 already, the chain does not branch
+        Click(ids[0]); Click(ids[3]);
+        if (vm.Project.Ties.Count() != ties || N(3) != null) throw new Exception("a chain branched: a second tie went out of a hole with an electronic detonator");
+
+        vm.ActiveTool!.Cancel();
+        // from the last hole of the chain back to its first: refused too
+        Click(ids[2]); Click(ids[0]);
+        if (vm.Project.Ties.Count() != ties) throw new Exception("the chain was closed from its last hole back to its first");
+        vm.ActiveTool!.Cancel();
+        // back between two holes tied, E2 → E1: refused, the tie keeps its direction
+        Click(ids[1]); Click(ids[0]);
+        if (!vm.Project.Ties.Any(t => t.FromId == ids[0] && t.ToId == ids[1]) || vm.Project.Ties.Any(t => t.FromId == ids[1] && t.ToId == ids[0])) throw new Exception("a tie back between two holes tied was made");
+        vm.ActiveTool!.Cancel();
+        // E4 → E1, the start of the chain: allowed, and the chain goes on from E4
+        Click(ids[3]); Click(ids[0]);
+        if (vm.Project.Ties.Count() != ties + 1 || N(3) != 1 || N(0) != 2 || N(1) != 3 || N(2) != 4) throw new Exception($"the end of a chain to the start of another: {N(3)}, {N(0)}, {N(1)}, {N(2)} instead of 1, 2, 3, 4");
+        vm.Undo(); Pump();
+        if (N(3) != null || N(0) != 1 || N(2) != 3) throw new Exception("undo did not bring the numbers back");
+        if (N(3) != null) throw new Exception("the refused tie numbered its start");
+        vm.ActiveTool!.Cancel();
+        // the label: Route no. among the hole labels of the Visibility tab, its section names in blue
+        window.ShowInspectorTab(2); Pump();
+        var title = window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Hole labels")) ?? throw new Exception("no Hole labels section");
+        if (title.Foreground != BlastDesigner.App.Services.Look.Blue) throw new Exception("the section names of the Visibility tab should be blue");
+        var route = window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => Avalonia.Automation.AutomationProperties.GetName(c) == BlastDesigner.App.Services.Loc.Ui("Route no.")) ?? throw new Exception("no Route no. among the hole labels");
+        route.IsChecked = true; Pump();
+        if (!vm.Project.View.HoleLabels.HasFlag(HoleLabelMode.RouteNumber)) throw new Exception("the Route no. label did not switch on");
+        vm.Doc.Select(ids); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "50b_route_numbers.png"));
+        // the tie E2 → E3 deleted: E3 loses its number, E1 and E2 keep theirs
+        var tie = vm.Project.Ties.First(t => (t.FromId == ids[1] && t.ToId == ids[2]) || (t.FromId == ids[2] && t.ToId == ids[1])).Id;
+        vm.Change("Delete", p => p.Entities.RemoveAll(e => e.Id == tie)); Pump();
+        if (N(0) != 1 || N(1) != 2 || N(2) != null) throw new Exception($"after the tie deleted: {N(0)}, {N(1)}, {N(2)} instead of 1, 2, none");
+        vm.Undo(); Pump();
+        if (N(2) != 3) throw new Exception("undo did not bring the number back");
+        route.IsChecked = false; Pump();
+    }
+    finally
+    {
+        window.ShowInspectorTab(0);
+        vm.SelectTool(); Pump();
+    }
+});
+Step("a selected hole has a ring round its collar in the colour of the selection", () =>
+{
+    var hole = vm.Project!.Holes.First(h => !h.IsDummy && h.Exceptions == HoleException.None);
+    vm.Doc!.Select(new[] { hole.Id }); vm.ZoomAll(); Pump();
+    int Ring()
+    {
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        using var frame = window.CaptureRenderedFrame()!;
+        using var buffer = frame.Lock();
+        var (x, y) = vm.View.Camera.ToScreen(hole.Collar);
+        var r = Math.Max(settings.CollarSizePixels / 2, hole.RadiusM * vm.View.Camera.Scale) + BlastDesigner.Rendering.PlanRenderer.SelectedRingGap;
+        var want = settings.SelectionColor;
+        var hits = 0;
+        for (int i = 0; i < 16; i++)
+        {
+            var a = i * Math.PI / 8;
+            var at = vm.View.TranslatePoint(new Avalonia.Point(x + r * Math.Cos(a), y + r * Math.Sin(a)), window)!.Value;
+            var px = (uint)System.Runtime.InteropServices.Marshal.ReadInt32(buffer.Address, (int)at.Y * buffer.RowBytes + (int)at.X * 4);
+            // RGBA in memory (red the lowest byte), the colour ARGB: close to the selection colour in each channel
+            int B(uint c, int sh) => (int)((c >> sh) & 0xFF);
+            if (Math.Abs(B(px, 0) - B(want, 16)) < 60 && Math.Abs(B(px, 8) - B(want, 8)) < 60 && Math.Abs(B(px, 16) - B(want, 0)) < 60) hits++;
+        }
+        return hits;
+    }
+    var selected = Ring();
+    window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "50d_selected_hole.png"));
+    vm.Doc.ClearSelection(); Pump();
+    var plain = Ring();
+    if (selected < 10 || selected <= plain + 6) throw new Exception($"the ring of a selected hole is not seen: {selected} of 16 points in its colour, {plain} unselected");
+    vm.ZoomAll(); Pump();
+});
+Step("hole label colours: the dot of a label picks its colour, kept in the project and in the settings for a new blast; right click puts its own back", () =>
+{
+    window.ShowInspectorTab(2); Pump();
+    Button Dot() => window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "labelColourNumber") ?? throw new Exception("no colour dot on the Hole number label");
+    if (Dot().Flyout == null) throw new Exception("the colour dot opens no colour picker");
+    var project = vm.Project!;
+    try
+    {
+        vm.SetHoleLabelColor(HoleLabel.Number, 0xFF16A34A); Pump(); Pump();
+        if (project.View.LabelColors.GetValueOrDefault(HoleLabel.Number) != 0xFF16A34A) throw new Exception("the colour is not in the project");
+        if (settings.HoleLabelColors.GetValueOrDefault(HoleLabel.Number) != 0xFF16A34A) throw new Exception("the colour is not in the settings");
+        if (Dot().Background is not Avalonia.Media.ISolidColorBrush { Color: var c } || c.ToUInt32() != 0xFF16A34A || Dot().ContextMenu == null) throw new Exception("the dot does not show the colour chosen, or offers no way back");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "50c_label_colour.png"));
+        // its own colour back
+        Dot().ContextMenu!.Items.OfType<MenuItem>().First().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(MenuItem.ClickEvent)); Pump(); Pump();
+        if (project.View.LabelColors.ContainsKey(HoleLabel.Number) || settings.HoleLabelColors.ContainsKey(HoleLabel.Number)) throw new Exception("Default colour did not put the label's own colour back");
+        // a new blast starts with the colours last chosen
+        vm.SetHoleLabelColor(HoleLabel.Length, 0xFFDC2626); Pump();
+        var doc = vm.Doc;
+        vm.NewSilent(); Pump();
+        if (vm.Project!.View.LabelColors.GetValueOrDefault(HoleLabel.Length) != 0xFFDC2626) throw new Exception("a new blast did not take the colours of the settings");
+        vm.SetHoleLabelColor(HoleLabel.Length, null);
+        vm.Attach(doc!); Pump();
+        vm.SetHoleLabelColor(HoleLabel.Length, null); Pump();
+    }
+    finally { window.ShowInspectorTab(0); Pump(); }
+});
 Step("select tool: a selected row of holes is dragged with the mouse on the plan", () =>
 {
     vm.SelectTool(); Pump();
@@ -4904,7 +5044,13 @@ Step("the Ties button opens the initiation catalogue, whose position goes to the
     Pump();
     if (win.Position != left) throw new Exception($"the catalogue opened at {win.Position}, not where it was left ({left})");
     if (settings.Window[TiePaletteWindow.PositionKey] != $"{left.X},{left.Y}") throw new Exception("opening the catalogue changed its saved place: " + settings.Window[TiePaletteWindow.PositionKey]);
-    win.Close(); vm.SelectTool();
+    win.Close(); vm.SelectTool(); Pump();
+    // the key T does what the button does: the tool and the catalogue
+    vm.View.Focus(); Pump();
+    window.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.T }); Pump();
+    var byKey = BlastDesigner.App.Services.Dialogs.LastShown;
+    if (vm.ActiveTool is not TieTool || byKey == null || !byKey.IsVisible || byKey.Title != BlastDesigner.App.Services.Loc.T(TiePaletteWindow.Title)) throw new Exception("the key T should give the tie tool and the catalogue, as the button does");
+    byKey.Close(); vm.SelectTool();
 });
 Step("initiation catalogue: Type → Family → Variant, user-defined delay, the window stays put", () =>
 {

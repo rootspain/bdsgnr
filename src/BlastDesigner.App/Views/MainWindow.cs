@@ -705,7 +705,8 @@ public sealed class MainWindow : Window
             Key.R => _vm.RowTool,
             Key.P => _vm.PatternTool,
             Key.L => _vm.LoadingTool,
-            Key.T => () => _vm.SetTool(new TieTool(_vm)),
+            // as the Ties button: the tool with the initiation catalogue
+            Key.T => _vm.TieToolWithPalette,
             Key.I => () => _vm.InitiationPointTool(false),
             Key.E => _vm.SetTimeTool,
             Key.X => () => AnalysisWindows.SectionTool(_vm),

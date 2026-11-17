@@ -36,6 +36,27 @@ public sealed partial class MainViewModel
         Doc.NotifyViewChanged();
     }
 
+    /// <summary>
+    /// Colour of a hole label (null: its own colour back): kept in the project and, for the next new blast, in the
+    /// settings.
+    /// </summary>
+    public void SetHoleLabelColor(HoleLabel label, uint? colour)
+    {
+        if (Doc == null) return;
+        if (colour is uint c)
+        {
+            ViewSettings.LabelColors[label] = c | 0xFF000000;
+            Settings.HoleLabelColors[label] = c | 0xFF000000;
+        }
+        else
+        {
+            ViewSettings.LabelColors.Remove(label);
+            Settings.HoleLabelColors.Remove(label);
+        }
+        Settings.Save();
+        Doc.NotifyViewChanged();
+    }
+
     private static readonly System.Reflection.PropertyInfo[] FlagProperties =
         typeof(ViewState).GetProperties().Where(p => p.CanWrite && (p.PropertyType == typeof(bool) || p.PropertyType.IsEnum)).ToArray();
 

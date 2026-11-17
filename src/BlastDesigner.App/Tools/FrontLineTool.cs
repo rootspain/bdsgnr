@@ -401,6 +401,8 @@ public sealed class FrontLineTool : Tool
         var from = shown[^2];
         var to = shown[^1];
         var d = (to - from).WithZ(0);
+        // the cursor on the last point: no segment to measure
+        if (d.Length2D < Chevron.MinLength) { View.Redraw(); return; }
         var bearing = (Math.Atan2(d.X, d.Y) / GeoMath.Deg + 360) % 360;
         var label = $"{bearing:0.0}° · {d.Length2D:0.00} m";
         if (shown.Count == 3 && d.Length2D > 1e-9) label = $"{Chevron.AngleDeg(shown):0.0}° · {d.Length2D:0.00} m";

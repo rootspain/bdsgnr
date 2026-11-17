@@ -9,6 +9,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.7 — 2026-11-16
 
 ### Changed
+- **A selected hole** stands out more: a ring in the colour of the selection round its collar, its labels moved clear of
+  it. The arrows of the ties are larger.
+- **Visibility tab:** the section names are blue. **Ties of the EBS detonators type** are drawn without the delay number.
 - **Deleting an EBS timing front or an opening point** deprograms its holes (as Deprogram holes does), but for those
   another front programs. One undo brings back the front and the times.
 - **The EBS timing front tool draws by clicks:** the first and second click make a line; a click on its end or Enter
@@ -55,10 +58,27 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The tips at the cursor in the dark theme** are lighter and easier to read.
 
 ### New
+- **Hole labels in a colour of their own:** on the Visibility tab a click on the colour dot of a label picks its colour,
+  a right click puts its default colour back. The colour shows on the plan, in 3D and in print and is kept in the
+  project; the colours last chosen go to the program settings, and a new blast starts with them. A project opened shows
+  its own.
+- **Route number of a hole (the "Route no." label):** for holes with an electronic detonator, the place in the chain of
+  ties in the order they were made: the first hole of a chain is 1, each next one 1 more than the hole it was tied from.
+  The Tie tool (holes on the way too), Connect multiple holes and Automatic tie-up number them. A tie deleted takes the
+  numbers of all the holes after it back. A tie goes to a hole with an electronic detonator only at the start of a chain:
+  not into a hole a tie comes into already, and not so as to close a ring; a chain does not branch, no
+  second tie goes out of a hole. The end of one chain may be tied to the start
+  of another, whose numbers then go on.
 - **DaveyTronic export:** the warning about holes left out of the file (without ties, or on a chain not chosen for
   any line) has a "Select the holes not written" button: the file is not written and those holes are selected in the plan.
 
 ### Fixed
+- Route numbers: deleting a tie took the number back from the hole it came from (when the other end had none), and the
+  chain could then go on from 1. Now only the holes after it lose theirs, and a hole without a number that a numbered
+  one is tied to goes on from that number.
+- Hole labels in light colours low in green (pinks, violets) were outlined in light and read poorly: the outline is
+  now chosen by contrast, light labels get a black one.
+- The T key opens the initiation catalogue along with the Tie tool, as the ribbon button does.
 - **The depth of a hole down to the surface or to the depth polygon is worked out at its new place:** a hole of a
   pattern moved, or copied and pasted, kept the level of where it was. Now it goes down to the surface (or to the depth
   polygon, its collar on the collar polygon) where it stands; a depth set by hand stays.

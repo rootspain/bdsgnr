@@ -50,6 +50,7 @@ public sealed partial class MainViewModel
         {
             project = BlastProject.CreateNew();
             project.View.HoleLabelFontSize = Settings.HoleLabelFontSize;
+            project.View.LabelColors = new(Settings.HoleLabelColors);
         }
         header.Created = DateTime.Now;
         project.Header = header;
@@ -65,6 +66,7 @@ public sealed partial class MainViewModel
     {
         var p = BlastProject.CreateNew(Loc.T("New blast"));
         p.View.HoleLabelFontSize = Settings.HoleLabelFontSize;
+        p.View.LabelColors = new(Settings.HoleLabelColors);
         p.Header.Author = Settings.Author;
         p.Header.ShotDate = DateTime.Today;
         Attach(new Document(p));

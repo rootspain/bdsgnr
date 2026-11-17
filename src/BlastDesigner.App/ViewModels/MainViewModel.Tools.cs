@@ -720,7 +720,13 @@ public sealed partial class MainViewModel
         var ids = SelectedOrAllHoles().Where(x => !x.IsDummy).Select(x => x.Id).ToHashSet();
         var ipId = ip.Id;
         int n = 0;
-        Change("Automatic tie-up", p => n = Timing.AutoTieUp(p, HolesById(p, ids), (InitiationPoint)p.FindEntity(ipId)!, connectors[h], connectors[r], p.Design.Burden / 2));
+        Change("Automatic tie-up", p =>
+        {
+            var had = p.Ties.Select(t => t.Id).ToHashSet();
+            n = Timing.AutoTieUp(p, HolesById(p, ids), (InitiationPoint)p.FindEntity(ipId)!, connectors[h], connectors[r], p.Design.Burden / 2);
+            // the route numbers of the holes along the ties made, in the order they were made
+            RouteNumbers.Number(p, p.Ties.Where(t => !had.Contains(t.Id)).Select(t => (t.FromId, t.ToId)).ToList());
+        });
         SetStatus(Loc.F("{0} ties created", n));
     }
 
@@ -730,7 +736,18 @@ public sealed partial class MainViewModel
         if (holes.Count < 2) return;
         var chain = GeneralOps.ChainPoints(holes.Select(h => h.Collar).ToList()).Select(c => holes.First(h => h.Collar == c)).ToList();
         var connector = ActiveConnector;
-        Change("Connect multiple holes", p => { for (int i = 1; i < chain.Count; i++) Timing.Connect(p, chain[i - 1].Id, chain[i].Id, connector); });
+        // a chain of holes with an electronic detonator: a tie only to its start, never branching, never a ring
+        for (int i = 1; i < chain.Count; i++)
+            if (RouteNumbers.Refusal(Project!, chain[i - 1].Id, chain[i].Id) is { } why)
+            {
+                SetStatus(Loc.F(why.Format, why.Hole));
+                return;
+            }
+        Change("Connect multiple holes", p =>
+        {
+            for (int i = 1; i < chain.Count; i++) Timing.Connect(p, chain[i - 1].Id, chain[i].Id, connector);
+            RouteNumbers.Number(p, chain.Zip(chain.Skip(1)).Select(x => (x.First.Id, x.Second.Id)));
+        });
     }
 
     public void FlipTies()

@@ -796,6 +796,41 @@ public class ReportTests
     }
 
     [Fact]
+    public void AHoleLabelInAColourOfItsOwn_IsDrawnInIt_AndTheProjectKeepsIt()
+    {
+        var p = Blast(5);
+        var plain = PlanPixels(p, new ReportDesign());
+        p.View.LabelColors[HoleLabel.Number] = 0xFF16A34A;
+        var green = PlanPixels(p, new ReportDesign());
+        Assert.NotEqual(plain, green);
+        // saved and opened again: the colour comes with the project
+        var back = ProjectJson.Deserialize(ProjectJson.Serialize(p));
+        Assert.Equal(0xFF16A34Au, back.View.LabelColors[HoleLabel.Number]);
+        Assert.Equal(green, PlanPixels(back, new ReportDesign()));
+        // a file from before the colours: every label in its own
+        Assert.Empty(new ViewState().LabelColors);
+    }
+
+    [Fact]
+    public void TheTiesOfElectronicDetonatorsShowNoDelay()
+    {
+        byte[] Plan(ProductKind kind, double delay)
+        {
+            var p = new BlastProject();
+            var product = BlastProject.CreateNew().Products.First(x => x.Kind == kind);
+            p.Products.Add(product);
+            var a = new Hole { Label = "1", Collar = new Vec3(0, 0, 100), Length = 10 };
+            var b = new Hole { Label = "2", Collar = new Vec3(5, 0, 100), Length = 10 };
+            p.Add(a); p.Add(b);
+            p.Add(new TieEntity { FromId = a.Id, ToId = b.Id, ProductId = product.Id, DelayMs = delay, FromPos = a.Collar, ToPos = b.Collar });
+            return PlanPixels(p, new ReportDesign());
+        }
+        // a surface connector: its delay is written on the tie; an EBS tie: nothing, whatever its delay
+        Assert.NotEqual(Plan(ProductKind.SurfaceConnector, 100), Plan(ProductKind.SurfaceConnector, 900));
+        Assert.Equal(Plan(ProductKind.ElectronicDetonator, 100), Plan(ProductKind.ElectronicDetonator, 900));
+    }
+
+    [Fact]
     public void AKindLeftOutIsNotDrawnAndNotCountedInTheFit()
     {
         var p = Blast(30);
