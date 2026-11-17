@@ -9,6 +9,24 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.7 — 2026-11-16
 
 ### Changed
+- **The exclusion zone is built by sources:** charged holes standing together are one source, each with its own
+  radius from its own charge. The zone is the circles of those radii about the holes: blasts far apart get zones of
+  their own, close ones one zone with a waist between them, not one convex shape over the empty ground. The
+  distance that joins holes into a source is set in the window (empty: from the spacing of the holes). The window
+  lists the sources; its cards are of the source with the largest radius.
+- **Arrows on the exclusion zone:** a zone of one source gets its radius arrow; a zone several sources make gets an
+  arrow of its greatest length and, across it, the width of the zone at each source. The Size switch under the list of
+  sources: Radius (the default) gives each source its radius arrow, in a joined zone too; Length is as above. The figures on the arrows
+  are the same size at any zoom, on the screen and on paper.
+- **A radius and an azimuth for each source of the exclusion zone:** in the list of sources the radius can be typed in
+  (the calculated one at first, empty brings it back), and the zone of the source is drawn with it; the azimuth sets
+  where its radius arrow points (0 is north). The values are saved with the project.
+- **The exclusion zone on the plan follows its window:** while it is drawn, any change in the Exclusion zone
+  calculator (a radius, an azimuth, Size, the merge distance, the constants) draws it again at once, in the same undo
+  step. The Draw exclusion zone button turns into Hide exclusion zone while the zone is on the plan. The merge
+  distance stands under Size, and the window is as high as what it holds.
+- **Mark clearance zone and the zone of the Flyrock window** are built of circles about the holes too: groups of
+  holes far apart get outlines of their own, and the arcs are smoother.
 - **The DeviTronic detonator is called Davey Tronic**, and so is its family. A project saved before gets the new name
   when it is opened, unless you renamed it yourself.
 - **Charge 3D and Depths over the plan are one chip, Depths:** a loaded hole shows its charge column, an empty one
@@ -35,6 +53,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.6 — 2026-11-16
 
 ### New
+- **Tips over the fields of Flyrock constants and Vibration site constants:** what each constant, limit and the MIC
+  window mean and how they make the forecasts and the exclusion zone. The merge distance of the exclusion zone sources
+  stands there in a group of its own, Exclusion zone, with its name translated.
 - **Pattern segments.** The Segments field in the properties of a pattern cuts it into parts (1 to its number of rows)
   by cut lines in the middle between rows; the rows are shared evenly, the extra ones towards the face, and no hole
   moves. Each segment has its own burden, spacing, diameter, angle, subdrill, depth and bearing — by default those of the

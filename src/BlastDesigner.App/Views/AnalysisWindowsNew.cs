@@ -348,8 +348,13 @@ public static class AnalisysWindows
             ("Draw clearance zone", () =>
             {
                 if (vm.Project is not { } p) return;
-                var poly = Engine.Flyrock.ClearancePolygon(p, r);
-                if (poly.Count > 2) vm.Change("Flyrock clearance zone", pr => pr.Add(new PolylineEntity { Points = poly, Closed = true, Kind = LineKind.ClearanceZone, Label = Loc.F("Flyrock clearance {0:0} m", r.Clearance) }, pr.GetOrCreateLayer(StandardLayers.Analysis, 0xFFDC2626, "Analysis")));
+                var polys = Engine.Flyrock.ClearancePolygon(p, r);
+                if (polys.Count > 0) vm.Change("Flyrock clearance zone", pr =>
+                {
+                    var layer = pr.GetOrCreateLayer(StandardLayers.Analysis, 0xFFDC2626, "Analysis");
+                    foreach (var poly in polys)
+                        pr.Add(new PolylineEntity { Points = poly, Closed = true, Kind = LineKind.ClearanceZone, Label = Loc.F("Flyrock clearance {0:0} m", r.Clearance) }, layer);
+                });
             }),
             ("Select critical hole", () => { if (r.Critical != null) vm.Doc!.Select(new[] { r.Critical.Id }); }),
             ("Export CSV…", () => _ = vm.SaveCsv("Export flyrock", "_flyrock", Interchange.ExportFlyrock(r)))), 860, 520);
@@ -489,14 +494,45 @@ public static class AnalisysWindows
     public static void ExclusionZone(MainViewModel vm)
     {
         var host = new ContentControl();
-        Engine.ExclusionZone.Result r = Engine.ExclusionZone.Compute(vm.Project!);
+        var merge = new TextBox { Width = 90, Name = "exclusionMerge", VerticalAlignment = VerticalAlignment.Center };
+        // the fields of the sources typed in and not yet taken: taken before the zone is drawn
+        var pending = new List<Action>();
+        // what the arrows measure, under the list of the sources; none without sources
+        var size = SizeSwitch(vm);
         void Update()
         {
             if (vm.Project is not { } p) return;
-            r = Engine.ExclusionZone.Compute(p);
-            host.Content = ExclusionZoneView(p, r);
+            // the cards show the source with the largest radius; with no hole charged the blast as a whole
+            var sources = Engine.ExclusionZone.Sources(p);
+            var r = sources.Count > 0 ? sources.MaxBy(s => s.Radius)!.Result : Engine.ExclusionZone.Compute(p);
+            pending.Clear();
+            host.Content = ExclusionZoneView(vm, p, r, sources, pending);
+            size.IsVisible = sources.Count > 0;
+            var auto = Engine.ExclusionZone.AutoMergeDistance(Engine.ExclusionZone.SourceHoles(p));
+            merge.Watermark = Loc.F("auto {0:0} m", auto);
+            merge.Text = p.Vibration.ExclusionMergeDistance > 0 ? p.Vibration.ExclusionMergeDistance.ToString("0.##", CultureInfo.CurrentCulture) : "";
         }
         Update();
+        // the distance that joins holes into one source: empty or 0 is worked out from the spacing
+        void SetMerge()
+        {
+            if (vm.Project is not { } p) return;
+            var text = merge.Text?.Trim() ?? "";
+            double d = 0;
+            if (text.Length > 0 && !double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out d)) { Update(); return; }
+            d = Math.Max(0, d);
+            if (Math.Abs(d - p.Vibration.ExclusionMergeDistance) < 1e-9) return;
+            ChangeZone(vm, "Exclusion zone sources", pr => pr.Vibration.ExclusionMergeDistance = d);
+            Update();
+        }
+        merge.LostFocus += (_, _) => SetMerge();
+        merge.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { SetMerge(); e.Handled = true; } };
+
+        TextBlock Label(string text) => new() { Text = Loc.T(text), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
+        var mergeRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 10, 0, 0) };
+        mergeRow.Children.Add(Label("Merge distance, m"));
+        mergeRow.Children.Add(merge);
+        ToolTip.SetTip(mergeRow, Loc.T("Charged holes no farther apart than this are one source of the zone; empty — from the spacing of the holes."));
 
         Button Action(string text, bool primary, Action click)
         {
@@ -505,47 +541,231 @@ public static class AnalisysWindows
             b.Click += (_, _) => { try { click(); } catch (Exception ex) { Dialogs.ShowError(ex); } };
             return b;
         }
-        // the constants are edited in their own window: the radii are worked out again when it is closed
-        async void Edit(Func<Task> edit) { await edit(); Update(); }
+        // the constants are edited in their own window: the radii are worked out again when it is closed, the zone on the plan too
+        async void Edit(Func<Task> edit)
+        {
+            await edit();
+            if (vm.Project is { } p && ZoneShown(p)) vm.Change("Exclusion zone", pr => PlaceZones(pr));
+            Update();
+        }
         var setup = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
-        foreach (var b in new[] { Action("Site constants…", false, () => Edit(vm.EditVibrationModel)), Action("Flyrock constants…", false, () => Edit(vm.EditFlyrockModel)) })
+        // the constants and Recalculate together on the left, Draw on its own on the right
+        foreach (var b in new[] { Action("Site constants…", false, () => Edit(vm.EditVibrationModel)), Action("Flyrock constants…", false, () => Edit(vm.EditFlyrockModel)), Action("Recalculate", false, Update) })
         {
             b.Margin = new Thickness(0, 0, 8, 0);
             setup.Children.Add(b);
         }
         var run = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
-        run.Children.Add(Action("Recalculate", false, Update));
-        run.Children.Add(Action("Draw exclusion zone", true, () =>
+        // one button: draws the zone while there is none on the plan, else hides it
+        Button toggle = null!;
+        toggle = Action("Draw exclusion zone", true, () =>
         {
             if (vm.Project is not { } p) return;
-            var holes = p.Holes.Where(h => !h.IsDummy).ToList();
-            if (holes.Count == 0) return;
-            var zone = GeneralOps.ClearanceZone(holes, r.Radius);
-            zone.Kind = LineKind.ExclusionZone;
-            zone.Label = Loc.F("Exclusion zone {0:0} m", r.Radius);
-            // the zone drawn before goes: one zone on the plan, not one over the other
-            vm.Change("Exclusion zone", pr =>
+            if (ZoneShown(p)) vm.Change("Hide exclusion zone", pr => pr.Entities.RemoveAll(MainViewModel.IsExclusionZone));
+            else
             {
-                pr.Entities.RemoveAll(MainViewModel.IsExclusionZone);
-                pr.Add(zone, pr.GetOrCreateLayer(StandardLayers.Analysis, 0xFFDC2626, "Analysis"));
-            });
-        }));
-        var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 16, 0, 0) };
+                foreach (var take in pending.ToList()) take();
+                SetMerge();
+                vm.Change("Exclusion zone", pr => PlaceZones(pr));
+            }
+            ShowToggle();
+        });
+        toggle.Name = "exclusionDraw";
+        void ShowToggle() => toggle.Content = Loc.T(vm.Project is { } p && ZoneShown(p) ? "Hide exclusion zone" : "Draw exclusion zone");
+        ShowToggle();
+        // the zone may come and go by an undo or Clear analysis too
+        Action refreshed = ShowToggle;
+        vm.ModelRefreshed += refreshed;
+        run.Children.Add(toggle);
+        var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 12, 0, 0) };
         Grid.SetColumn(run, 1);
         footer.Children.Add(setup);
         footer.Children.Add(run);
-        var page = new DockPanel { Margin = new Thickness(18, 16, 18, 16) };
-        DockPanel.SetDock(footer, Dock.Bottom);
-        page.Children.Add(footer);
+        // the list of the sources, Size, the merge distance on the next line, the buttons: the window as high as they are
+        var page = new StackPanel { Margin = new Thickness(18, 16, 18, 16) };
         page.Children.Add(host);
-        Dialogs.ShowWindow("Exclusion zone calculator", page, 760, 360);
+        page.Children.Add(size);
+        page.Children.Add(mergeRow);
+        page.Children.Add(footer);
+        var window = Dialogs.ShowWindow("Exclusion zone calculator", page, 800, 600, beforeShow: w => { w.ClearValue(Window.HeightProperty); w.SizeToContent = SizeToContent.Height; });
+        window.Closed += (_, _) => vm.ModelRefreshed -= refreshed;
+    }
+
+    private static bool ZoneShown(BlastProject p) => p.Entities.Any(MainViewModel.IsExclusionZone);
+
+    /// <summary>
+    /// The exclusion zone on the plan, worked out anew from the project: the zone drawn before goes, one zone on the plan,
+    /// not one over the other.
+    /// </summary>
+    private static void PlaceZones(BlastProject pr)
+    {
+        var zones = Engine.ExclusionZone.Zones(Engine.ExclusionZone.Sources(pr), pr.Vibration.ExclusionSize);
+        pr.Entities.RemoveAll(MainViewModel.IsExclusionZone);
+        if (zones.Count == 0) return;
+        var layer = pr.GetOrCreateLayer(StandardLayers.Analysis, 0xFFDC2626, "Analysis");
+        foreach (var z in zones)
+            pr.Add(new PolylineEntity
+            {
+                Points = z.Outline, Closed = true, Kind = LineKind.ExclusionZone,
+                Label = Loc.F("Exclusion zone {0:0} m", z.Radius), ZoneArrows = z.Arrows.Count > 0 ? z.Arrows : null
+            }, layer);
+    }
+
+    /// <summary>A change of a setting of the zone; the zone on the plan, if there is one, is drawn again with it in the same undo step.</summary>
+    private static void ChangeZone(MainViewModel vm, string name, Action<BlastProject> change) =>
+        vm.Change(name, pr =>
+        {
+            var shown = ZoneShown(pr);
+            change(pr);
+            if (shown) PlaceZones(pr);
+        });
+
+    private static bool TryNumber(string? text, out double value) =>
+        double.TryParse((text ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out value) && double.IsFinite(value);
+
+    /// <summary>Sets the radius typed in and the azimuth of the radius arrow of a source, kept by a hole of it; one with neither goes.</summary>
+    private static void SetSource(MainViewModel vm, Engine.ExclusionZone.Source s, double? radius, double azimuth) =>
+        ChangeZone(vm, "Exclusion zone source", pr =>
+        {
+            var list = pr.Vibration.ExclusionSources;
+            var set = Engine.ExclusionZone.Setting(pr, s.Holes);
+            if (set == null) list.Add(set = new ExclusionSourceSetting { HoleId = s.Holes[0].Id });
+            set.Radius = radius;
+            set.Azimuth = azimuth;
+            // the settings of holes gone and the ones that set nothing
+            var ids = pr.Holes.Select(h => h.Id).ToHashSet();
+            list.RemoveAll(x => !ids.Contains(x.HoleId) || (x.Radius == null && x.Azimuth == 0));
+        });
+
+    /// <summary>
+    /// A row a source: its radius (calculated, or typed in over it), the azimuth of its radius arrow, how many holes it has,
+    /// its charge and what sets the calculated radius.
+    /// </summary>
+    private static Control SourcesTable(MainViewModel vm, IReadOnlyList<Engine.ExclusionZone.Source> sources, List<Action> pending)
+    {
+        var table = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,Auto,*"), Name = "exclusionSources" };
+        string Lead(Engine.ExclusionZone.Result x) =>
+            x.Radius == x.VibrationRadius ? "Vibration" : x.Radius == x.AirblastRadius ? "Airblast" : "Flyrock";
+        void Cell(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); table.Children.Add(c); }
+        TextBlock Text(string text, IBrush brush, FontWeight weight = FontWeight.Normal, double size = 13) =>
+            new() { Text = text, Foreground = brush, FontWeight = weight, FontSize = size, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 3, 22, 3) };
+        table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        Cell(Text(Loc.T("Radius, m"), Look.Muted, size: 12), 0, 1);
+        Cell(Text(Loc.T("Azimuth, °"), Look.Muted, size: 12), 0, 2);
+        for (int i = 0; i < sources.Count; i++)
+        {
+            var s = sources[i];
+            int row = i + 1;
+            table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            Cell(Text(Loc.F("Source {0}", s.Number), Look.Text, FontWeight.SemiBold), row, 0);
+
+            var calculated = s.Result.Radius;
+            var radius = new TextBox { Width = 80, Name = $"exclusionRadius{s.Number}", Watermark = calculated.ToString("0", CultureInfo.CurrentCulture), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 12, 2) };
+            var azimuth = new TextBox { Width = 64, Name = $"exclusionAzimuth{s.Number}", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 22, 2) };
+            ToolTip.SetTip(radius, Loc.F("Calculated {0:0} m. Type another to draw the zone of this source with it; empty — the calculated one", calculated));
+            ToolTip.SetTip(azimuth, Loc.T("Where the radius arrow of this source points, degrees clockwise from north"));
+            double? set = s.SetRadius;
+            double side = s.Azimuth;
+            void Show()
+            {
+                radius.Text = (set ?? calculated).ToString("0.#", CultureInfo.CurrentCulture);
+                radius.FontWeight = set != null ? FontWeight.SemiBold : FontWeight.Normal;
+                radius.Foreground = set != null ? Look.Accent : Look.Text;
+                azimuth.Text = side.ToString("0.#", CultureInfo.CurrentCulture);
+            }
+            Show();
+            void Take()
+            {
+                double? r = set;
+                var text = radius.Text?.Trim() ?? "";
+                // empty, or the calculated radius as it is shown: none typed in
+                if (text.Length == 0 || text == calculated.ToString("0.#", CultureInfo.CurrentCulture)) r = null;
+                else if (TryNumber(text, out var v) && v > 0) r = v;
+                var a = side;
+                if (TryNumber(azimuth.Text, out var w)) a = (w % 360 + 360) % 360;
+                if (r != set || Math.Abs(a - side) > 1e-9)
+                {
+                    set = r;
+                    side = a;
+                    SetSource(vm, s, set, side);
+                }
+                Show();
+            }
+            pending.Add(Take);
+            foreach (var box in new[] { radius, azimuth })
+            {
+                box.LostFocus += (_, _) => Take();
+                box.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { Take(); e.Handled = true; } };
+            }
+            Cell(radius, row, 1);
+            Cell(azimuth, row, 2);
+            Cell(Text(Loc.F("{0} holes", s.Holes.Count), Look.Muted), row, 3);
+            Cell(Text(Loc.F("{0:0.0} kg", s.Result.Mic), Look.TextSoft), row, 4);
+            Cell(Text(Loc.F("Set by: {0}", Loc.T(Lead(s.Result))), Look.TextSoft), row, 5);
+        }
+        var list = new StackPanel { Spacing = 6 };
+        if (sources.Count > 1)
+            list.Children.Add(new TextBlock { Text = Loc.F("{0} sources: each zone of its own radius", sources.Count), FontSize = 12, Foreground = Look.Muted });
+        list.Children.Add(table);
+        return new Border
+        {
+            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(14, 10), Margin = new Thickness(0, 12, 0, 0), Child = list
+        };
+    }
+
+    /// <summary>What the arrows of the zone measure: buttons side by side in one frame, as Plan and 3D over the plan.</summary>
+    private static Control SizeSwitch(MainViewModel vm)
+    {
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        var of = new Dictionary<Button, ExclusionSizing>();
+        void Show()
+        {
+            var now = vm.Project?.Vibration.ExclusionSize ?? ExclusionSizing.Radius;
+            foreach (var (b, size) in of)
+            {
+                b.Background = size == now ? Look.AccentSoft : Brushes.Transparent;
+                b.Foreground = size == now ? Look.Accent : Look.Muted;
+            }
+        }
+        foreach (var (size, text, tip) in new[]
+        {
+            (ExclusionSizing.Length, "Length", "A zone of one source its radius; a zone several sources make its length and a width across each source"),
+            (ExclusionSizing.Radius, "Radius", "Each source the arrow of its radius, also inside a zone several sources make")
+        })
+        {
+            var b = new Button
+            {
+                Content = Loc.T(text), Padding = new Thickness(12, 4), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(0),
+                FontSize = 12, VerticalContentAlignment = VerticalAlignment.Center, Name = "exclusionSize" + size
+            };
+            ToolTip.SetTip(b, Loc.T(tip));
+            b.Click += (_, _) =>
+            {
+                if (vm.Project is not { } p || p.Vibration.ExclusionSize == size) return;
+                ChangeZone(vm, "Exclusion zone arrows", pr => pr.Vibration.ExclusionSize = size);
+                Show();
+            };
+            of[b] = size;
+            buttons.Children.Add(b);
+        }
+        Show();
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+        row.Children.Add(new TextBlock { Text = Loc.T("Size"), Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+        row.Children.Add(new Border
+        {
+            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(2), VerticalAlignment = VerticalAlignment.Center, Child = buttons
+        });
+        return row;
     }
 
     /// <summary>
     /// The radius of the exclusion zone large on top, with the charge it comes from; below it the three radii it is the
-    /// largest of, each on a card with a bar of its length against the radius, the one that sets the radius marked.
+    /// largest of, each on a card with a bar of its length against the radius, the one that sets the radius marked. With
+    /// several sources these are of the one with the largest radius, and a list of the sources follows.
     /// </summary>
-    private static Control ExclusionZoneView(BlastProject p, Engine.ExclusionZone.Result r)
+    private static Control ExclusionZoneView(MainViewModel vm, BlastProject p, Engine.ExclusionZone.Result r, IReadOnlyList<Engine.ExclusionZone.Source> sources, List<Action> pending)
     {
         var v = p.Vibration;
         var factors = new (string Icon, string Name, double Radius, string Detail)[]
@@ -611,6 +831,7 @@ public static class AnalisysWindows
         var view = new StackPanel();
         view.Children.Add(hero);
         view.Children.Add(cards);
+        if (sources.Count > 0) view.Children.Add(SourcesTable(vm, sources, pending));
         return new ScrollViewer { Content = view, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
     }
 

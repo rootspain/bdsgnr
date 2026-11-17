@@ -168,7 +168,8 @@ public static class FormLayouts
             S("Results", "FragmentationP50 FragmentationP80 MaxFlyrock MeasuredPpv MeasuredAirblast"), S("Digging", "MuckpileHeight DiggingRate"), S("Rating", "Rating Comments")),
         [typeof(CostSchema)] = Of("", S("Costs", "Currency DrillingPerMetre LoadingPerHole LabourPerBlast OtherFixed")),
         [typeof(ElectronicSettings)] = Of("", S("Intervals", "HoleIntervalMs RowIntervalMs"), S("Limits", "MaxTimeMs BaseTimeMs AllowSubMs"), S("Decks and primers", "InterDeckDelayMs IntraDeckDelayMs DeckOrder PrimerOrder UseOffsets")),
-        [typeof(VibrationModel)] = Of("", S("Vibration", "SiteK SiteB PpvLimit WindowMs"), S("Airblast", "AirK AirB AirblastLimitDb")),
+        [typeof(VibrationModel)] = Of("m: ExclusionMergeDistance", S("Vibration", "SiteK SiteB PpvLimit WindowMs"), S("Airblast", "AirK AirB AirblastLimitDb"),
+            S("Exclusion zone", "ExclusionMergeDistance")),
         [typeof(SummaryBlock)] = Of("", S("Summary block", "Corner Visible ShowHeader ShowQuantities ShowPattern")),
         [typeof(DesignTolerances)] = Of("m: CollarXY, ToeXY, Depth", S("Position", "CollarXY ToeXY Depth"), S("Direction", "AngleDeg BearingDeg"), S("Redrilling", "RedrillFraction")),
         [typeof(FlyrockModel)] = Of("m: MinimumClearance", S("Flyrock", "SiteK SafetyFactor MinimumClearance")),
@@ -199,5 +200,31 @@ public static class FormLayouts
         grid.Sections = All.TryGetValue(type, out var layout) ? layout.Sections : new[] { new PropertySection("Properties") };
         if (layout == null) return;
         foreach (var (name, unit) in layout.Units) grid.Units[name] = Loc.Ui(unit);
+        // set in the window of the exclusion zone, not here
+        if (type == typeof(VibrationModel)) grid.Exclude.UnionWith(new[] { nameof(VibrationModel.ExclusionSize), nameof(VibrationModel.ExclusionSources) });
+        if (Tips.TryGetValue(type, out var tips))
+            foreach (var (name, tip) in tips) grid.Tips[name] = Loc.Ui(tip);
     }
+
+    /// <summary>What a field means, shown over it: for the fields whose name alone does not say how it is used.</summary>
+    private static readonly Dictionary<Type, (string Name, string Tip)[]> Tips = new()
+    {
+        [typeof(VibrationModel)] = new[]
+        {
+            (nameof(VibrationModel.SiteK), "K of the site law PPV = K · (D / √Q)^(−B), mm/s: D the distance, m, Q the charge in the window, kg. Fitted from the measured events of the site"),
+            (nameof(VibrationModel.SiteB), "How fast the vibration falls with the scaled distance D / √Q: the larger B, the faster"),
+            (nameof(VibrationModel.PpvLimit), "The peak particle velocity allowed at a protected object; the vibration radius of the exclusion zone is where the forecast falls to it"),
+            (nameof(VibrationModel.WindowMs), "Charges firing within this time of each other count as one: their sum is the maximum instantaneous charge (MIC) the forecasts use"),
+            (nameof(VibrationModel.AirK), "K of the airblast law P = K · (D / ∛Q)^(−B), kPa: D the distance, m, Q the charge in the window, kg"),
+            (nameof(VibrationModel.AirB), "How fast the airblast falls with the scaled distance D / ∛Q: the larger B, the faster"),
+            (nameof(VibrationModel.AirblastLimitDb), "The airblast overpressure allowed, dB; the airblast radius of the exclusion zone is where the forecast falls to it"),
+            (nameof(VibrationModel.ExclusionMergeDistance), "Charged holes no farther apart than this are one source of the exclusion zone; 0 — from the spacing of the holes")
+        },
+        [typeof(FlyrockModel)] = new[]
+        {
+            (nameof(FlyrockModel.SiteK), "Site constant k of the Richards and Moore throw (face burst, cratering, rifling): 13.5 is typical, up to 27 for a conservative estimate. The throw grows as k squared"),
+            (nameof(FlyrockModel.SafetyFactor), "The greatest throw of the holes times this is the flyrock clearance"),
+            (nameof(FlyrockModel.MinimumClearance), "The flyrock clearance is never less than this, however short the throw")
+        }
+    };
 }

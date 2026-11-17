@@ -61,8 +61,15 @@ void Pump()
     for (int i = 0; i < 5; i++) Dispatcher.UIThread.RunJobs();
 }
 
+// SMOKE_ONLY="word|other": only the steps whose name holds one of the words (the setup steps before them still run when named)
+var only = Environment.GetEnvironmentVariable("SMOKE_ONLY")?.Split('|', StringSplitOptions.RemoveEmptyEntries);
+// the last step was left out by SMOKE_ONLY: the screenshots after it are of it, left out too
+bool skipped = false;
+
 void Step(string name, Action a)
 {
+    skipped = only != null && !only.Any(w => name.Contains(w, StringComparison.OrdinalIgnoreCase));
+    if (skipped) return;
     try
     {
         a();
@@ -78,6 +85,7 @@ void Step(string name, Action a)
 
 void Shot(string name)
 {
+    if (skipped) return;
     Pump();
     var frame = window.CaptureRenderedFrame();
     var path = Path.Combine(outDir, name + ".png");
@@ -676,6 +684,18 @@ Step("mixed values and flag merge", () =>
     grid.ApplyTo(template, b);
     if (b.Exceptions != (HoleException.Wet | HoleException.Blocked | HoleException.Misfire)) throw new Exception("flag merge wrong: " + b.Exceptions);
 });
+Step("Flyrock and vibration site constants: each field has a tip saying how it is used", () =>
+{
+    foreach (var model in new object[] { new FlyrockModel(), new VibrationModel() })
+    {
+        var grid = new PropertyGrid();
+        FormLayouts.Apply(grid, model.GetType());
+        grid.SetTarget(model);
+        var tips = grid.GetLogicalDescendants().OfType<Control>().Select(ToolTip.GetTip).OfType<string>().ToList();
+        foreach (var name in model.GetType().GetProperties().Where(pr => pr.CanWrite && pr.PropertyType == typeof(double)).Select(pr => pr.Name))
+            if (!grid.Tips.TryGetValue(name, out var tip) || !tips.Contains(tip)) throw new Exception($"no tip over {model.GetType().Name}.{name}");
+    }
+});
 Step("properties of several points: a typed axis of the position is set on all of them, the others stay", () =>
 {
     var selected = vm.Doc!.Selection.ToList();
@@ -926,6 +946,7 @@ Step("menu translations", () =>
 // ---- version 6 features ----
 void WindowShot(string name)
 {
+    if (skipped) return;
     Pump();
     var w = BlastDesigner.App.Services.Dialogs.LastShown;
     var frame = w?.CaptureRenderedFrame();
@@ -982,20 +1003,131 @@ Step("site law", () => AnalisysWindows.SiteLaw(vm));
 WindowShot("18_site_law");
 Step("exclusion zone", () => AnalisysWindows.ExclusionZone(vm));
 WindowShot("19_exclusion_zone");
-Step("Draw exclusion zone again replaces the zone; Clear analysis takes it off, an undo brings it back", () =>
+Step("Draw exclusion zone turns into Hide exclusion zone and back; Clear analysis takes it off, an undo brings it back", () =>
 {
+    // open: the button follows the plan while its window is open
+    AnalisysWindows.ExclusionZone(vm); Pump();
     var w = BlastDesigner.App.Services.Dialogs.LastShown!;
-    var draw = w.GetLogicalDescendants().OfType<Button>().First(b => b.Content as string == BlastDesigner.App.Services.Loc.T("Draw exclusion zone"));
+    var draw = w.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "exclusionDraw");
     int Zones() => vm.Project!.Entities.Count(BlastDesigner.App.ViewModels.MainViewModel.IsExclusionZone);
+    string Says() => draw.Content as string ?? "";
+    void Click() { draw.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
     vm.ClearOverlays();
-    for (int i = 0; i < 2; i++) { draw.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
-    if (Zones() != 1) throw new Exception($"{Zones()} exclusion zones after drawing it twice");
+    if (Says() != BlastDesigner.App.Services.Loc.T("Draw exclusion zone")) throw new Exception("with no zone the button says " + Says());
+    Click();
+    if (Zones() != 1 || Says() != BlastDesigner.App.Services.Loc.T("Hide exclusion zone")) throw new Exception($"{Zones()} zones after drawing, the button says {Says()}");
+    Click();
+    if (Zones() != 0 || Says() != BlastDesigner.App.Services.Loc.T("Draw exclusion zone")) throw new Exception($"{Zones()} zones after hiding, the button says {Says()}");
+    Click();
     if (!vm.HasAnalysisDisplay) throw new Exception("with the exclusion zone on the plan there is no Clear analysis");
     vm.ClearAnalysis(); Pump();
     if (Zones() != 0 || vm.HasAnalysisDisplay) throw new Exception("Clear analysis left the exclusion zone");
+    if (Says() != BlastDesigner.App.Services.Loc.T("Draw exclusion zone")) throw new Exception("after Clear analysis the button says " + Says());
     vm.Undo(); Pump();
-    if (Zones() != 1) throw new Exception("an undo did not bring the exclusion zone back");
+    if (Zones() != 1 || Says() != BlastDesigner.App.Services.Loc.T("Hide exclusion zone")) throw new Exception("an undo did not bring the exclusion zone back");
     vm.ClearAnalysis(); Pump();
+    w.Close();
+});
+Step("Two blasts far apart are two sources: two zones, each with its radius arrow to the north; joined, one", () =>
+{
+    var p = vm.Project!;
+    var holes = p.Holes.Where(h => !h.IsDummy).ToList();
+    var far = BlastDesigner.Engine.ExclusionZone.Sources(p).Max(s => s.Radius) * 3 + 500;
+    vm.Change("Second blast", pr => { foreach (var h in holes) { var c = (Hole)h.CloneWithNewId(); c.Translate(new BlastDesigner.Domain.Geometry.Vec3(far, 0, 0)); pr.Add(c); } });
+    try
+    {
+        AnalisysWindows.ExclusionZone(vm); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        if (w.GetLogicalDescendants().OfType<Control>().All(c => c.Name != "exclusionSources")) throw new Exception("no list of the sources in the window");
+        if (w.GetLogicalDescendants().OfType<Control>().Any(c => c.Name?.StartsWith("exclusionArrow") == true)) throw new Exception("the window still has a side for the arrow");
+        // a radius typed in for the first source and its arrow to the east
+        TextBox Box(string name) => w.GetLogicalDescendants().OfType<TextBox>().Single(b => b.Name == name);
+        var calculatedAll = BlastDesigner.Engine.ExclusionZone.Sources(vm.Project!).Select(x => x.Radius).ToList();
+        var calculated = calculatedAll[0];
+        if (Box("exclusionRadius1").Text != calculated.ToString("0.#", System.Globalization.CultureInfo.CurrentCulture)) throw new Exception("the radius field does not start with the calculated radius");
+        var draw = w.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "exclusionDraw");
+        draw.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        // typed in with the zone on the plan: drawn again at once, no button
+        void Enter(TextBox b) { b.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump(); }
+        var typedIn = Math.Round(calculated) + 100;
+        Box("exclusionRadius1").Text = typedIn.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        Enter(Box("exclusionRadius1"));
+        Box("exclusionAzimuth1").Text = "90";
+        Enter(Box("exclusionAzimuth1"));
+        var zones = vm.Project!.Entities.OfType<PolylineEntity>().Where(e => e.Kind == LineKind.ExclusionZone).OrderBy(e => e.Points.Average(q => q.X)).ToList();
+        if (zones.Count != 2) throw new Exception($"{zones.Count} zones of two blasts far apart");
+        if (zones[0].ZoneArrows is not [{ Kind: ZoneArrowKind.Radius } typed] || Math.Abs(typed.Length - typedIn) > 1e-6 || typed.To.X <= typed.From.X || Math.Abs(typed.To.Y - typed.From.Y) > 1e-6)
+            throw new Exception("the first zone has not the radius typed in, to the east");
+        if (zones[1].ZoneArrows is not [{ Kind: ZoneArrowKind.Radius } a] || Math.Abs(a.Length - calculatedAll[1]) > 1e-6 || a.To.Y <= a.From.Y || Math.Abs(a.To.X - a.From.X) > 1e-6)
+            throw new Exception("the second zone has not its calculated radius to the north");
+        WindowShot("19c_exclusion_sources");
+        vm.ZoomAll(); Shot("19d_exclusion_zone_two_sources");
+        // one source across both: one zone, its radius arrow
+        var merge = w.GetLogicalDescendants().OfType<TextBox>().Single(b => b.Name == "exclusionMerge");
+        merge.Text = (far * 2).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Enter(merge);
+        zones = vm.Project!.Entities.OfType<PolylineEntity>().Where(e => e.Kind == LineKind.ExclusionZone).ToList();
+        if (zones.Count != 1 || zones[0].ZoneArrows is not [{ Kind: ZoneArrowKind.Radius }]) throw new Exception($"joined into one source: {zones.Count} zones");
+        vm.Project!.Vibration.ExclusionSources.Clear();
+        vm.ClearAnalysis(); Pump();
+    }
+    finally
+    {
+        // the merge distance, the radius typed in and the second blast go
+        vm.Project!.Vibration.ExclusionMergeDistance = 0;
+        vm.Project!.Vibration.ExclusionSources.Clear();
+        for (int i = 0; i < 20 && vm.Project!.Holes.Count(h => !h.IsDummy) > holes.Count; i++) { vm.Undo(); Pump(); }
+        vm.ZoomAll();
+    }
+});
+Step("Two blasts nearer than two radii are one zone with a waist: Size Length gives its length and a width across each blast, Radius (the default) a radius each", () =>
+{
+    var p = vm.Project!;
+    var holes = p.Holes.Where(h => !h.IsDummy).ToList();
+    var r = BlastDesigner.Engine.ExclusionZone.Sources(p).Max(s => s.Radius);
+    var span = holes.Max(h => h.Collar.X) - holes.Min(h => h.Collar.X);
+    vm.Change("Second blast", pr => { foreach (var h in holes) { var c = (Hole)h.CloneWithNewId(); c.Translate(new BlastDesigner.Domain.Geometry.Vec3(span + r, 0, 0)); pr.Add(c); } });
+    try
+    {
+        var sources = BlastDesigner.Engine.ExclusionZone.Sources(vm.Project!);
+        if (sources.Count != 2) throw new Exception($"{sources.Count} sources");
+        AnalisysWindows.ExclusionZone(vm); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        Button Named(string name) => w.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == name);
+        if (vm.Project!.Vibration.ExclusionSize != ExclusionSizing.Radius || Named("exclusionSizeRadius").Background != BlastDesigner.App.Services.Look.AccentSoft)
+            throw new Exception("Size is not Radius by default");
+        Named("exclusionSizeLength").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        var draw = Named("exclusionDraw");
+        draw.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        w.Close();
+        var zones = vm.Project!.Entities.OfType<PolylineEntity>().Where(e => e.Kind == LineKind.ExclusionZone).ToList();
+        if (zones.Count != 1) throw new Exception($"{zones.Count} zones of two blasts close together");
+        if (zones[0].ZoneArrows?.Select(a => a.Kind).SequenceEqual(new[] { ZoneArrowKind.Length, ZoneArrowKind.Width, ZoneArrowKind.Width }) != true)
+            throw new Exception("the joined zone has not its length and a width across each blast");
+        vm.ZoomAll(); Shot("19e_exclusion_zone_joined");
+        // Size: Radius — each blast its radius arrow inside the one zone
+        AnalisysWindows.ExclusionZone(vm); Pump();
+        w = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var byRadius = w.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "exclusionSizeRadius");
+        byRadius.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (vm.Project!.Vibration.ExclusionSize != ExclusionSizing.Radius || byRadius.Background != BlastDesigner.App.Services.Look.AccentSoft) throw new Exception("Size Radius is not set");
+        // the window as high as what it holds, no empty band at the bottom
+        if (w.Content is Control body && w.ClientSize.Height > body.DesiredSize.Height + 4) throw new Exception($"the window is {w.ClientSize.Height:0} high for {body.DesiredSize.Height:0} of content; size {w.SizeToContent}");
+        WindowShot("19f_exclusion_size_switch");
+        // the zone on the plan is drawn again at once
+        w.Close();
+        zones = vm.Project!.Entities.OfType<PolylineEntity>().Where(e => e.Kind == LineKind.ExclusionZone).ToList();
+        if (zones.Count != 1 || zones[0].ZoneArrows?.Select(a => a.Kind).SequenceEqual(new[] { ZoneArrowKind.Radius, ZoneArrowKind.Radius }) != true)
+            throw new Exception("with Size Radius the joined zone has not a radius arrow for each blast");
+        vm.ZoomAll(); Shot("19g_exclusion_zone_joined_radii");
+        vm.ClearAnalysis(); Pump();
+    }
+    finally
+    {
+        vm.Project!.Vibration.ExclusionSize = ExclusionSizing.Radius;
+        for (int i = 0; i < 20 && vm.Project!.Holes.Count(h => !h.IsDummy) > holes.Count; i++) { vm.Undo(); Pump(); }
+        vm.ZoomAll();
+    }
 });
 Step("Isolines is the first button of Initiation and a switch; one Depths chip over the plan", () =>
 {

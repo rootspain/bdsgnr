@@ -3380,3 +3380,30 @@ In a window of {0} ms	В окне {0} мс
 Level	Уровень
 ui:Isolines	Изолинии
 ui:Hole depths: a loaded hole shows its charge column, an empty one the line from collar to toe; off shows collars only	Глубины скважин: у заряженной — колонка заряда, у пустой — линия от устья до забоя; выключено — только устья
+Merge distance, m	Расстояние объединения, м
+Charged holes no farther apart than this are one source of the zone; empty — from the spacing of the holes.	Заряженные скважины, стоящие не дальше этого расстояния друг от друга, — один источник зоны; пусто — по шагу скважин.
+auto {0:0} m	авто {0:0} м
+Source {0}	Источник {0}
+{0} sources: each zone of its own radius	Источников: {0}, у каждого свой радиус
+Exclusion zone sources	Источники опасной зоны
+ui:Site constant k of the Richards and Moore throw (face burst, cratering, rifling): 13.5 is typical, up to 27 for a conservative estimate. The throw grows as k squared	Коэффициент k площадки в расчёте разлёта по Ричардсу и Муру (прорыв через откос, воронка, выброс вдоль скважины): обычно 13,5, для осторожной оценки до 27. Разлёт растёт как квадрат k
+ui:The greatest throw of the holes times this is the flyrock clearance	Опасная зона по разлёту — наибольший разлёт по скважинам, умноженный на этот коэффициент
+ui:The flyrock clearance is never less than this, however short the throw	Опасная зона по разлёту не меньше этого расстояния, каким бы малым ни был разлёт
+Exclusion merge distance	Расстояние объединения источников
+ui:K of the site law PPV = K · (D / √Q)^(−B), mm/s: D the distance, m, Q the charge in the window, kg. Fitted from the measured events of the site	K закона площадки V = K · (D / √Q)^(−B), мм/с: D — расстояние, м, Q — заряд в окне, кг. Подбирается по замерам вибрации на площадке
+ui:How fast the vibration falls with the scaled distance D / √Q: the larger B, the faster	Насколько быстро затухают колебания с приведённым расстоянием D / √Q: чем больше B, тем быстрее
+ui:The peak particle velocity allowed at a protected object; the vibration radius of the exclusion zone is where the forecast falls to it	Допустимая скорость колебаний у охраняемого объекта; радиус опасной зоны по сейсмике — расстояние, на котором прогноз падает до неё
+ui:Charges firing within this time of each other count as one: their sum is the maximum instantaneous charge (MIC) the forecasts use	Заряды, взрываемые в пределах этого времени, считаются одновременными: их сумма — масса взрывчатки на замедление (МВЗ), по которой идут прогнозы
+ui:K of the airblast law P = K · (D / ∛Q)^(−B), kPa: D the distance, m, Q the charge in the window, kg	K закона воздушной волны P = K · (D / ∛Q)^(−B), кПа: D — расстояние, м, Q — заряд в окне, кг
+ui:How fast the airblast falls with the scaled distance D / ∛Q: the larger B, the faster	Насколько быстро затухает воздушная волна с приведённым расстоянием D / ∛Q: чем больше B, тем быстрее
+ui:The airblast overpressure allowed, dB; the airblast radius of the exclusion zone is where the forecast falls to it	Допустимое избыточное давление ВУВ, дБ; радиус опасной зоны по ВУВ — расстояние, на котором прогноз падает до него
+ui:Charged holes no farther apart than this are one source of the exclusion zone; 0 — from the spacing of the holes	Заряженные скважины, стоящие не дальше этого расстояния друг от друга, — один источник опасной зоны; 0 — по шагу скважин
+Radius, m	Радиус, м
+Azimuth, °	Азимут, °
+Calculated {0:0} m. Type another to draw the zone of this source with it; empty — the calculated one	Расчётный {0:0} м. Введите другой — зона этого источника будет нарисована с ним; пусто — расчётный
+Where the radius arrow of this source points, degrees clockwise from north	Куда направлена стрелка радиуса этого источника, градусы по часовой стрелке от севера
+A zone of one source its radius; a zone several sources make its length and a width across each source	У зоны одного источника — радиус; у общей зоны нескольких источников — её длина и ширина у каждого источника
+Each source the arrow of its radius, also inside a zone several sources make	У каждого источника — стрелка его радиуса, и в общей зоне тоже
+Exclusion zone source	Источник опасной зоны
+Exclusion zone arrows	Стрелки опасной зоны
+Hide exclusion zone	Скрыть опасную зону

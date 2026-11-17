@@ -346,13 +346,15 @@ public static class CalcService
         r.AddBuiltin(new BuiltinDef
         {
             Name = "mic", NameRu = "Максимальный взрываемый заряд", Contexts = new[] { "blast" }, Unit = "kg",
-            Description = "Наибольшая масса ВВ скважин, сработавших в окне МВЗ (огибающая по времени); по всем скважинам проекта.",
+            Description = "Наибольшая масса ВВ скважин, сработавших в окне МВЗ (огибающая по времени); по всем скважинам проекта, у источника опасной зоны — по его скважинам.",
             Inputs = new[] { "hole.firingTimeMs", "hole.isDummy", "hole.chargeMass", "param:site.vib.window" },
             Outputs = new[] { "blast.mic" },
             Prepare = s =>
             {
                 var window = s.ParameterValue("site.vib.window") ?? s.Project.Vibration.WindowMs;
-                return Timing.TimeEnvelope(s.Project, window, h => s.Number("hole.chargeMass", h)).Select(e => e.ChargeKg).DefaultIfEmpty(0).Max();
+                // a source of the exclusion zone counts only its own holes
+                var holes = s.Scope.BuiltinArgs.GetValueOrDefault("mic.holes") as IReadOnlyList<Hole>;
+                return Timing.TimeEnvelope(s.Project, window, h => s.Number("hole.chargeMass", h), holes).Select(e => e.ChargeKg).DefaultIfEmpty(0).Max();
             },
             Value = (_, prepared, _, _) => (double)prepared!
         });

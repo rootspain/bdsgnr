@@ -396,9 +396,9 @@ public static class Timing
     /// hole is an event of its own, at its time and with its share of the hole's mass (<see cref="Charging.ChargeEvents"/>);
     /// "holes" counts the charges.
     /// </summary>
-    public static List<EnvelopePoint> TimeEnvelope(BlastProject project, double windowMs, Func<Hole, double> charge)
+    public static List<EnvelopePoint> TimeEnvelope(BlastProject project, double windowMs, Func<Hole, double> charge, IEnumerable<Hole>? holes = null)
     {
-        var events = project.Holes.Where(h => h.FiringTimeMs.HasValue && !h.IsDummy)
+        var events = (holes ?? project.Holes).Where(h => h.FiringTimeMs.HasValue && !h.IsDummy)
             .SelectMany(h => Charging.ChargeEvents(project, h, charge(h)))
             .Select(e => (T: e.TimeMs, Q: e.Kg))
             .OrderBy(e => e.T).ToList();

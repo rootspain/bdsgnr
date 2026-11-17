@@ -447,6 +447,7 @@ public static class PlanRenderer
                         var (x, y) = cam.ToScreen(pl.Points[pl.Points.Count / 2]);
                         canvas.DrawText(pl.Label, x + 2, y - 2, text);
                     }
+                    if (pl.ZoneArrows is { Count: > 0 } arrows && !opt.HaloPass) DrawZoneArrows(canvas, cam, arrows, color, opt.Background);
                     break;
                 case PointEntity p:
                     DrawPoint(canvas, cam, p, stroke, fill, text, showText);
@@ -1007,6 +1008,49 @@ public static class PlanRenderer
         path.Close();
         fill.Color = stroke.Color;
         c.DrawPath(path, fill);
+    }
+
+    /// <summary>Size of the figures on the arrows of an exclusion zone: pixels on the screen, points on a sheet, whatever the zoom.</summary>
+    public const float ZoneArrowTextSize = 13;
+
+    /// <summary>
+    /// The arrows of an exclusion zone (a radius out of it, a length and a width across it) with their lengths written on
+    /// them on a plate of the background: the size of the figures does not change with the zoom, so they read
+    /// the same on a printed sheet of any scale.
+    /// </summary>
+    public static void DrawZoneArrows(SKCanvas c, Camera cam, IReadOnlyList<ZoneArrow> arrows, SKColor color, SKColor background)
+    {
+        using var line = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.6f, Color = color };
+        using var head = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = color };
+        using var text = new SKPaint { IsAntialias = true, TextSize = ZoneArrowTextSize, Color = color, FakeBoldText = true, TextAlign = SKTextAlign.Center, Typeface = SKTypeface.Default };
+        using var plate = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = background.WithAlpha(225) };
+        using var rim = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = color };
+        // the figures of the others at their middles; a width runs through a source, its middle on the holes and maybe
+        // along a radius: its figures a quarter of the way from the end farther from the other figures
+        var middles = arrows.Where(a => a.Kind != ZoneArrowKind.Width).Select(a => cam.ToScreen(Vec3.Lerp(a.From, a.To, 0.5))).ToList();
+        double Clear(Vec3 p)
+        {
+            var (px, py) = cam.ToScreen(p);
+            return middles.Count == 0 ? 0 : middles.Min(m => (m.Item1 - px) * (m.Item1 - px) + (m.Item2 - py) * (m.Item2 - py));
+        }
+        foreach (var a in arrows)
+        {
+            DrawArrow(c, cam, a.From, a.To, line, head, 11);
+            if (a.BothEnds) DrawArrow(c, cam, a.To, a.From, line, head, 11);
+            var label = $"{a.Length:0} {Translate("m")}";
+            var at = Vec3.Lerp(a.From, a.To, 0.5);
+            if (a.Kind == ZoneArrowKind.Width)
+            {
+                var (q1, q3) = (Vec3.Lerp(a.From, a.To, 0.25), Vec3.Lerp(a.From, a.To, 0.75));
+                at = Clear(q1) >= Clear(q3) ? q1 : q3;
+            }
+            var (x, y) = cam.ToScreen(at);
+            var w = text.MeasureText(label);
+            var box = new SKRect(x - w / 2 - 5, y - ZoneArrowTextSize * 0.8f - 3, x + w / 2 + 5, y + ZoneArrowTextSize * 0.35f + 3);
+            c.DrawRoundRect(box, 3, 3, plate);
+            c.DrawRoundRect(box, 3, 3, rim);
+            c.DrawText(label, x, y, text);
+        }
     }
 
     /// <summary>Point kinds drawn as a plain cross (batched by <see cref="Render"/>).</summary>

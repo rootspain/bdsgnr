@@ -1190,7 +1190,13 @@ public sealed partial class MainViewModel
         var holes = SelectedOrAllHoles();
         var r = await Dialogs.PromptNumber("Mark clearance zone", Loc.T("Clearance radius (m)"), 500);
         if (r is not double v) return;
-        Change("Mark clearance zone", p => p.Add(GeneralOps.ClearanceZone(holes, v), p.GetOrCreateLayer("Clearance", 0xFFDC2626, "Design")));
+        var zones = GeneralOps.ClearanceZone(holes, v);
+        if (zones.Count == 0) return;
+        Change("Mark clearance zone", p =>
+        {
+            var layer = p.GetOrCreateLayer("Clearance", 0xFFDC2626, "Design");
+            foreach (var z in zones) p.Add(z, layer);
+        });
     }
 
     public async Task PolygonArea3D()

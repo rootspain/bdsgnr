@@ -48,14 +48,14 @@ public static class GeneralOps
     public static PolylineEntity Expand(PolylineEntity polygon, double distance) =>
         new() { Points = GeoMath.OffsetPolygon(polygon.Points, distance), Closed = true, Kind = polygon.Kind, LayerId = polygon.LayerId };
 
-    /// <summary>Clearance zone: the hull of the selected holes expanded by a radius.</summary>
-    public static PolylineEntity ClearanceZone(IEnumerable<Hole> holes, double radius)
+    /// <summary>Clearance zone: the area within a radius of the holes, an outline a group of holes standing together, joined where they overlap.</summary>
+    public static List<PolylineEntity> ClearanceZone(IEnumerable<Hole> holes, double radius)
     {
-        var pts = new List<Vec3>();
-        foreach (var h in holes)
-            for (int i = 0; i < 16; i++)
-                pts.Add(h.Collar + new Vec3(Math.Cos(i * Math.PI / 8) * radius, Math.Sin(i * Math.PI / 8) * radius, 0));
-        return new PolylineEntity { Points = GeoMath.ConvexHull(pts), Closed = true, Kind = LineKind.ClearanceZone, Label = $"Clearance {radius:0} m" };
+        // the holes standing together are one group: groups far apart get a zone each, not one hull over the gap
+        var list = holes.ToList();
+        var groups = ExclusionZone.Cluster(list, ExclusionZone.AutoMergeDistance(list));
+        return ExclusionZone.Outlines(groups.Select(g => ((IReadOnlyList<Vec3>)g.Select(h => h.Collar).ToList(), radius)))
+            .Select(o => new PolylineEntity { Points = o, Closed = true, Kind = LineKind.ClearanceZone, Label = $"Clearance {radius:0} m" }).ToList();
     }
 
     /// <summary>Similarity transform: translate, rotate about a pivot in plan, and scale.</summary>

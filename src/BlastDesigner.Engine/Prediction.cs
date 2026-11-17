@@ -51,21 +51,14 @@ public static class Flyrock
         return new Report(list, critical?.Max ?? 0, V("blast.flyrockClearance", project), critical?.Hole);
     }
 
-    /// <summary>Clearance zone polygon: hull of a circle of the per-hole clearance around every hole.</summary>
-    public static List<Vec3> ClearancePolygon(BlastProject project, Report r, int segments = 48)
+    /// <summary>
+    /// Clearance zone outlines: a circle of the per-hole clearance around every hole, joined where they overlap; holes far
+    /// apart get outlines of their own, not one hull over the gap.
+    /// </summary>
+    public static List<List<Vec3>> ClearancePolygon(BlastProject project, Report r)
     {
-        var pts = new List<Vec3>();
         var m = project.Flyrock;
-        foreach (var hr in r.Holes)
-        {
-            var radius = Math.Max(m.MinimumClearance, hr.Max * m.SafetyFactor);
-            for (int i = 0; i < segments; i++)
-            {
-                var a = 2 * Math.PI * i / segments;
-                pts.Add(hr.Hole.Collar + new Vec3(Math.Cos(a) * radius, Math.Sin(a) * radius, 0));
-            }
-        }
-        return GeoMath.ConvexHull(pts);
+        return ExclusionZone.Outlines(r.Holes.Select(hr => ((IReadOnlyList<Vec3>)new[] { hr.Hole.Collar }, Math.Max(m.MinimumClearance, hr.Max * m.SafetyFactor))));
     }
 }
 
@@ -214,24 +207,6 @@ public static class SiteLaw
     {
         var kpa = 20e-6 * Math.Pow(10, limitDb / 20) / 1000;
         return Math.Cbrt(Math.Max(0, chargeKg)) * Math.Pow(m.AirK / kpa, 1 / m.AirB);
-    }
-}
-
-/// <summary>Exclusion zone: the larger of the flyrock clearance and the vibration and airblast distances.</summary>
-public static class ExclusionZone
-{
-    public sealed record Result(double Mic, double VibrationRadius, double AirblastRadius, double FlyrockRadius)
-    {
-        public double Radius => Math.Max(VibrationRadius, Math.Max(AirblastRadius, FlyrockRadius));
-    }
-
-    /// <summary>Solves the timing, then the radii are the properties <c>blast.vibrationRadius</c>, <c>blast.airblastRadius</c>, <c>blast.flyrockClearance</c>.</summary>
-    public static Result Compute(BlastProject project)
-    {
-        Timing.Solve(project);
-        var s = CalcService.Live(project) ?? CalcService.Session(project);
-        double V(string id) => Charging.Calculated(s, id, project, 0);
-        return new Result(V("blast.micOrMaxCharge"), V("blast.vibrationRadius"), V("blast.airblastRadius"), V("blast.flyrockClearance"));
     }
 }
 

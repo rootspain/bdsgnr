@@ -475,6 +475,37 @@ public sealed class VibrationModel
     public double WindowMs { get; set; } = 8;
     public double PpvLimit { get; set; } = 10;
     public double AirblastLimitDb { get; set; } = 120;
+    /// <summary>
+    /// Charged holes no farther apart than this, m, are one source of the exclusion zone; 0 works it out from the spacing
+    /// of the holes (<c>ExclusionZone.AutoMergeDistance</c>).
+    /// </summary>
+    public double ExclusionMergeDistance { get; set; }
+    /// <summary>What the arrows of the exclusion zone measure: the radius of each source (by default), or its length and widths.</summary>
+    public ExclusionSizing ExclusionSize { get; set; } = ExclusionSizing.Radius;
+    /// <summary>The radius typed in and the side of the radius arrow of a source of the exclusion zone, kept by a hole of it.</summary>
+    public List<ExclusionSourceSetting> ExclusionSources { get; set; } = new();
+}
+
+/// <summary>What the arrows of the exclusion zone measure.</summary>
+public enum ExclusionSizing
+{
+    /// <summary>An outline of one source its radius; one several make its length and a width across each source.</summary>
+    Length,
+    /// <summary>Each source its radius, whatever outline it is in.</summary>
+    Radius
+}
+
+/// <summary>
+/// A source of the exclusion zone as set by hand. The sources are worked out from the holes each time, so the setting is
+/// kept by a hole: it is of the source that hole is in.
+/// </summary>
+public sealed class ExclusionSourceSetting
+{
+    public Guid HoleId { get; set; }
+    /// <summary>The radius typed in, m; none — the calculated one.</summary>
+    public double? Radius { get; set; }
+    /// <summary>Where the radius arrow points, degrees clockwise from north.</summary>
+    public double Azimuth { get; set; }
 }
 
 public sealed class SummaryBlock

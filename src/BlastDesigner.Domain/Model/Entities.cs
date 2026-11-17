@@ -148,10 +148,24 @@ public sealed class PolylineEntity : Entity, ILineStyled
     /// <inheritdoc cref="ILineStyled.LineTypeScale"/>
     public double LineTypeScale { get; set; } = 1;
 
+    /// <summary>
+    /// Arrows of an exclusion zone, drawn with it and gone with it: the radius of a zone of one source, the length and the
+    /// width of one that several sources make. Null on every other line and in files from before them.
+    /// </summary>
+    public List<ZoneArrow>? ZoneArrows { get; set; }
+
     public override string KindName => Closed ? "Polygon" : "Polyline";
     public override IEnumerable<Vec3> GetVertices() => Points;
-    public override void Translate(Vec3 d) { for (int i = 0; i < Points.Count; i++) Points[i] += d; }
-    public override void Transform(Func<Vec3, Vec3> f) { for (int i = 0; i < Points.Count; i++) Points[i] = f(Points[i]); }
+    public override void Translate(Vec3 d)
+    {
+        for (int i = 0; i < Points.Count; i++) Points[i] += d;
+        if (ZoneArrows != null) foreach (var a in ZoneArrows) { a.From += d; a.To += d; }
+    }
+    public override void Transform(Func<Vec3, Vec3> f)
+    {
+        for (int i = 0; i < Points.Count; i++) Points[i] = f(Points[i]);
+        if (ZoneArrows != null) foreach (var a in ZoneArrows) { a.From = f(a.From); a.To = f(a.To); }
+    }
     public override double PickDistance(Vec3 p) => GeoMath.DistanceToPolyline2D(Points, p, Closed);
 
     /// <summary>A part of the line to show (cut by a block): the same object, same id, with these points, open.</summary>
@@ -165,6 +179,29 @@ public sealed class PolylineEntity : Entity, ILineStyled
 
     [JsonIgnore] public double Length => GeoMath.Length(Points, Closed);
     [JsonIgnore] public double Area => Closed ? GeoMath.Area(Points) : 0;
+}
+
+/// <summary>What an arrow of an exclusion zone measures.</summary>
+public enum ZoneArrowKind
+{
+    /// <summary>The radius of a source: from its outermost charged hole toward the azimuth set for it, the head on the edge.</summary>
+    Radius,
+    /// <summary>The greatest length of a zone that several sources make: across it between its two farthest points.</summary>
+    Length,
+    /// <summary>The width of such a zone across one of its sources, square to its length: arrow heads at both ends.</summary>
+    Width
+}
+
+/// <summary>An arrow of an exclusion zone with its length written on it (the radius, or the zone's length or width).</summary>
+public sealed class ZoneArrow
+{
+    public Vec3 From { get; set; }
+    public Vec3 To { get; set; }
+    public ZoneArrowKind Kind { get; set; }
+
+    [JsonIgnore] public double Length => Vec3.Distance2D(From, To);
+    /// <summary>Heads at both ends: a length or a width across the zone, not a radius out of it.</summary>
+    [JsonIgnore] public bool BothEnds => Kind != ZoneArrowKind.Radius;
 }
 
 public sealed class TextEntity : Entity
