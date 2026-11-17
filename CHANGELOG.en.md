@@ -43,7 +43,14 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the vertex table of the segment and its elevation.
 - **The tips at the cursor in the dark theme** are lighter and easier to read.
 
+### New
+- **DaveyTronic export:** the warning about holes left out of the file (without ties, or on a chain not chosen for
+  any line) has a "Select the holes not written" button: the file is not written and those holes are selected in the plan.
+
 ### Fixed
+- **The depth of a hole down to the surface or to the depth polygon is worked out at its new place:** a hole of a
+  pattern moved, or copied and pasted, kept the level of where it was. Now it goes down to the surface (or to the depth
+  polygon, its collar on the collar polygon) where it stands; a depth set by hand stays.
 - **The round Blast direction button over the plan** is on the line of the chips and no longer covers the north arrow.
 - **Draw exclusion zone no longer draws a zone over the one before:** that one is deleted, the plan has one zone.
   Clear analysis (the chip over the plan, Esc, the menu) takes the exclusion zone off too; an undo brings it back.

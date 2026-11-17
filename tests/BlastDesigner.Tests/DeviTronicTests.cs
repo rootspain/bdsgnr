@@ -153,6 +153,34 @@ public class DeviTronicTests
     }
 
     [Fact]
+    public void Build_NamesTheHolesLeftOut_ToBeSelected()
+    {
+        var p = BlastProject.CreateNew();
+        var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
+        Hole H(string label, double x)
+        {
+            var h = new Hole { Label = label, Collar = new Vec3(x, 0, 100), Length = 10, ElectronicTimeMs = x };
+            h.Decks.Add(new Deck { Top = 3, Bottom = 10, Primers = { new Primer { Depth = 9, DetonatorId = edet.Id } } });
+            p.Entities.Add(h);
+            return h;
+        }
+        var h1 = H("1", 0); var h2 = H("2", 5); var h3 = H("3", 10); var h4 = H("4", 15); var h5 = H("5", 20);
+        var plain = new Hole { Label = "6", Collar = new Vec3(25, 0, 100), Length = 10 };   // no electronic detonator: not counted
+        p.Entities.Add(plain);
+        p.Entities.Add(new TieEntity { FromId = h1.Id, ToId = h2.Id, ProductId = "w" });
+        p.Entities.Add(new TieEntity { FromId = h3.Id, ToId = h4.Id, ProductId = "x" });
+        p.Coordinates.UtmZone = 29;
+        var chains = DeviTronic.Chains(p);
+        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t");
+        Assert.Empty(r.Errors);
+        var untied = Assert.Single(r.Warnings, w => w.Format.Contains("have no ties"));
+        Assert.Equal(new[] { h5.Id }, untied.Holes);
+        var other = Assert.Single(r.Warnings, w => w.Format.Contains("not chosen for any line"));
+        Assert.Equal(new[] { h3.Id, h4.Id }, other.Holes);
+        Assert.Empty(new BpdMessage("x").Holes);
+    }
+
+    [Fact]
     public void Build_RejectsTheSameChainTwice()
     {
         var p = BlastProject.CreateNew();

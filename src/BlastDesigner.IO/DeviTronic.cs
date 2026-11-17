@@ -72,6 +72,9 @@ public sealed class BpdPlan
 /// <summary>A message of the export check: an English format (the translation key) and its arguments.</summary>
 public sealed record BpdMessage(string Format, params object[] Args)
 {
+    /// <summary>The holes the message is about (those left out of the file), to be selected in the plan; none for the others.</summary>
+    public IReadOnlyList<Guid> Holes { get; init; } = Array.Empty<Guid>();
+
     public override string ToString() => string.Format(CultureInfo.InvariantCulture, Format, Args);
 }
 
@@ -198,10 +201,10 @@ public static class DeviTronic
         var chainOf = HoleChains(project, chains);
         var chosen = holes.Where(h => !h.IsDummy).ToList();
         var keys = paths.Select(p => p.ChainKey).ToHashSet();
-        var notTied = chosen.Count(h => !chainOf.ContainsKey(h.Id) && HasElectronic(project, h));
-        if (notTied > 0) warnings.Add(new BpdMessage("{0} hole(s) with electronic detonators have no ties and are not written.", notTied));
-        var other = chosen.Count(h => chainOf.TryGetValue(h.Id, out var k) && !keys.Contains(k) && HasElectronic(project, h));
-        if (other > 0) warnings.Add(new BpdMessage("{0} hole(s) are on a chain not chosen for any line and are not written.", other));
+        var notTied = chosen.Where(h => !chainOf.ContainsKey(h.Id) && HasElectronic(project, h)).Select(h => h.Id).ToList();
+        if (notTied.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) with electronic detonators have no ties and are not written.", notTied.Count) { Holes = notTied });
+        var other = chosen.Where(h => chainOf.TryGetValue(h.Id, out var k) && !keys.Contains(k) && HasElectronic(project, h)).Select(h => h.Id).ToList();
+        if (other.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) are on a chain not chosen for any line and are not written.", other.Count) { Holes = other });
 
         for (int i = 0; i < paths.Count && i < 26; i++)
         {

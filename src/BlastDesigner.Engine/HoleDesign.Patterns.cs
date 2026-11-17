@@ -622,6 +622,8 @@ public static partial class HoleDesign
     /// A pattern cut into segments goes along only when all the holes of all its segments moved together (its segments and
     /// cut lines with it); the holes of one segment moved together keep their offsets, as the segment stays in its part.
     /// The length or level of a hole with a depth from/to edited by hand is kept from then on (<see cref="Hole.DepthManual"/>).
+    /// A hole moved, or a copy pasted, of a pattern drilled to the surface or to the depth polygon takes the level of its new
+    /// place (<see cref="Relevel"/>).
     /// </summary>
     public static Action? FollowPatterns(BlastProject project)
     {
@@ -639,6 +641,8 @@ public static partial class HoleDesign
         return () =>
         {
             var now = project.Holes.ToDictionary(h => h.Id);
+            // the holes now standing elsewhere, with the pattern whose depth they take there
+            var relevel = new List<(Hole Hole, HolePattern Pattern)>();
             // a pattern cut into segments with all its holes moved or turned together: the whole tree goes along
             var handled = new HashSet<Guid>();
             foreach (var (root, revision) in before.Where(x => x.pat.IsContainer && x.pat.ParentId == null))
@@ -651,6 +655,8 @@ public static partial class HoleDesign
                 var moved = was.Select(x => (Hole: now[x.Key], From: x.Value.Collar)).ToList();
                 if (moved.Any(m => Vec3.Distance2D(m.From, m.Hole.Collar) <= 1e-6) || Rigid(moved) is not var (turn, pivotFrom, pivotTo)) continue;
                 PatternTree.Transform(project, root, GeneralOps.MakeTransform(pivotTo - pivotFrom, turn, pivotFrom, 1), turn);
+                foreach (var (h, _) in moved)
+                    if (h.PatternId is Guid pid && project.FindPattern(pid) is { } leaf) relevel.Add((h, leaf));
                 handled.Add(root.Id);
                 foreach (var s in tree) handled.Add(s.Id);
             }
@@ -673,13 +679,20 @@ public static partial class HoleDesign
                     present++;
                     if (Vec3.Distance2D(from, h.Collar) > 1e-6) moved.Add((h, from));
                 }
-                foreach (var h in now.Values.Where(h => h.PatternId == pat.Id && !was.ContainsKey(h.Id) && !PatternTree.IsSeamHole(project, h))) h.DetachFromPattern();
+                foreach (var h in now.Values.Where(h => h.PatternId == pat.Id && !was.ContainsKey(h.Id) && !PatternTree.IsSeamHole(project, h)))
+                {
+                    // a copy: the depth of the pattern where it is put, unless the one copied had a depth of its own
+                    if (!h.DepthManual) relevel.Add((h, pat));
+                    h.DetachFromPattern();
+                }
                 // a length or a level of a hole with a depth from/to edited by hand: kept when the pattern is laid out again
                 foreach (var id in was.Keys)
                     if (now.TryGetValue(id, out var h) && h.PatternId == pat.Id && depthBefore.TryGetValue(id, out var d)
                         && (h.ToLevel != d.Level || (Math.Abs(h.Length - d.Length) > 1e-9 && h.Collar.Z == d.Z && h.Angle == d.Angle && h.Subdrill == d.Subdrill)))
                         h.DepthManual = true;
                 if (moved.Count == 0) continue;
+                foreach (var (h, _) in moved)
+                    if (!h.DepthManual) relevel.Add((h, pat));
                 // a segment stays in its part of the pattern: its holes moved together keep their offsets from their nodes
                 if (pat.ParentId == null && moved.Count == present && present == was.Count && Rigid(moved) is var (turn, pivotFrom, pivotTo))
                 {
@@ -699,7 +712,39 @@ public static partial class HoleDesign
                     h.GridOffset = o.Length2D < 1e-6 ? null : o;
                 }
             }
+            Relevel(project, relevel);
         };
+    }
+
+    /// <summary>
+    /// The depth of holes standing at a new place, taken there from the pattern they are of (or were copied from): drilled to
+    /// the surface, the level where each meets it now; to the depth polygon, the level of the polygon under it now (the
+    /// collar on the collar polygon, when the pattern has one). The length follows the level (<see cref="HoleLevel.Follow"/>).
+    /// A depth of another mode stays: a level, a fixed depth and the rectangle go by the pattern or the node, not the place.
+    /// </summary>
+    public static void Relevel(BlastProject project, IReadOnlyList<(Hole Hole, HolePattern Pattern)> holes)
+    {
+        if (holes.Count == 0) return;
+        var bench = project.Entities.OfType<SurfaceEntity>().FirstOrDefault(s => s.Kind == SurfaceKind.Bench);
+        var polygons = new Dictionary<Guid, (SurfaceEntity? Collar, SurfaceEntity? Depth)>();
+        foreach (var (h, pat) in holes)
+        {
+            var depth = pat.HoleDefaults.Depth;
+            var mode = PatternTree.EffectiveDepthMode(pat);
+            if (depth.UsesPolygons)
+            {
+                if (!polygons.TryGetValue(pat.Id, out var poly)) polygons[pat.Id] = poly = PatternSurfaces.Surfaces(project, pat, bench);
+                if (depth.Collars == CollarSource.Polygon && poly.Collar != null) h.Collar = h.Collar.WithZ(PatternSurfaces.At(poly.Collar, h.Collar.X, h.Collar.Y));
+                if (mode == DepthMode.Polygon && poly.Depth != null)
+                {
+                    var z = PatternSurfaces.DepthLevel(h, poly.Depth) + (depth.IncludesSubdrill ? h.Subdrill : 0);
+                    h.ToLevel = HoleLevel.Reaches(h, z) ? z : null;
+                }
+            }
+            if (mode == DepthMode.ToSurface)
+                h.ToLevel = HoleLevel.SurfaceLevel(project, h) is double s && HoleLevel.Reaches(h, s) ? s : null;
+            if (HoleLevel.Length(h) is double length) h.Length = length;
+        }
     }
 
     /// <summary>The turn (degrees clockwise) and shift that took every hole from where it was to where it is, within a millimetre; null when there is none.</summary>

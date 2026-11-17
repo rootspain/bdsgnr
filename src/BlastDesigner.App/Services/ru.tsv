@@ -2941,6 +2941,7 @@ The UTM zone is not set (Edit ▸ Site coordinate system): zone 0 is written.	Н
 No more than 26 lines (A–Z) can be written.	Можно записать не более 26 линий (A–Z).
 The tie type is chosen for more than one line: {0}	Тип связи выбран для нескольких линий: {0}
 {0} hole(s) with electronic detonators have no ties and are not written.	Скважин с электронными детонаторами без связей: {0}, они не записаны.
+Select the holes not written	Выделить эти скважины
 {0} hole(s) are tied with a type not chosen for any line and are not written.	Скважин с типом связи, не выбранным ни для одной линии: {0}, они не записаны.
 Line {0}: {1} hole(s) without electronic detonators are not written.	Линия {0}: скважин без электронных детонаторов: {1}, они не записаны.
 Line {0} ({1}): no holes with electronic detonators.	Линия {0} ({1}): нет скважин с электронными детонаторами.
