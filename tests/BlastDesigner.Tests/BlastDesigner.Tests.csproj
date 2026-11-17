@@ -17,6 +17,10 @@
     <ProjectReference Include="..\..\src\BlastDesigner.Recognition\BlastDesigner.Recognition.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- where the repository is, for the tests that read its sources: they may be built and run outside it (dotnet test -o) -->
+    <AssemblyMetadata Include="RepositoryRoot" Value="$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..'))" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- reference probabilities from ml/train.py for the ONNX parity test -->
     <None Include="..\..\ml\models\parity.json" Link="parity.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

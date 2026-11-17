@@ -38,11 +38,24 @@ public class DashboardTipTests
         Assert.Contains("less than 3.20 m (80 % of the design burden of 4.00 m)", string.Format(CultureInfo.InvariantCulture, low.Tip!, low.TipArgs!));
     }
 
+    /// <summary>
+    /// The root of the repository: above the tests as built in it, or, built elsewhere (dotnet test -o), where the build put
+    /// it (the RepositoryRoot metadata of the project).
+    /// </summary>
+    static string Root()
+    {
+        for (var dir = AppContext.BaseDirectory; dir != null; dir = Path.GetDirectoryName(dir))
+            if (File.Exists(Path.Combine(dir, "Directory.Build.props"))) return dir;
+        var meta = typeof(DashboardTipTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .OfType<System.Reflection.AssemblyMetadataAttribute>().FirstOrDefault(a => a.Key == "RepositoryRoot")?.Value;
+        if (meta != null && File.Exists(Path.Combine(meta, "Directory.Build.props"))) return meta;
+        throw new DirectoryNotFoundException("the repository is neither above " + AppContext.BaseDirectory + " nor at " + meta);
+    }
+
     [Fact]
     public void EveryTipOfTheDashboardIsTranslatedWithTheSameValues()
     {
-        var root = AppContext.BaseDirectory;
-        while (!File.Exists(Path.Combine(root, "Directory.Build.props"))) root = Path.GetDirectoryName(root)!;
+        var root = Root();
         var source = File.ReadAllText(Path.Combine(root, "src", "BlastDesigner.Engine", "Analysis.cs"));
         var dashboard = source[source.IndexOf("public static List<Kpi> Dashboard", StringComparison.Ordinal)..];
         var tips = Regex.Matches(dashboard, @"^\s+""(.+)"",\s*$", RegexOptions.Multiline).Select(m => m.Groups[1].Value).ToList();

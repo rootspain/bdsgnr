@@ -4990,7 +4990,9 @@ Step("a block of three clicks shows only what is inside it, has a layer of its o
 });
 Step("an initiation point on a hole is picked by its star's rays, the hole by its middle", () =>
 {
-    var hole = vm.Project!.Holes.First(h => !h.IsDummy);
+    // a hole on no tie yet: a chain of holes with an electronic detonator does not branch, so the chain from the point
+    // starts on a hole of its own
+    var hole = vm.Project!.Holes.First(h => !h.IsDummy && !vm.Project.Ties.Any(t => t.FromId == h.Id || t.ToId == h.Id));
     var ip = new InitiationPoint { Position = hole.Collar, Label = "IPX" };
     vm.Change("Smoke initiation point on a hole", p => p.Add(ip));
     vm.Doc!.Select(new[] { hole.Id }); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); Pump();
