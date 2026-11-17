@@ -393,7 +393,7 @@ public sealed partial class PropertiesPanel
     }
 
     /// <summary>The name of a vertex in the table: its number on the outline, the line and end of a crossing, the island and its vertex.</summary>
-    private static string VertexName(BlastProject p, HolePattern root, string key)
+    internal static string VertexName(BlastProject p, HolePattern root, string key)
     {
         var parts = key.Split(':');
         return parts[0] switch

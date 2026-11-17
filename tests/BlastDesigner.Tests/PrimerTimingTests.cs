@@ -6,7 +6,7 @@ using BlastDesigner.IO;
 
 namespace BlastDesigner.Tests;
 
-/// <summary>The DeviTronic detonator, primers with times of their own and the charges they fire.</summary>
+/// <summary>The Davey Tronic detonator, primers with times of their own and the charges they fire.</summary>
 public class PrimerTimingTests
 {
     private const string DeviTronicId = "5f2d6f31-4a02-4514-a200-0a6d6490db5a";
@@ -24,7 +24,7 @@ public class PrimerTimingTests
     {
         var fresh = BlastProject.CreateNew();
         Assert.Single(fresh.Products, x => x.Id == DeviTronicId);
-        Assert.Contains(fresh.Catalogue.Families, f => f.Id == "31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2" && f.Name == "DeviTronic");
+        Assert.Contains(fresh.Catalogue.Families, f => f.Id == "31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2" && f.Name == "Davey Tronic");
 
         // a file saved before DeviTronic was in the catalogue
         var old = BlastProject.CreateNew();
@@ -37,6 +37,27 @@ public class PrimerTimingTests
         var hole = new Hole { Length = 10 };
         hole.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = opened.Products.First(x => x.IsExplosive).Id, Primers = { new Primer { Depth = 9.5, DetonatorId = DeviTronicId } } });
         Assert.True(Charging.HasElectronicDetonator(opened, hole));
+    }
+
+    [Fact]
+    public void AProjectSavedWhenTheDetonatorWasDeviTronic_OpensWithDaveyTronic_ButANameTheUserGaveStays()
+    {
+        const string family = "31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2";
+        var old = BlastProject.CreateNew();
+        var det = old.Products.Single(x => x.Id == DeviTronicId);
+        det.Name = "DeviTronic";
+        det.Family = "DeviTronic";
+        old.Catalogue.Families.Single(f => f.Id == family).Name = "DeviTronic";
+        var opened = Reopened(old);
+        var now = opened.Products.Single(x => x.Id == DeviTronicId);
+        Assert.Equal("Davey Tronic", now.Name);
+        Assert.Equal("Davey Tronic", now.Family);
+        Assert.Equal("Davey Tronic", opened.Catalogue.Families.Single(f => f.Id == family).Name);
+        Assert.DoesNotContain(opened.Products, x => x.Name == "DeviTronic" || x.Name == "Davey Tronic" && x.Id != DeviTronicId);
+
+        var own = BlastProject.CreateNew();
+        own.Products.Single(x => x.Id == DeviTronicId).Name = "Мой детонатор";
+        Assert.Equal("Мой детонатор", Reopened(own).Products.Single(x => x.Id == DeviTronicId).Name);
     }
 
     private static string Explosive(BlastProject p) => p.Products.First(x => x.IsExplosive).Id;

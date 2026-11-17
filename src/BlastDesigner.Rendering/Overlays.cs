@@ -66,7 +66,7 @@ public sealed class PreviewOverlay : IOverlay
     {
         using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, PathEffect = SKPathEffect.CreateDash(new[] { 5f, 3f }, 0) };
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
-        using var text = new SKPaint { IsAntialias = true, TextSize = 12, Color = PlanRenderer.Adapt(new SKColor(0xFF1D4ED8)) };
+        using var text = new SKPaint { IsAntialias = true, TextSize = 12, Color = PlanRenderer.DarkMode ? new SKColor(0xFFDBE7FF) : new SKColor(0xFF1D4ED8) };
         foreach (var (pts, closed, col) in Lines)
         {
             stroke.Color = PlanRenderer.Adapt(col);

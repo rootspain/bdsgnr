@@ -6,9 +6,12 @@ using static BlastDesigner.App.Tools.MenuEntry;
 
 namespace BlastDesigner.App.ViewModels;
 
-/// <summary>One command on the ribbon: a big or small button, optionally a dropdown, optionally locked (not available in this program).</summary>
+/// <summary>
+/// One command on the ribbon: a big or small button, optionally a dropdown, optionally locked (not available in this program),
+/// optionally a switch shown pressed while <paramref name="Checked"/> is true.
+/// </summary>
 public sealed record RibbonItem(string Label, string Icon, Action? Run, Func<bool>? Enabled = null, string? Key = null, bool Big = false,
-    Func<IEnumerable<MenuEntry>>? Drop = null, string? Lock = null, string? ToolName = null);
+    Func<IEnumerable<MenuEntry>>? Drop = null, string? Lock = null, string? ToolName = null, Func<bool>? Checked = null);
 
 public sealed record RibbonGroup(string Name, List<RibbonItem> Items);
 
@@ -139,6 +142,7 @@ public sealed partial class MainViewModel
         }),
         new Stage("Initiation", new()
         {
+            G("Display", new RibbonItem("Isolines", "iso", ToggleIsolines, () => HasProject, Big: true, Checked: () => IsolinesShown)),
             G("Tie-up", Tb("Ties", "tie", "Tie", "T", true), Tb("Initiation point", "star", "Lead-in", "I", true),
                 Tb("Dummy hole", "dummy", "Dummy hole"), M("Initiation catalogue", "palette", "Tools/Ties/Show palette"), M("Automatic tie-up", "auto", "Tools/Ties/Automatic tie-up…"),
                 M("Connect in order", "tie", "Tools/Ties/Connect selected holes in order"), M("Flip ties", "flip", "Tools/Ties/Flip selected ties"), M("Delete ties", "close", "Tools/Ties/Delete tie up")),
@@ -149,7 +153,7 @@ public sealed partial class MainViewModel
                 M("Re-apply", "auto", "Tools/Electronic timing/Re-apply timing"), M("Deprogram", "empty", "Tools/Electronic timing/Deprogram holes")),
             G("Conversion", M("Pyrotechnic → electronic", "convert", "Tools/Electronic timing/Convert pyrotechnic devices to electronic"),
                 M("Clear exceptions", "close", "Tools/Electronic timing/Clear exceptions"), M("Electronic settings", "gear", "Tools/Electronic timing/Preferences…")),
-            G("Check", M("Isochrones", "iso", "Calculations/Visualize timing", "Ctrl⇧V", true), M("Timing overlap", "chart", "Calculations/Timing overlap"),
+            G("Check", M("Timing overlap", "chart", "Calculations/Timing overlap"),
                 M("Logging report", "report", "Calculations/Electronic logging report"))
         }),
         new Stage("Analysis", new()

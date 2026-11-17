@@ -363,7 +363,7 @@ public sealed class RibbonBar : DockPanel
         foreach (var (it, b) in _buttons)
         {
             b.IsEnabled = it.Lock == null && (it.Run != null || it.Drop != null) && (it.Enabled?.Invoke() ?? true);
-            b.Background = it.ToolName != null && it.ToolName == tool ? Look.AccentSoft : Brushes.Transparent;
+            b.Background = it.ToolName != null && it.ToolName == tool || it.Checked?.Invoke() == true ? Look.AccentSoft : Brushes.Transparent;
         }
     }
 }

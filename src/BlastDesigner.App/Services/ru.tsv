@@ -1923,7 +1923,6 @@ ui:Only selected	Только выбранные
 ui:Show all	Показать все
 ui:Plan	План
 ui:Timing	Время
-ui:Charge 3D	Заряд 3D
 ui:Labels	Подписи
 ui:Tracks	Траектории
 ui:Isochrones and colour by time (Ctrl+Shift+V)	Изолинии и цвет по времени (Ctrl+Shift+V)
@@ -1955,7 +1954,7 @@ Tracks and points	Траектории и точки
 Expand	Расширить
 Simplify	Упростить
 ui:Clear analysis	Убрать анализ
-ui:Remove maps, isochrones and arrows from the plan (Esc)	Убрать с плана карты, изолинии, стрелки и подсветку скважин (Esc)
+ui:Remove maps, isochrones and arrows from the plan (Esc)	Убрать с плана карты, изолинии, стрелки, подсветку скважин и опасную зону (Esc)
 No firing times: add an initiation point and ties, or electronic times.	Нет времён взрывания: добавьте точку инициирования и связи или задайте времена ЭСИ.
 Chart could not be drawn:	Не удалось нарисовать график:
 At least {0} points are needed	Нужно не меньше {0} точек
@@ -2432,8 +2431,6 @@ Increase arrow	Увеличить стрелку
 Decrease arrow	Уменьшить стрелку
 Show on plan	Показать на плане
 ui:Depths	Глубины
-ui:Hole depth lines from collar to toe; off shows collars only	Линии скважин от устья до забоя; выключено — только устья
-ui:Charge columns along the holes, also without depth lines (Ctrl+Shift+L)	Колонки зарядов по скважинам, в том числе без линий глубин (Ctrl+Shift+L)
 Arrows	Стрелки
 Triangles	Треугольники
 One colour	Один цвет
@@ -2698,7 +2695,7 @@ ui:Plan and 3D: the firing order of the decks in the hole, top to bottom ("2-1" 
 ui:Plan and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time.	План и 3D: замедление внутрискважинного детонатора в мс, красным. Прибавляется к времени поверхностной сети и даёт время взрывания скважины.
 ui:Plan and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time.	План и 3D: время прихода сигнала поверхностной сети к устью в мс, красным. Считается по связям и поверхностным замедлителям; часть времени взрывания скважины.
 ui:Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator.	План и 3D: идентификатор зарегистрированного электронного детонатора, только у скважин, где он есть. Используется в отчёте регистрации ЭДС и для поиска скважины по детонатору.
-ui:Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.	План и 3D: время взрывания скважины в мс (поверхностная сеть плюс внутрискважинное замедление), красным. По нему считаются сейсмика (заряд в окне замедления), изохроны, анимация взрыва и первое движение.
+ui:Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.	План и 3D: время взрывания скважины в мс (поверхностная сеть плюс внутрискважинное замедление), красным. По нему считаются сейсмика (заряд в окне замедления), изолинии, анимация взрыва и первое движение.
 ui:Plan and 3D: "T" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.	План и 3D: «T» и номер типа скважины. Тип задаёт цвет скважины, по нему подбираются правила заряжания и инициирования и фильтруются показываемые скважины.
 ui:I (highest strength)	I (в высшей степени крепкие)
 ui:Quartzites, basalts (extremely strong).	Кварциты, базальты (в высшей степени крепкие).
@@ -3184,7 +3181,7 @@ ui:As in AutoCAD: 0.25 mm is a pixel on the screen, thinner too, thicker in prop
 ui:Dashes as in AutoCAD, in drawing units: they grow as the plan is zoomed in	Штрихи как в AutoCAD, в единицах чертежа: при приближении плана они становятся крупнее
 ui:The dashes of this line longer (above 1) or shorter (below 1)	Штрихи этой линии длиннее (больше 1) или короче (меньше 1)
 {0} of {1} holes have no charge: they are not counted in the explosive and the powder factor. Select them and give them a loading.	У {0} из {1} скважин нет заряда: они не входят в массу ВВ и удельный расход. Выделите их и назначьте им заряд.
-{0} holes have no firing time: they are not connected to the initiation, and drop out of the firing order, the isochrones and the instantaneous charge. Connect them with ties or apply the initiation rules.	У {0} скважин нет времени срабатывания: они не подключены к схеме инициирования и выпадают из порядка взрывания, изохрон и расчёта мгновенного заряда. Соедините их связями или примените правила инициирования.
+{0} holes have no firing time: they are not connected to the initiation, and drop out of the firing order, the isochrones and the instantaneous charge. Connect them with ties or apply the initiation rules.	У {0} скважин нет времени срабатывания: они не подключены к схеме инициирования и выпадают из порядка взрывания, изолиний и расчёта мгновенного заряда. Соедините их связями или примените правила инициирования.
 {0} pairs of neighbouring holes (no more than {1:0.0} m apart, 1.5 × spacing) fire less than {2:0} ms apart: their charges act together, the vibration grows and the rock between them breaks worse. The pairs are listed in the Timing overlap window.	{0} пар соседних скважин (не дальше {1:0.0} м друг от друга, 1,5 × расстояние в ряду) срабатывают с разницей меньше {2:0} мс: их заряды работают вместе, сейсмика растёт, а порода между ними дробится хуже. Список пар — в окне «Совпадение времён».
 At {0} the predicted PPV is {1:0.00} mm/s, above the limit of {2:0.##} mm/s. Lower the charge per delay (fewer holes firing within {3:0} ms, decked charges) or check the constants in Project properties ▸ Vibration site constants.	В точке «{0}» прогноз PPV {1:0.00} мм/с — выше предела {2:0.##} мм/с. Уменьшите заряд на замедление (меньше скважин в окне {3:0} мс, рассредоточенный заряд) или проверьте коэффициенты в «Свойства проекта ▸ Коэффициенты площадки (сейсмика)».
 {0:0.0} % of the rock is predicted larger than {1} (the oversize size), more than 10 %. A smaller burden and spacing, a higher powder factor or shorter stemming break it finer. The prediction and its inputs are in the Fragmentation prediction window.	По прогнозу {0:0.0} % породы крупнее {1} (размер негабарита) — больше 10 %. Мельче дробят меньшие ЛНС и расстояние, больший удельный расход или более короткая забойка. Расчёт и исходные данные — в окне «Прогноз фрагментации».
@@ -3342,7 +3339,6 @@ collar polygon	полигон устьев
 depth polygon	полигон глубин
 Collar polygon	Полигон устьев
 Depth polygon	Полигон глубин
-Double click: type the elevation	Двойной щелчок: ввести отметку
 Drag: up or down (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation	Перетащить: вверх или вниз (Ctrl — 0,01 м, Shift — весь полигон); двойной щелчок: ввести отметку
 the whole polygon	весь полигон
 Elevation, m	Отметка, м
@@ -3371,5 +3367,16 @@ ui:polygon	полигон
 ui:Toe elevation, m	Отметка забоя, м
 The toe elevation {0:0.00} m is not below the collar ({1:0.00} m). The depth polygon holds elevations, not depths.	Отметка забоя {0:0.00} м не ниже устья ({1:0.00} м). В полигоне глубин задаются отметки, а не глубины.
 ui:The outline of a pattern is only tilted: it is not scaled or mirrored	Контур сетки только наклоняется: масштаб и зеркало к нему не применяются
-Click: select (Ctrl+click: add or take away); drag: up or down, with the selected ones (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation	Щелчок — выделить (Ctrl+щелчок — добавить или убрать); перетаскивание — вверх или вниз вместе с выделенными (Ctrl — шаг 0,01 м, Shift — весь полигон); двойной щелчок — ввести отметку
 Only vertices of one polygon of one segment are selected together	Вместе выделяются только вершины одного полигона одной секции
+Flyrock	Разлёт
+{0} mm/s · K = {1:0} · B = {2:0.00}	{0} мм/с · K = {1:0} · B = {2:0.00}
+Limit {0} dB	Предел {0} дБ
+Clearance of the flyrock	Дальность разлёта кусков
+{0:0} m	{0:0} м
+Exclusion zone radius	Радиус опасной зоны
+Set by: {0}	Определяет: {0}
+{0:0.0} kg	{0:0.0} кг
+In a window of {0} ms	В окне {0} мс
+Level	Уровень
+ui:Isolines	Изолинии
+ui:Hole depths: a loaded hole shows its charge column, an empty one the line from collar to toe; off shows collars only	Глубины скважин: у заряженной — колонка заряда, у пустой — линия от устья до забоя; выключено — только устья

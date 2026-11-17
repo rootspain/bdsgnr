@@ -437,6 +437,15 @@ Step("timing labels are independent", () =>
     vm.ToggleTimingLabel(TimingLabelMode.InholeTime);
 });
 Shot("01_plan");
+Step("The blast direction button is on the line of the chips, above the north arrow", () =>
+{
+    var compass = window.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "blastDirection");
+    var plan = window.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.Viewport>().First(v => v.IsVisible);
+    var bottom = compass.TranslatePoint(new Avalonia.Point(0, compass.Bounds.Height), plan)!.Value.Y;
+    // the north arrow: its centre 40 px under the top inset of the scene, the N 26 px above that
+    var arrowTop = 40 + vm.BuildSceneOptions().TopInset - 26 - 10;
+    if (bottom > arrowTop) throw new Exception($"the blast direction button reaches {bottom:0} px down the plan, the north arrow starts at {arrowTop:0}");
+});
 Step("collapse the panel", () => { window.TogglePropertiesPanel(); if (window.PropertiesVisible) throw new Exception("panel still open"); });
 Shot("01b_panel_collapsed");
 Step("expand the panel", () => { window.TogglePropertiesPanel(); if (!window.PropertiesVisible) throw new Exception("panel still closed"); });
@@ -831,7 +840,7 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
     w.Close(); Pump();
 });
 Step("clear overlays", vm.ClearOverlays);
-Step("loading view 3D", () => { vm.ToggleView(v => v.ShowLoading = true); vm.View3D(); });
+Step("loading view 3D", () => { vm.ToggleView(v => { v.ShowLoading = true; v.CollarsOnly = false; }); vm.View3D(); });
 Shot("07_3d_loading");
 Step("plan view", vm.PlanView);
 Step("undo/redo", () => { vm.Undo(); vm.Redo(); });
@@ -973,6 +982,42 @@ Step("site law", () => AnalisysWindows.SiteLaw(vm));
 WindowShot("18_site_law");
 Step("exclusion zone", () => AnalisysWindows.ExclusionZone(vm));
 WindowShot("19_exclusion_zone");
+Step("Draw exclusion zone again replaces the zone; Clear analysis takes it off, an undo brings it back", () =>
+{
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var draw = w.GetLogicalDescendants().OfType<Button>().First(b => b.Content as string == BlastDesigner.App.Services.Loc.T("Draw exclusion zone"));
+    int Zones() => vm.Project!.Entities.Count(BlastDesigner.App.ViewModels.MainViewModel.IsExclusionZone);
+    vm.ClearOverlays();
+    for (int i = 0; i < 2; i++) { draw.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    if (Zones() != 1) throw new Exception($"{Zones()} exclusion zones after drawing it twice");
+    if (!vm.HasAnalysisDisplay) throw new Exception("with the exclusion zone on the plan there is no Clear analysis");
+    vm.ClearAnalysis(); Pump();
+    if (Zones() != 0 || vm.HasAnalysisDisplay) throw new Exception("Clear analysis left the exclusion zone");
+    vm.Undo(); Pump();
+    if (Zones() != 1) throw new Exception("an undo did not bring the exclusion zone back");
+    vm.ClearAnalysis(); Pump();
+});
+Step("Isolines is the first button of Initiation and a switch; one Depths chip over the plan", () =>
+{
+    var stage = vm.BuildStages().Single(s => s.Name == "Initiation");
+    var iso = stage.Groups[0].Items[0];
+    if (iso.Label != "Isolines" || iso.Checked == null) throw new Exception("the first button of Initiation is " + iso.Label);
+    if (stage.Groups.SelectMany(g => g.Items).Count(i => i.Icon == "iso" && i.Label != "Timing line") != 1) throw new Exception("a second isolines button on Initiation");
+    vm.ClearOverlays();
+    iso.Run!(); Pump();
+    if (!vm.IsolinesShown || !iso.Checked()) throw new Exception("the isolines are not on the plan after the button");
+    if (vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.TimingContourOverlay>().Single().ColourHoles) throw new Exception("the isolines button also colours the holes");
+    if (vm.VisualizationShown) throw new Exception("the isolines of the button light the Visualization chip");
+    vm.View.Redraw(); Pump(); Shot("19b_isolines");
+    iso.Run!(); Pump();
+    if (vm.IsolinesShown || iso.Checked()) throw new Exception("the isolines stay on the plan after the second press");
+    // the depths chip: on shows the charge columns too, off neither
+    vm.ToggleView(v => { v.CollarsOnly = true; v.ShowLoading = false; });
+    vm.ToggleDepths();
+    if (vm.Project!.View.CollarsOnly || !vm.Project.View.ShowLoading) throw new Exception("the depths chip on does not show the charge columns");
+    vm.ToggleDepths();
+    if (!vm.Project!.View.CollarsOnly) throw new Exception("the depths chip off still shows the depths");
+});
 Step("tolerances", () => AnalisysWindows.Tolerances(vm));
 WindowShot("20_tolerances");
 Step("strata intercepts", () => AnalisysWindows.StrataIntercepts(vm));
@@ -2069,6 +2114,8 @@ Step("the collar and depth polygons of a cut pattern are drawn: elevations on th
     ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = vm.View.HitTest(x, y), Left = true, ClickCount = 1, Modifiers = Avalonia.Input.KeyModifiers.None };
     vm.ActiveTool.PointerMoved(At(gx, gy));
     if (polyGrips.Hot?.Key != "O:2") throw new Exception("the collar vertex is not found under the cursor in 3D");
+    // the tip names the vertex by its number on the outline
+    if (!vm.View.Preview.Labels.Any(l => l.Text.StartsWith(BlastDesigner.App.Services.Loc.Ui("Vertex") + " 3 · " + BlastDesigner.App.Services.Loc.T("Level") + " "))) throw new Exception("the tip of a polygon vertex does not give its number: " + string.Join(" | ", vm.View.Preview.Labels.Select(l => l.Text)));
     var steps = vm.Doc.UndoNames.Count;
     var highest = PatternTree.TreeHoles(vm.Project!, root).Max(h => h.Collar.Z);
     vm.ActiveTool.PointerPressed(At(gx, gy));

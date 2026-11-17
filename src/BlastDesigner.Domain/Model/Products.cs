@@ -116,7 +116,7 @@ public sealed class Product
         new() { Id = "9b1a41ce-34f1-41fb-b691-10ef5d988960", Name = "Downhole det 500 ms", Family = "Downhole detonator", Kind = ProductKind.DownholeDetonator, DelayMs = 500, Cost = 4, Color = 0xFF1976D2 },
         new() { Id = "3d1c671d-5460-4696-ba1c-59a8c5bbea03", Name = "Downhole det 400 ms", Family = "Downhole detonator", Kind = ProductKind.DownholeDetonator, DelayMs = 400, Cost = 4, Color = 0xFF1565C0 },
         new() { Id = "38a53a3b-bf68-4fa1-a7a4-6998b9284666", Name = "Electronic detonator", Family = "Electronic detonator", Kind = ProductKind.ElectronicDetonator, DelayMs = 0, Cost = 25, Color = 0xFF00897B },
-        new() { Id = "5f2d6f31-4a02-4514-a200-0a6d6490db5a", Name = "DeviTronic", Family = "DeviTronic", Kind = ProductKind.ElectronicDetonator, DelayMs = 0, Cost = 25, Color = 0xFF00897B },
+        new() { Id = "5f2d6f31-4a02-4514-a200-0a6d6490db5a", Name = "Davey Tronic", Family = "Davey Tronic", Kind = ProductKind.ElectronicDetonator, DelayMs = 0, Cost = 25, Color = 0xFF00897B },
         new() { Id = "0fe4a38c-2cbe-45a4-9f66-73016d8029fa", Name = "Surface connector 17 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 17, Cost = 3, Color = 0xFFFFEB3B },
         new() { Id = "95edced9-9aab-4121-84e0-55eb7ee2f529", Name = "Surface connector 25 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 25, Cost = 3, Color = 0xFFF44336 },
         new() { Id = "dfe87a96-71f0-4a93-9bf0-431198d83df2", Name = "Surface connector 42 ms", Family = "Surface connector", Kind = ProductKind.SurfaceConnector, DelayMs = 42, Cost = 3, Color = 0xFFFFFFFF },

@@ -123,7 +123,9 @@ public enum LineKind
     ClearanceZone,
     BenchLayout,
     BoreTrack,
-    Intersection
+    Intersection,
+    /// <summary>The exclusion zone drawn by the Exclusion zone calculator: one in a project, drawn again in place, taken off by Clear analysis.</summary>
+    ExclusionZone
 }
 
 /// <summary>3D polyline; when <see cref="Closed"/> is set it is a polygon.</summary>

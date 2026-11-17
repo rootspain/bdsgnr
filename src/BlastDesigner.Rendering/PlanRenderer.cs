@@ -319,7 +319,7 @@ public static class PlanRenderer
                     var closed = true;
                     if (e is PolylineEntity pl) { pts = pl.Points; closed = pl.Closed; }
                     else { var poly = ((CircleEntity)e).ToPolygon(48); polys[(CircleEntity)e] = poly; pts = poly; }
-                    if (e is PolylineEntity { Closed: true, Kind: LineKind.ClearanceZone } zone)
+                    if (e is PolylineEntity { Closed: true, Kind: LineKind.ClearanceZone or LineKind.ExclusionZone } zone)
                         list.Add((zone.Points.Select(DepthOf).Average(), e, -2));
                     var n = closed ? pts.Count : pts.Count - 1;
                     for (int i = 0; i < n; i++)
@@ -436,7 +436,7 @@ public static class PlanRenderer
                         stroke.PathEffect = DashOf(pl);
                         DrawPolyline(canvas, cam, pl.Points, pl.Closed, stroke);
                         stroke.PathEffect = null;
-                        if (pl.Closed && pl.Kind == LineKind.ClearanceZone && !opt.HaloPass)
+                        if (pl.Closed && pl.Kind is LineKind.ClearanceZone or LineKind.ExclusionZone && !opt.HaloPass)
                         {
                             fill.Color = color.WithAlpha(30);
                             DrawPolygonFill(canvas, cam, pl.Points, fill);
@@ -1644,11 +1644,14 @@ public static class PlanRenderer
         stroke.PathEffect = null;
     }
 
-    /// <summary>Hole depth line (collar to toe) and, on its own switch, the charge column along it, into <paramref name="lines"/>.</summary>
+    /// <summary>
+    /// The depth of a hole into <paramref name="lines"/>: a loaded hole its charge column (with the charge track on), an
+    /// empty one the line from collar to toe with a dot at the toe. With collars only, neither.
+    /// </summary>
     private static void DrawHoleColumn(SKCanvas c, Camera cam, BlastProject project, Hole h, SceneOptions opt, SKPaint fill, LineMesh lines)
     {
         var view = project.View;
-        if (view.CollarsOnly && !(view.ShowLoading && h.Decks.Count > 0)) return;
+        if (view.CollarsOnly) return;
         if (opt.HiddenDepths?.Contains(h.Id) == true) return;
         var (x, y) = cam.ToScreen(h.Collar);
         var (tx, ty) = cam.ToScreen(h.Toe);
@@ -1657,8 +1660,9 @@ public static class PlanRenderer
         var typeColor = HoleColour(project, h);
         var color = selected ? opt.SelectionColor : typeColor;
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
-        if (!view.CollarsOnly) lines.Line(color.WithAlpha(160), 1, x, y, tx, ty);
-        if (view.ShowLoading && h.Decks.Count > 0)
+        var charged = view.ShowLoading && h.Decks.Any(d => project.FindProduct(d.ProductId) != null);
+        if (!charged) lines.Line(color.WithAlpha(160), 1, x, y, tx, ty);
+        else
             foreach (var d in h.Decks)
             {
                 var p = project.FindProduct(d.ProductId);
@@ -1667,7 +1671,7 @@ public static class PlanRenderer
                 var (bx, by) = cam.ToScreen(h.PointAtDepth(d.Bottom));
                 lines.Line(new SKColor(p.Color), Math.Max(3, r), ax, ay, bx, by);
             }
-        if (!view.CollarsOnly)
+        if (!charged)
         {
             fill.Color = color.WithAlpha(160);
             c.DrawCircle(tx, ty, 1.5f, fill);
@@ -1744,6 +1748,8 @@ public static class PlanRenderer
         if (cam.Scale < 1.2) return;
         var (x, y) = cam.ToScreen(h.Collar);
         if (x < -100 || y < -100 || x > cam.Width + 100 || y > cam.Height + 100) return;
+        // the Labels chip over the plan takes the columns of every hole off, the layer's own switch those of its holes
+        if (!view.ShowText) return;
         var layer = project.FindLayer(h.LayerId);
         if (layer is { ShowText: false }) return;
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);

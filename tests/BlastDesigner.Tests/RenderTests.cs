@@ -681,4 +681,67 @@ public class RenderTests
         Assert.True(Lit(false) > 20);
         Assert.Equal(0, Lit(true));
     }
+
+    [Fact]
+    public void TheLabelsChipOff_TakesTheLabelColumnsBesideTheCollarOff()
+    {
+        // the pixels drawn beside the collar, left and right of it, on the plan
+        int Lit(bool labels)
+        {
+            var p = BlastProject.CreateNew("labels");
+            p.View.ShowText = labels;
+            p.View.HoleLabels |= HoleLabelMode.Label;
+            p.Add(new Hole { Label = "888", Collar = new Vec3(0, 0, 100), Length = 10 });
+            var cam = new Camera { Width = 300, Height = 300, Scale = 10, Target = new Vec3(0, 0, 100) };
+            var options = new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false, Background = SKColors.White };
+            using var bitmap = new SKBitmap(300, 300);
+            using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+            var (cx, cy) = cam.ToScreen(new Vec3(0, 0, 100));
+            var n = 0;
+            for (int x = 0; x < 300; x++)
+                for (int y = (int)cy - 40; y < cy + 40; y++)
+                {
+                    if (Math.Abs(x - cx) < 12) continue;
+                    var c = bitmap.GetPixel(x, y);
+                    if (c.Red + c.Green + c.Blue < 600) n++;
+                }
+            return n;
+        }
+        Assert.True(Lit(true) > 10, "no label beside the collar with the labels on");
+        Assert.Equal(0, Lit(false));
+    }
+
+    [Fact]
+    public void WithTheDepthsOn_ALoadedHoleIsItsChargeColumn_AnEmptyOneItsLine_AndWithCollarsOnlyNeither()
+    {
+        // the pixels drawn under the collar between two elevations, seen from the side
+        (int Above, int Charge) Lit(bool loaded, bool collarsOnly)
+        {
+            var p = BlastProject.CreateNew("depths");
+            p.View.CollarsOnly = collarsOnly;
+            p.View.ShowLoading = true;
+            var h = new Hole { Collar = new Vec3(0, 0, 100), Length = 20 };
+            p.Add(h);
+            if (loaded) h.Decks.Add(new Deck { Top = 10, Bottom = 18, ProductId = p.Products.First(x => x.Name == "ANFO").Id });
+            var cam = new Camera { Width = 300, Height = 300, Pitch = 0, Scale = 6, Target = new Vec3(0, 0, 90) };
+            var options = new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false, Background = SKColors.White };
+            using var bitmap = new SKBitmap(300, 300);
+            using (var canvas = new SKCanvas(bitmap)) PlanRenderer.Render(canvas, cam, p, options);
+            int Count(double z0, double z1)
+            {
+                var (x, y0) = cam.ToScreen(new Vec3(0, 0, z0));
+                var (_, y1) = cam.ToScreen(new Vec3(0, 0, z1));
+                return Enumerable.Range((int)Math.Min(y0, y1), (int)Math.Abs(y1 - y0))
+                    .Count(y => Enumerable.Range((int)Math.Round(x) - 1, 3).Any(xx => { var c = bitmap.GetPixel(xx, y); return c.Red + c.Green + c.Blue < 700; }));
+            }
+            // 5 to 8 m down: above the charge; 12 to 16 m down: in it
+            return (Count(95, 92), Count(88, 84));
+        }
+        var empty = Lit(false, false);
+        Assert.True(empty.Above > 10 && empty.Charge > 10, $"the line of an empty hole: {empty}");
+        var loaded = Lit(true, false);
+        Assert.True(loaded.Above == 0 && loaded.Charge > 10, $"a loaded hole is its charge column, without the line above it: {loaded}");
+        Assert.Equal((0, 0), Lit(true, true));
+        Assert.Equal((0, 0), Lit(false, true));
+    }
 }

@@ -158,7 +158,7 @@ public sealed partial class MainViewModel
                 Check("Rows", () => Project?.View.ShowRows == true, () => ToggleView(v => v.ShowRows = !v.ShowRows), P),
                 Check("Text", () => Project?.View.ShowText == true, () => ToggleView(v => v.ShowText = !v.ShowText), P),
                 Check("Surfaces", () => Project?.View.ShowSurfaces == true, () => ToggleView(v => v.ShowSurfaces = !v.ShowSurfaces), P)),
-            Item("Clear analysis display", ClearOverlays, P)),
+            Item("Clear analysis display", ClearAnalysis, P)),
         Sub("Calculations",
             Item("Visualize timing", VisualizeTiming, P),
             Item("Angle of initiation", AngleOfInitiation, P),

@@ -182,6 +182,7 @@ public sealed class ProductCatalogue
     {
         project.Catalogue = Layered(BuiltIn(), user, project.Catalogue);
         DropRetired(project);
+        RenameDaveyTronic(project);
         foreach (var p in Product.DefaultCatalogue())
             if (!project.Products.Any(x => x.Id == p.Id || (x.Kind == p.Kind && x.Name == p.Name))) project.Products.Add(p);
         foreach (var p in userProducts)
@@ -191,6 +192,25 @@ public sealed class ProductCatalogue
             else if (p.Deleted) own.Deleted = true;
         }
         Link(project);
+    }
+
+    private const string DaveyTronicProduct = "5f2d6f31-4a02-4514-a200-0a6d6490db5a";
+    private const string DaveyTronicFamily = "31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2";
+
+    /// <summary>
+    /// The built-in detonator was called DeviTronic before 0.3.7: a project saved then gets the new name, Davey Tronic, for
+    /// the detonator and its family. A name the user gave them stays.
+    /// </summary>
+    private static void RenameDaveyTronic(BlastProject project)
+    {
+        const string old = "DeviTronic", now = "Davey Tronic";
+        foreach (var p in project.Products)
+        {
+            if (p.Id == DaveyTronicProduct && p.Name == old) p.Name = now;
+            if (p.Family == old) p.Family = now;
+        }
+        foreach (var f in project.Catalogue.Families)
+            if (f.Id == DaveyTronicFamily && f.Name == old) f.Name = now;
     }
 
     /// <summary>Ids of the products the built-in catalogue had once, and of their family.</summary>
@@ -350,7 +370,7 @@ public sealed class ProductCatalogue
 
         Family("ddc6ed48-5bc2-4902-be8f-64cdbfd8e90d", "Downhole detonator", DownholeDetonator);
         Family("73a7dd8e-133d-402d-ba26-703f1d430510", "Electronic detonator", ElectronicDetonator);
-        Family("31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2", "DeviTronic", ElectronicDetonator);
+        Family("31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2", "Davey Tronic", ElectronicDetonator);
         Family("1b2212dd-fc1d-4409-916c-4313f4b912ae", "Surface connector", SurfaceConnector);
         Family("a70df506-c21a-4e74-8f5a-22bd5f22a86f", "Detonating cord", DetonatingCord);
         Family("f5d36999-3c77-4a86-be52-14c75c75dd7b", "Cord relay", CordRelay);

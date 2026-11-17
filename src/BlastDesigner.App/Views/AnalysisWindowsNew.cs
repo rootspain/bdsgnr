@@ -488,36 +488,130 @@ public static class AnalisysWindows
 
     public static void ExclusionZone(MainViewModel vm)
     {
-        var text = new SelectableTextBlock { Margin = new Thickness(8), FontSize = 14 };
+        var host = new ContentControl();
         Engine.ExclusionZone.Result r = Engine.ExclusionZone.Compute(vm.Project!);
         void Update()
         {
             if (vm.Project is not { } p) return;
             r = Engine.ExclusionZone.Compute(p);
-            text.Text = string.Join("\n", new[]
-            {
-                Loc.F("Maximum instantaneous charge: {0:0.0} kg (window {1} ms)", r.Mic, p.Vibration.WindowMs),
-                Loc.F("Vibration ({0} mm/s, K = {1:0}, B = {2:0.00}): {3:0} m", p.Vibration.PpvLimit, p.Vibration.SiteK, p.Vibration.SiteB, r.VibrationRadius),
-                Loc.F("Airblast ({0} dB): {1:0} m", p.Vibration.AirblastLimitDb, r.AirblastRadius),
-                Loc.F("Flyrock clearance: {0:0} m", r.FlyrockRadius),
-                "",
-                Loc.F("Exclusion zone radius: {0:0} m", r.Radius)
-            });
+            host.Content = ExclusionZoneView(p, r);
         }
         Update();
-        Dialogs.ShowWindow("Exclusion zone calculator", WithButtons(text,
-            ("Site constants…", () => _ = vm.EditVibrationModel()),
-            ("Flyrock constants…", () => _ = vm.EditFlyrockModel()),
-            ("Recalculate", Update),
-            ("Draw exclusion zone", () =>
+
+        Button Action(string text, bool primary, Action click)
+        {
+            var b = new Button { Content = Loc.T(text), MinHeight = 32, Padding = new Thickness(14, 6), VerticalContentAlignment = VerticalAlignment.Center };
+            if (primary) b.Classes.Add("primary");
+            b.Click += (_, _) => { try { click(); } catch (Exception ex) { Dialogs.ShowError(ex); } };
+            return b;
+        }
+        // the constants are edited in their own window: the radii are worked out again when it is closed
+        async void Edit(Func<Task> edit) { await edit(); Update(); }
+        var setup = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+        foreach (var b in new[] { Action("Site constants…", false, () => Edit(vm.EditVibrationModel)), Action("Flyrock constants…", false, () => Edit(vm.EditFlyrockModel)) })
+        {
+            b.Margin = new Thickness(0, 0, 8, 0);
+            setup.Children.Add(b);
+        }
+        var run = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        run.Children.Add(Action("Recalculate", false, Update));
+        run.Children.Add(Action("Draw exclusion zone", true, () =>
+        {
+            if (vm.Project is not { } p) return;
+            var holes = p.Holes.Where(h => !h.IsDummy).ToList();
+            if (holes.Count == 0) return;
+            var zone = GeneralOps.ClearanceZone(holes, r.Radius);
+            zone.Kind = LineKind.ExclusionZone;
+            zone.Label = Loc.F("Exclusion zone {0:0} m", r.Radius);
+            // the zone drawn before goes: one zone on the plan, not one over the other
+            vm.Change("Exclusion zone", pr =>
             {
-                if (vm.Project is not { } p) return;
-                var holes = p.Holes.Where(h => !h.IsDummy).ToList();
-                if (holes.Count == 0) return;
-                var zone = GeneralOps.ClearanceZone(holes, r.Radius);
-                zone.Label = Loc.F("Exclusion zone {0:0} m", r.Radius);
-                vm.Change("Exclusion zone", pr => pr.Add(zone, pr.GetOrCreateLayer(StandardLayers.Analysis, 0xFFDC2626, "Analysis")));
-            })), 620, 300);
+                pr.Entities.RemoveAll(MainViewModel.IsExclusionZone);
+                pr.Add(zone, pr.GetOrCreateLayer(StandardLayers.Analysis, 0xFFDC2626, "Analysis"));
+            });
+        }));
+        var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(0, 16, 0, 0) };
+        Grid.SetColumn(run, 1);
+        footer.Children.Add(setup);
+        footer.Children.Add(run);
+        var page = new DockPanel { Margin = new Thickness(18, 16, 18, 16) };
+        DockPanel.SetDock(footer, Dock.Bottom);
+        page.Children.Add(footer);
+        page.Children.Add(host);
+        Dialogs.ShowWindow("Exclusion zone calculator", page, 760, 360);
+    }
+
+    /// <summary>
+    /// The radius of the exclusion zone large on top, with the charge it comes from; below it the three radii it is the
+    /// largest of, each on a card with a bar of its length against the radius, the one that sets the radius marked.
+    /// </summary>
+    private static Control ExclusionZoneView(BlastProject p, Engine.ExclusionZone.Result r)
+    {
+        var v = p.Vibration;
+        var factors = new (string Icon, string Name, double Radius, string Detail)[]
+        {
+            ("wave", "Vibration", r.VibrationRadius, Loc.F("{0} mm/s · K = {1:0} · B = {2:0.00}", v.PpvLimit, v.SiteK, v.SiteB)),
+            ("air", "Airblast", r.AirblastRadius, Loc.F("Limit {0} dB", v.AirblastLimitDb)),
+            ("exclusion", "Flyrock", r.FlyrockRadius, Loc.T("Clearance of the flyrock")),
+        };
+        var max = r.Radius;
+        var lead = factors.OrderByDescending(f => f.Radius).First();
+        string Metres(double m) => double.IsFinite(m) ? Loc.F("{0:0} m", m) : "—";
+        TextBlock Caption(string text) => new() { Text = text, FontSize = 12, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap };
+
+        // the radius
+        var radius = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        radius.Children.Add(Caption(Loc.T("Exclusion zone radius")));
+        radius.Children.Add(new SelectableTextBlock { Text = Metres(max), FontSize = 34, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, Name = "exclusionRadius" });
+        radius.Children.Add(new TextBlock { Text = Loc.F("Set by: {0}", Loc.T(lead.Name)), FontSize = 12, Foreground = Look.TextSoft });
+        var mark = new Border
+        {
+            Width = 52, Height = 52, CornerRadius = new CornerRadius(26), Background = Look.AccentSoft, Margin = new Thickness(0, 0, 16, 0),
+            VerticalAlignment = VerticalAlignment.Center, Child = Look.Icon("exclusion", 28, Look.Accent)
+        };
+        var charge = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(16, 0, 0, 0) };
+        charge.Children.Add(Caption(Loc.T("Maximum instantaneous charge")));
+        charge.Children.Add(new SelectableTextBlock { Text = Loc.F("{0:0.0} kg", r.Mic), FontSize = 20, FontWeight = FontWeight.SemiBold, Foreground = Look.Text });
+        charge.Children.Add(new TextBlock { Text = Loc.F("In a window of {0} ms", v.WindowMs), FontSize = 12, Foreground = Look.TextSoft });
+        var top = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto") };
+        Grid.SetColumn(radius, 1);
+        Grid.SetColumn(charge, 2);
+        top.Children.Add(mark);
+        top.Children.Add(radius);
+        top.Children.Add(charge);
+        var hero = new Border { Background = Look.Ribbon, BorderBrush = Look.Accent, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10), Padding = new Thickness(18, 14), Child = top };
+
+        // the three radii
+        var cards = new Avalonia.Controls.Primitives.UniformGrid { Columns = 3, Margin = new Thickness(-6, 12, -6, 0) };
+        foreach (var f in factors)
+        {
+            var leads = f == lead;
+            var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            head.Children.Add(Look.Icon(f.Icon, 18, leads ? Look.Accent : Look.Muted));
+            head.Children.Add(new TextBlock { Text = Loc.T(f.Name), FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center });
+            // the bar: the radius against the largest
+            var share = max > 0 && double.IsFinite(f.Radius) ? Math.Clamp(f.Radius / max, 0.001, 1) : 0.001;
+            var bar = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions($"{share.ToString(CultureInfo.InvariantCulture)}*,{Math.Max(0.001, 1 - share).ToString(CultureInfo.InvariantCulture)}*"),
+                Height = 4, Background = Look.Line, Margin = new Thickness(0, 10, 0, 8)
+            };
+            bar.Children.Add(new Border { Background = leads ? Look.Accent : Look.Blue, CornerRadius = new CornerRadius(2) });
+            var body = new StackPanel();
+            body.Children.Add(head);
+            body.Children.Add(new SelectableTextBlock { Text = Metres(f.Radius), FontSize = 24, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, Margin = new Thickness(0, 8, 0, 0) });
+            body.Children.Add(bar);
+            body.Children.Add(Caption(f.Detail));
+            cards.Children.Add(new Border
+            {
+                Background = Look.Panel, BorderBrush = leads ? Look.Accent : Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(14, 12), Margin = new Thickness(6, 0), Child = body
+            });
+        }
+        var view = new StackPanel();
+        view.Children.Add(hero);
+        view.Children.Add(cards);
+        return new ScrollViewer { Content = view, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled };
     }
 
     // ---- quality -----------------------------------------------------------------------------

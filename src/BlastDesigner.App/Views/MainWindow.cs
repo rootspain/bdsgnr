@@ -102,6 +102,7 @@ public sealed class MainWindow : Window
         _vm.SelectionRefreshed += () => _ribbon.Refresh();
         _vm.ToolChanged += OnToolChanged;
         _vm.OverlaysChanged += RefreshChips;
+        _vm.OverlaysChanged += () => _ribbon.Refresh();
         // tunnel, so a focused button or field cannot take the Enter first
         AddHandler(KeyDownEvent, (_, e) =>
         {
@@ -518,7 +519,10 @@ public sealed class MainWindow : Window
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(1),
             HorizontalContentAlignment = HorizontalAlignment.Center,
-            VerticalContentAlignment = VerticalAlignment.Center
+            VerticalContentAlignment = VerticalAlignment.Center,
+            // on the line of the chips, not half way down the view cube beside them: there it covered the north arrow
+            VerticalAlignment = VerticalAlignment.Top,
+            Name = "blastDirection"
         };
         ToolTip.SetTip(compass, Loc.Ui("Blast direction: click to set, double-click to reset the orientation"));
         compass.Click += (_, _) => Ui.Safe(_vm.SetBlastOrientation);
@@ -560,15 +564,14 @@ public sealed class MainWindow : Window
             b.IsEnabled = p != null;
             _chips.Children.Add(b);
         }
-        var timing = _vm.AnalysisOverlays.Any(o => o is BlastDesigner.Rendering.TimingContourOverlay);
+        var timing = _vm.VisualizationShown;
         Chip("Visualization", timing, () => { if (timing) { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); } else _vm.VisualizeTiming(); }, "Isochrones and colour by time (Ctrl+Shift+V)");
-        Chip("Charge 3D", v?.ShowLoading == true, () => _vm.ToggleView(x => x.ShowLoading = !x.ShowLoading), "Charge columns along the holes, also without depth lines (Ctrl+Shift+L)");
         Chip("Labels", v?.ShowText == true, () => _vm.ToggleView(x => x.ShowText = !x.ShowText), "Hole labels and times");
-        Chip("Depths", v != null && !v.CollarsOnly, () => _vm.ToggleView(x => x.CollarsOnly = !x.CollarsOnly), "Hole depth lines from collar to toe; off shows collars only");
+        Chip("Depths", v != null && !v.CollarsOnly, _vm.ToggleDepths, "Hole depths: a loaded hole shows its charge column, an empty one the line from collar to toe; off shows collars only");
         Chip("Ties", v?.ShowTies == true, () => _vm.ToggleView(x => x.ShowTies = !x.ShowTies), "Surface ties");
         if (_vm.HasAnalysisDisplay)
         {
-            var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan (Esc)"));
+            var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { _vm.ClearAnalysis(); RefreshChips(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan (Esc)"));
             _chips.Children.Add(clear);
         }
         if (_eye != null)
@@ -724,7 +727,7 @@ public sealed class MainWindow : Window
                 _vm.ActiveTool?.Cancel();
                 if (_vm.ActiveTool is not SelectTool) _vm.SelectTool();
                 else if (_vm.HasSelection) _vm.Doc?.ClearSelection();
-                else if (_vm.HasAnalysisDisplay) { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); }
+                else if (_vm.HasAnalysisDisplay) _vm.ClearAnalysis();
             };
         if (a == null) return;
         if (_vm.Doc == null && e.Key is not (Key.N or Key.O or Key.K) && m != KeyModifiers.Alt) return;

@@ -2,6 +2,7 @@ using Avalonia.Input;
 using BlastDesigner.App.Controls;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.ViewModels;
+using BlastDesigner.App.Views;
 using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
@@ -127,12 +128,8 @@ public sealed class DepthPolygonGrips : ISelectGesture
     {
         var hit = _busy ? null : GripAt(p.X, p.Y);
         if (hit != Hot) { Hot = hit; _vm.View.Redraw(); }
-        if (hit == null) return;
-        var what = Loc.T(hit.Collar ? "Collar polygon" : "Depth polygon");
-        var tip = _vm.View.Camera.IsPlan
-            ? Loc.T("Double click: type the elevation")
-            : Loc.T("Click: select (Ctrl+click: add or take away); drag: up or down, with the selected ones (Ctrl 0.01 m, Shift the whole polygon); double click: type the elevation");
-        _vm.View.Preview.Labels.Add((hit.Point, $"{what}: {hit.Z:0.00} — {tip}"));
+        if (hit == null || _vm.Project is not { } project || project.FindPattern(hit.Root) is not { } root) return;
+        _vm.View.Preview.Labels.Add((hit.Point, $"{Loc.Ui("Vertex")} {PropertiesPanel.VertexName(project, root, hit.Key)} · {Loc.T("Level")} {hit.Z:0.00}"));
     }
 
     public bool TryPress(ToolPointer p)

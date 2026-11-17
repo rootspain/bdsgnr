@@ -177,6 +177,16 @@ public sealed partial class MainViewModel
     }
 
     public void ToggleLabel(HoleLabelMode m) => ToggleView(v => v.HoleLabels ^= m);
+
+    /// <summary>
+    /// The Depths chip: on, a loaded hole shows its charge column and an empty one the line from collar to toe; off,
+    /// the collars only.
+    /// </summary>
+    public void ToggleDepths() => ToggleView(v =>
+    {
+        v.CollarsOnly = !v.CollarsOnly;
+        if (!v.CollarsOnly) v.ShowLoading = true;
+    });
     public bool IsTimingLabelVisible(TimingLabelMode mode)
     {
         var view = Project?.View;
@@ -357,7 +367,21 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>An analysis display or a highlight is on the plan.</summary>
-    public bool HasAnalysisDisplay => AnalysisOverlays.Count > 0 || Highlight.Ids.Count > 0;
+    public bool HasAnalysisDisplay => AnalysisOverlays.Count > 0 || Highlight.Ids.Count > 0 || Project?.Entities.Any(IsExclusionZone) == true;
+
+    /// <summary>The polygon of the Exclusion zone calculator.</summary>
+    public static bool IsExclusionZone(Entity e) => e is PolylineEntity { Kind: LineKind.ExclusionZone };
+
+    /// <summary>
+    /// Clear analysis (the chip over the plan, Esc, the menu): the displays, the highlight and the Visualization window
+    /// go, and the exclusion zone drawn on the plan is deleted (one undo step brings it back).
+    /// </summary>
+    public void ClearAnalysis()
+    {
+        Dialogs.CloseWindow("Visualization");
+        ClearOverlays();
+        if (Project?.Entities.Any(IsExclusionZone) == true) Change("Clear analysis", p => p.Entities.RemoveAll(IsExclusionZone));
+    }
 
     public void ClearOverlays()
     {
@@ -377,6 +401,33 @@ public sealed partial class MainViewModel
     }
 
     public void VisualizeTiming() { if (Doc != null) AnalysisWindows.VisualizeTiming(this); }
+
+    /// <summary>The isolines of the firing times are on the plan (by the Isolines button or the Visualization window).</summary>
+    public bool IsolinesShown => AnalysisOverlays.OfType<TimingContourOverlay>().Any(o => o.Contours);
+
+    /// <summary>The isolines the Isolines button put on the plan, told apart from those of the Visualization window.</summary>
+    private TimingContourOverlay? _isolines;
+
+    /// <summary>The Visualization window has its display on the plan (not the isolines of the Isolines button).</summary>
+    public bool VisualizationShown => AnalysisOverlays.OfType<TimingContourOverlay>().Any(o => o != _isolines);
+
+    /// <summary>
+    /// The Isolines button: the isolines of the whole blast on the plan, at the interval of the Visualization window,
+    /// without the window, its animation or the colour by time; pressed again, they go.
+    /// </summary>
+    public void ToggleIsolines()
+    {
+        if (Project is not { } p) return;
+        Dialogs.CloseWindow("Visualization");
+        if (IsolinesShown) { ClearOverlays(); return; }
+        Timing.Solve(p);
+        if (!p.Holes.Any(h => h.FiringTimeMs.HasValue && !h.IsDummy))
+        {
+            _ = Dialogs.Info(Loc.T("No hole is initiated. Add an initiation point and ties, or electronic times."));
+            return;
+        }
+        ShowOverlay(_isolines = new TimingContourOverlay { IntervalMs = Settings.IsochroneIntervalMs, Contours = true, ColourHoles = false });
+    }
     public void AngleOfInitiation() => VectorOverlay(TimingVectorOverlay.Mode.InitiationAngle);
     /// <summary>First movement: opens the First Movement window, which also puts the arrows on the plan.</summary>
     public void FirstMovement() { if (Doc != null) AnalysisWindows.FirstMovementWindow(this); }

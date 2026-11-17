@@ -6,6 +6,32 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.7 — 2026-11-16
+
+### Changed
+- **The DeviTronic detonator is called Davey Tronic**, and so is its family. A project saved before gets the new name
+  when it is opened, unless you renamed it yourself.
+- **Charge 3D and Depths over the plan are one chip, Depths:** a loaded hole shows its charge column, an empty one
+  the line from collar to toe; off shows the collars only.
+- **Isolines is the first button of the Initiation tab and a switch:** it puts the isolines of the firing times of the
+  whole blast on the plan (at the interval of the Visualization window) without the window or the animation, and
+  takes them off when pressed again. The button stays lit while they are on the plan.
+- **The Russian interface says «Изолинии» for isochrones** in the tips that still said «изохроны».
+- **The Exclusion zone calculator has a new look:** the radius of the zone large with what sets it, the maximum
+  instantaneous charge beside it; vibration, airblast and flyrock on cards of their own, each with a bar of its
+  length against the radius, the one that sets it marked. The buttons are at the bottom, Draw exclusion zone the
+  main one; after the site or flyrock constants are edited the radii are worked out again by themselves.
+- **The tip at a vertex of a collar or depth polygon** is shorter: Vertex 3 · Level 306.00, the number of the vertex as in
+  the vertex table of the segment and its elevation.
+- **The tips at the cursor in the dark theme** are lighter and easier to read.
+
+### Fixed
+- **The round Blast direction button over the plan** is on the line of the chips and no longer covers the north arrow.
+- **Draw exclusion zone no longer draws a zone over the one before:** that one is deleted, the plan has one zone.
+  Clear analysis (the chip over the plan, Esc, the menu) takes the exclusion zone off too; an undo brings it back.
+- **The Labels chip over the plan takes the label columns left and right of the hole collars off too:** they stayed
+  before.
+
 ## 0.3.6 — 2026-11-16
 
 ### New
