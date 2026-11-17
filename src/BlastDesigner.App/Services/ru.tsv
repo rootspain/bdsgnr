@@ -2958,13 +2958,11 @@ Line {0}: the chain of ties is not in the plan.	Линия {0}: цепочки �
 Top detonator	Верхний детонатор
 Bottom detonator	Нижний детонатор
 {0}: holes {1}–{2}, {3} ties ({4} holes)	{0}: скв. {1}–{2}, связей {3} ({4} скважин)
-Press to place the vertex of the front and drag the way it is to point: the sides open behind the cursor (a click gives 60 px, upwards). On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length (drawn out to 180° it becomes a straight line, whose ends then move on their own), the line to move it.	Нажмите, чтобы поставить вершину фронта, и тяните туда, куда он должен смотреть: стороны расходятся позади курсора (щелчок даёт 60 пкс вверх). У выделенного фронта кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину (раскрытый до 180° фронт становится прямой, и тогда его концы двигаются сами по себе), перетаскивание линии сдвигает фронт.
-Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line both ways, the holes at one distance from it fire together. On a selected line drag a circle to move its end, the label in its middle to make it a chevron, the line to move it.	Нажмите в одном конце линии и тяните к другому (щелчок даёт 60 пкс); время растёт от линии в обе стороны, скважины на одном расстоянии от неё срабатывают вместе. У выделенной линии кружок двигает её конец, подпись в середине делает её шевроном, перетаскивание линии сдвигает её.
 ui:Shape	Фигура
 ui:Line	Линия
 ui:Chevron	Галочка
-ui:The times grow from the line both ways; the holes at one distance from it fire together	Время растёт от линии в обе стороны; скважины на одном расстоянии от неё срабатывают вместе
-ui:Two segments at a vertex: the times grow from the vertex outwards; opened to 180° it is a straight line, the times grow from it	Два отрезка с общей вершиной: время растёт от вершины наружу; раскрытый до 180° — прямая, время растёт от неё
+Click the start and the end of the line. A click on its end (or Enter) finishes a line; a click elsewhere draws a second segment and finishes a chevron, its vertex at the end of the line. Backspace takes the last point back, Esc drops the input. On a selected front drag a circle to change it, the line to move it.	Щёлкните начало и конец линии. Щелчок по её концу (или Enter) завершает линию; щелчок в другом месте рисует второй отрезок и завершает шеврон с вершиной в конце линии. Backspace убирает последнюю точку, Esc отменяет ввод. У выбранного фронта перетащите кружок, чтобы изменить его, или линию, чтобы переместить.
+Click the end of the line	Щёлкните конец линии
 Rotate timing line	Поворот фронта отбойки ЭСИ
 Reshape timing line	Изменение формы фронта отбойки ЭСИ
 Timing line changed: {0} holes reprogrammed	Фронт отбойки ЭСИ изменён: перепрограммировано скважин — {0}

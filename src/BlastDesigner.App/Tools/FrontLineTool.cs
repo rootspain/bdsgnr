@@ -194,28 +194,25 @@ public sealed class FrontLineHandles : ISelectGesture
 }
 
 /// <summary>
-/// Timing front tool, drawing the shape chosen in its panel (<see cref="MainViewModel.FrontShape"/>).
-/// A chevron: two segments meeting at a vertex at a right angle (<see cref="Chevron.DefaultAngleDeg"/>), the times growing from the vertex outwards. A press places the vertex; dragging with the button held pulls the base after the cursor (direction and length),
-/// a click without a drag gives segments 60 px long at the present zoom, pointing up the screen.
-/// A line: a press places one end, the drag the other (a click gives 60 px across the screen); its ends are put in the order
-/// that makes the times grow to the side of most holes, which an arrow shows.
-/// On release the timing line window opens. A selected front is changed by its circles and moved by dragging the line itself.
+/// Timing front tool, drawn by clicks. The first click puts the start of a line, the second its end. A click on that end
+/// (or Enter) finishes a line: its ends are put in the order that makes the times grow to the side of most holes. A click
+/// anywhere else puts the end of a second segment and finishes a chevron, its vertex at the end of the first line, its
+/// segments as long and at the angle they were clicked. Backspace takes the last point back, Esc drops the input.
+/// When the front is finished the timing line window opens. A selected front is changed by its circles and moved by
+/// dragging the line itself, while no front is being drawn.
 /// </summary>
 public sealed class FrontLineTool : Tool
 {
-    private const double DefaultLengthPx = 60;
     private const double DragPx = 4;
     private const double DirectionStepDeg = 15;
+    /// <summary>Radius of the vertices clicked, px: larger than the points of other tools, as the circles of a selected front.</summary>
+    public const float VertexRadius = 7;
 
     private readonly Action<List<Vec3>> _finish;
     private readonly FrontLineHandles _handles;
-    // the front being drawn
-    private ToolPointer? _down;
-    private Vec3 _apex;
-    private bool _stretching;
-    private bool _line;
-    private List<Vec3> _holes = new();
-    private List<Vec3>? _shape;
+    // the front being drawn: the points clicked, and the cursor
+    private readonly List<Vec3> _points = new();
+    private ToolPointer? _cursor;
     // a selected front being moved
     private ToolPointer? _moveDown;
     private Vec3 _moveHandle;
@@ -225,13 +222,15 @@ public sealed class FrontLineTool : Tool
     public FrontLineTool(MainViewModel vm, Action<List<Vec3>> finish) : base(vm)
     {
         _finish = finish;
-        _handles = new FrontLineHandles(vm, () => Preview.Moving == null && _down == null);
+        _handles = new FrontLineHandles(vm, () => Preview.Moving == null && _points.Count == 0);
     }
 
     public override string Name => "Timing line";
-    public override string Hint => Vm.FrontShape == TimingFrontShape.Line
-        ? "Press at one end of the line and drag to the other (a click gives 60 px); the times grow from the line both ways, the holes at one distance from it fire together. On a selected line drag a circle to move its end, the label in its middle to make it a chevron, the line to move it."
-        : "Press to place the vertex of the front and drag the way it is to point: the sides open behind the cursor (a click gives 60 px, upwards). On a selected front drag the accent circle at the vertex to turn it, a circle at the base to change its angle and length (drawn out to 180° it becomes a straight line, whose ends then move on their own), the line to move it.";
+    public override string Hint =>
+        "Click the start and the end of the line. A click on its end (or Enter) finishes a line; a click elsewhere draws a second segment and finishes a chevron, its vertex at the end of the line. Backspace takes the last point back, Esc drops the input. On a selected front drag a circle to change it, the line to move it.";
+
+    /// <summary>The points clicked of the front being drawn: none, its start, or the start and the end of its first line.</summary>
+    public IReadOnlyList<Vec3> Points => _points;
 
     /// <summary>The end of a segment from <paramref name="from"/> turned to the nearest step of 15°, its length kept.</summary>
     public static Vec3 Stepped(Vec3 from, Vec3 to)
@@ -255,40 +254,50 @@ public sealed class FrontLineTool : Tool
         base.Deactivate();
     }
 
-    protected override bool HasPendingInput => _down != null || _moveDown != null || _handles.Active;
+    protected override bool HasPendingInput => _points.Count > 0 || _moveDown != null || _handles.Active;
 
     public override void PointerPressed(ToolPointer p)
     {
         if (!p.Left) return;
-        if (_handles.TryPress(p)) return;
-        if (p.Hit is TimingLineEntity hit && Vm.Doc!.Selection.Contains(hit.Id) && Vm.Project!.FindLayer(hit.LayerId) is not { Locked: true })
+        if (_points.Count == 0)
         {
-            _moveDown = p;
-            _moving = false;
-            _moveShown = null;
-            var cam = View.Camera;
-            _moveHandle = hit.Points.DefaultIfEmpty(p.World).MinBy(v =>
+            if (_handles.TryPress(p)) return;
+            if (p.Hit is TimingLineEntity hit && Vm.Doc!.Selection.Contains(hit.Id) && Vm.Project!.FindLayer(hit.LayerId) is not { Locked: true })
             {
-                var (x, y) = cam.ToScreen(v);
-                return (x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y);
-            });
+                _moveDown = p;
+                _moving = false;
+                _moveShown = null;
+                var cam = View.Camera;
+                _moveHandle = hit.Points.DefaultIfEmpty(p.World).MinBy(v =>
+                {
+                    var (x, y) = cam.ToScreen(v);
+                    return (x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y);
+                });
+                return;
+            }
+            _points.Add(p.Snapped);
+            _cursor = p;
+            UpdatePreview();
             return;
         }
-        _down = p;
-        _apex = p.Snapped;
-        _stretching = false;
-        _line = Vm.FrontShape == TimingFrontShape.Line;
-        _holes = _line ? Vm.SelectedOrAllHoles().Where(h => !h.IsDummy).Select(h => h.Collar).ToList() : new();
-        UpdateShape(p);
+        // a click on the end of the first line finishes it as a line
+        if (_points.Count == 2 && OnEnd(p)) { FinishLine(); return; }
+        var at = Next(p);
+        // a point on the last one adds nothing: the shape needs a length
+        if (Vec3.Distance2D(_points[^1], at) < Chevron.MinLength) return;
+        _points.Add(at);
+        if (_points.Count == 3) { FinishChevron(); return; }
+        _cursor = p;
+        UpdatePreview();
     }
 
     public override void PointerMoved(ToolPointer p)
     {
         if (_handles.Active) { _handles.Drag(p, Preview); return; }
         if (_moveDown != null) { MovePreview(p); return; }
-        if (_down == null) { _handles.Hover(p); return; }
-        if (!_stretching && Math.Abs(p.X - _down.X) + Math.Abs(p.Y - _down.Y) > DragPx) _stretching = true;
-        UpdateShape(p);
+        if (_points.Count == 0) { _handles.Hover(p); return; }
+        _cursor = p;
+        UpdatePreview();
     }
 
     public override void PointerReleased(ToolPointer p)
@@ -301,95 +310,102 @@ public sealed class FrontLineTool : Tool
             _moving = false;
             Preview.Clear();
             if (delta is Vec3 d) Vm.MoveSelection(d);
-            return;
         }
-        if (_down == null) return;
-        UpdateShape(p);
-        var pts = _shape;
-        _down = null;
-        _shape = null;
-        Preview.Clear();
-        if (pts == null) return;
-        try { _finish(pts); }
-        catch (Exception ex) { Dialogs.ShowError(ex); }
-        View.Redraw();
+    }
+
+    public override bool KeyDown(Key key, KeyModifiers mods)
+    {
+        // Enter with nothing to finish is left to the window, which closes the tool
+        if (key is Key.Enter or Key.Return) return FinishEntry();
+        if (key == Key.Back && _points.Count > 0)
+        {
+            _points.RemoveAt(_points.Count - 1);
+            if (_points.Count == 0) Preview.Clear(); else UpdatePreview();
+            View.Redraw();
+            return true;
+        }
+        return base.KeyDown(key, mods);
+    }
+
+    /// <summary>Enter: the start and the end clicked finish a line; with the start alone the input waits for its end.</summary>
+    public override bool FinishEntry()
+    {
+        if (_points.Count == 0) return false;
+        if (_points.Count == 1) { Vm.SetStatus(Loc.T("Click the end of the line")); return true; }
+        FinishLine();
+        return true;
     }
 
     public override void Cancel()
     {
-        _down = null;
-        _shape = null;
+        _points.Clear();
+        _cursor = null;
         _moveDown = null;
         _moving = false;
         _handles.Cancel();
         base.Cancel();
     }
 
-    /// <summary>The front as the pointer gives it now, shown with its circles.</summary>
-    private void UpdateShape(ToolPointer p)
+    /// <summary>The point a click or the cursor gives after the last point: snapped, with Shift turned to a step of 15° from it.</summary>
+    private Vec3 Next(ToolPointer p)
     {
-        if (_line) { UpdateLine(p); return; }
-        var cam = View.Camera;
-        Vec3 dir;
-        double length;
-        if (_stretching)
-        {
-            // the front follows the cursor: dragged up, it points up and its sides open below the vertex
-            var v = (cam.ToWorld(p.X, p.Y, _apex.Z) - _apex).WithZ(0);
-            length = v.Length2D;
-            dir = v.Normalized();
-            if (p.Modifiers.HasFlag(KeyModifiers.Shift) && dir != Vec3.Zero)
-            {
-                var step = DirectionStepDeg * GeoMath.Deg;
-                var a = Math.Round(Math.Atan2(dir.Y, dir.X) / step) * step;
-                dir = new Vec3(Math.Cos(a), Math.Sin(a), 0);
-            }
-        }
-        else
-        {
-            length = DefaultLengthPx / Math.Max(cam.Scale, 1e-9);
-            dir = cam.Up.WithZ(0).Normalized();
-        }
-        if (dir == Vec3.Zero) dir = new Vec3(0, 1, 0);
-        _shape = Chevron.Build(_apex, dir, Chevron.DefaultAngleDeg, length);
-
-        Preview.Lines.Clear();
-        Preview.Guides.Clear();
-        Preview.Points.Clear();
-        Preview.Labels.Clear();
-        Preview.Lines.Add((_shape, false, PreviewColor));
-        foreach (var q in _shape) Preview.Points.Add((q, PreviewColor));
-        // bearing the front points to, clockwise from north
-        var bearing = (Math.Atan2(dir.X, dir.Y) / GeoMath.Deg + 360) % 360;
-        Preview.Labels.Add((_shape[0], $"{bearing:0.0}° · {Chevron.Length(_shape):0.00} m"));
+        var last = _points[^1];
+        var at = p.Snapped.WithZ(last.Z);
+        return p.Modifiers.HasFlag(KeyModifiers.Shift) ? Stepped(last, at) : at;
     }
 
-    /// <summary>The line as the pointer gives it now, its ends in order, with an arrow from its middle to the side the times grow to.</summary>
-    private void UpdateLine(ToolPointer p)
+    /// <summary>The pointer on the end of the first line, within the pick radius on the screen.</summary>
+    private bool OnEnd(ToolPointer p)
     {
-        var cam = View.Camera;
-        var end = _stretching ? cam.ToWorld(p.X, p.Y, _apex.Z) : _apex;
-        if (_stretching && p.Modifiers.HasFlag(KeyModifiers.Shift)) end = Stepped(_apex, end);
-        if (Vec3.Distance2D(_apex, end) < Chevron.MinLength)
-        {
-            var up = cam.Up.WithZ(0).Normalized();
-            if (up == Vec3.Zero) up = new Vec3(0, 1, 0);
-            end = _apex + new Vec3(up.Y, -up.X, 0) * (DefaultLengthPx / Math.Max(cam.Scale, 1e-9));
-        }
-        _shape = EbsTimingLine.FacingLine(_apex, end, _holes);
+        var (x, y) = View.Camera.ToScreen(_points[1]);
+        return Math.Sqrt((x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y)) <= Math.Max(View.TargetRadius, VertexGripsOverlay.Reach);
+    }
 
+    /// <summary>A line: its ends in order toward most of the holes (the selected ones, or all).</summary>
+    private void FinishLine()
+    {
+        var holes = Vm.SelectedOrAllHoles().Where(h => !h.IsDummy).Select(h => h.Collar).ToList();
+        Finish(EbsTimingLine.FacingLine(_points[0], _points[1], holes));
+    }
+
+    /// <summary>A chevron: the vertex at the end of the first line, the ends at the start of it and at the last click.</summary>
+    private void FinishChevron() => Finish(new List<Vec3> { _points[0], _points[1], _points[2] });
+
+    private void Finish(List<Vec3> pts)
+    {
+        _points.Clear();
+        _cursor = null;
+        Preview.Clear();
+        // the input is over: back to Select (V), where the front made is selected and can be changed at once
+        Vm.SelectTool();
+        try { _finish(pts); }
+        catch (Exception ex) { Dialogs.ShowError(ex); }
+        View.Redraw();
+    }
+
+    /// <summary>The points clicked and the segment to the cursor, with its bearing and length, and on the second segment the angle at the vertex.</summary>
+    private void UpdatePreview()
+    {
         Preview.Lines.Clear();
         Preview.Guides.Clear();
         Preview.Points.Clear();
         Preview.Labels.Clear();
-        Preview.Lines.Add((_shape, false, PreviewColor));
-        foreach (var q in _shape) Preview.Points.Add((q, PreviewColor));
-        // the times grow from the line both ways: no arrow. Its ends are still put in order toward most holes, the way it
-        // bends when it is made a chevron
-        var d = (_shape[1] - _shape[0]).WithZ(0);
-        var length = d.Length2D;
+        var shown = _points.ToList();
+        if (_cursor is { } c) shown.Add(Next(c));
+        if (shown.Count > 1) Preview.Lines.Add((shown, false, PreviewColor));
+        // the vertices large enough to be clicked: the end of the line larger still under the cursor, where a click finishes it
+        Preview.PointRadius = VertexRadius;
+        Preview.HotPoint = _points.Count == 2 && _cursor is { } over && OnEnd(over) ? _points[1] : null;
+        foreach (var q in _points) Preview.Points.Add((q, PreviewColor));
+        if (shown.Count < 2) return;
+        var from = shown[^2];
+        var to = shown[^1];
+        var d = (to - from).WithZ(0);
         var bearing = (Math.Atan2(d.X, d.Y) / GeoMath.Deg + 360) % 360;
-        Preview.Labels.Add((_shape[1], $"{bearing:0.0}° · {length:0.00} m"));
+        var label = $"{bearing:0.0}° · {d.Length2D:0.00} m";
+        if (shown.Count == 3 && d.Length2D > 1e-9) label = $"{Chevron.AngleDeg(shown):0.0}° · {d.Length2D:0.00} m";
+        Preview.Labels.Add((to, label));
+        View.Redraw();
     }
 
     /// <summary>The selected objects follow the cursor; the move is applied (with undo and reprogramming) on release.</summary>

@@ -50,6 +50,18 @@ public static class TimingLineWindow
             ? existing.Segments.Take(count).ToList()
             : Enumerable.Range(0, count).Select(_ => existing?.Segments.FirstOrDefault() ?? _lastSegment).ToList();
         var same = existing != null ? segments.All(s => s == segments[0]) : _sameForAll;
+        // a new chevron with segments of different lengths: each delay goes with its segment's length, as when an end is
+        // dragged, so that the window keeps the ends where they were clicked
+        if (existing == null && front == TimingFrontShape.Chevron && points.Count == 3 && segments.Count == 2 && !Chevron.IsStraight(points))
+        {
+            var first = Vec3.Distance2D(points[0], points[1]);
+            var second = Vec3.Distance2D(points[2], points[1]);
+            if (first > 1e-9 && Math.Abs(second - first) > 1e-6)
+            {
+                segments[1] = segments[0] with { ReliefMsPerM = Math.Round(segments[0].ReliefMsPerM * second / first, 2) };
+                same = false;
+            }
+        }
         var preview = new TimingLinePreviewOverlay();
         var form = new TimingLineForm(vm, points, holes, options, segments, same, preview, existing, front);
         var w = new Window

@@ -9,6 +9,12 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.7 — 2026-11-16
 
 ### Changed
+- **Deleting an EBS timing front or an opening point** deprograms its holes (as Deprogram holes does), but for those
+  another front programs. One undo brings back the front and the times.
+- **The EBS timing front tool draws by clicks:** the first and second click make a line; a click on its end or Enter
+  finishes a line, a click elsewhere a second segment, giving a chevron with its vertex at the end of the line, its
+  lengths and angle as clicked. Backspace takes the last point back, Esc drops the input. The Line / Chevron choice is
+  gone from the tool panel. After the input the tool switches to Select.
 - **First movement window:** in place of the Shape and Colour switches (the arrows are now always of one shape,
   yellow), the chips Angle of initiation and Burden relief, each turned on by itself. The layers turned on show in the
   window, on the main plan with Show on plan, and in print, each on a sheet of its own after the sheet of the arrows.

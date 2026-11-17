@@ -693,29 +693,6 @@ public sealed class ToolPanel : Border
             capture.IsCheckedChanged += (_, _) => { _vm.TieCaptureShown = capture.IsChecked == true; _vm.View.Redraw(); };
             _fields.Children.Add(capture);
         }
-        if (tool is FrontLineTool)
-        {
-            // the shape the next front is drawn with; the hint above follows it
-            var shapes = Ui.Row(6);
-            foreach (var (shape, text, tip) in new[]
-            {
-                (Domain.Model.TimingFrontShape.Line, "Line", "The times grow from the line both ways; the holes at one distance from it fire together"),
-                (Domain.Model.TimingFrontShape.Chevron, "Chevron", "Two segments at a vertex: the times grow from the vertex outwards; opened to 180° it is a straight line, the times grow from it")
-            })
-            {
-                var s = shape;
-                var chip = Ui.Chip(Loc.Ui(text), () =>
-                {
-                    if (_vm.FrontShape == s) return;
-                    _vm.ActiveTool?.Cancel();
-                    _vm.FrontShape = s;
-                    _vm.TimingLineTool();
-                }, _vm.FrontShape == shape, Loc.Ui(tip));
-                chip.Tag = "front:" + shape;
-                shapes.Children.Add(chip);
-            }
-            _fields.Children.Add(Labelled("Shape", shapes));
-        }
         if (tool is PatternRotateTool rotate) RotateFields(rotate);
         if (tool is TransformTool transform) TransformFields(transform);
         if (tool.Name is "Set" or "Row set")

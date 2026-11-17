@@ -765,7 +765,7 @@ public sealed partial class MainViewModel
     public void SetTimeTool() => SetTool(new TimeSetTool(this, false));
 
     /// <summary>
-    /// The timing front tool: a line, or two segments meeting at a vertex (<see cref="FrontLineTool"/>). When the front is drawn the
+    /// The timing front tool: a line, or two segments meeting at a vertex, by clicks (<see cref="FrontLineTool"/>). When the front is drawn the
     /// timing line window opens; applied, the front stays in the project, programs the selected holes (or all) and is
     /// selected, so that it can be turned and reshaped at once.
     /// </summary>

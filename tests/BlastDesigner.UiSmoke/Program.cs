@@ -3597,18 +3597,18 @@ Step("a chevron's ends move on their own, each segment's delay with its length, 
     while (vm.Doc.UndoNames.Count > steps) vm.Undo();
     vm.Doc.ClearSelection(); Pump();
 });
-Step("timing front tool: the panel chooses a line or a chevron, the window offers no type, a line times to the side of its holes", () =>
+Step("timing front tool: clicks draw a line (a click on its end or Enter) or a chevron (a second segment), the window offers no type, a line times to the side of its holes", () =>
 {
-    var shape = vm.FrontShape;
     vm.Doc!.ClearSelection(false);
     vm.PlanView(); vm.ZoomAll(); Pump();
     var holes = vm.Project!.Holes.Where(h => !h.IsDummy).ToList();
     var y = holes.Max(h => h.Collar.Y) + 3;
-    void Chip(BlastDesigner.Domain.Model.TimingFrontShape s) { window.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "front:" + s).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
     ToolPointer At(double x, double yy) { var w = new BlastDesigner.Domain.Geometry.Vec3(x, yy, 300); var (sx, sy) = vm.View.Camera.ToScreen(w); return new ToolPointer { X = sx, Y = sy, World = w, Snapped = w, Left = true, ClickCount = 1 }; }
-    TimingLineForm Draw(double x0, double x1, double y1)
+    FrontLineTool Tool() => (FrontLineTool)vm.ActiveTool!;
+    // the tool clicked: the click that finishes the input switches to Select before the button is released
+    void Click(double x, double yy) { var t = Tool(); t.PointerMoved(At(x, yy)); t.PointerPressed(At(x, yy)); t.PointerReleased(At(x, yy)); Pump(); }
+    TimingLineForm Form()
     {
-        vm.ActiveTool!.PointerPressed(At(x0, y)); vm.ActiveTool.PointerMoved(At((x0 + x1) / 2, (y + y1) / 2)); vm.ActiveTool.PointerMoved(At(x1, y1)); vm.ActiveTool.PointerReleased(At(x1, y1)); Pump();
         var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
         if (dlg.GetLogicalDescendants().OfType<Button>().Any(b => (b.Tag as string)?.StartsWith("type:") == true)) throw new Exception("the window of a front still offers the type of line");
         if (!dlg.GetLogicalDescendants().OfType<Button>().Any(b => b.Tag as string == "reverse")) throw new Exception("the window of a front lost its direction");
@@ -3617,11 +3617,43 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
     try
     {
         vm.TimingLineTool(); Pump();
-        Chip(BlastDesigner.Domain.Model.TimingFrontShape.Line);
-        if (vm.FrontShape != BlastDesigner.Domain.Model.TimingFrontShape.Line || vm.ActiveTool is not FrontLineTool || !vm.ActiveTool.Hint.StartsWith("Press at one end")) throw new Exception("the Line chip did not choose the line");
-        // drawn from west to east above the block: its ends are turned so that the times grow southwards, into the holes
+        // the shape is not chosen in the panel any more: the clicks give it
+        if (window.GetLogicalDescendants().OfType<Button>().Any(b => (b.Tag as string)?.StartsWith("front:") == true)) throw new Exception("the panel still offers Line / Chevron");
+        if (!Tool().Hint.StartsWith("Click the start")) throw new Exception("the hint does not tell the clicks: " + Tool().Hint);
         var lines = vm.Project.Entities.OfType<TimingLineEntity>().Count();
-        var form = Draw(holes.Min(h => h.Collar.X) - 3, holes.Max(h => h.Collar.X) + 3, y);
+        double x0 = holes.Min(h => h.Collar.X) - 3, x1 = holes.Max(h => h.Collar.X) + 3;
+        // Backspace takes the last point back, Esc drops the input, and neither opens the window
+        var shownBefore = BlastDesigner.App.Services.Dialogs.LastShown;
+        Click(x0, y); Click(x1, y);
+        if (Tool().Points.Count != 2) throw new Exception($"two clicks should hold two points: {Tool().Points.Count}");
+        // the vertices large, to be clicked; the end of the line larger still under the cursor, where a click finishes it
+        if (vm.View.Preview.PointRadius != FrontLineTool.VertexRadius) throw new Exception($"the vertices are drawn {vm.View.Preview.PointRadius} px, not {FrontLineTool.VertexRadius}");
+        Tool().PointerMoved(At(x1, y)); Pump();
+        if (vm.View.Preview.HotPoint is not { } hot || Vec3.Distance2D(hot, new Vec3(x1, y, 300)) > 1e-6) throw new Exception("the end of the line is not marked under the cursor");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47c_front_drawing.png"));
+        Tool().PointerMoved(At(x1 - 10, y - 5)); Pump();
+        if (vm.View.Preview.HotPoint != null) throw new Exception("the end stays marked with the cursor away");
+        Tool().KeyDown(Avalonia.Input.Key.Back, Avalonia.Input.KeyModifiers.None);
+        if (Tool().Points.Count != 1) throw new Exception("Backspace did not take the end back");
+        Tool().KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+        if (Tool().Points.Count != 0 || vm.ActiveTool is not FrontLineTool) throw new Exception("Esc should drop the input and keep the tool");
+        if (BlastDesigner.App.Services.Dialogs.LastShown != shownBefore || vm.Project.Entities.OfType<TimingLineEntity>().Count() != lines) throw new Exception("a dropped input opened the window or made a front");
+        // Enter after two points: a line, as a click on its end
+        Click(x0, y); Click(x1, y);
+        Tool().KeyDown(Avalonia.Input.Key.Enter, Avalonia.Input.KeyModifiers.None); Pump();
+        var entered = Form();
+        if (entered.Options.Style != TimingLineStyle.TimeLine) throw new Exception("Enter should finish a line");
+        // the input over, the tool is Select (V)
+        if (vm.ActiveTool is not BlastDesigner.App.Tools.SelectTool) throw new Exception("the tool should be Select after the input: " + vm.ActiveTool?.Name);
+        entered.Closing!(false); Pump();
+        if (vm.Project.Entities.OfType<TimingLineEntity>().Count() != lines) throw new Exception("the window cancelled made a front");
+
+        // drawn from west to east above the block, finished by a click on its end: its ends are turned so that the times
+        // grow southwards, into the holes
+        vm.TimingLineTool(); Pump();
+        Click(x0, y); Click(x1, y); Click(x1, y);
+        var form = Form();
         if (form.Options.ReverseOrder || form.Options.Style != TimingLineStyle.TimeLine) throw new Exception("a new line should be a contour line A → B");
         form.Closing!(true); Pump();
         var line = vm.Project.Entities.OfType<TimingLineEntity>().Last();
@@ -3639,21 +3671,39 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
         window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "47d_front_line.png"));
         vm.Undo(); Pump();
 
-        // a chevron: its times grow from its vertex, not reversed
-        vm.TimingLineTool(); Pump();
-        Chip(BlastDesigner.Domain.Model.TimingFrontShape.Chevron);
-        if (vm.FrontShape != BlastDesigner.Domain.Model.TimingFrontShape.Chevron) throw new Exception("the Chevron chip did not choose the chevron");
+        // a second segment of other length: the chevron as clicked, its vertex at the end of the first line; the window
+        // keeps its ends, the delay of each segment going with its length
         var x = holes.Average(h => h.Collar.X);
-        // dragged south, into the holes: the front points the way of the cursor
-        var chevron = Draw(x, x, y - 10);
+        vm.Doc.ClearSelection(false);
+        vm.TimingLineTool(); Pump();
+        Click(x - 4, y + 4); Click(x, y);
+        // the preview of the second segment says the angle at the vertex
+        Tool().PointerMoved(At(x + 9, y + 3)); Pump();
+        if (!vm.View.Preview.Labels.Any(l => l.Item2.Contains('°'))) throw new Exception("the second segment shows no angle");
+        Click(x + 9, y + 3);
+        var uneven = Form();
+        var clicked = new[] { new Vec3(x - 4, y + 4, 300), new Vec3(x, y, 300), new Vec3(x + 9, y + 3, 300) };
+        if (uneven.ChevronPoints is not { } up || up.Zip(clicked).Any(q => Vec3.Distance2D(q.First, q.Second) > 1e-6)) throw new Exception("the window moved the ends of the chevron clicked");
+        var seg = uneven.Segments();
+        var ratio = Vec3.Distance2D(clicked[2], clicked[1]) / Vec3.Distance2D(clicked[0], clicked[1]);
+        if (Math.Abs(seg[1].ReliefMsPerM / seg[0].ReliefMsPerM - ratio) > 0.01) throw new Exception($"the delays do not go with the lengths: {seg[0].ReliefMsPerM} and {seg[1].ReliefMsPerM}, lengths {ratio:0.###}");
+        uneven.Closing!(false); Pump();
+
+        // a chevron: three clicks, its times grow from its vertex, not reversed
+        vm.TimingLineTool(); Pump();
+        // pointing south, into the holes: the sides open behind the vertex, at a right angle
+        Click(x - 6, y + 6); Click(x, y); Click(x + 6, y + 6);
+        var chevron = Form();
         if (chevron.Options.ReverseOrder) throw new Exception("a new chevron should go A → B, its times from its vertex");
         if (chevron.Options.Style != TimingLineStyle.BurnLine) throw new Exception("a new chevron should be of the Two fronts type: " + chevron.Options.Style);
         chevron.Closing!(true); Pump();
+        if (vm.ActiveTool is not BlastDesigner.App.Tools.SelectTool) throw new Exception("the tool should be Select after a chevron: " + vm.ActiveTool?.Name);
         // it has no ray from its vertex, selected (it is, made) or not
         var made = vm.Project.Entities.OfType<TimingLineEntity>().Last();
         if (made.Front != BlastDesigner.Domain.Model.TimingFrontShape.Chevron || !vm.Doc.Selection.Contains(made.Id)) throw new Exception("the chevron was not made and selected");
+        if (Vec3.Distance2D(made.Points[1], new Vec3(x, y, 300)) > 1e-6) throw new Exception("the vertex of the chevron should be the end of its first line");
         if (made.Style != TimingLineStyle.BurnLine) throw new Exception("the chevron made should be of the Two fronts type: " + made.Style);
-        if (Math.Abs(BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points) - 90) > 1e-6) throw new Exception($"a new chevron should open at 90°: {BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points):0.##}°");
+        if (Math.Abs(BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points) - 90) > 1e-6) throw new Exception($"the chevron should open at the 90° clicked: {BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points):0.##}°");
         // timed by its oval all the same: as a chevron of the Front line type
         var asFront = BlastDesigner.Engine.EbsTimingLine.OptionsOf(made); asFront.Style = TimingLineStyle.TimeLine;
         var timedHoles = vm.Project.Holes.Where(h => made.HoleIds.Contains(h.Id)).ToList();
@@ -3689,7 +3739,6 @@ Step("timing front tool: the panel chooses a line or a chevron, the window offer
     }
     finally
     {
-        vm.FrontShape = shape;
         vm.SelectTool(); Pump();
     }
 });

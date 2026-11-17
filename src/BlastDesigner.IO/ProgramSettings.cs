@@ -115,8 +115,6 @@ public sealed class ProgramSettings
     public bool ShowFps { get; set; }
     /// <summary>Tie tool panel ▸ Capture width: grey lines beside the tie being drawn show what it captures.</summary>
     public bool TieCaptureShown { get; set; } = true;
-    /// <summary>Timing front tool panel: the shape it draws, a line or a chevron.</summary>
-    public TimingFrontShape TimingFrontShape { get; set; } = TimingFrontShape.Chevron;
     /// <summary>Visualization window: seconds the whole blast is shown in; 0 runs on the blast's own clock.</summary>
     public double PlaybackSeconds { get; set; }
     /// <summary>Visualization window: isochrone interval, ms.</summary>

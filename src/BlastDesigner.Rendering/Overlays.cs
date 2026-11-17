@@ -12,6 +12,11 @@ public sealed class PreviewOverlay : IOverlay
     /// <summary>Helper lines beside what is being drawn, thinner than <see cref="Lines"/>.</summary>
     public List<(IReadOnlyList<Vec3> Points, SKColor Color)> Guides { get; } = new();
     public List<(Vec3 Point, SKColor Color)> Points { get; } = new();
+    /// <summary>Radius of the <see cref="Points"/>, px; a tool may draw them larger, to be clicked.</summary>
+    public float PointRadius { get; set; } = DefaultPointRadius;
+    public const float DefaultPointRadius = 4;
+    /// <summary>A point of <see cref="Points"/> under the cursor, drawn larger still: a click on it does something.</summary>
+    public Vec3? HotPoint { get; set; }
     public List<(Vec3 Point, string Text)> Labels { get; } = new();
     /// <summary>Square markers for holes that a tool is about to create.</summary>
     public List<(Vec3 Point, SKColor Color)> Markers { get; } = new();
@@ -43,6 +48,8 @@ public sealed class PreviewOverlay : IOverlay
         Lines.Clear();
         Guides.Clear();
         Points.Clear();
+        PointRadius = DefaultPointRadius;
+        HotPoint = null;
         Labels.Clear();
         Markers.Clear();
         ScreenRect = null;
@@ -82,7 +89,7 @@ public sealed class PreviewOverlay : IOverlay
         {
             fill.Color = PlanRenderer.Adapt(col);
             var (x, y) = cam.ToScreen(p);
-            c.DrawCircle(x, y, 4, fill);
+            c.DrawCircle(x, y, HotPoint == p ? PointRadius + 2 : PointRadius, fill);
         }
         foreach (var (p, col) in Markers)
         {

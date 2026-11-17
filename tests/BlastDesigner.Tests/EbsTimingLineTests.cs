@@ -427,6 +427,42 @@ public class EbsTimingLineTests
         Assert.Equal(1, ((Hole)doc.Project.FindEntity(other.Id)!).ElectronicTimeMs);
     }
 
+    [Fact]
+    public void DeletingAFrontDeprogramsItsHoles()
+    {
+        var p = BlastProject.CreateNew();
+        var a = H(0, -10);
+        var b = H(5, -10);
+        var kept = H(10, -10);
+        var manual = H(15, -10);
+        p.Add(a); p.Add(b); p.Add(kept); p.Add(manual);
+        var line = EbsTimingLine.CreateEntity(Line((-20, -20), (20, -20)), new[] { new TimingLineSegment(0, 10, 0) }, new TimingLineOptions());
+        line.HoleIds = new List<Guid> { a.Id, b.Id, manual.Id };
+        // another front times the third hole: it keeps its time
+        var other = EbsTimingLine.CreateEntity(Line((-20, -30), (20, -30)), new[] { new TimingLineSegment(0, 10, 0) }, new TimingLineOptions());
+        other.HoleIds = new List<Guid> { kept.Id };
+        p.Add(line); p.Add(other);
+        EbsTimingLine.Apply(p, new[] { a, b, manual }, line);
+        EbsTimingLine.Apply(p, new[] { kept }, other);
+        Timing.SetTime(manual, 4321, true);
+        var doc = new Document(p);
+        var keptTime = kept.ElectronicTimeMs;
+        Assert.NotNull(a.ElectronicTimeMs);
+
+        doc.Execute("Delete", pr => pr.Entities.RemoveAll(e => e.Id == line.Id));
+        Hole Of(Hole h) => (Hole)doc.Project.FindEntity(h.Id)!;
+        Assert.Null(Of(a).ElectronicTimeMs);
+        Assert.Null(Of(b).ElectronicTimeMs);
+        // deprogrammed as by Deprogram holes: a time set by hand too; the hole of the front still there keeps its time
+        Assert.Null(Of(manual).ElectronicTimeMs);
+        Assert.False(Of(manual).ElectronicTimeManual);
+        Assert.Equal(keptTime, Of(kept).ElectronicTimeMs);
+        // one undo brings the front and its times back
+        doc.Undo();
+        Assert.NotNull(Of(a).ElectronicTimeMs);
+        Assert.NotNull(doc.Project.FindEntity(line.Id));
+    }
+
     /// <summary>
     /// A line along the front of a grid gives every hole of the grid a time in each of its styles, walked either way, and
     /// walked the other way it fires the other end first (what the properties panel programs again when they are changed).

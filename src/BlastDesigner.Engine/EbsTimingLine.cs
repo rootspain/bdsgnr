@@ -204,15 +204,26 @@ public static class EbsTimingLine
     /// Before a change of the project: where the holes of its objects of time (timing fronts, opening points) are timed from
     /// (<see cref="TimingPoint"/>), whether they have an electronic detonator, and the values of the opening points. After it,
     /// each object with a hole that changed so (moved, loaded or primed otherwise), and each opening point changed itself,
-    /// programs its holes again, in the same undo step; manual times stay. Null when no object knows its holes.
+    /// programs its holes again, in the same undo step; manual times stay. An object deleted deprograms its holes
+    /// (<see cref="Timing.Deprogram"/>) but for those another object times. Null when no object knows its holes.
     /// </summary>
     public static Action? Follow(BlastProject project)
     {
         if (!project.Entities.OfType<IHoleTimer>().Any(l => l.HoleIds.Count > 0)) return null;
         var before = State(project);
         var points = Openings(project);
+        var timers = project.Entities.OfType<IHoleTimer>().Where(l => l.HoleIds.Count > 0).ToDictionary(l => l.Id, l => l.HoleIds.ToList());
         return () =>
         {
+            // a front or an opening point deleted: its holes are deprogrammed (Deprogram holes), but for those another one
+            // times now
+            var present = project.Entities.OfType<IHoleTimer>().ToList();
+            var gone = timers.Where(t => present.All(l => l.Id != t.Key)).SelectMany(t => t.Value).ToHashSet();
+            if (gone.Count > 0)
+            {
+                var held = present.SelectMany(l => l.HoleIds).ToHashSet();
+                Timing.Deprogram(project.Holes.Where(h => gone.Contains(h.Id) && !held.Contains(h.Id)), onlyManual: false);
+            }
             var after = State(project);
             var nowPoints = Openings(project);
             foreach (var timer in project.Entities.OfType<IHoleTimer>().Where(l => l.HoleIds.Count > 0))

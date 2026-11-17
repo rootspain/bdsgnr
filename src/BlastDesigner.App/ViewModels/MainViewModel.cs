@@ -74,17 +74,6 @@ public sealed partial class MainViewModel : ObservableObject
             Settings.Save();
         }
     }
-    /// <summary>Timing front tool panel ▸ Line / Chevron: the shape the tool draws; kept in the settings.</summary>
-    public TimingFrontShape FrontShape
-    {
-        get => Settings.TimingFrontShape == TimingFrontShape.Line ? TimingFrontShape.Line : TimingFrontShape.Chevron;
-        set
-        {
-            if (Settings.TimingFrontShape == value) return;
-            Settings.TimingFrontShape = value;
-            Settings.Save();
-        }
-    }
     /// <summary>Tie palette ▸ User defined: the delay new ties get instead of a product's; null uses the connector.</summary>
     public double? ActiveTieDelayMs { get; set; }
     /// <summary>Tie palette ▸ Initiation system chosen: the id of its record in the table of types.</summary>
