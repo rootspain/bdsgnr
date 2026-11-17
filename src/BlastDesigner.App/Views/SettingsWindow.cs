@@ -478,6 +478,7 @@ public sealed class SettingsForm : DockPanel
         yield return Row("Point cloud transparency", Number("pointCloudTransparency", Edited.PointCloudTransparency, v => Edited.PointCloudTransparency = (int)Math.Round(v), "%", 0, 100, "0"), "The points of a point cloud");
         yield return Row("Collar size", Number("collar", Edited.CollarSizePixels, v => Edited.CollarSizePixels = v, "px", 2, 40, "0.#"));
         yield return Row("Coordinates box", Toggle(Edited.ShowCoordinatesBox, v => Edited.ShowCoordinatesBox = v), "Cursor coordinates in the status bar");
+        yield return Row("Ribbon group names at the side", Toggle(Edited.RibbonCaptionsAside, v => Edited.RibbonCaptionsAside = v, "ribbonCaptionsAside"), "Upright at the start of each group; off — under the buttons");
         yield return Row("FPS", Toggle(Edited.ShowFps, v => Edited.ShowFps = v, "showFps"), "Frames per second");
     }
 

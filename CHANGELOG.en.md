@@ -9,6 +9,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.7 — 2026-11-16
 
 ### Changed
+- **Ribbon group names** stand upright at the start of each group instead of a line under the buttons: the ribbon is
+  lower. The former look is back with Settings ▸ Ribbon group names at the side.
 - **The exclusion zone is built by sources:** charged holes standing together are one source, each with its own
   radius from its own charge. The zone is the circles of those radii about the holes: blasts far apart get zones of
   their own, close ones one zone with a waist between them, not one convex shape over the empty ground. The

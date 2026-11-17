@@ -118,6 +118,50 @@ Step("ribbon groups are as wide as their buttons: small ones in columns of three
     Shot("01b_ribbon_topography");
     window.Ribbon.Select(2); Pump();
 });
+Step("ribbon group names upright at the start of the groups, the ribbon lower; off in the settings puts them back under the buttons", () =>
+{
+    void Show(bool aside)
+    {
+        var edited = BlastDesigner.Domain.ProjectJson.DeepClone(vm.Settings);
+        edited.RibbonCaptionsAside = aside;
+        vm.ApplyProgramSettings(edited);
+        Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    }
+    Control Band() => window.Ribbon.Children.OfType<Border>().First();
+    window.Ribbon.Select(0); Pump();
+    if (!vm.Settings.RibbonCaptionsAside) throw new Exception("the names are not at the side by default");
+    Show(true);
+    for (int st = 0; st < window.Ribbon.Stages.Count; st++)
+    {
+        window.Ribbon.Select(st); Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        var captions = window.Ribbon.GetLogicalDescendants().OfType<Border>().Where(b => b.Name == "ribbonCaption").ToList();
+        if (captions.Count != window.Ribbon.Stages[st].Groups.Count) throw new Exception($"stage {st}: {captions.Count} names for {window.Ribbon.Stages[st].Groups.Count} groups");
+        foreach (var c in captions)
+        {
+            var text = c.GetLogicalDescendants().OfType<TextBlock>().First();
+            // upright: higher than wide, and no higher than its group
+            if (c.Bounds.Height < c.Bounds.Width || c.Bounds.Height > ((Control)c.Parent!).Bounds.Height + 0.5) throw new Exception($"'{text.Text}': {c.Bounds.Width:0}×{c.Bounds.Height:0}");
+        }
+        // the name runs along the whole height of the ribbon: "Электронное (ЭСИ)" in one line
+        foreach (var c in captions)
+        {
+            var t = c.GetLogicalDescendants().OfType<TextBlock>().First();
+            if (Math.Abs(t.MaxWidth - Band().Bounds.Height + 2) > 1) throw new Exception($"'{t.Text}': {t.MaxWidth:0} px to run along of {Band().Bounds.Height - 2:0}");
+        }
+        // the ribbon as low as a column of three small buttons, the same on every stage: the plan does not jump
+        if (Math.Abs(Band().Bounds.Height - BlastDesigner.App.Views.RibbonBar.CaptionsAsideHeight) > 0.5) throw new Exception($"stage {st}: the ribbon is {Band().Bounds.Height:0} px high, not {BlastDesigner.App.Views.RibbonBar.CaptionsAsideHeight}");
+        if (st == 4) Shot("01e_ribbon_names_aside_initiation");
+    }
+    var low = Band().Bounds.Height;
+    window.Ribbon.Select(0); Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    Shot("01c_ribbon_names_aside");
+    Show(false);
+    if (window.Ribbon.GetLogicalDescendants().OfType<Border>().Any(b => b.Name == "ribbonCaption")) throw new Exception("names still at the side");
+    if (Band().Bounds.Height <= low) throw new Exception($"the ribbon is not lower with the names at the side: {low:0} and {Band().Bounds.Height:0} px");
+    Shot("01d_ribbon_names_under");
+    Show(true);
+    window.Ribbon.Select(2); Pump();
+});
 var boundary = new[] { new Vec3(1000, 2000, 300), new Vec3(1060, 2000, 300), new Vec3(1070, 2035, 300), new Vec3(1005, 2040, 300) };
 Step("bench surface", () => vm.Change("Create surface", p =>
 {

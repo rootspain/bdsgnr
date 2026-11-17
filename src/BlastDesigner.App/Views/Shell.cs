@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Threading;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.Tools;
 using BlastDesigner.App.ViewModels;
@@ -192,6 +193,7 @@ public sealed class RibbonBar : DockPanel
     private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal, Spacing = 2 };
     private readonly StackPanel _groups = new() { Orientation = Orientation.Horizontal };
     private readonly List<(RibbonItem Item, Button Button)> _buttons = new();
+    private readonly Border _band;
 
     public RibbonBar(MainViewModel vm)
     {
@@ -201,14 +203,14 @@ public sealed class RibbonBar : DockPanel
         _tabs.VerticalAlignment = VerticalAlignment.Bottom;
         _tabs.Name = "stageTabs";
         TabStrip = Ui.HScroll(_tabs);
-        Children.Add(new Border
+        _band = new Border
         {
             Background = Look.Ribbon,
             BorderBrush = Look.Line,
             BorderThickness = new Thickness(0, 1),
-            MinHeight = 100,
             Child = Ui.HScroll(_groups)
-        });
+        };
+        Children.Add(_band);
         Select(2);
     }
 
@@ -256,6 +258,9 @@ public sealed class RibbonBar : DockPanel
     {
         _groups.Children.Clear();
         _buttons.Clear();
+        var aside = _vm.Settings.RibbonCaptionsAside;
+        // the names at the side free the line under the buttons: the ribbon is lower by it
+        _band.MinHeight = aside ? CaptionsAsideHeight : 100;
         foreach (var g in stage.Groups)
         {
             var bigs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
@@ -266,7 +271,7 @@ public sealed class RibbonBar : DockPanel
             StackPanel? column = null;
             foreach (var it in g.Items)
             {
-                var b = it.Big ? BigButton(it) : SmallButton(it);
+                var b = it.Big ? BigButton(it, aside) : SmallButton(it);
                 if (it.Big) bigs.Children.Add(b);
                 else
                 {
@@ -282,20 +287,97 @@ public sealed class RibbonBar : DockPanel
             var body = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
             if (bigs.Children.Count > 0) body.Children.Add(bigs);
             if (smalls.Children.Count > 0) body.Children.Add(smalls);
-            var group = new DockPanel { Margin = new Thickness(8, 6, 8, 4) };
-            var caption = new TextBlock { Text = Loc.Ui(g.Name), Foreground = Look.Accent, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 2, 0, 0) };
-            DockPanel.SetDock(caption, Dock.Bottom);
-            group.Children.Add(caption);
-            group.Children.Add(body);
+            Control group;
+            if (aside)
+            {
+                // read from the bottom up along the whole height of the ribbon, in two lines when it is longer
+                var text = new TextBlock
+                {
+                    Text = Loc.Ui(g.Name), Foreground = Look.Accent, FontSize = 11, TextWrapping = TextWrapping.Wrap,
+                    TextAlignment = TextAlignment.Center, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                ToolTip.SetTip(text, Loc.Ui(g.Name));
+                var side = new Border
+                {
+                    Name = "ribbonCaption",
+                    Child = new LayoutTransformControl { LayoutTransform = new RotateTransform(-90), Child = text, VerticalAlignment = VerticalAlignment.Center }
+                };
+                // a narrow margin above and below the buttons; the name runs up to the edges of the ribbon
+                body.Margin = new Thickness(0, 2);
+                group = new AsideGroup(side, text, body) { Margin = new Thickness(2, 0, 8, 0) };
+            }
+            else
+            {
+                var dock = new DockPanel { Margin = new Thickness(8, 6, 8, 4) };
+                var caption = new TextBlock { Text = Loc.Ui(g.Name), Foreground = Look.Accent, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 2, 0, 0) };
+                DockPanel.SetDock(caption, Dock.Bottom);
+                dock.Children.Add(caption);
+                dock.Children.Add(body);
+                group = dock;
+            }
             _groups.Children.Add(new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 1, 0), Child = group });
         }
         Refresh();
     }
 
+    /// <summary>
+    /// A ribbon group with its name at the left: the buttons are measured first, then the name turned upright gets the whole
+    /// height of the group (the buttons', at least the ribbon's) to run along and wraps only past it.
+    /// </summary>
+    private sealed class AsideGroup : Panel
+    {
+        private const double Gap = 4;
+        private readonly Control _caption, _body;
+        private readonly TextBlock _text;
+
+        public AsideGroup(Control caption, TextBlock text, Control body)
+        {
+            _caption = caption;
+            _text = text;
+            _body = body;
+            Children.Add(caption);
+            Children.Add(body);
+        }
+
+        private double _height;
+        // the height the group was given last: the ribbon is as high as its highest group, so a lower one has more room
+        private double _arranged;
+
+        protected override Size MeasureOverride(Size available)
+        {
+            _body.Measure(new Size(double.PositiveInfinity, available.Height));
+            // the room the buttons take, not the one offered: the ribbon offers the height of the window
+            _height = Math.Max(Math.Max(_body.DesiredSize.Height, _arranged), CaptionsAsideHeight - Margin.Top - Margin.Bottom - 2);
+            // the lines of the name, turned, run along the height: they wrap where it ends
+            if (_text.MaxWidth != _height) _text.MaxWidth = _height;
+            _caption.Measure(new Size(double.PositiveInfinity, _height));
+            return new Size(_caption.DesiredSize.Width + Gap + _body.DesiredSize.Width, Math.Max(_body.DesiredSize.Height, _caption.DesiredSize.Height));
+        }
+
+        protected override Size ArrangeOverride(Size final)
+        {
+            // given more height than the buttons take: the name runs along it all, measured again
+            if (final.Height > _height + 0.5)
+            {
+                _arranged = final.Height;
+                Dispatcher.UIThread.Post(InvalidateMeasure);
+            }
+            var w = _caption.DesiredSize.Width;
+            _caption.Arrange(new Rect(0, 0, w, final.Height));
+            _body.Arrange(new Rect(w + Gap, 0, _body.DesiredSize.Width, final.Height));
+            return final;
+        }
+    }
+
+    /// <summary>The height of the ribbon with the group names at the side of the groups.</summary>
+    public const double CaptionsAsideHeight = 81;
+
     /// <summary>Small buttons in a column of a ribbon group.</summary>
     public const int SmallsPerColumn = 3;
 
-    private Button BigButton(RibbonItem it)
+    /// <param name="low">For the ribbon with the names at the side: the label in one line and less padding, the ribbon as
+    /// low as a column of three small buttons.</param>
+    private Button BigButton(RibbonItem it, bool low = false)
     {
         var stack = new StackPanel { Spacing = 3, HorizontalAlignment = HorizontalAlignment.Center };
         var icon = new Panel { Width = 26, Height = 26, HorizontalAlignment = HorizontalAlignment.Center };
@@ -303,14 +385,14 @@ public sealed class RibbonBar : DockPanel
         if (it.Lock != null || it.Drop != null)
             icon.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -2, -10, 0), Child = Look.Icon(it.Lock != null ? "lock" : "down", 11, Look.Faint, 2) });
         stack.Children.Add(icon);
-        stack.Children.Add(new TextBlock { Text = Loc.Ui(it.Label), FontSize = 11.5, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxWidth = 116, Foreground = Look.Text });
+        stack.Children.Add(new TextBlock { Text = Loc.Ui(it.Label), FontSize = 11.5, TextAlignment = TextAlignment.Center, TextWrapping = low ? TextWrapping.NoWrap : TextWrapping.Wrap, MaxWidth = low ? double.PositiveInfinity : 116, Foreground = Look.Text });
         if (it.Key != null) stack.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Center, Child = Look.Kbd(it.Key, 9) });
         var b = new Button
         {
             Content = stack,
             MinWidth = 72,
-            MinHeight = 76,
-            Padding = new Thickness(2, 6),
+            MinHeight = low ? 0 : 76,
+            Padding = low ? new Thickness(4, 3) : new Thickness(2, 6),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(6),
