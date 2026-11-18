@@ -444,8 +444,6 @@ public sealed partial class MainViewModel
         s.PatternTurnRefusedColor = edited.PatternTurnRefusedColor;
         s.CollarSizePixels = edited.CollarSizePixels;
         s.ShowCoordinatesBox = edited.ShowCoordinatesBox;
-        var ribbon = s.RibbonCaptionsAside != edited.RibbonCaptionsAside;
-        s.RibbonCaptionsAside = edited.RibbonCaptionsAside;
         s.UsageLogging = edited.UsageLogging;
         if (s.UsageLogging) IO.UsageLog.Start(IO.Changelog.Current.ToString());
         else IO.UsageLog.Stop();
@@ -463,12 +461,8 @@ public sealed partial class MainViewModel
         View.TargetRadius = s.TargetRadiusPixels;
         View.ShowFps = s.ShowFps;
         View.SurfaceWireframe = s.SurfaceWireframe;
-        if (ribbon) RibbonLayoutChanged?.Invoke();
         RefreshAll();
     }
-
-    /// <summary>The ribbon is to be laid out again: where the group names go has changed.</summary>
-    public event Action? RibbonLayoutChanged;
 
     public async Task ManageTemplates()
     {

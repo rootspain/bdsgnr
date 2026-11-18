@@ -100,7 +100,6 @@ public sealed class MainWindow : Window
         };
         _vm.ModelRefreshed += OnModelRefreshed;
         _vm.SelectionRefreshed += () => _ribbon.Refresh();
-        _vm.RibbonLayoutChanged += () => _ribbon.Select(_ribbon.Current);
         _vm.ToolChanged += OnToolChanged;
         _vm.OverlaysChanged += RefreshChips;
         _vm.OverlaysChanged += () => _ribbon.Refresh();

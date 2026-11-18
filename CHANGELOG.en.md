@@ -6,6 +6,19 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.8 — 2026-11-18
+
+### Changed
+- **Blast analysis window:** Angle of initiation, First movement and Burden relief are the tabs of one window over one
+  plan, whose view stays from tab to tab. The ribbon buttons open the window on their tab, or turn the open one to it.
+  The window leaves the main window and the other windows free. Show on plan puts the analysis of the open tab on the
+  main plan; another analysis on the plan or Clear analysis (Esc) turns the switch off, and closing the window takes
+  the analysis off the plan. Print gives the sheet of the open tab; the preview can change the analysis. The chips
+  Angle of initiation and Burden relief of First movement are gone: the layers are no longer laid over each other.
+- **Ribbon group names** are a line under the buttons again, as before 0.3.7. The setting Ribbon group names at the
+  side is gone. The ribbon is as high on every stage: on Initiation it is no longer higher, and the plan stays put.
+- **A lower ribbon:** the group names stand close under the buttons, the names of the big buttons in one line.
+
 ## 0.3.7 — 2026-11-16
 
 ### Changed

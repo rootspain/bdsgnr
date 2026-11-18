@@ -3403,14 +3403,9 @@ Each source the arrow of its radius, also inside a zone several sources make	У 
 Exclusion zone source	Источник опасной зоны
 Exclusion zone arrows	Стрелки опасной зоны
 Hide exclusion zone	Скрыть опасную зону
-ui:Ribbon group names at the side	Названия групп ленты сбоку
-ui:Upright at the start of each group; off — under the buttons	Вертикально в начале каждой группы; выключено — под кнопками
 Show	Показать
 Burden relief	Разгрузка ЛНС
 The angle at which each hole is initiated, from the times of its neighbours	Угол, под которым инициируется каждая скважина, по времени её соседей
-The burden relief of the triangles between the holes, under the arrows, with its legend	Разгрузка ЛНС по треугольникам между скважинами, под стрелками, с легендой
-ui:Sheet of the angle of initiation	Лист угла инициирования
-ui:Sheet of the burden relief	Лист разгрузки ЛНС
 R {0}	М {0}
 Route number	Марш. номер
 ui:Route no.	Марш. номер
@@ -3421,3 +3416,5 @@ ui:Label colour	Цвет подписи
 ui:The colour of the label: click to change it, right click for its own colour	Цвет подписи: щелчок — изменить, правый щелчок — вернуть цвет по умолчанию
 ui:The colour of the label: click to change it	Цвет подписи: щелчок — изменить
 Hole {0} has an electronic detonator and a tie going out of it already: a chain does not branch	У скважины {0} электронный детонатор, и из неё уже выходит связь: цепочка не ветвится
+Blast analysis	Анализ отбойки
+The sheet of the open tab	Лист открытой вкладки

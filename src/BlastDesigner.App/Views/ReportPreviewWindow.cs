@@ -355,7 +355,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         }
         Kind(ReportKind.Report, Loc.Ui("Report"));
         Kind(ReportKind.Plan, Loc.Ui("Plan"));
-        Kind(ReportKind.FirstMovement, Loc.T("First movement"));
+        Kind(ReportKind.FirstMovement, Loc.T("Blast analysis"));
         Kind(ReportKind.CrossSection, Loc.T("Section view"));
 
         var body = new StackPanel { Spacing = 16, Margin = new Thickness(16, 14), Children = { kinds } };
@@ -461,18 +461,42 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         };
     }
 
-    private Control ArrowOptions(FirstMovementSheet arrows) => new StackPanel
+    /// <summary>
+    /// The sheet of the Blast analysis window: which of its analyses (the tab it was printed from at first), the title,
+    /// which follows the analysis while it is its name.
+    /// </summary>
+    private Control ArrowOptions(FirstMovementSheet arrows)
     {
-        Spacing = 14,
-        Children =
+        var title = TitleBox(arrows.Title, v => arrows.Title = v);
+        var chips = new WrapPanel();
+        var list = new List<(BlastAnalysis Analysis, Button Chip)>();
+        foreach (var a in Enum.GetValues<BlastAnalysis>())
         {
-            FormKit.Labeled(Loc.T("Title"), TitleBox(arrows.Title, v => arrows.Title = v)),
-            Flag(Loc.Ui("Hide geometry"), arrows.HideGeometry, on => arrows.HideGeometry = on),
-            Flag(Loc.Ui("Sheet of the angle of initiation"), arrows.AngleSheet, on => arrows.AngleSheet = on, "angleSheet"),
-            Flag(Loc.Ui("Sheet of the burden relief"), arrows.ReliefSheet, on => arrows.ReliefSheet = on, "reliefSheet"),
-            Flag(Loc.T("Landscape"), arrows.Landscape, on => arrows.Landscape = on)
+            var chip = Ui.Chip(AnalysisWindows.AnalysisName(a), () =>
+            {
+                if (a == arrows.Analysis) return;
+                if (arrows.Title == AnalysisWindows.AnalysisName(arrows.Analysis)) title.Text = AnalysisWindows.AnalysisName(a);
+                arrows.Analysis = a;
+                foreach (var (x, c) in list) Ui.SetChip(c, x == a);
+                Rebuild();
+            }, a == arrows.Analysis);
+            chip.Name = "analysis" + a;
+            chip.Margin = new Thickness(0, 0, 6, 6);
+            list.Add((a, chip));
+            chips.Children.Add(chip);
         }
-    };
+        return new StackPanel
+        {
+            Spacing = 14,
+            Children =
+            {
+                FormKit.Labeled(Loc.T("Analysis"), chips),
+                FormKit.Labeled(Loc.T("Title"), title),
+                Flag(Loc.Ui("Hide geometry"), arrows.HideGeometry, on => arrows.HideGeometry = on),
+                Flag(Loc.T("Landscape"), arrows.Landscape, on => arrows.Landscape = on)
+            }
+        };
+    }
 
     private Control SectionOptions(CrossSectionSheet sheet)
     {
@@ -938,7 +962,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
 
         // everything the build reads is copied here: the window goes on changing its own
         var (kind, now, design) = (_kind, DateTime.Now, ProjectJson.DeepClone(Design));
-        var arrows = new FirstMovementSheet { Title = _arrows.Title, Landscape = _arrows.Landscape, HideGeometry = _arrows.HideGeometry, Yaw = _arrows.Yaw, Arrows = _arrows.Arrows };
+        var arrows = new FirstMovementSheet { Analysis = _arrows.Analysis, Title = _arrows.Title, Landscape = _arrows.Landscape, HideGeometry = _arrows.HideGeometry, Yaw = _arrows.Yaw, Arrows = _arrows.Arrows, ReliefLimit = _arrows.ReliefLimit };
         var sections = new CrossSectionSheet { Title = _sections.Title, Landscape = _sections.Landscape, HalfWidth = _sections.HalfWidth, Line = _sections.Line };
         var previous = _building;
         string? note = null;
@@ -947,7 +971,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
             // one at a time: they read the same copy of the project, and the plan changes its view while it draws
             await previous.ContinueWith(_ => { });
             var project = await _project;
-            if (kind == ReportKind.FirstMovement && arrows.Arrows.Arrows(project).Count == 0) note = AnalysisWindows.NoFirstMovement(project);
+            if (kind == ReportKind.FirstMovement && !AnalysisWindows.HasAnalysis(project, arrows.Analysis)) note = AnalysisWindows.NoFirstMovement(project);
             if (kind == ReportKind.CrossSection && sections.Line == null && Reports.SectionLines(project).Count == 0) note = Loc.Ui("The blast has no section lines. Draw one with the Section line tool.");
             return kind switch
             {
@@ -1042,7 +1066,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         catch (Exception ex) { Dialogs.ShowError(ex); }
     }
 
-    private void SavePdf() => _ = Using(d => _vm.SaveReport(d, _kind switch { ReportKind.Plan => "_plan", ReportKind.FirstMovement => "_first_movement", ReportKind.CrossSection => "_section", _ => "_report" }));
+    private void SavePdf() => _ = Using(d => _vm.SaveReport(d, _kind switch { ReportKind.Plan => "_plan", ReportKind.FirstMovement => _arrows.Analysis switch { BlastAnalysis.InitiationAngle => "_initiation_angle", BlastAnalysis.BurdenRelief => "_burden_relief", _ => "_first_movement" }, ReportKind.CrossSection => "_section", _ => "_report" }));
 
     private void Print() => _ = Using(d => Printing.Print((Window)TopLevel.GetTopLevel(this)!, d));
 

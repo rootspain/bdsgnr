@@ -179,8 +179,6 @@ public sealed class ProgramSettings
     /// <summary>Colours of the hole labels last chosen: a new blast starts with them, the project keeps its own.</summary>
     public Dictionary<BlastDesigner.Domain.Model.HoleLabel, uint> HoleLabelColors { get; set; } = new();
     public bool ShowCoordinatesBox { get; set; } = true;
-    /// <summary>The names of the ribbon groups upright at the start of each group; off — under the buttons, as before.</summary>
-    public bool RibbonCaptionsAside { get; set; } = true;
     public Dictionary<string, string> Window { get; set; } = new();
 
     public static string AppDataFolder

@@ -449,30 +449,24 @@ public sealed partial class MainViewModel
         }
         ShowOverlay(_isolines = new TimingContourOverlay { IntervalMs = Settings.IsochroneIntervalMs, Contours = true, ColourHoles = false });
     }
-    public void AngleOfInitiation() => VectorOverlay(TimingVectorOverlay.Mode.InitiationAngle);
-    /// <summary>First movement: opens the First Movement window, which also puts the arrows on the plan.</summary>
-    public void FirstMovement() { if (Doc != null) AnalysisWindows.FirstMovementWindow(this); }
+    /// <summary>The angle of initiation: opens the Blast analysis window on its tab.</summary>
+    public void AngleOfInitiation() => BlastAnalysis(Rendering.BlastAnalysis.InitiationAngle);
+    /// <summary>First movement: opens the Blast analysis window on its tab.</summary>
+    public void FirstMovement() => BlastAnalysis(Rendering.BlastAnalysis.FirstMovement);
+    /// <summary>Burden relief: opens the Blast analysis window on its tab.</summary>
+    public void BurdenRelief() => BlastAnalysis(Rendering.BlastAnalysis.BurdenRelief);
+    private void BlastAnalysis(Rendering.BlastAnalysis tab) { if (Doc != null) AnalysisWindows.BlastAnalysisWindow(this, tab); }
 
     /// <summary>
-    /// Shows (as the one analysis display, like the others) the layers of the first-movement window on the main plan: the
-    /// arrows and what its chips have turned on; or takes them off.
+    /// Puts the analysis of the Blast analysis window on the main plan, as the one analysis display (like the others), or
+    /// takes it off.
     /// </summary>
-    public void ShowFirstMovementOnPlan(IReadOnlyList<IOverlay> layers, bool show)
+    public void ShowAnalysisOnPlan(IOverlay layer, bool show)
     {
-        if (show) AnalysisOverlays.Clear();
-        else AnalysisOverlays.RemoveAll(o => o is FirstMovementOverlay || layers.Contains(o));
-        if (show) AnalysisOverlays.AddRange(layers);
+        if (show) { AnalysisOverlays.Clear(); AnalysisOverlays.Add(layer); }
+        else AnalysisOverlays.Remove(layer);
         View.Redraw();
         OverlaysChanged?.Invoke();
-    }
-    /// <summary>Burden relief: opens its window, which also fills the triangles of the main plan.</summary>
-    public void BurdenRelief() { if (Doc != null) AnalysisWindows.BurdenReliefWindow(this); }
-    private double NeighbourRadius => TimingVectorOverlay.RadiusFor(Project!);
-
-    private void VectorOverlay(TimingVectorOverlay.Mode mode)
-    {
-        if (ToggleOff(o => o is TimingVectorOverlay v && v.Show == mode)) return;
-        ShowOverlay(new TimingVectorOverlay { Show = mode, NeighbourRadius = NeighbourRadius });
     }
 
     public void VibrationMap(bool airblast)

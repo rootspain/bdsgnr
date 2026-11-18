@@ -118,48 +118,37 @@ Step("ribbon groups are as wide as their buttons: small ones in columns of three
     Shot("01b_ribbon_topography");
     window.Ribbon.Select(2); Pump();
 });
-Step("ribbon group names upright at the start of the groups, the ribbon lower; off in the settings puts them back under the buttons", () =>
+Step("ribbon group names under the buttons of each group, the ribbon as high on every stage (Initiation too)", () =>
 {
-    void Show(bool aside)
-    {
-        var edited = BlastDesigner.Domain.ProjectJson.DeepClone(vm.Settings);
-        edited.RibbonCaptionsAside = aside;
-        vm.ApplyProgramSettings(edited);
-        Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
-    }
     Control Band() => window.Ribbon.Children.OfType<Border>().First();
-    window.Ribbon.Select(0); Pump();
-    if (!vm.Settings.RibbonCaptionsAside) throw new Exception("the names are not at the side by default");
-    Show(true);
+    var heights = new List<double>();
+    var allGaps = new List<double>();
     for (int st = 0; st < window.Ribbon.Stages.Count; st++)
     {
         window.Ribbon.Select(st); Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
-        var captions = window.Ribbon.GetLogicalDescendants().OfType<Border>().Where(b => b.Name == "ribbonCaption").ToList();
+        var captions = window.Ribbon.GetLogicalDescendants().OfType<TextBlock>().Where(t => t.Name == "ribbonCaption").ToList();
         if (captions.Count != window.Ribbon.Stages[st].Groups.Count) throw new Exception($"stage {st}: {captions.Count} names for {window.Ribbon.Stages[st].Groups.Count} groups");
         foreach (var c in captions)
         {
-            var text = c.GetLogicalDescendants().OfType<TextBlock>().First();
-            // upright: higher than wide, and no higher than its group
-            if (c.Bounds.Height < c.Bounds.Width || c.Bounds.Height > ((Control)c.Parent!).Bounds.Height + 0.5) throw new Exception($"'{text.Text}': {c.Bounds.Width:0}×{c.Bounds.Height:0}");
+            // a line under the buttons of its group: wider than high, below everything else of the group
+            var group = (DockPanel)c.Parent!;
+            var body = group.Children.First(x => x != c);
+            if (c.Bounds.Width < c.Bounds.Height || c.Bounds.Top < body.Bounds.Bottom - 0.5) throw new Exception($"stage {st}, '{c.Text}': {c.Bounds} under {body.Bounds}");
         }
-        // the name runs along the whole height of the ribbon: "Электронное (ЭСИ)" in one line
-        foreach (var c in captions)
-        {
-            var t = c.GetLogicalDescendants().OfType<TextBlock>().First();
-            if (Math.Abs(t.MaxWidth - Band().Bounds.Height + 2) > 1) throw new Exception($"'{t.Text}': {t.MaxWidth:0} px to run along of {Band().Bounds.Height - 2:0}");
-        }
-        // the ribbon as low as a column of three small buttons, the same on every stage: the plan does not jump
-        if (Math.Abs(Band().Bounds.Height - BlastDesigner.App.Views.RibbonBar.CaptionsAsideHeight) > 0.5) throw new Exception($"stage {st}: the ribbon is {Band().Bounds.Height:0} px high, not {BlastDesigner.App.Views.RibbonBar.CaptionsAsideHeight}");
-        if (st == 4) Shot("01e_ribbon_names_aside_initiation");
+        // the names close under the buttons: the tallest group has no gap, the others little
+        var gaps = captions.Select(c => { var g = (DockPanel)c.Parent!; var b = g.Children.First(x => x != c); return (c.Text, Gap: c.Bounds.Top - b.Bounds.Top - b.DesiredSize.Height, Full: b.DesiredSize.Height >= 70); }).ToList();
+        allGaps.AddRange(gaps.Select(x => x.Gap));
+        // (a group of one or two small buttons is lower by itself)
+        if (gaps.Where(x => x.Full).Max(x => x.Gap) > 6) throw new Exception($"stage {st}: gaps under the buttons " + string.Join(", ", gaps.Select(x => $"{x.Text} {x.Gap:0.#}")));
+        
+        heights.Add(Band().Bounds.Height);
+        if (st == 4) Shot("01e_ribbon_names_under_initiation");
     }
-    var low = Band().Bounds.Height;
+    if (allGaps.Min() > 0.5) throw new Exception($"the ribbon is higher than its tallest group: {allGaps.Min():0.#} px under the buttons");
+    // the plan does not move from stage to stage
+    if (heights.Max() - heights.Min() > 0.5) throw new Exception("the ribbon height changes with the stage: " + string.Join(", ", heights.Select(h => h.ToString("0.#"))));
     window.Ribbon.Select(0); Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
-    Shot("01c_ribbon_names_aside");
-    Show(false);
-    if (window.Ribbon.GetLogicalDescendants().OfType<Border>().Any(b => b.Name == "ribbonCaption")) throw new Exception("names still at the side");
-    if (Band().Bounds.Height <= low) throw new Exception($"the ribbon is not lower with the names at the side: {low:0} and {Band().Bounds.Height:0} px");
-    Shot("01d_ribbon_names_under");
-    Show(true);
+    Shot("01c_ribbon_names_under");
     window.Ribbon.Select(2); Pump();
 });
 var boundary = new[] { new Vec3(1000, 2000, 300), new Vec3(1060, 2000, 300), new Vec3(1070, 2035, 300), new Vec3(1005, 2040, 300) };
@@ -809,10 +798,12 @@ Step("burden relief", vm.BurdenRelief);
 Shot("05_relief");
 Step("first movement", vm.FirstMovement);
 Shot("06_movement");
-Step("first movement window: everything in view on opening, shape, arrow size, on plan", () =>
+Step("blast analysis window: everything in view on opening, a tab per analysis, arrow size, on plan", () =>
 {
+    // the Burden relief button opened it, the First movement button turned it to its tab
     var w = BlastDesigner.App.Services.Dialogs.LastShown!;
-    if (w.Title != BlastDesigner.App.Services.Loc.T("First movement")) throw new Exception("not the first movement window: " + w.Title);
+    if (w.Title != BlastDesigner.App.Services.Loc.T("Blast analysis")) throw new Exception("not the blast analysis window: " + w.Title);
+    if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage().Analysis != BlastDesigner.Rendering.BlastAnalysis.FirstMovement) throw new Exception("the First movement button should turn the window to its tab");
     Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     var view = w.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.Viewport>().First();
     foreach (var h in vm.Project!.Holes)
@@ -841,32 +832,46 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
     hideGeometry.IsChecked = true; Pump();
     if (view.Camera.Scale <= wide) throw new Exception($"the blast should fill the plan: scale {wide} to {view.Camera.Scale}");
     if (!w.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "print")) throw new Exception("no print button");
-    // the chips Angle of initiation and Burden relief: each on its own, off at first; the relief under the arrows, the
-    // angles over them, in the window and on the main plan (on through the switch), and a print sheet for each
+    // a tab for each analysis, over the same plan with the same view: each shows its own layer, in the window and (with
+    // the switch on) on the main plan, prints its own sheet and has its own tools
     {
-        var angle = w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "show:angle");
-        var relief = w.GetLogicalDescendants().OfType<Button>().First(b => (b.Tag as string) == "show:relief");
         string Layers(IEnumerable<BlastDesigner.Rendering.IOverlay> list) => string.Join(",", list.Select(o => o.GetType().Name));
         string Window() => Layers(view.OptionsSource!().Overlays);
-        if (Window() != "FirstMovementOverlay") throw new Exception($"the window should show only the arrows at first: {Window()}");
-        if (!angle.IsEnabled || !relief.IsEnabled) throw new Exception("the chips should be there to turn on");
-        void Click(Button b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
-        Click(angle);
-        if (Window() != "FirstMovementOverlay,TimingVectorOverlay" || angle.Foreground != BlastDesigner.App.Services.Look.Accent) throw new Exception($"the angle chip: {Window()}");
-        Click(relief);
-        if (Window() != "BurdenReliefOverlay,FirstMovementOverlay,TimingVectorOverlay") throw new Exception($"both chips: {Window()}");
-        if (Layers(vm.AnalysisOverlays) != "BurdenReliefOverlay,FirstMovementOverlay,TimingVectorOverlay") throw new Exception($"the main plan should take the chips' layers: {Layers(vm.AnalysisOverlays)}");
-        var page = BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage();
-        if (!page.AngleSheet || !page.ReliefSheet) throw new Exception("the print should have a sheet for each chip on");
+        void Tab(string name) { w.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+        bool Shown(string name) => w.GetLogicalDescendants().OfType<Control>().Any(c => c.Name == name && c.IsEffectivelyVisible);
+        if (w.GetLogicalDescendants().OfType<Button>().Any(b => b.Tag is string t && t.StartsWith("show:"))) throw new Exception("the chips over the arrows should be gone");
+        if (Window() != "FirstMovementOverlay" || Layers(vm.AnalysisOverlays) != "FirstMovementOverlay") throw new Exception($"the first movement tab: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
+        var camera = (view.Camera.Scale, view.Camera.Yaw);
+        Tab("tabInitiationAngle");
+        if (Window() != "TimingVectorOverlay" || Layers(vm.AnalysisOverlays) != "TimingVectorOverlay") throw new Exception($"the angle tab: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
+        if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage().Analysis != BlastDesigner.Rendering.BlastAnalysis.InitiationAngle) throw new Exception("the print should take the angle tab");
+        if (Shown("arrowSize") || Shown("export") || Shown("reliefLimit")) throw new Exception("the angle tab shows the tools of another tab");
+        if ((view.Camera.Scale, view.Camera.Yaw) != camera) throw new Exception("the view should stay from tab to tab");
         Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
-        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06g_first_movement_angle_relief.png"));
-        Click(angle);
-        if (Window() != "BurdenReliefOverlay,FirstMovementOverlay" || Layers(vm.AnalysisOverlays) != "BurdenReliefOverlay,FirstMovementOverlay") throw new Exception($"the angle chip off: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
-        Click(relief);
-        if (Window() != "FirstMovementOverlay" || Layers(vm.AnalysisOverlays) != "FirstMovementOverlay") throw new Exception($"both chips off: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
-        if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage() is { AngleSheet: true } or { ReliefSheet: true }) throw new Exception("no extra sheets with the chips off");
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06g_blast_analysis_angle.png"));
+        Tab("tabBurdenRelief");
+        if (Window() != "BurdenReliefOverlay" || Layers(vm.AnalysisOverlays) != "BurdenReliefOverlay") throw new Exception($"the relief tab: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
+        if (!Shown("reliefLimit") || !Shown("reliefUnder") || Shown("arrowSize")) throw new Exception("the relief tab should show its limit and the relief under the cursor");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06h_blast_analysis_relief.png"));
+        // a ribbon button with the window open: forward on its tab, no second window
+        vm.AngleOfInitiation(); Pump();
+        if (BlastDesigner.App.Services.Dialogs.LastShown != w || Window() != "TimingVectorOverlay") throw new Exception("the Angle of initiation button should turn the open window to its tab");
+        // the window leaves the main window free: another window opens, its display takes the plan, the switch goes off
+        vm.VisualizeTiming(); Pump();
+        if (!BlastDesigner.App.Services.Dialogs.IsOpen("Visualization") || !BlastDesigner.App.Services.Dialogs.IsOpen("Blast analysis")) throw new Exception("the two windows should be open together");
+        if (planSwitch.IsChecked != false) throw new Exception("another analysis display on the plan should turn the switch off");
+        BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); Pump();
+        planSwitch.IsChecked = true; Pump();
+        if (Layers(vm.AnalysisOverlays) != "TimingVectorOverlay") throw new Exception($"the switch should put the angle back: {Layers(vm.AnalysisOverlays)}");
+        // Clear analysis takes it off and turns the switch off, the window stays
+        vm.ClearOverlays(); Pump();
+        if (planSwitch.IsChecked != false || !BlastDesigner.App.Services.Dialogs.IsOpen("Blast analysis")) throw new Exception("Clear analysis should turn the switch off and leave the window");
+        vm.FirstMovement(); Pump();
+        planSwitch.IsChecked = true; Pump();
+        if (Window() != "FirstMovementOverlay" || Layers(vm.AnalysisOverlays) != "FirstMovementOverlay" || !Shown("arrowSize") || !Shown("export")) throw new Exception($"back on the first movement tab: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
     }
-    // the plan keeps its own arrow style; the window's settings show on its chips and size field
+    // the window's settings show on its size field
     var buttons = w.GetLogicalDescendants().OfType<Button>().ToList();
     // arrows only, in one colour: no shape or colour to choose
     if (buttons.Any(b => b.Tag is string t && (t.StartsWith("shape:") || t.StartsWith("colour:")))) throw new Exception("the shape or colour chips are still there");
@@ -913,7 +918,11 @@ Step("first movement window: everything in view on opening, shape, arrow size, o
     vm.ActiveTool.Cancel(); vm.View.Preview.Clear(); Pump();
     for (int i = 0; i < 10 && vm.Project!.Entities.OfType<InitiationPoint>().Any(x => x.Label == "IPM"); i++) vm.Undo();
     vm.Doc.ClearSelection(); Pump();
+    // the analysis leaves the main plan with its window
+    planSwitch.IsChecked = true; Pump();
     w.Close(); Pump();
+    if (vm.AnalysisOverlays.Count != 0) throw new Exception("the analysis stayed on the plan after its window closed");
+    planSwitch.IsChecked = false;
 });
 Step("clear overlays", vm.ClearOverlays);
 Step("loading view 3D", () => { vm.ToggleView(v => { v.ShowLoading = true; v.CollarsOnly = false; }); vm.View3D(); });
@@ -2417,10 +2426,12 @@ Step("analysis overlays never stack", () =>
             a.Run(); Pump(); b.Run(); Pump();
             var n = vm.AnalysisOverlays.Count;
             if (n > 1) throw new Exception($"{a.Name} then {b.Name}: {n} overlays on the plan");
-            // the first movement window leaves the plan as it is while its switch is off
-            var shown = b.Name == "movement" ? a : b;
-            if (a.Name != b.Name && (n != 1 || vm.AnalysisOverlays[0].GetType() != shown.Kind)) throw new Exception($"{a.Name} then {b.Name}: expected only {shown.Name}, got {n}");
-            vm.ClearOverlays(); BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); BlastDesigner.App.Services.Dialogs.CloseWindow("Burden relief"); Pump();
+            // the blast analysis window (angle, movement, relief) leaves the plan as it is while its switch is off
+            static bool Window(string name) => name is "angle" or "movement" or "relief";
+            var shown = Window(b.Name) ? a : b;
+            if (a.Name != b.Name && !Window(shown.Name) && (n != 1 || vm.AnalysisOverlays[0].GetType() != shown.Kind)) throw new Exception($"{a.Name} then {b.Name}: expected only {shown.Name}, got {n}");
+            if (Window(shown.Name) && n != 0) throw new Exception($"{a.Name} then {b.Name}: the analysis window put {n} overlays on the plan with its switch off");
+            vm.ClearOverlays(); BlastDesigner.App.Services.Dialogs.CloseWindow("Visualization"); BlastDesigner.App.Services.Dialogs.CloseWindow("Blast analysis"); Pump();
         }
     vm.VisualizeTiming(); Pump(); vm.VisualizeTiming(); Pump();
     if (vm.AnalysisOverlays.Count != 1) throw new Exception($"timing twice: {vm.AnalysisOverlays.Count} overlays");
@@ -4287,10 +4298,11 @@ Step("EBS opening point: a click, its window with the overall relief, OK program
     if (vm.Project.Entities.OfType<EbsOpeningPoint>().Count() != before) throw new Exception("one undo should take the opening point away");
     vm.SelectTool(); Pump();
 });
-Step("burden relief: its window fills the triangles in five colours, an upper limit, the relief under the cursor", () =>
+Step("burden relief: its tab fills the triangles in five colours, an upper limit, the relief under the cursor", () =>
 {
     vm.BurdenRelief(); Pump();
     var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    w.GetLogicalDescendants().OfType<ToggleSwitch>().First(t => t.Name == "onPlan").IsChecked = true; Pump();
     if (!vm.AnalysisOverlays.OfType<BlastDesigner.Rendering.BurdenReliefOverlay>().Any()) throw new Exception("the main plan does not show the burden relief");
     var limit = w.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "reliefLimit");
     limit.Text = "12"; Pump();
@@ -6397,7 +6409,13 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     Press(fromReports.Window, "tabReport"); Pump();
     Press(fromReports.Window, "kindFirstMovement"); Pump();
     Wait(fromReports.Form);
-    if (fromReports.Form.Document!.Title != BlastDesigner.App.Services.Loc.T("First movement") || fromReports.Form.Document.Pages.Count != 1) throw new Exception("the Reports command has no first movement sheet");
+    // the sheet of the tab last open in the Blast analysis window; another analysis chosen takes its name as the title
+    var lastTab = BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage().Analysis;
+    if (fromReports.Form.Document!.Title != BlastDesigner.App.Views.AnalysisWindows.AnalysisName(lastTab) || fromReports.Form.Document.Pages.Count != 1) throw new Exception("the Reports command has no blast analysis sheet");
+    var otherTab = lastTab == BlastDesigner.Rendering.BlastAnalysis.FirstMovement ? BlastDesigner.Rendering.BlastAnalysis.InitiationAngle : BlastDesigner.Rendering.BlastAnalysis.FirstMovement;
+    Press(fromReports.Window, "analysis" + otherTab); Pump();
+    Wait(fromReports.Form);
+    if (fromReports.Form.Document!.Title != BlastDesigner.App.Views.AnalysisWindows.AnalysisName(otherTab) || fromReports.Form.Document.Pages.Count != 1) throw new Exception($"choosing {otherTab} should print its sheet under its name: {fromReports.Form.Document.Title}");
     fromReports.Form.Closing!(); Pump();
 
     // the section line: two clicks and the entry ends, on the list before the polygon
@@ -6498,13 +6516,13 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     noSections.Form.Closing!(); Pump();
     vm.FirstMovement(); Pump();
     var arrows = BlastDesigner.App.Services.Dialogs.LastShown!;
-    if (arrows.Title == BlastDesigner.App.Services.Loc.T("First movement"))
+    if (arrows.Title == BlastDesigner.App.Services.Loc.T("Blast analysis"))
     {
         arrows.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "print").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
         var sheet = BlastDesigner.App.Services.Dialogs.LastShown!;
         var form = sheet.GetLogicalDescendants().OfType<ReportPreviewForm>().Single();
         Wait(form);
-        if (form.Document!.Title != BlastDesigner.App.Services.Loc.T("First movement") || form.Document.Pages.Count != 1) throw new Exception("not the first movement sheet");
+        if (form.Document!.Title != BlastDesigner.App.Views.AnalysisWindows.AnalysisName(BlastDesigner.Rendering.BlastAnalysis.FirstMovement) || form.Document.Pages.Count != 1) throw new Exception("not the first movement sheet");
         Shot(sheet, "80d_preview_first_movement");
         form.Closing!(); Pump();
         arrows.Close(); Pump();

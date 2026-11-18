@@ -5,19 +5,20 @@ using SkiaSharp;
 
 namespace BlastDesigner.Rendering;
 
-/// <summary>The arrows of the first movement on one sheet, as in their window.</summary>
+/// <summary>The analyses of the Blast analysis window, one to a tab.</summary>
+public enum BlastAnalysis { InitiationAngle, FirstMovement, BurdenRelief }
+
+/// <summary>One analysis of the Blast analysis window on a sheet, as on its tab: the arrows of the first movement, the angle of initiation or the burden relief.</summary>
 public sealed class FirstMovementSheet
 {
+    /// <summary>Which analysis the sheet shows.</summary>
+    public BlastAnalysis Analysis { get; set; } = BlastAnalysis.FirstMovement;
     public string Title { get; set; } = "";
     public bool Landscape { get; set; } = true;
     public bool HideGeometry { get; set; } = true;
     /// <summary>Which way the plan is turned, degrees.</summary>
     public double Yaw { get; set; }
     public required FirstMovementOverlay Arrows { get; init; }
-    /// <summary>The angle of initiation on a sheet of its own, after the arrows.</summary>
-    public bool AngleSheet { get; set; }
-    /// <summary>The burden relief on a sheet of its own, after the arrows and the angles.</summary>
-    public bool ReliefSheet { get; set; }
     /// <summary>Top of the scale of the burden relief, ms/m; null: the most relief of the blast.</summary>
     public double? ReliefLimit { get; set; }
 }
@@ -222,17 +223,21 @@ public static class Reports
         Sheet(project, ReportLayout.Fill(opt.Title, ReportLayout.Fields(project, "", now)), opt.Landscape, opt.Scale, design, now, (c, rect) => DrawPlan(c, rect, project, project.View.TimingLabels, design, opt.Scale));
 
     /// <summary>
-    /// The arrows of the first movement on a sheet, of a project whose times are solved; then, each on a sheet of its own,
-    /// the angle of initiation and the burden relief when they are asked for. All the sheets frame the plan alike.
+    /// One analysis of the Blast analysis window on a sheet (<see cref="FirstMovementSheet.Analysis"/>), of a project whose
+    /// times are solved: the arrows of the first movement, the angle of initiation or the burden relief with its legend.
     /// </summary>
     public static ReportDocument BuildFirstMovement(BlastProject project, FirstMovementSheet opt, ReportDesign design, DateTime now)
     {
         var w = opt.Landscape ? A4H : A4W;
         var h = opt.Landscape ? A4W : A4H;
         var layout = new ReportLayout(design, w, h);
-        var sheets = new List<(string Title, IOverlay Overlay)> { (opt.Title, opt.Arrows) };
-        if (opt.AngleSheet) sheets.Add((T("Angle of initiation"), TimingVectorOverlay.InitiationAngles(project)));
-        if (opt.ReliefSheet) sheets.Add((T("Burden relief"), new BurdenReliefOverlay { UpperLimit = opt.ReliefLimit, LegendTitle = T("Burden relief, ms/m") }));
+        IOverlay overlay = opt.Analysis switch
+        {
+            BlastAnalysis.InitiationAngle => TimingVectorOverlay.InitiationAngles(project),
+            BlastAnalysis.BurdenRelief => new BurdenReliefOverlay { UpperLimit = opt.ReliefLimit, LegendTitle = T("Burden relief, ms/m") },
+            _ => opt.Arrows
+        };
+        var sheets = new List<(string Title, IOverlay Overlay)> { (opt.Title, overlay) };
         var pages = sheets.Select((s, i) => SheetPage(project, layout, i, s.Title, w, h, null, now, true, (c, rect) =>
         {
             var hidden = Hidden(project, design.HiddenKinds);

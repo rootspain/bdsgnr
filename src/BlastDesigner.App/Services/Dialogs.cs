@@ -245,6 +245,9 @@ public static class Dialogs
         return true;
     }
 
+    /// <summary>Whether a tool window of the title is open.</summary>
+    public static bool IsOpen(string title) => OpenWindows.ContainsKey(title);
+
     /// <summary>Closes an open tool window by title (no-op when it is not open).</summary>
     public static void CloseWindow(string title)
     {
