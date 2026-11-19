@@ -535,11 +535,11 @@ public class RenderTests
         Assert.NotEqual(without.GetPixel((int)ex, (int)Math.Round(ey) + 2), with.GetPixel((int)ex, (int)Math.Round(ey) + 2));
     }
 
-    /// <summary>A selected chevron shows its oval and no ray from its vertex; opened into a straight line, not even the oval.</summary>
+    /// <summary>A selected chevron shows no ray from its vertex and no oval round it (it is timed as a contour line); a straight one neither.</summary>
     [Theory]
     [InlineData(30.0)]
     [InlineData(180.0)]
-    public void ASelectedChevronHasNoRay_AStraightOneNoOval(double angle)
+    public void ASelectedChevronHasNoRayAndNoOval(double angle)
     {
         var apex = new Vec3(0, 0, 0);
         var pts = angle >= 180
@@ -573,17 +573,14 @@ public class RenderTests
             var (x, y) = cam.ToScreen(apex + ray * (10 * t));
             Assert.Equal(none.GetPixel((int)x, (int)y), with.GetPixel((int)x, (int)y));
         }
-        // the oval of a bent one is drawn: across, square to the ray, it crosses the oval within the length of a side
-        if (angle < 180)
-        {
-            var across = new Vec3(1, 0, 0);
-            var radius = Chevron.OvalRadius(pts[0] - apex, pts[2] - apex, across);
-            // the oval is dashed: anywhere in a box round the point it crosses
-            var (ox, oy) = cam.ToScreen(apex + across * radius);
-            var hit = Enumerable.Range(-5, 11).SelectMany(dx => Enumerable.Range(-5, 11).Select(dy => (dx, dy)))
-                .Any(d => with.GetPixel((int)Math.Round(ox) + d.dx, (int)Math.Round(oy) + d.dy) != none.GetPixel((int)Math.Round(ox) + d.dx, (int)Math.Round(oy) + d.dy));
-            Assert.True(hit, "the oval of the selected chevron is not drawn");
-        }
+        // nothing across the vertex either, square to the ray, where an oval of delays would cross
+        var across = new Vec3(ray.Y, -ray.X, 0);
+        foreach (var side in new[] { 1.0, -1.0 })
+            for (double t = 0.5; t < 0.9; t += 0.05)
+            {
+                var (x, y) = cam.ToScreen(apex + across * (side * 10 * t) + ray * 1.5);
+                Assert.Equal(none.GetPixel((int)x, (int)y), with.GetPixel((int)x, (int)y));
+            }
     }
 
     /// <summary>A chevron opened into a straight line is drawn as a line front: one label of its delay, in its middle.</summary>

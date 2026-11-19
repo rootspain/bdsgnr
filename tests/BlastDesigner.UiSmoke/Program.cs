@@ -3730,11 +3730,11 @@ Step("timing front tool: clicks draw a line (a click on its end or Enter) or a c
         if (Vec3.Distance2D(made.Points[1], new Vec3(x, y, 300)) > 1e-6) throw new Exception("the vertex of the chevron should be the end of its first line");
         if (made.Style != TimingLineStyle.BurnLine) throw new Exception("the chevron made should be of the Two fronts type: " + made.Style);
         if (Math.Abs(BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points) - 90) > 1e-6) throw new Exception($"the chevron should open at the 90° clicked: {BlastDesigner.Domain.Geometry.Chevron.AngleDeg(made.Points):0.##}°");
-        // timed by its oval all the same: as a chevron of the Front line type
+        // timed as a contour line all the same: as a chevron of the Front line type
         var asFront = BlastDesigner.Engine.EbsTimingLine.OptionsOf(made); asFront.Style = TimingLineStyle.TimeLine;
         var timedHoles = vm.Project.Holes.Where(h => made.HoleIds.Contains(h.Id)).ToList();
-        var byOval = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, timedHoles, made.Points, made.Segments, asFront, vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
-        if (byOval.Count == 0 || byOval.Any(kv => ((Hole)vm.Project.FindEntity(kv.Key)!).ElectronicTimeMs is not double et || Math.Abs(et - kv.Value) > 1e-6)) throw new Exception("the chevron of the Two fronts type is not timed by its oval");
+        var asContour = BlastDesigner.Engine.EbsTimingLine.Plan(vm.Project, timedHoles, made.Points, made.Segments, asFront, vm.Project.Electronic.MaxTimeMs, vm.Project.Electronic.AllowSubMs).Times;
+        if (asContour.Count == 0 || asContour.Any(kv => ((Hole)vm.Project.FindEntity(kv.Key)!).ElectronicTimeMs is not double et || Math.Abs(et - kv.Value) > 1e-6)) throw new Exception("the chevron of the Two fronts type is not timed as a contour line");
         uint[] RayPixels()
         {
             vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();

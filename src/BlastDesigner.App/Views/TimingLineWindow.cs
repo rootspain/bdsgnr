@@ -493,7 +493,7 @@ public sealed class TimingLineForm : DockPanel
 
     private Control SegmentTable()
     {
-        // a chevron of the "two fronts" type has no burn rate: its oval times it
+        // a chevron of the "two fronts" type has no burn rate: it is timed as a contour line
         var burn = Options.Style == TimingLineStyle.BurnLine && !IsChevron;
         var progress = Options.UseProgressive;
         var stack = new StackPanel { Spacing = 8 };

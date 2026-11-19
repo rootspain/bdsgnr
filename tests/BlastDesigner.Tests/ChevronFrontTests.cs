@@ -5,61 +5,78 @@ using Xunit;
 
 namespace BlastDesigner.Tests;
 
-/// <summary>A chevron's two segments are independent; the oval through their ends gives the delay every way from the vertex.</summary>
-public class ChevronOvalTests
+/// <summary>
+/// A chevron's two segments are independent; it is timed as a contour line of SHOTPlus: a hole's time is its signed distance
+/// from the line of the segment the bisector picks, times that segment's delay.
+/// </summary>
+public class ChevronFrontTests
 {
     private static readonly Vec3 Apex = new(100, 200, 50);
 
     /// <summary>A chevron with its ends at the given plan offsets from the vertex: [end 0, vertex, end 2].</summary>
     private static List<Vec3> Shape(Vec3 to0, Vec3 to2) => new() { Apex + to0, Apex, Apex + to2 };
 
-    private static double[] Times(List<Vec3> shape, double delay0, double delay1, params Vec3[] holes)
+    private static double[] Times(List<Vec3> shape, double delay0, double delay1, params Vec3[] holes) =>
+        Times(shape, delay0, delay1, false, TimingLineStyle.TimeLine, holes);
+
+    private static double[] Times(List<Vec3> shape, double delay0, double delay1, bool reverse, TimingLineStyle style, params Vec3[] holes)
     {
         var data = new[] { new TimingLineSegment(0, delay0, 0), new TimingLineSegment(0, delay1, 0) };
-        var o = new TimingLineOptions { Front = TimingFrontShape.Chevron, Style = TimingLineStyle.TimeLine };
+        var o = new TimingLineOptions { Front = TimingFrontShape.Chevron, Style = style, ReverseOrder = reverse };
         return EbsTimingLine.RawTimes(shape, data, o, holes);
     }
 
     [Fact]
-    public void TwoEqualPerpendicularSegmentsMakeACircle()
+    public void ASymmetricChevronTimesFromTheLineOfTheNearerRay_IsochronesParallelToTheRays()
     {
-        var a = new Vec3(5, 0, 0);
-        var b = new Vec3(0, 5, 0);
-        foreach (var deg in new[] { 0.0, 17, 45, 90, 133, 200, 290 })
-        {
-            var w = new Vec3(Math.Cos(deg * GeoMath.Deg), Math.Sin(deg * GeoMath.Deg), 0);
-            Assert.Equal(5, Chevron.OvalRadius(a, b, w), 9);
-        }
+        // vertex at the origin, ray to the north, 10 ms/m on both segments
+        var shape = Shape(new Vec3(-10, -10, 0), new Vec3(10, -10, 0));
+        Assert.Equal(0, Chevron.RayDir(shape).X, 9);
+        Assert.Equal(1, Chevron.RayDir(shape).Y, 9);
+        var r2 = Math.Sqrt(2);
+        var t = Times(shape, 10, 10, Apex + new Vec3(0, 5, 0), Apex + new Vec3(3, 5, 0), Apex + new Vec3(-3, 5, 0), Apex + new Vec3(7, 1, 0), Apex);
+        // on the axis both rays give it, the later of the two: 10 · 5/√2
+        var fromLeft = 10 * -Vec3.Dot(new Vec3(10, 15, 0), new Vec3(1, -1, 0) / r2);
+        var fromRight = 10 * -Vec3.Dot(new Vec3(0, 5, 0), new Vec3(-1, -1, 0) / r2);
+        Assert.Equal(Math.Max(fromLeft, fromRight), t[0], 9);
+        Assert.Equal(10 * 5 / r2, t[0], 9);
+        // (3, 5): its distance from the line of the nearer, right ray, 8/√2 m
+        Assert.Equal(10 * 8 / r2, t[1], 9);
+        // mirror holes fire together
+        Assert.Equal(t[1], t[2], 9);
+        // (7, 1) lies on the parallel to the right ray through (3, 5): the same time
+        Assert.Equal(t[1], t[3], 9);
+        // the vertex is on the line
+        Assert.Equal(0, t[4], 9);
     }
 
     [Fact]
-    public void TheOvalGoesThroughBothEnds_AlongASegmentTheDelayIsItsOwn()
+    public void TheHolesBehindTheVertexGetSmallerTimes_NotOutOfReach()
     {
-        // not perpendicular, not alike: the ends are still on the oval
-        var shape = Shape(new Vec3(-6, -8, 0), new Vec3(7, -2, 0));
-        var u = (shape[0] - Apex).Normalized();
-        var v = (shape[2] - Apex).Normalized();
-        Assert.Equal(8, Chevron.DelayAlong(shape, 8, 5, u), 9);
-        Assert.Equal(5, Chevron.DelayAlong(shape, 8, 5, v), 9);
-        // the oval drawn on the plan goes through the ends too
-        var oval = Chevron.Oval(shape, 4);
-        Assert.True(Vec3.Distance2D(oval[0], shape[0]) < 1e-9);
-        Assert.True(Vec3.Distance2D(oval[1], shape[2]) < 1e-9);
+        var shape = Shape(new Vec3(-10, -10, 0), new Vec3(10, -10, 0));
+        var t = Times(shape, 10, 10, Apex + new Vec3(0, 5, 0), Apex + new Vec3(0, -5, 0));
+        Assert.Equal(-10 * 5 / Math.Sqrt(2), t[1], 9);
+        Assert.True(t[1] < t[0]);
+        Assert.True(Math.Abs(t[1]) < 1e30);
     }
 
     [Fact]
-    public void TimesGrowFromTheVertexEveryWay()
+    public void TheRaySideIsLaterWhicheverWayRoundThePointsLie_ReversedTheOtherSide()
     {
-        var shape = Shape(new Vec3(-5, -5, 0), new Vec3(5, -5, 0));
-        var along0 = (shape[0] - Apex).Normalized();
-        var t = Times(shape, 8, 4, Apex, Apex + along0 * 10, Apex - along0 * 10, Apex + new Vec3(0, 20, 0));
-        Assert.Equal(0, t[0], 9);
-        // 10 m along segment 0: 10 × its delay
-        Assert.Equal(80, t[1], 6);
-        // 10 m behind the vertex the other way: the oval is closed, the same delay
-        Assert.Equal(80, t[2], 6);
-        // ahead of the vertex, between the directions: a time too, not out of reach
-        Assert.True(t[3] > 0 && t[3] < 1e30);
+        var shape = Shape(new Vec3(-10, -10, 0), new Vec3(10, -6, 0));
+        // an end dragged over the ray leaves the points the other way round: the same front, the same times
+        var swapped = new List<Vec3> { shape[2], shape[1], shape[0] };
+        var holes = new[] { Apex + new Vec3(0, 5, 0), Apex + new Vec3(4, 2, 0), Apex + new Vec3(-6, 1, 0), Apex + new Vec3(1, -7, 0) };
+        var t = Times(shape, 8, 5, holes);
+        var s = Times(swapped, 5, 8, holes);
+        for (int i = 0; i < holes.Length; i++) Assert.Equal(t[i], s[i], 9);
+        // ahead of the vertex later than behind it
+        Assert.True(t[0] > t[3]);
+        // B → A: the other side later
+        var back = Times(shape, 8, 5, true, TimingLineStyle.TimeLine, holes);
+        Assert.True(back[0] < back[3]);
+        var backSwapped = Times(swapped, 5, 8, true, TimingLineStyle.TimeLine, holes);
+        for (int i = 0; i < holes.Length; i++) Assert.Equal(back[i], backSwapped[i], 9);
     }
 
     [Fact]
@@ -71,7 +88,7 @@ public class ChevronOvalTests
         Assert.Equal(shape[2], moved[2]);
         // the end takes the elevation of the vertex
         Assert.Equal(new Vec3(Apex.X - 12, Apex.Y + 3, Apex.Z), moved[0]);
-        // along the other segment it would make no oval: it stays
+        // along the other segment it would make no chevron: it stays
         var along = Chevron.MoveEnd(shape, 0, Apex + new Vec3(10, -10, 0));
         Assert.Equal(shape[0], along[0]);
         // onto the continuation of the other one it is a straight line: see AnEndDrawnOutTo180DegreesSnapsIntoAStraightLine
@@ -132,20 +149,21 @@ public class ChevronOvalTests
     }
 
     [Fact]
-    public void AStraightChevronTimesFromTheLineBothWays_TheFirstSegmentsDelay_OneParallelTogether()
+    public void AStraightChevronTimesBySignedDistanceFromTheLine_OneParallelTogether()
     {
         var line = Shape(new Vec3(-10, 0, 0), new Vec3(10, 0, 0));
         Assert.True(Chevron.IsStraight(line));
         var holes = new[] { new Vec3(0, 3, 0), new Vec3(7, 3, 0), new Vec3(25, 3, 0), new Vec3(-7, -3, 0), new Vec3(0, -6, 0), new Vec3(4, 0, 0) }
             .Select(v => Apex + v).ToArray();
-        // the delay of the first segment for the whole line, 5 ms/m; the second's, 9, is not used
-        var t = Times(line, 5, 9, holes);
-        Assert.Equal(new[] { 15.0, 15, 15, 15, 30, 0 }, t.Select(x => Math.Round(x, 9)));
+        // its ray (north, end 0 on the left) is the later side; behind the line the times go below nought, not mirrored
+        var t = Times(line, 5, 5, holes);
+        Assert.Equal(new[] { 15.0, 15, 15, -15, -30, 0 }, t.Select(x => Math.Round(x, 9)));
 
-        // reversed: the farthest from the line first, the ones on it last
-        var data = new[] { new TimingLineSegment(0, 5, 0), new TimingLineSegment(0, 9, 0) };
-        var back = EbsTimingLine.RawTimes(line, data, new TimingLineOptions { Front = TimingFrontShape.Chevron, Style = TimingLineStyle.TimeLine, ReverseOrder = true }, holes);
-        Assert.Equal(new[] { 15.0, 15, 15, 15, 0, 30 }, back.Select(x => Math.Round(x, 9)));
+        // reversed: the other side later
+        var back = Times(line, 5, 5, true, TimingLineStyle.TimeLine, holes);
+        Assert.Equal(new[] { -15.0, -15, -15, 15, 30, 0 }, back.Select(x => Math.Round(x, 9)));
+        // the bisector of two segments on one line is nought: no NaN
+        Assert.All(t.Concat(back), x => Assert.False(double.IsNaN(x)));
     }
 
     [Fact]
@@ -209,17 +227,17 @@ public class ChevronOvalTests
     }
 
     [Fact]
-    public void AChevronOfTheTwoFrontsTypeIsTimedByItsOvalAsOneOfTheFrontLineType_TheAdvancedBurnIsNot()
+    public void AChevronOfTheTwoFrontsTypeIsTimedAsAContourLineAsOneOfTheFrontLineType_TheAdvancedBurnIsNot()
     {
         var shape = Shape(new Vec3(-6, -8, 0), new Vec3(7, -2, 0));
         var holes = new[] { Apex + new Vec3(0, 10, 0), Apex + new Vec3(-4, -3, 0), Apex + new Vec3(9, 1, 0) };
         var data = new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 5, 0) };
         double[] Of(TimingLineStyle style) => EbsTimingLine.RawTimes(shape, data, new TimingLineOptions { Front = TimingFrontShape.Chevron, Style = style }, holes);
         Assert.Equal(Of(TimingLineStyle.TimeLine), Of(TimingLineStyle.BurnLine));
-        Assert.True(EbsTimingLine.TimedAsChevron(new TimingLineOptions { Front = TimingFrontShape.Chevron, Style = TimingLineStyle.BurnLine }, 3));
-        Assert.False(EbsTimingLine.TimedAsChevron(new TimingLineOptions { Front = TimingFrontShape.Chevron, Style = TimingLineStyle.AdvancedBurn }, 3));
-        // a burn line that is no chevron burns as before
-        Assert.False(EbsTimingLine.TimedAsChevron(new TimingLineOptions { Front = TimingFrontShape.None, Style = TimingLineStyle.BurnLine }, 3));
+        Assert.NotEqual(Of(TimingLineStyle.TimeLine), Of(TimingLineStyle.AdvancedBurn));
+        // a line that is no chevron, of the front line type: a contour line as the chevron
+        double[] Picked(TimingLineStyle style) => EbsTimingLine.RawTimes(shape, data, new TimingLineOptions { Front = TimingFrontShape.None, Style = style }, holes);
+        Assert.Equal(Of(TimingLineStyle.TimeLine), Picked(TimingLineStyle.TimeLine));
         // the type follows the shape
         var line = new TimingLineEntity { Front = TimingFrontShape.Chevron, Points = shape.ToList(), Style = TimingLineStyle.TimeLine };
         line.TypeByShape();

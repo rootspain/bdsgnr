@@ -21,6 +21,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Isolines tab in the Blast analysis window:** the isolines of the firing times, as the Isolines button draws them,
   with a field for the interval (the one of the Visualization window). On the main plan with Show on plan, in print
   on a sheet of its own.
+- **The chevron of the EBS front** is timed contour line: the time runs from the line of the ray the
+  bisector picks, the isochrones run parallel to the rays, and the holes behind the vertex get smaller times. The dashed
+  oval at the vertex is gone.
 
 ## 0.3.7 — 2026-11-16
 

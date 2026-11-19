@@ -494,8 +494,6 @@ public static class PlanRenderer
                     break;
                 case TimingLineEntity tl:
                     DrawTimingLine(canvas, cam, tl, selected || e.Color != null ? color : (SKColor?)null, text);
-                    // a selected chevron of the front tool shows its oval of delays (not one of the advanced burn, not timed by it)
-                    if (selected && tl.TimedAsChevron()) DrawChevronOval(canvas, cam, tl.Points, color);
                     break;
             }
         }
@@ -1133,18 +1131,6 @@ public static class PlanRenderer
     public static SKColor TimingLineColor(TimingLineEntity tl) =>
         // a chevron of the "two fronts" type is no burn line: the green of the fronts
         Adapt(tl.Color is uint own ? new SKColor(own) : tl.Style == TimingLineStyle.BurnLine && !tl.TimedAsChevron() ? new SKColor(0xFF808000) : new SKColor(0xFF008000));
-
-    /// <summary>
-    /// The oval of a chevron's delays, thin and dashed: its centre at the vertex, through both ends (its segments are its
-    /// semi-diameters). The delay a hole gets is the oval's radius toward it, in the chevron's scale. A chevron opened into a
-    /// straight line has none: its times grow from the line.
-    /// </summary>
-    public static void DrawChevronOval(SKCanvas c, Camera cam, IReadOnlyList<Vec3> points, SKColor color)
-    {
-        if (points.Count != 3 || Chevron.IsStraight(points)) return;
-        using var dashed = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = color.WithAlpha(170), PathEffect = SKPathEffect.CreateDash(new[] { 4f, 4f }, 0) };
-        DrawPolyline(c, cam, Chevron.Oval(points), true, dashed);
-    }
 
     /// <summary>
     /// Electronic timing line as drawn on the plan: a 3 px line through the picked points at their

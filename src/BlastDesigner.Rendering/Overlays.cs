@@ -198,7 +198,7 @@ public sealed class VertexGripsOverlay : IOverlay
 /// (drag to turn the front), the two ends of the base in the colour of the line (drag to change the angle and the length).
 /// A line: its two ends in its colour (drag to move one). A chevron opened into a straight line: only its ends, which move
 /// as a line's; no vertex circle, it is not turned by its vertex.
-/// While one is dragged the front is drawn as it will be, with its oval of delays.
+/// While one is dragged the front is drawn as it will be.
 /// </summary>
 public sealed class FrontLineHandlesOverlay : IOverlay
 {
@@ -234,9 +234,6 @@ public sealed class FrontLineHandlesOverlay : IOverlay
             var (line, pts) = dragged;
             var shown = line.WithPoints(pts);
             PlanRenderer.DrawTimingLine(c, cam, shown, null, text);
-            // the oval of delays follows the ends dragged
-            // the oval times a chevron of the "two fronts" or the "front line" type, not one of the advanced burn
-            if (line.WithPoints(pts).TimedAsChevron()) PlanRenderer.DrawChevronOval(c, cam, pts, PlanRenderer.TimingLineColor(line));
         }
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var edge = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.2f, Color = PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White };

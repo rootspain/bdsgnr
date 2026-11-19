@@ -220,7 +220,7 @@ public sealed class TimingLineEntity : Entity, IHoleTimer
     }
 
     /// <summary>
-    /// A chevron of the front tool timed by its oval: "two fronts" (as the tool makes it) or "front line" (a straight one,
+    /// A chevron of the front tool timed as a contour line: "two fronts" (as the tool makes it) or "front line" (a straight one,
     /// older files), not the advanced burn. A method, so the properties panel shows no field.
     /// </summary>
     public bool TimedAsChevron() => Front == TimingFrontShape.Chevron && Points.Count == 3 && Style is TimingLineStyle.TimeLine or TimingLineStyle.BurnLine;

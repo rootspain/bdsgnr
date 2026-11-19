@@ -270,10 +270,10 @@ public class EbsTimingLineTests
     }
 
     [Fact]
-    public void AReversedChevronTimesFromTheFarthestHoleBackToItsVertex()
+    public void AReversedChevronTimesItsConcaveSideLater_EachGapTheSame()
     {
-        // ray to the north: forward the hole by the vertex fires first and the times grow away from it; reversed the
-        // farthest hole fires first, at the start, and the times come back to the vertex, each gap the same
+        // ray to the north: forward the holes behind the vertex fire first and the times grow along the ray; reversed (B → A)
+        // the hole ahead fires first and the times grow back behind the vertex, each gap the same the other way round
         var pts = Chevron.Build(new Vec3(0, 0, 100), new Vec3(0, 1, 0), 30, 10);
         var segments = new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) };
         List<double> Times(bool reverse)
@@ -285,13 +285,12 @@ public class EbsTimingLineTests
         }
         var forward = Times(false);
         var back = Times(true);
-        Assert.Equal(100, forward[0], 6);
-        Assert.True(forward[0] < forward[1] && forward[1] < forward[2]);
-        // the farthest of the holes, 8 m behind the vertex, first
-        Assert.Equal(100, back[2], 6);
-        Assert.True(back[2] < back[1] && back[1] < back[0]);
+        Assert.Equal(100, forward[2], 6);
+        Assert.True(forward[2] < forward[1] && forward[1] < forward[0]);
+        Assert.Equal(forward[3], forward[4], 6);
+        Assert.Equal(100, back[0], 6);
+        Assert.True(back[0] < back[1] && back[1] < back[2]);
         Assert.Equal(back[3], back[4], 6);
-        // the same delays between the holes, the other way round
         var span = forward.Max() - forward.Min();
         for (int i = 0; i < forward.Count; i++) Assert.Equal(span - (forward[i] - 100), back[i] - 100, 1);
     }
@@ -319,9 +318,9 @@ public class EbsTimingLineTests
     }
 
     [Fact]
-    public void AChevronTimesTheHolesEveryWayFromItsVertex_ByItsOval()
+    public void AChevronTimesTheHolesBehindItsVertexEarlier_TheyCountForTheFirst()
     {
-        // ray to the north; the oval of delays is closed: behind the vertex the holes get times as well
+        // ray to the north, a contour line: behind the vertex the holes get smaller times, the first of them at the start
         var pts = Chevron.Build(new Vec3(0, 0, 100), new Vec3(0, 1, 0), 30, 10);
         var ahead = H(0, 6);
         var near = H(0, 1);
@@ -331,14 +330,17 @@ public class EbsTimingLineTests
         Timing.SetTime(manual, 77, true);
         var holes = new List<Hole> { ahead, near, behind, manual };
         var r = EbsTimingLine.Apply(Project, holes, pts, new[] { new TimingLineSegment(0, 8, 0), new TimingLineSegment(0, 8, 0) },
-            new TimingLineOptions { Style = TimingLineStyle.TimeLine, Front = TimingFrontShape.Chevron, StartOffsetMs = 10 }, 20000, true);
-        Assert.Equal(10, near.ElectronicTimeMs!.Value, 6);
-        Assert.True(ahead.ElectronicTimeMs > near.ElectronicTimeMs);
-        // the oval is symmetric about the vertex: as far behind, as late as ahead
-        Assert.Equal(ahead.ElectronicTimeMs!.Value, behind.ElectronicTimeMs!.Value, 6);
+            new TimingLineOptions { Style = TimingLineStyle.BurnLine, Front = TimingFrontShape.Chevron, StartOffsetMs = 10 }, 20000, true);
         Assert.DoesNotContain(behind, r.Unreached);
-        // a time set by hand stays
+        Assert.Empty(r.Unreached);
+        // the hole set by hand (behind it all) keeps its time; of the others the one behind the vertex is the first
         Assert.Equal(77, manual.ElectronicTimeMs);
+        Assert.True(manual.ElectronicTimeManual);
+        Assert.True(behind.ElectronicTimeMs < near.ElectronicTimeMs && near.ElectronicTimeMs < ahead.ElectronicTimeMs);
+        // a metre along the axis is sin 15° m from the line of a segment 15° off it, at 8 ms/m
+        var perMetre = 8 * Math.Sin(15 * GeoMath.Deg);
+        Assert.InRange(near.ElectronicTimeMs!.Value - behind.ElectronicTimeMs!.Value, 7 * perMetre - 0.2, 7 * perMetre + 0.2);
+        Assert.InRange(ahead.ElectronicTimeMs!.Value - near.ElectronicTimeMs!.Value, 5 * perMetre - 0.2, 5 * perMetre + 0.2);
     }
 
     [Fact]
