@@ -34,6 +34,7 @@ public static partial class AnalysisWindows
     {
         BlastAnalysis.InitiationAngle => "Angle of initiation",
         BlastAnalysis.BurdenRelief => "Burden relief",
+        BlastAnalysis.Isolines => "Isolines",
         _ => "First movement"
     });
 
@@ -46,12 +47,17 @@ public static partial class AnalysisWindows
     {
         BlastAnalysis.InitiationAngle => TimingVectorOverlay.InitiationAngles(p).Analysis(p).Count > 0,
         BlastAnalysis.BurdenRelief => BurdenRelief.Valid(new BurdenReliefOverlay().Delaunay(p)).Any(),
+        BlastAnalysis.Isolines => p.Holes.Any(h => h.FiringTimeMs.HasValue && !h.IsDummy),
         _ => new FirstMovementOverlay().Arrows(p).Count > 0
     };
 
-    /// <summary>The sheet of the tab last open in the Blast analysis window, with its choices, whether it is open or not.</summary>
-    public static FirstMovementSheet FirstMovementPage(double yaw = 0) => new()
+    /// <summary>
+    /// The sheet of the tab last open in the Blast analysis window, with its choices, whether it is open or not; the
+    /// isolines at <paramref name="isolineInterval"/> ms (the interval of the program settings).
+    /// </summary>
+    public static FirstMovementSheet FirstMovementPage(double isolineInterval, double yaw = 0) => new()
     {
+        IsolineIntervalMs = isolineInterval,
         Analysis = _analysisTab,
         Title = AnalysisName(_analysisTab),
         HideGeometry = _analysisHideGeometry,
@@ -61,7 +67,8 @@ public static partial class AnalysisWindows
     };
 
     /// <summary>
-    /// The Blast analysis window: the angle of initiation, the first movement and the burden relief, each on a tab, over
+    /// The Blast analysis window: the angle of initiation, the first movement, the burden relief and the isolines of the
+    /// firing times (at the interval of the Visualization window, without the colour by time), each on a tab, over
     /// one plan of its own (its view kept from tab to tab). It leaves the main window and the other windows free. Its
     /// switch puts the analysis of the open tab on the main plan; Clear analysis takes it off and turns the switch off.
     /// Opened again, it only comes forward on the tab asked for.
@@ -84,8 +91,11 @@ public static partial class AnalysisWindows
         var planArrows = new FirstMovementOverlay { PlanStyle = true };
         var planAngles = TimingVectorOverlay.InitiationAngles(p);
         var planRelief = new BurdenReliefOverlay { UpperLimit = _burdenReliefLimit, ShowLegend = false };
-        IOverlay Layer(BlastAnalysis a) => a switch { BlastAnalysis.InitiationAngle => angles, BlastAnalysis.BurdenRelief => relief, _ => arrows };
-        IOverlay PlanLayer(BlastAnalysis a) => a switch { BlastAnalysis.InitiationAngle => planAngles, BlastAnalysis.BurdenRelief => planRelief, _ => planArrows };
+        // the isolines as the Isolines button draws them, on the plan of the window and on the main plan alike
+        var isolines = new TimingContourOverlay { IntervalMs = vm.Settings.IsochroneIntervalMs, Contours = true, ColourHoles = false };
+        var planIsolines = new TimingContourOverlay { IntervalMs = vm.Settings.IsochroneIntervalMs, Contours = true, ColourHoles = false };
+        IOverlay Layer(BlastAnalysis a) => a switch { BlastAnalysis.InitiationAngle => angles, BlastAnalysis.BurdenRelief => relief, BlastAnalysis.Isolines => isolines, _ => arrows };
+        IOverlay PlanLayer(BlastAnalysis a) => a switch { BlastAnalysis.InitiationAngle => planAngles, BlastAnalysis.BurdenRelief => planRelief, BlastAnalysis.Isolines => planIsolines, _ => planArrows };
 
         var view = SecondaryViewport(vm, () =>
         {
@@ -164,6 +174,14 @@ public static partial class AnalysisWindows
             vm.View.Redraw();
         };
         var limitGroup = Group("Upper limit", limit);
+
+        // ---- isolines: the time between two lines, the one of the Visualization window
+        var interval = new NumericUpDown
+        {
+            Value = (decimal)Math.Clamp(vm.Settings.IsochroneIntervalMs, 1, 1000), Minimum = 1, Maximum = 1000, Increment = 5, FormatString = "0",
+            Width = 120, Height = 32, FontFamily = Look.Mono, VerticalContentAlignment = VerticalAlignment.Center, Name = "isolineInterval"
+        };
+        var intervalGroup = Group("Interval ms", interval);
         var under = new TextBlock { Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center, Name = "reliefUnder", MinWidth = 220, Margin = new Thickness(0, 0, 14, 0) };
         void Under(double? value) => under.Text = value is double v ? Loc.F("Under the cursor: {0} ms/m", v.ToString("0.0", CultureInfo.CurrentCulture)) : Loc.T("Move the cursor over the triangles");
         Under(null);
@@ -210,7 +228,7 @@ public static partial class AnalysisWindows
         hideGeometry.IsCheckedChanged += (_, _) => { _analysisHideGeometry = hideGeometry.IsChecked == true; view.ZoomAll(); };
         var print = Command("print", "Print", "print");
         ToolTip.SetTip(print, Loc.T("The sheet of the open tab"));
-        print.Click += (_, _) => Ui.Safe(() => _ = ReportPreviewWindow.Show(vm, ReportKind.FirstMovement, FirstMovementPage(view.Camera.Yaw)));
+        print.Click += (_, _) => Ui.Safe(() => _ = ReportPreviewWindow.Show(vm, ReportKind.FirstMovement, FirstMovementPage(vm.Settings.IsochroneIntervalMs, view.Camera.Yaw)));
 
         // ---- the tabs
         var tabs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Name = "analysisTabs" };
@@ -220,7 +238,7 @@ public static partial class AnalysisWindows
             var text = new TextBlock { Text = AnalysisName(a), VerticalAlignment = VerticalAlignment.Center };
             var b = new Button
             {
-                Content = Ui.Row(6, Look.Icon(a == BlastAnalysis.BurdenRelief ? "chart" : "arrow", 15, Look.TextSoft), text),
+                Content = Ui.Row(6, Look.Icon(a switch { BlastAnalysis.BurdenRelief => "chart", BlastAnalysis.Isolines => "iso", _ => "arrow" }, 15, Look.TextSoft), text),
                 Height = 32, VerticalAlignment = VerticalAlignment.Bottom, Padding = new Thickness(14, 0),
                 CornerRadius = new CornerRadius(6, 6, 0, 0), BorderBrush = Look.Accent, Name = "tab" + a, Tag = a
             };
@@ -268,6 +286,7 @@ public static partial class AnalysisWindows
             {
                 BlastAnalysis.InitiationAngle => Loc.F("{0} holes", angles.Analysis(pr).Count) + "  ·  " + Loc.T("The angle at which each hole is initiated, from the times of its neighbours"),
                 BlastAnalysis.BurdenRelief => ReliefNote(pr),
+                BlastAnalysis.Isolines => Loc.F("{0} holes", pr.Holes.Count(h => h.FiringTimeMs.HasValue && !h.IsDummy)) + "  ·  " + Loc.F("Lines of equal firing time, every {0} ms", isolines.IntervalMs.ToString("0.#", CultureInfo.CurrentCulture)),
                 _ => Loc.F("{0} arrows", arrows.Arrows(pr).Count) + "  ·  " + Loc.T("The arrows show where the rock moves first, from the firing times of the neighbouring holes")
             };
             ToolTip.SetTip(note, note.Text);
@@ -296,6 +315,7 @@ public static partial class AnalysisWindows
             tools.Children.Clear();
             if (a == BlastAnalysis.FirstMovement) tools.Children.Add(arrowGroup);
             if (a == BlastAnalysis.BurdenRelief) tools.Children.Add(limitGroup);
+            if (a == BlastAnalysis.Isolines) tools.Children.Add(intervalGroup);
             tools.Children.Add(viewGroup);
             export.IsVisible = a == BlastAnalysis.FirstMovement;
             under.IsVisible = a == BlastAnalysis.BurdenRelief;
@@ -305,6 +325,14 @@ public static partial class AnalysisWindows
             if (_analysisOnPlan) OnPlan();
         }
         foreach (var (x, b, _) in tabButtons) b.Click += (_, _) => Select(x);
+        interval.ValueChanged += (_, _) =>
+        {
+            if (interval.Value is not decimal v) return;
+            isolines.IntervalMs = planIsolines.IntervalMs = vm.Settings.IsochroneIntervalMs = (double)v;
+            Describe();
+            view.Redraw();
+            vm.View.Redraw();
+        };
         Select(tab);
         _analysisSelect = Select;
 

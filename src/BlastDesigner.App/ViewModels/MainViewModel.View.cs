@@ -430,7 +430,10 @@ public sealed partial class MainViewModel
     private TimingContourOverlay? _isolines;
 
     /// <summary>The Visualization window has its display on the plan (not the isolines of the Isolines button).</summary>
-    public bool VisualizationShown => AnalysisOverlays.OfType<TimingContourOverlay>().Any(o => o != _isolines);
+    public bool VisualizationShown => AnalysisOverlays.OfType<TimingContourOverlay>().Any(o => o != _isolines && o != _analysisLayer);
+
+    /// <summary>The layer the Blast analysis window put on the plan (its isolines are not those of the Visualization window).</summary>
+    private IOverlay? _analysisLayer;
 
     /// <summary>
     /// The Isolines button: the isolines of the whole blast on the plan, at the interval of the Visualization window,
@@ -463,8 +466,8 @@ public sealed partial class MainViewModel
     /// </summary>
     public void ShowAnalysisOnPlan(IOverlay layer, bool show)
     {
-        if (show) { AnalysisOverlays.Clear(); AnalysisOverlays.Add(layer); }
-        else AnalysisOverlays.Remove(layer);
+        if (show) { AnalysisOverlays.Clear(); AnalysisOverlays.Add(layer); _analysisLayer = layer; }
+        else { AnalysisOverlays.Remove(layer); if (_analysisLayer == layer) _analysisLayer = null; }
         View.Redraw();
         OverlaysChanged?.Invoke();
     }

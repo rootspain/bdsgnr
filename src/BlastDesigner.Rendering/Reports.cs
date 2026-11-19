@@ -6,7 +6,7 @@ using SkiaSharp;
 namespace BlastDesigner.Rendering;
 
 /// <summary>The analyses of the Blast analysis window, one to a tab.</summary>
-public enum BlastAnalysis { InitiationAngle, FirstMovement, BurdenRelief }
+public enum BlastAnalysis { InitiationAngle, FirstMovement, BurdenRelief, Isolines }
 
 /// <summary>One analysis of the Blast analysis window on a sheet, as on its tab: the arrows of the first movement, the angle of initiation or the burden relief.</summary>
 public sealed class FirstMovementSheet
@@ -21,6 +21,8 @@ public sealed class FirstMovementSheet
     public required FirstMovementOverlay Arrows { get; init; }
     /// <summary>Top of the scale of the burden relief, ms/m; null: the most relief of the blast.</summary>
     public double? ReliefLimit { get; set; }
+    /// <summary>The time between two isolines, ms.</summary>
+    public double IsolineIntervalMs { get; set; } = 25;
 }
 
 /// <summary>The cross sections on sheets of their own: one per section line of the blast, or one along a line that was only picked.</summary>
@@ -235,6 +237,7 @@ public static class Reports
         {
             BlastAnalysis.InitiationAngle => TimingVectorOverlay.InitiationAngles(project),
             BlastAnalysis.BurdenRelief => new BurdenReliefOverlay { UpperLimit = opt.ReliefLimit, LegendTitle = T("Burden relief, ms/m") },
+            BlastAnalysis.Isolines => new TimingContourOverlay { IntervalMs = opt.IsolineIntervalMs, Contours = true, ColourHoles = false },
             _ => opt.Arrows
         };
         var sheets = new List<(string Title, IOverlay Overlay)> { (opt.Title, overlay) };

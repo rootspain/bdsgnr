@@ -1062,14 +1062,21 @@ public class ReportTests
         using var angle = Sheet(BlastAnalysis.InitiationAngle);
         using var arrows = Sheet(BlastAnalysis.FirstMovement);
         using var relief = Sheet(BlastAnalysis.BurdenRelief);
+        using var isolines = Sheet(BlastAnalysis.Isolines);
         // one sheet each, and each draws its own analysis
         Assert.Single(angle.Pages);
         Assert.Single(arrows.Pages);
         Assert.Single(relief.Pages);
+        Assert.Single(isolines.Pages);
         static byte[] Pixels(ReportDocument d) { using var b = d.Rasterize(0, 36); return b.Bytes; }
         Assert.NotEqual(Pixels(arrows), Pixels(angle));
         Assert.NotEqual(Pixels(arrows), Pixels(relief));
         Assert.NotEqual(Pixels(angle), Pixels(relief));
+        Assert.NotEqual(Pixels(isolines), Pixels(arrows));
+        Assert.NotEqual(Pixels(isolines), Pixels(relief));
+        // the isolines at the interval of the sheet
+        using var sparse = Reports.BuildFirstMovement(p, new FirstMovementSheet { Title = "Sheet", Analysis = BlastAnalysis.Isolines, IsolineIntervalMs = 200, Arrows = new FirstMovementOverlay() }, new ReportDesign(), Now);
+        Assert.NotEqual(Pixels(isolines), Pixels(sparse));
         // the arrows unless told otherwise
         using var plain = Reports.BuildFirstMovement(p, new FirstMovementSheet { Title = "Sheet", Arrows = new FirstMovementOverlay() }, new ReportDesign(), Now);
         Assert.Equal(Pixels(arrows), Pixels(plain));

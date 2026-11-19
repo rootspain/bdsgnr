@@ -803,7 +803,7 @@ Step("blast analysis window: everything in view on opening, a tab per analysis, 
     // the Burden relief button opened it, the First movement button turned it to its tab
     var w = BlastDesigner.App.Services.Dialogs.LastShown!;
     if (w.Title != BlastDesigner.App.Services.Loc.T("Blast analysis")) throw new Exception("not the blast analysis window: " + w.Title);
-    if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage().Analysis != BlastDesigner.Rendering.BlastAnalysis.FirstMovement) throw new Exception("the First movement button should turn the window to its tab");
+    if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage(25).Analysis != BlastDesigner.Rendering.BlastAnalysis.FirstMovement) throw new Exception("the First movement button should turn the window to its tab");
     Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     var view = w.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.Viewport>().First();
     foreach (var h in vm.Project!.Holes)
@@ -844,7 +844,7 @@ Step("blast analysis window: everything in view on opening, a tab per analysis, 
         var camera = (view.Camera.Scale, view.Camera.Yaw);
         Tab("tabInitiationAngle");
         if (Window() != "TimingVectorOverlay" || Layers(vm.AnalysisOverlays) != "TimingVectorOverlay") throw new Exception($"the angle tab: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
-        if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage().Analysis != BlastDesigner.Rendering.BlastAnalysis.InitiationAngle) throw new Exception("the print should take the angle tab");
+        if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage(25).Analysis != BlastDesigner.Rendering.BlastAnalysis.InitiationAngle) throw new Exception("the print should take the angle tab");
         if (Shown("arrowSize") || Shown("export") || Shown("reliefLimit")) throw new Exception("the angle tab shows the tools of another tab");
         if ((view.Camera.Scale, view.Camera.Yaw) != camera) throw new Exception("the view should stay from tab to tab");
         Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
@@ -854,6 +854,21 @@ Step("blast analysis window: everything in view on opening, a tab per analysis, 
         if (!Shown("reliefLimit") || !Shown("reliefUnder") || Shown("arrowSize")) throw new Exception("the relief tab should show its limit and the relief under the cursor");
         Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
         w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06h_blast_analysis_relief.png"));
+        // the isolines, as the Isolines button draws them, at the interval of the Visualization window; on the main
+        // plan they light the Isolines button, not the Visualization chip
+        Tab("tabIsolines");
+        if (Window() != "TimingContourOverlay" || Layers(vm.AnalysisOverlays) != "TimingContourOverlay") throw new Exception($"the isolines tab: window {Window()}, plan {Layers(vm.AnalysisOverlays)}");
+        var lines = (BlastDesigner.Rendering.TimingContourOverlay)view.OptionsSource!().Overlays[0];
+        if (!lines.Contours || lines.ColourHoles || lines.IntervalMs != vm.Settings.IsochroneIntervalMs) throw new Exception("the isolines tab should draw the isolines alone, at the interval of the settings");
+        if (!Shown("isolineInterval") || Shown("reliefLimit") || Shown("arrowSize")) throw new Exception("the isolines tab should show its interval only");
+        if (!vm.IsolinesShown || vm.VisualizationShown) throw new Exception("the isolines of the window on the plan are not those of the Visualization window");
+        var intervalWas = vm.Settings.IsochroneIntervalMs;
+        w.GetLogicalDescendants().OfType<NumericUpDown>().First(x => x.Name == "isolineInterval").Value = 50; Pump();
+        if (lines.IntervalMs != 50 || ((BlastDesigner.Rendering.TimingContourOverlay)vm.AnalysisOverlays[0]).IntervalMs != 50 || vm.Settings.IsochroneIntervalMs != 50) throw new Exception("the interval should reach the window, the plan and the settings");
+        if (BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage(vm.Settings.IsochroneIntervalMs) is not { Analysis: BlastDesigner.Rendering.BlastAnalysis.Isolines, IsolineIntervalMs: 50 }) throw new Exception("the print should take the isolines at their interval");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06i_blast_analysis_isolines.png"));
+        w.GetLogicalDescendants().OfType<NumericUpDown>().First(x => x.Name == "isolineInterval").Value = (decimal)intervalWas; Pump();
         // a ribbon button with the window open: forward on its tab, no second window
         vm.AngleOfInitiation(); Pump();
         if (BlastDesigner.App.Services.Dialogs.LastShown != w || Window() != "TimingVectorOverlay") throw new Exception("the Angle of initiation button should turn the open window to its tab");
@@ -6410,7 +6425,7 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     Press(fromReports.Window, "kindFirstMovement"); Pump();
     Wait(fromReports.Form);
     // the sheet of the tab last open in the Blast analysis window; another analysis chosen takes its name as the title
-    var lastTab = BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage().Analysis;
+    var lastTab = BlastDesigner.App.Views.AnalysisWindows.FirstMovementPage(25).Analysis;
     if (fromReports.Form.Document!.Title != BlastDesigner.App.Views.AnalysisWindows.AnalysisName(lastTab) || fromReports.Form.Document.Pages.Count != 1) throw new Exception("the Reports command has no blast analysis sheet");
     var otherTab = lastTab == BlastDesigner.Rendering.BlastAnalysis.FirstMovement ? BlastDesigner.Rendering.BlastAnalysis.InitiationAngle : BlastDesigner.Rendering.BlastAnalysis.FirstMovement;
     Press(fromReports.Window, "analysis" + otherTab); Pump();

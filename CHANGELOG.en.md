@@ -18,6 +18,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Ribbon group names** are a line under the buttons again, as before 0.3.7. The setting Ribbon group names at the
   side is gone. The ribbon is as high on every stage: on Initiation it is no longer higher, and the plan stays put.
 - **A lower ribbon:** the group names stand close under the buttons, the names of the big buttons in one line.
+- **Isolines tab in the Blast analysis window:** the isolines of the firing times, as the Isolines button draws them,
+  with a field for the interval (the one of the Visualization window). On the main plan with Show on plan, in print
+  on a sheet of its own.
 
 ## 0.3.7 — 2026-11-16
 

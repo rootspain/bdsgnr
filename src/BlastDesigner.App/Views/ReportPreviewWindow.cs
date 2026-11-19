@@ -34,7 +34,7 @@ public static class ReportPreviewWindow
         // a copy of its own: the pages are built on another thread, and the window can rebuild them without touching the blast
         var state = vm.Doc.Capture();
         var project = Task.Run(() => { var p = state(); Timing.Solve(p); return p; });
-        using var form = new ReportPreviewForm(vm, project, kind, arrows ?? AnalysisWindows.FirstMovementPage(), sections ?? AnalysisWindows.SectionPage(), design, page);
+        using var form = new ReportPreviewForm(vm, project, kind, arrows ?? AnalysisWindows.FirstMovementPage(vm.Settings.IsochroneIntervalMs), sections ?? AnalysisWindows.SectionPage(), design, page);
         var w = new Window
         {
             Title = Loc.Ui("Report preview"),
@@ -962,7 +962,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
 
         // everything the build reads is copied here: the window goes on changing its own
         var (kind, now, design) = (_kind, DateTime.Now, ProjectJson.DeepClone(Design));
-        var arrows = new FirstMovementSheet { Analysis = _arrows.Analysis, Title = _arrows.Title, Landscape = _arrows.Landscape, HideGeometry = _arrows.HideGeometry, Yaw = _arrows.Yaw, Arrows = _arrows.Arrows, ReliefLimit = _arrows.ReliefLimit };
+        var arrows = new FirstMovementSheet { Analysis = _arrows.Analysis, IsolineIntervalMs = _arrows.IsolineIntervalMs, Title = _arrows.Title, Landscape = _arrows.Landscape, HideGeometry = _arrows.HideGeometry, Yaw = _arrows.Yaw, Arrows = _arrows.Arrows, ReliefLimit = _arrows.ReliefLimit };
         var sections = new CrossSectionSheet { Title = _sections.Title, Landscape = _sections.Landscape, HalfWidth = _sections.HalfWidth, Line = _sections.Line };
         var previous = _building;
         string? note = null;
@@ -1066,7 +1066,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         catch (Exception ex) { Dialogs.ShowError(ex); }
     }
 
-    private void SavePdf() => _ = Using(d => _vm.SaveReport(d, _kind switch { ReportKind.Plan => "_plan", ReportKind.FirstMovement => _arrows.Analysis switch { BlastAnalysis.InitiationAngle => "_initiation_angle", BlastAnalysis.BurdenRelief => "_burden_relief", _ => "_first_movement" }, ReportKind.CrossSection => "_section", _ => "_report" }));
+    private void SavePdf() => _ = Using(d => _vm.SaveReport(d, _kind switch { ReportKind.Plan => "_plan", ReportKind.FirstMovement => _arrows.Analysis switch { BlastAnalysis.InitiationAngle => "_initiation_angle", BlastAnalysis.BurdenRelief => "_burden_relief", BlastAnalysis.Isolines => "_isolines", _ => "_first_movement" }, ReportKind.CrossSection => "_section", _ => "_report" }));
 
     private void Print() => _ = Using(d => Printing.Print((Window)TopLevel.GetTopLevel(this)!, d));
 

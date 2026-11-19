@@ -3418,3 +3418,4 @@ ui:The colour of the label: click to change it	Цвет подписи: щелч
 Hole {0} has an electronic detonator and a tie going out of it already: a chain does not branch	У скважины {0} электронный детонатор, и из неё уже выходит связь: цепочка не ветвится
 Blast analysis	Анализ отбойки
 The sheet of the open tab	Лист открытой вкладки
+Lines of equal firing time, every {0} ms	Линии равного времени взрывания, через {0} мс
