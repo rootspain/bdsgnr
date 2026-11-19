@@ -133,6 +133,26 @@ public class RouteNumberTests
     }
 
     [Fact]
+    public void ALetterSetByHand_GoesToTheWholeChain_AndTheChainThatHadItTakesTheOldOne()
+    {
+        var p = Project();
+        var a = H(p, "a", 0); var b = H(p, "b", 5); var c = H(p, "c", 20); var d = H(p, "d", 25); var e = H(p, "e", 40); var f = H(p, "f", 45);
+        Tie(p, a, b); Tie(p, c, d); Tie(p, e, f);
+        Assert.Equal(new[] { "A", "B", "C" }, RouteNumbers.Lines(p));
+        RouteNumbers.SwapLine(p, "A", "B");
+        Assert.Equal(new[] { "B", "B", "A", "A", "C", "C" }, new[] { a, b, c, d, e, f }.Select(h => h.RouteLine));
+        Assert.Equal(new int?[] { 1, 2, 1, 2, 1, 2 }, new[] { a, b, c, d, e, f }.Select(h => h.RouteNumber));
+        // a chain tied on later goes on with the letter set
+        var g = H(p, "g", 10);
+        Tie(p, b, g);
+        Assert.Equal(("B", 3), (g.RouteLine, g.RouteNumber!.Value));
+    }
+
+    [Fact]
+    public void TheRouteNumberLabelIsOnInANewProject() =>
+        Assert.True(Project().View.HoleLabels.HasFlag(HoleLabelMode.RouteNumber));
+
+    [Fact]
     public void AHoleWithoutANumberTiedFromAChain_GoesOnFromIt_NotFromOne()
     {
         var p = Project();
@@ -145,7 +165,70 @@ public class RouteNumberTests
     }
 
     [Fact]
-    public void DeletingATie_TakesTheNumbersBackFromTheHolesAfterIt()
+    public void EachChainHasItsLetter_InTheOrderTheyAreMade_AChainTiedOnTakesTheLetterOfTheOneBefore()
+    {
+        var p = Project();
+        var a = H(p, "a", 0); var b = H(p, "b", 5); var c = H(p, "c", 10); var d = H(p, "d", 20); var e = H(p, "e", 25);
+        Tie(p, a, b);
+        Tie(p, b, c);
+        Tie(p, d, e);
+        Assert.Equal(new[] { "A", "A", "A", "B", "B" }, new[] { a, b, c, d, e }.Select(h => h.RouteLine));
+        // a hole tied to the start of chain B starts it: B too
+        var f = H(p, "f", 15);
+        Tie(p, f, d);
+        Assert.Equal(new[] { "B", "B", "B" }, new[] { f, d, e }.Select(h => h.RouteLine));
+        Assert.Equal(new int?[] { 1, 2, 3 }, new[] { f, d, e }.Select(h => h.RouteNumber));
+        // the end of chain A tied to the start of chain B: all A
+        Tie(p, c, f);
+        Assert.All(new[] { a, b, c, f, d, e }, h => Assert.Equal("A", h.RouteLine));
+        Assert.Equal(new int?[] { 1, 2, 3, 4, 5, 6 }, new[] { a, b, c, f, d, e }.Select(h => h.RouteNumber));
+        // a new chain: the letter after the last one
+        var g = H(p, "g", 40); var k = H(p, "k", 45);
+        Tie(p, g, k);
+        Assert.Equal("B", g.RouteLine);
+        // from an initiation point too
+        var ip = new InitiationPoint { Position = new Vec3(50, 0, 100) };
+        p.Add(ip);
+        var m = H(p, "m", 55);
+        Timing.Connect(p, ip.Id, m.Id, null);
+        RouteNumbers.Number(p, new[] { (ip.Id, m.Id) });
+        Assert.Equal(("C", 1), (m.RouteLine, m.RouteNumber!.Value));
+        Assert.Equal(new[] { "A", "Z", "AA", "AB", "BA" }, new[] { 0, 25, 26, 27, 52 }.Select(RouteNumbers.LineName));
+        Assert.Equal(new[] { 0, 25, 26, 27, 52 }, new[] { "A", "Z", "AA", "AB", "BA" }.Select(RouteNumbers.LineIndex));
+    }
+
+    [Fact]
+    public void DeletingATieInTheMiddle_MakesTheHolesAfterItAChainOfTheNextLetter()
+    {
+        var p = Project();
+        var a = H(p, "a", 0); var b = H(p, "b", 5); var c = H(p, "c", 10); var d = H(p, "d", 15);
+        var e = H(p, "e", 30); var f = H(p, "f", 35);
+        Tie(p, a, b); Tie(p, b, c); Tie(p, c, d);
+        Tie(p, e, f);
+        var doc = new Document(p);
+        var tie = p.Ties.First(t => t.FromId == b.Id && t.ToId == c.Id).Id;
+        doc.Execute("Delete tie", pr => pr.Entities.RemoveAll(x => x.Id == tie));
+        Hole Now(Hole h) => (Hole)doc.Project.FindEntity(h.Id)!;
+        string? L(Hole h) => Now(h).RouteNumber is int n ? Now(h).RouteLine + n : null;
+        Assert.Equal(new[] { "A1", "A2", "C1", "C2", "B1", "B2" }, new[] { a, b, c, d, e, f }.Select(L));
+        // one undo brings the tie, the numbers and the letters back
+        doc.Undo();
+        Assert.Equal(new[] { "A1", "A2", "A3", "A4" }, new[] { a, b, c, d }.Select(L));
+        // two ties of one chain deleted at once: the parts take the letters in their order; a hole left alone, none
+        var bc = doc.Project.Ties.First(t => t.FromId == b.Id && t.ToId == c.Id).Id;
+        var ef = doc.Project.Ties.First(t => t.FromId == e.Id && t.ToId == f.Id).Id;
+        doc.Execute("Delete ties", pr => pr.Entities.RemoveAll(x => x.Id == bc || x.Id == ef));
+        Assert.Equal(new[] { "A1", "A2", "C1", "C2", "B1", null }, new[] { a, b, c, d, e, f }.Select(L));
+        doc.Undo();
+        var cd = doc.Project.Ties.First(t => t.FromId == c.Id && t.ToId == d.Id).Id;
+        bc = doc.Project.Ties.First(t => t.FromId == b.Id && t.ToId == c.Id).Id;
+        var ab = doc.Project.Ties.First(t => t.FromId == a.Id && t.ToId == b.Id).Id;
+        doc.Execute("Delete ties", pr => pr.Entities.RemoveAll(x => x.Id == ab || x.Id == cd));
+        Assert.Equal(new[] { "A1", "C1", "C2", null }, new[] { a, b, c, d }.Select(L));
+    }
+
+    [Fact]
+    public void DeletingATie_KeepsTheNumbersBeforeIt_AndUndoBringsThemBack()
     {
         var p = Project();
         var a = H(p, "a", 0); var b = H(p, "b", 5); var c = H(p, "c", 10); var d = H(p, "d", 15);
@@ -154,7 +237,7 @@ public class RouteNumberTests
         var tie = p.Ties.First(t => t.FromId == b.Id && t.ToId == c.Id).Id;
         doc.Execute("Delete tie", pr => pr.Entities.RemoveAll(e => e.Id == tie));
         int? N(Hole h) => ((Hole)doc.Project.FindEntity(h.Id)!).RouteNumber;
-        Assert.Equal(new int?[] { 1, 2, null, null }, new[] { a, b, c, d }.Select(N));
+        Assert.Equal(new int?[] { 1, 2, 1, 2 }, new[] { a, b, c, d }.Select(N));
         // one undo brings the tie and the numbers back
         doc.Undo();
         Assert.Equal(new int?[] { 1, 2, 3, 4 }, new[] { a, b, c, d }.Select(N));

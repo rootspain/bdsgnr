@@ -41,6 +41,7 @@ public static class TimingLineWindow
         };
         // a line front is a front line; a chevron "two fronts", and "front line" while it is opened into a straight line
         if (front == TimingFrontShape.Line) options.Style = TimingLineStyle.TimeLine;
+        else if (front == TimingFrontShape.Point) options.Style = TimingLineStyle.Point;
         else if (front == TimingFrontShape.Chevron) options.Style = points.Count == 3 && Chevron.IsStraight(points) ? TimingLineStyle.TimeLine : TimingLineStyle.BurnLine;
         // A new front goes A → B: a chevron's times grow along its ray, from the vertex outwards, a line's (its ends put in
         // order by the tool) to the side of most holes. A front edited keeps its direction, which A → B / B → A turn.
@@ -190,6 +191,9 @@ public sealed class TimingLineForm : DockPanel
     /// <summary>The values of every segment, the first row copied to all when "same for all segments" is on.</summary>
     public List<TimingLineSegment> Segments() => SameForAll ? _segments.Select(_ => _segments[0]).ToList() : _segments.ToList();
 
+    /// <summary>A point front: one point, one row of values, the delays round it.</summary>
+    private bool IsPoint => _front == TimingFrontShape.Point && _points.Count == 1;
+
     /// <summary>A chevron drawn by the front tool: three points, its two segments independent.</summary>
     private bool IsChevron => _front == TimingFrontShape.Chevron && _points.Count == 3 && _segments.Count >= 2;
 
@@ -237,7 +241,7 @@ public sealed class TimingLineForm : DockPanel
         var row = new WrapPanel { Children =
         {
             new TextBlock { Text = Editing ? Loc.T("Edit timing line") : Loc.T("Timing line"), FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) },
-            Chip(Loc.F("Segments: {0} · {1} m", SegmentCount, N(length, "0"))),
+            Chip(IsPoint ? L("Point: the delays go round it") : Loc.F("Segments: {0} · {1} m", SegmentCount, N(length, "0"))),
             Chip(holes)
         } };
         foreach (var c in row.Children.Skip(1).OfType<Control>()) c.Margin = new Thickness(0, 0, 6, 0);
@@ -382,7 +386,7 @@ public sealed class TimingLineForm : DockPanel
         if (Advanced) _body.Children.Add(Section("Burn with angles", AdvancedFields()));
         else
         {
-            _body.Children.Add(Section("Segments", SegmentTable()));
+            _body.Children.Add(IsPoint ? Section("Delay", PointFields()) : Section("Segments", SegmentTable()));
             _body.Children.Add(ProgressiveRow());
         }
         // One card for the life of the window: rebuilding the form only moves it to the end of the new body.
@@ -480,10 +484,13 @@ public sealed class TimingLineForm : DockPanel
     private Control DirectionChips()
     {
         var row = Ui.Row(6);
-        foreach (var (reverse, text) in new[] { (false, "A → B"), (true, "B → A") })
+        // a point front: from the point outwards, or from the farthest hole back to it
+        var chips = IsPoint ? new[] { (false, L("From the point")), (true, L("To the point")) } : new[] { (false, "A → B"), (true, "B → A") };
+        foreach (var (reverse, text) in chips)
         {
             var r = reverse;
-            var chip = Ui.Chip(text, () => { if (Options.ReverseOrder != r) { Options.ReverseOrder = r; Build(); } }, Options.ReverseOrder == reverse, L("A and B are marked on the plan"));
+            var chip = Ui.Chip(text, () => { if (Options.ReverseOrder != r) { Options.ReverseOrder = r; Build(); } }, Options.ReverseOrder == reverse,
+                IsPoint ? L("From the point: the nearest hole first; to the point: the farthest first") : L("A and B are marked on the plan"));
             chip.Height = 32;
             chip.Tag = reverse ? "reverse" : "forward";
             row.Children.Add(chip);
@@ -541,6 +548,17 @@ public sealed class TimingLineForm : DockPanel
         }
         stack.Children.Add(grid);
         return stack;
+    }
+
+    /// <summary>The values of a point front: its delay per metre from the point and, with the progressive relief, its progress.</summary>
+    private Control PointFields()
+    {
+        var wrap = new WrapPanel();
+        void Add(string label, Control field) => wrap.Children.Add(new Border { Margin = new Thickness(0, 0, 24, 8), Child = Labeled(label, field) });
+        var s = _segments[0];
+        Add("Relief", Number("relief0", s.ReliefMsPerM, "ms/m", 0.5, 0, 1000, v => _segments[0] = _segments[0] with { ReliefMsPerM = v }));
+        if (Options.UseProgressive) Add("Progress", Number("progress0", s.ProgressMs, "ms/10 m", 1, 0, 10000, v => _segments[0] = _segments[0] with { ProgressMs = v }));
+        return wrap;
     }
 
     private Control ProgressiveRow()

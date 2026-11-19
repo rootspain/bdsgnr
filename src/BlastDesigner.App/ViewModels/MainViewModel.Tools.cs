@@ -551,7 +551,7 @@ public sealed partial class MainViewModel
     public async Task AttachHolesToRow()
     {
         if (Project!.Rows.Count == 0) { await Dialogs.Info(Loc.T("There are no rows.")); return; }
-        var idx = await Dialogs.Choose("Attach holes to row", Loc.T("Row"), Project.Rows.Select(r => $"{r.Name} ({r.HoleIds.Count})").ToList());
+        var idx = await Dialogs.Choose("Attach holes to row", Loc.T("Row"), Project.Rows.Select(RowChoiceName).ToList());
         if (idx is not int i) return;
         var ids = SelectedHoleIds();
         Change("Attach holes to row", p =>
@@ -782,7 +782,7 @@ public sealed partial class MainViewModel
     public void SetTimeTool() => SetTool(new TimeSetTool(this, false));
 
     /// <summary>
-    /// The timing front tool: a line, or two segments meeting at a vertex, by clicks (<see cref="FrontLineTool"/>). When the front is drawn the
+    /// The timing front tool: a point, a line, or two segments meeting at a vertex, by clicks (<see cref="FrontLineTool"/>). When the front is drawn the
     /// timing line window opens; applied, the front stays in the project, programs the selected holes (or all) and is
     /// selected, so that it can be turned and reshaped at once.
     /// </summary>
@@ -799,7 +799,8 @@ public sealed partial class MainViewModel
             var holes = SelectedOrAllHoles().Where(h => !h.IsDummy).ToList();
             // one shape, one type: the line of the tool is the straight chevron, its vertex in the middle, a front line
             if (pts.Count == 2) pts = new List<Vec3> { pts[0], new((pts[0].X + pts[1].X) / 2, (pts[0].Y + pts[1].Y) / 2, pts[0].Z), new(pts[1].X, pts[1].Y, pts[0].Z) };
-            var front = TimingFrontShape.Chevron;
+            // one point (the end of the line clicked on its start): a point front, the delays round it
+            var front = pts.Count == 1 ? TimingFrontShape.Point : TimingFrontShape.Chevron;
             if (await TimingLineWindow.Show(this, pts, holes, front: front) is not { } setup) return;
             var ids = ElectronicHoleIds(holes);
             TimingLineResult? r = null;
@@ -929,6 +930,8 @@ public sealed partial class MainViewModel
             if (segments != null) l.Segments = segments.ToList();
             // snapped into a straight line it is a front line, bent again two fronts
             l.TypeByShape();
+            // the ends of a line put together: a point front
+            l.PointByPoints();
         }));
         if (timed > 0) SetStatus(Loc.F("Timing line changed: {0} holes reprogrammed", timed));
     }
@@ -1064,6 +1067,9 @@ public sealed partial class MainViewModel
         Change("Copy times between horizons", p => n = Timing.CopyTimesBetweenHorizons(p.Holes.ToList(), (int)from!.Value, (int)to!.Value, o, p.Electronic.AllowSubMs));
         SetStatus(Loc.F("{0} holes timed", n));
     }
+
+    /// <summary>A row as the list of Attach holes to row names it, and the properties panel over its holes: "name (holes)".</summary>
+    public static string RowChoiceName(HoleRow r) => $"{r.Name} ({r.HoleIds.Count})";
 
     public async Task Deprogram(bool onlyManual)
     {

@@ -1753,7 +1753,7 @@ ui:Design tolerances	Допуски
 ui:Tolerance check	Проверка допусков
 ui:Result	Итог
 ui:Quantities	Ведомость
-ui:Tie-up	Схема
+ui:Tie-up	Схема коммутации
 ui:Ties	Связи
 ui:Lead-in	Магистраль
 ui:Dummy hole	Холостая скважина
@@ -1762,14 +1762,11 @@ ui:Automatic tie-up	Автосвязка
 ui:Connect in order	Связать по порядку
 ui:Flip ties	Перевернуть связи
 ui:Delete ties	Удалить связи
-ui:Electronic	Электронное (ЭСИ)
+ui:Electronic	Электронная система инициирования
 ui:Time by click	Время щелчком
 ui:Along row	Вдоль ряда
 ui:Timing line	Фронт отбойки ЭСИ
 ui:Opening point	Точка начала
-ui:V pattern	V-схема
-ui:Encoding sequence	Порядок кодирования
-ui:i-kon loggers	Логгеры i-kon
 ui:Edit times	Правка времён
 ui:Shift time…	Сдвинуть время…
 ui:Scale intervals…	Масштаб интервалов…
@@ -1889,7 +1886,7 @@ ui:Not programmed	Без программы ЭСИ
 ui:Alt+1…7 — switch stage	Alt+1…7 — переключить этап
 ui:All commands in the classic menu	Все команды в классическом меню
 ui:Bench	Уступ
-ui:Blast direction: click to set, double-click to reset the orientation	Направление взрыва: щелчок — задать, двойной щелчок — сбросить ориентацию
+ui:Turn to north	Повернуть на север
 ui:Blast properties, design data, resources	Свойства взрыва, проектные данные, ресурсы
 ui:Cancel	Отмена
 ui:Command, hole, setting…	Команда, скважина, настройка…
@@ -2392,6 +2389,12 @@ ui:No.	№
 ui:Burn rate	Скорость горения
 ui:Relief	Замедление
 ui:Progress	Прогрессия
+ui:Point: the delays go round it	Точка: замедления расходятся кругом
+ui:From the point	От точки
+ui:To the point	К точке
+ui:From the point: the nearest hole first; to the point: the farthest first	От точки: первой срабатывает ближайшая скважина; к точке — самая дальняя
+Point relief ms per m	Замедление точки, мс/м
+ms/m	мс/м
 ui:All	Все
 ui:ms/m	мс/м
 ui:ms/10 m	мс/10 м
@@ -2922,8 +2925,6 @@ Insert a calculated field…	Вставить вычисляемое поле…
 ui:Insert a calculated field…	Вставить вычисляемое поле…
 # DaveyTronic (.BPD)
 BPD file…	Файл BPD...
-Delays in:	Замедления в:
-0.1 ms	0,1ms
 Line	Линия
 Tie type	Тип связи
 Lines (PATH)	Линии (PATH)
@@ -2946,7 +2947,6 @@ Hole {0}: the electronic time is not set.	Скважина {0}: не задан�
 Hole {0}: a primer fires before 0 with its offset and is not programmed.	Скважина {0}: боевик со своим смещением срабатывает раньше 0 и не запрограммирован.
 {0} ties of this type: more than {1}.	Связей этого типа: {0}, больше {1}.
 Line {0} ({1}): {2} ties, more than {3}.	Линия {0} ({1}): связей {2}, больше {3}.
-Chain of ties	Цепочка связей
 {0}: holes {1}–{2}, {3} ties	{0}: скв. {1}–{2}, связей {3}
 {0} ties in the chain: more than {1}.	Связей в цепочке: {0}, больше {1}.
 Each line takes the holes of its chain of ties. Holes are numbered along the ties in the order they were drawn.	В линию попадают скважины её цепочки связей. Нумерация идёт по связям в порядке их построения.
@@ -2961,10 +2961,11 @@ Bottom detonator	Нижний детонатор
 ui:Shape	Фигура
 ui:Line	Линия
 ui:Chevron	Галочка
-Click the start and the end of the line. A click on its end (or Enter) finishes a line; a click elsewhere draws a second segment and finishes a chevron, its vertex at the end of the line. Backspace takes the last point back, Esc drops the input. On a selected front drag a circle to change it, the line to move it.	Щёлкните начало и конец линии. Щелчок по её концу (или Enter) завершает линию; щелчок в другом месте рисует второй отрезок и завершает шеврон с вершиной в конце линии. Backspace убирает последнюю точку, Esc отменяет ввод. У выбранного фронта перетащите кружок, чтобы изменить его, или линию, чтобы переместить.
+Click the start and the end of the line. A click on the start again (or Enter after it) finishes a point; a click on the end (or Enter) finishes a line; a click elsewhere draws a second segment and finishes a chevron, its vertex at the end of the line. Backspace takes the last point back, Esc drops the input. On a selected front drag a circle to change it (an end onto the other end makes a point), the line to move it.	Щёлкните начало и конец линии. Повторный щелчок по началу (или Enter после него) завершает точку; щелчок по концу (или Enter) завершает линию; щелчок в другом месте рисует второй отрезок и завершает шеврон с вершиной в конце линии. Backspace убирает последнюю точку, Esc отменяет ввод. У выбранного фронта перетащите кружок, чтобы изменить его (конец на другой конец превращает линию в точку), или линию, чтобы переместить.
 Click the end of the line	Щёлкните конец линии
 Rotate timing line	Поворот фронта отбойки ЭСИ
 Reshape timing line	Изменение формы фронта отбойки ЭСИ
+Move timing line	Перемещение фронта отбойки ЭСИ
 Timing line changed: {0} holes reprogrammed	Фронт отбойки ЭСИ изменён: перепрограммировано скважин — {0}
 {0} holes are out of reach of the line and lose their time	{0} скв. вне досягаемости фронта, их время сбрасывается
 {0} holes without an electronic detonator fire by their tie-up	{0} скв. без ЭСИ взрываются по коммутации
@@ -3406,10 +3407,9 @@ Hide exclusion zone	Скрыть опасную зону
 Show	Показать
 Burden relief	Разгрузка ЛНС
 The angle at which each hole is initiated, from the times of its neighbours	Угол, под которым инициируется каждая скважина, по времени её соседей
-R {0}	М {0}
 Route number	Марш. номер
 ui:Route no.	Марш. номер
-ui:Plan and 3D: "R" and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted takes the numbers of the holes after it back.	План и 3D: «М» и маршрутный номер скважины с электронным детонатором — её место в цепочке связей по порядку связывания: 1 — первая скважина, каждая следующая на 1 больше той, от которой к ней провели связь. При удалении связи номера у всех последующих скважин сбрасываются.
+ui:Plan and 3D: the letter of the chain (A the first, B the second…) and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted in the middle of a chain makes the holes after it a chain of the next letter, numbered from 1.	План и 3D: литера цепочки (A — первая, B — вторая…) и маршрутный номер скважины с электронным детонатором — её место в цепочке связей по порядку связывания: 1 — первая скважина, каждая следующая на 1 больше той, от которой к ней провели связь. При удалении связи в середине цепочки скважины после неё становятся цепочкой со следующей литерой, с номерами от 1.
 Hole {0} has an electronic detonator: a tie comes into it already, or this one would close a ring. A tie goes to the start of a chain only	У скважины {0} электронный детонатор: в неё уже входит связь или эта связь замкнёт кольцо. Связь можно провести только к началу цепочки
 ui:Default colour	Цвет по умолчанию
 ui:Label colour	Цвет подписи
@@ -3419,3 +3419,9 @@ Hole {0} has an electronic detonator and a tie going out of it already: a chain 
 Blast analysis	Анализ отбойки
 The sheet of the open tab	Лист открытой вкладки
 Lines of equal firing time, every {0} ms	Линии равного времени взрывания, через {0} мс
+ui:Dynamics analysis	Анализ динамики
+Dynamics analysis	Анализ динамики
+Route line	Литера маршрута
+ui:The letter of the chain of ties of the hole: chosen, the whole chain takes it, and the chain that had it takes the letter of this one	Литера цепочки связей скважины: выбранную литеру получает вся цепочка, а цепочка, у которой она была, — литеру этой
+The route letter is set for one chain: select holes of one chain of ties	Литера маршрута задаётся одной цепочке: выделите скважины одной цепочки связей
+Not on a chain of ties	Не в цепочке связей

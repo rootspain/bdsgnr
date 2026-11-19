@@ -113,7 +113,7 @@ public static class ProjectFile
         foreach (var s in p.Entities.OfType<SurfaceEntity>())
             if (s.Color is uint own) s.Color = ProgramSettings.NewSurfaceColor(own);
         // one shape, one type: a line front of two points is now the straight chevron (its vertex in the middle)
-        foreach (var l in p.Entities.OfType<TimingLineEntity>()) l.LineFrontToStraightChevron();
+        foreach (var l in p.Entities.OfType<TimingLineEntity>()) { l.LineFrontToStraightChevron(); l.PointByPoints(); }
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;
     }
 

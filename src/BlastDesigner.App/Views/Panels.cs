@@ -252,7 +252,7 @@ public sealed partial class PropertiesPanel : DockPanel
         _header.Text = sel.Count == 1 ? Loc.T(first.KindName) : $"{Loc.T(first.KindName)} × {sel.Count}";
         var template = first.EditCopy();
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
-        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset", "U", "V", "Center", "Current", "KindName" }, ReadOnly = doc.IsReadOnly };
+        var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HasHandles", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset", "U", "V", "Center", "Current", "KindName" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid, first is TieEntity ? sel.OfType<TieEntity>().ToList() : null);
         if (first is TimingLineEntity)
         {
@@ -275,7 +275,9 @@ public sealed partial class PropertiesPanel : DockPanel
                 grid.Exclude.Add(nameof(TimingLineEntity.SecondSegmentReliefMsPerM));
             }
             if (!straight) grid.Exclude.Add(nameof(TimingLineEntity.LineReliefMsPerM));
-            if (sel.Any(e => e is TimingLineEntity { Front: TimingFrontShape.Chevron or TimingFrontShape.Line })) grid.Exclude.Add(nameof(TimingLineEntity.BurdenReliefMsPerM));
+            // a point front has one delay, the one round it
+            if (!sel.All(e => e is TimingLineEntity tl && tl.IsPoint())) grid.Exclude.Add(nameof(TimingLineEntity.PointReliefMsPerM));
+            if (sel.Any(e => e is TimingLineEntity { Front: TimingFrontShape.Chevron or TimingFrontShape.Line or TimingFrontShape.Point })) grid.Exclude.Add(nameof(TimingLineEntity.BurdenReliefMsPerM));
             grid.Tips[nameof(TimingLineEntity.LeftFrontAzimuthDeg)] = grid.Tips[nameof(TimingLineEntity.RightFrontAzimuthDeg)] =
                 Loc.Ui("Bearing of the segment from the vertex, clockwise from north: typed in, the segment turns to it");
             // one shape, one type: the list offers the types the selected lines can take
@@ -285,6 +287,8 @@ public sealed partial class PropertiesPanel : DockPanel
         {
             // the detonator id of a hole is its serial number, not a product
             grid.Choices.Remove(nameof(Hole.DetonatorId));
+            // the letter of the route has a field of its own under the layer (RouteLineRow)
+            grid.Exclude.Add(nameof(Hole.RouteLine));
             grid.Sections = HoleSections;
             grid.Collapsed = _collapsed;
             string m = Loc.Ui("m"), degrees = "°";
@@ -337,12 +341,15 @@ public sealed partial class PropertiesPanel : DockPanel
                         // a type its shape does not take (several lines selected): that line keeps its own
                         if (name == nameof(TimingLineEntity.Style) && template is TimingLineEntity want && !tl.AllowedStyles().Contains(want.Style)) continue;
                         // one shape, one type: a front takes the shape of the type chosen (two fronts bends it into a chevron,
-                        // front line makes it straight)
+                        // front line makes it straight, point gathers it into its vertex); made from a point, its later side
+                        // faces the middle of its holes
                         var reshape = name == nameof(TimingLineEntity.Style);
+                        var mine = p.Holes.Where(h => tl.HoleIds.Contains(h.Id) && !h.IsDummy).ToList();
+                        Vec3? middle = mine.Count > 0 ? new Vec3(mine.Average(h => h.Collar.X), mine.Average(h => h.Collar.Y), mine.Average(h => h.Collar.Z)) : null;
                         timed += MainViewModel.ReprogramTimingLines(p, new HashSet<Guid> { e.Id }, () =>
                         {
                             grid.ApplyTo(template, e);
-                            if (reshape) tl.ShapeByType();
+                            if (reshape) tl.ShapeByType(middle);
                         });
                         continue;
                     }
@@ -377,6 +384,10 @@ public sealed partial class PropertiesPanel : DockPanel
                 Children = { HoleHead(hole, sel.Count), edit, sel.Count == 1 ? HoleCharge(doc.Project, hole) : HolesCharge(doc.Project, sel.OfType<Hole>().ToList()), LayerRow(doc, sel, stacked: true), grid, HoleCalculations(doc.Project, sel.OfType<Hole>().ToList()) }
             };
             if (PatternSection(doc, sel.OfType<Hole>().ToList()) is { } pattern) ((StackPanel)_content.Content).Children.Insert(4, pattern);
+            // the letter of the route, under the layer: to be seen, not folded away among the other fields
+            if (RouteLineRow(doc, sel.OfType<Hole>().ToList()) is { } route) ((StackPanel)_content.Content).Children.Insert(4, route);
+            // a row selected (all its holes, no other): its name before the holes, as the Attach holes to row list has it
+            if (RowName(doc.Project, sel) is { } row) ((StackPanel)_content.Content).Children.Insert(0, row);
             return;
         }
         var panel = new StackPanel { Children = { LayerRow(doc, sel) } };
@@ -444,6 +455,40 @@ public sealed partial class PropertiesPanel : DockPanel
         Grid.SetColumn(combo, 1);
         // the columns and margin of the property grid under it, so the row lines up with its fields
         return new Grid { ColumnDefinitions = new ColumnDefinitions("2*,3*"), Margin = new Thickness(4, 4, 4, 0), Children = { label, combo } };
+    }
+
+    /// <summary>
+    /// The letter of the route of the selected holes, laid out like the layer above it: one of the letters of the chains of
+    /// the project. Chosen, the whole chain takes it, and the chain that had it the letter of this one (the two swap), one
+    /// undo step. Holes of several chains show it mixed and take no letter; holes with an electronic detonator on no chain
+    /// show the field off. Null for holes without an electronic detonator.
+    /// </summary>
+    private Control? RouteLineRow(Document doc, List<Hole> holes)
+    {
+        var chained = holes.Where(h => h.RouteNumber != null).ToList();
+        if (chained.Count == 0 && !holes.Any(h => Charging.HasElectronicDetonator(doc.Project, h))) return null;
+        var letters = RouteNumbers.Lines(doc.Project);
+        var mine = chained.Select(h => h.RouteLine).Distinct().ToList();
+        var combo = new ComboBox
+        {
+            Name = "routeLine",
+            ItemsSource = letters,
+            SelectedIndex = mine is [string one] ? letters.IndexOf(one) : -1,
+            PlaceholderText = chained.Count == 0 ? Loc.T("Not on a chain of ties") : Loc.T("(mixed)"),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            FontFamily = Look.Mono,
+            IsEnabled = !doc.IsReadOnly && chained.Count > 0
+        };
+        ToolTip.SetTip(combo, Loc.Ui("The letter of the chain of ties of the hole: chosen, the whole chain takes it, and the chain that had it takes the letter of this one"));
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (combo.SelectedIndex < 0) return;
+            var letter = letters[combo.SelectedIndex];
+            if (mine is not [string from]) _vm.SetStatus(Loc.T("The route letter is set for one chain: select holes of one chain of ties"));
+            else if (from != letter) _vm.Change(Loc.F("Edit {0}", Loc.Property(nameof(Hole.RouteLine))), p => RouteNumbers.SwapLine(p, from, letter));
+        };
+        return new StackPanel { Spacing = 4, Children = { new TextBlock { Text = Loc.Property(nameof(Hole.RouteLine)), FontSize = 12, Foreground = Look.Muted }, combo } };
     }
 
     /// <summary>
@@ -526,6 +571,22 @@ public sealed partial class PropertiesPanel : DockPanel
         body.Children.Add(Ui.Row(6, select, rotate));
         foreach (var control in SegmentControls(doc, pat, segment)) body.Children.Add(control);
         return new StackPanel { Spacing = 8, Children = { head, body } };
+    }
+
+    /// <summary>
+    /// The name of the row whose holes are selected, all of them and no other, as the list of Attach holes to row shows it:
+    /// "name (holes)"; null for any other selection.
+    /// </summary>
+    private static Control? RowName(BlastProject p, List<Entity> sel)
+    {
+        var ids = sel.Select(e => e.Id).ToHashSet();
+        var row = p.Rows.FirstOrDefault(r => r.HoleIds.Count == ids.Count && r.HoleIds.All(ids.Contains));
+        if (row == null) return null;
+        return new TextBlock
+        {
+            Text = BlastDesigner.App.ViewModels.MainViewModel.RowChoiceName(row), FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Look.Blue,
+            TextTrimming = TextTrimming.CharacterEllipsis, Name = "rowName"
+        };
     }
 
     /// <summary>What is selected: the kind on the left, the number of the hole or how many on the right.</summary>

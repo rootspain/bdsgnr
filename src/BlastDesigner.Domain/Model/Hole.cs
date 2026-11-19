@@ -84,6 +84,11 @@ public sealed class Hole : Entity
     /// (1 the first); null when it is on no chain. Set by the ties made, see RouteNumbers of the engine.
     /// </summary>
     public int? RouteNumber { get; set; }
+    /// <summary>
+    /// The letter of the chain of ties the hole is on (A the first chain, B the second…), shown before its
+    /// <see cref="RouteNumber"/>; null with it.
+    /// </summary>
+    public string? RouteLine { get; set; }
     public Guid? RowId { get; set; }
     /// <summary>The pattern grid the hole was laid out on (<see cref="HolePattern"/>); null for a hole of its own.</summary>
     public Guid? PatternId { get; set; }

@@ -522,11 +522,11 @@ public sealed class MainWindow : Window
             VerticalContentAlignment = VerticalAlignment.Center,
             // on the line of the chips, not half way down the view cube beside them: there it covered the north arrow
             VerticalAlignment = VerticalAlignment.Top,
-            Name = "blastDirection"
+            Name = "northUp"
         };
-        ToolTip.SetTip(compass, Loc.Ui("Blast direction: click to set, double-click to reset the orientation"));
-        compass.Click += (_, _) => Ui.Safe(_vm.SetBlastOrientation);
-        compass.DoubleTapped += (_, _) => Ui.Safe(_vm.BlastView);
+        // turns the camera to the north; the blast direction is set in the pattern panel and by its command
+        ToolTip.SetTip(compass, Loc.Ui("Turn to north"));
+        compass.Click += (_, _) => { UsageLog.Track(UsageLog.Button, "Turn to north", "view"); Ui.Safe(_vm.ResetOrientation); };
         var top = new DockPanel { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12) };
         DockPanel.SetDock(compass, Dock.Right);
         top.Children.Add(compass);

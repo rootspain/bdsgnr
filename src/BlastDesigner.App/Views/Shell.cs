@@ -319,6 +319,15 @@ public sealed class RibbonBar : DockPanel
     /// <summary>Small buttons in a column of a ribbon group.</summary>
     public const int SmallsPerColumn = 3;
 
+    /// <summary>A name broken into two lines at the space nearest its middle; one word stays as it is.</summary>
+    public static string TwoLines(string text)
+    {
+        var best = -1;
+        for (int i = 0; i < text.Length; i++)
+            if (text[i] == ' ' && (best < 0 || Math.Abs(i - text.Length / 2.0) < Math.Abs(best - text.Length / 2.0))) best = i;
+        return best < 0 ? text : text[..best] + "\n" + text[(best + 1)..];
+    }
+
     private Button BigButton(RibbonItem it)
     {
         var stack = new StackPanel { Spacing = 3, HorizontalAlignment = HorizontalAlignment.Center };
@@ -327,7 +336,7 @@ public sealed class RibbonBar : DockPanel
         if (it.Lock != null || it.Drop != null)
             icon.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -2, -10, 0), Child = Look.Icon(it.Lock != null ? "lock" : "down", 11, Look.Faint, 2) });
         stack.Children.Add(icon);
-        stack.Children.Add(new TextBlock { Text = Loc.Ui(it.Label), FontSize = 11.5, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.NoWrap, Foreground = Look.Text });
+        stack.Children.Add(new TextBlock { Text = it.TwoLines ? TwoLines(Loc.Ui(it.Label)) : Loc.Ui(it.Label), FontSize = 11.5, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.NoWrap, Foreground = Look.Text, Name = "bigLabel" });
         if (it.Key != null) stack.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Center, Child = Look.Kbd(it.Key, 9) });
         var b = new Button
         {
@@ -1017,7 +1026,7 @@ public sealed class Inspector : DockPanel
         [HoleLabel.DeckSequence] = ("Deck sequence", "Plan and 3D: the firing order of the decks in the hole, top to bottom (\"2-1\" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes."),
         [HoleLabel.InholeDelay] = ("In-hole delay", "Plan and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time."),
         [HoleLabel.SurfaceTime] = ("Surface time", "Plan and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time."),
-        [HoleLabel.RouteNumber] = ("Route no.", "Plan and 3D: \"R\" and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted takes the numbers of the holes after it back."),
+        [HoleLabel.RouteNumber] = ("Route no.", "Plan and 3D: the letter of the chain (A the first, B the second…) and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted in the middle of a chain makes the holes after it a chain of the next letter, numbered from 1."),
         [HoleLabel.DetonatorId] = ("Detonator ID", "Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator."),
         [HoleLabel.HoleTime] = ("Hole time", "Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it."),
         [HoleLabel.Type] = ("Hole type", "Plan and 3D: \"T\" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.")

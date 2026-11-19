@@ -9,18 +9,18 @@ using BlastDesigner.IO;
 
 namespace BlastDesigner.App.Views;
 
-/// <summary>Choices of the DaveyTronic export: units of the delays and, for each line, the PU serial number and the chain of ties it takes.</summary>
+/// <summary>Choices of the DaveyTronic export: units of the delays (always milliseconds) and, for each line, the PU serial number and the chain of ties it takes.</summary>
 public sealed record BpdExportChoice(BpdDelayUnit Unit, BpdLevelOrder Levels, List<BpdPathRequest> Paths);
 
 /// <summary>
-/// "DaveyTronic (.BPD)": the delay units and one row per chain of ties of the plan (ties of one type joined end to end; one
+/// "DaveyTronic (.BPD)": the delays always in milliseconds; one row per chain of ties of the plan (ties of one type joined end to end; one
 /// type may make several chains); each row gives a line (PATH) its programming unit serial number and its chain. The first
-/// row is line A, the second B and so on. A chain of more than <see cref="DeviTronic.MaxTiesPerPath"/> ties is marked with a
+/// row's line is the letter of the route numbers of its holes (A, B… as the chains were tied), the rows in the order of the
+/// letters. A chain of more than <see cref="DeviTronic.MaxTiesPerPath"/> ties is marked with a
 /// yellow warning sign.
 /// </summary>
 public static class BpdExportWindow
 {
-    private static BpdDelayUnit _unit = BpdDelayUnit.Ms;
     private static BpdLevelOrder _levels = BpdLevelOrder.BottomFirst;
     // the serial numbers typed last, by chain (its first tie), for the next export in this session
     private static readonly Dictionary<string, string> Serials = new();
@@ -43,24 +43,22 @@ public static class BpdExportWindow
 
     public static async Task<BpdExportChoice?> Show(BlastProject project)
     {
-        var types = DeviTronic.Chains(project);
-        if (types.Count == 0)
+        var chains = DeviTronic.Chains(project);
+        if (chains.Count == 0)
         {
             await Dialogs.Info(Loc.T("There are no ties in the plan: the lines (PATH) are made by chains of ties."), Loc.T("DaveyTronic (.BPD)"));
             return null;
         }
-        var holeChains = DeviTronic.HoleChains(project, types);
+        var holeChains = DeviTronic.HoleChains(project, chains);
+        // the line of a chain is the letter of its route numbers; the rows go by the letters
+        var lineOf = DeviTronic.Lines(project, chains);
+        var order = Enumerable.Range(0, chains.Count).OrderBy(i => lineOf[i], StringComparer.Ordinal).ToList();
+        var types = order.Select(i => chains[i]).ToList();
+        var lines = order.Select(i => lineOf[i]).ToList();
         var typeNames = types.Select(c => Loc.F("{0}: holes {1}–{2}, {3} ties ({4} holes)", Loc.T(c.TieTypeName), c.FirstHole, c.LastHole, c.TieCount,
             holeChains.Values.Count(k => k == c.Key))).ToList();
-
-        // ---- delay units
-        var ms = new RadioButton { Content = Loc.T("ms"), GroupName = "bpdUnit", IsChecked = _unit == BpdDelayUnit.Ms, Name = "bpdUnitMs" };
-        var tenth = new RadioButton { Content = Loc.T("0.1 ms"), GroupName = "bpdUnit", IsChecked = _unit == BpdDelayUnit.TenthMs, Name = "bpdUnitTenth" };
-        var units = new StackPanel
-        {
-            Orientation = Orientation.Horizontal, Spacing = 16,
-            Children = { new TextBlock { Text = Loc.T("Delays in:"), VerticalAlignment = VerticalAlignment.Center, Foreground = Look.Muted, Width = 110 }, ms, tenth }
-        };
+        // the column shows the number of holes of the chain; the whole of it in the tooltip
+        var holeCounts = types.Select(c => holeChains.Values.Count(k => k == c.Key)).ToList();
 
         // ---- which detonator of a hole is LEVEL 1
         var top = new RadioButton { Content = Loc.T("Top detonator"), GroupName = "bpdLevel", IsChecked = _levels == BpdLevelOrder.TopFirst, Name = "bpdLevelTop" };
@@ -82,16 +80,16 @@ public static class BpdExportWindow
         }
         Head(Loc.T("Line"), 0);
         Head("PU Serial Number", 1);
-        Head(Loc.T("Chain of ties"), 2);
+        Head(Loc.T("Holes"), 2);
         var serialBoxes = new List<TextBox>();
         for (int i = 0; i < types.Count; i++)
         {
             grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            var id = new TextBlock { Text = ((char)('A' + i)).ToString(), FontFamily = Look.Mono, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
+            var id = new TextBlock { Text = lines[i], Name = "bpdLine" + i, FontFamily = Look.Mono, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Center };
             var serial = FormKit.Text(Serials.TryGetValue(types[i].Key, out var s) ? s : "");
             serial.FontFamily = Look.Mono;
             serial.Name = "bpdSerial" + i;
-            var type = new TextBlock { Text = typeNames[i], VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Look.Text, Name = "bpdChain" + i };
+            var type = new TextBlock { Text = holeCounts[i].ToString(CultureInfo.CurrentCulture), FontFamily = Look.Mono, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Foreground = Look.Text, Name = "bpdChain" + i };
             ToolTip.SetTip(type, typeNames[i]);
             Grid.SetRow(id, i + 1);
             Grid.SetRow(serial, i + 1); Grid.SetColumn(serial, 1);
@@ -115,7 +113,6 @@ public static class BpdExportWindow
             Spacing = 14, MinWidth = 520,
             Children =
             {
-                units,
                 levels,
                 FormKit.Section(Loc.T("Lines (PATH)"), new ScrollViewer { MaxHeight = 360, Content = grid }),
                 new TextBlock { Text = Loc.T("Each line takes the holes of its chain of ties. Holes are numbered along the ties in the order they were drawn."), FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap },
@@ -130,7 +127,7 @@ public static class BpdExportWindow
             {
                 var text = serialBoxes[i].Text?.Trim() ?? "";
                 if (text.Length == 0 || !long.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out _))
-                    msg = Loc.F("Line {0}: PU Serial Number must be a whole number.", (char)('A' + i));
+                    msg = Loc.F("Line {0}: PU Serial Number must be a whole number.", lines[i]);
             }
             error.Text = msg;
             error.IsVisible = msg != null;
@@ -139,7 +136,6 @@ public static class BpdExportWindow
 
         if (!await Dialogs.Custom("DaveyTronic (.BPD)", content, Validate, serialBoxes.FirstOrDefault(), width: 780)) return null;
 
-        _unit = tenth.IsChecked == true ? BpdDelayUnit.TenthMs : BpdDelayUnit.Ms;
         _levels = top.IsChecked == true ? BpdLevelOrder.TopFirst : BpdLevelOrder.BottomFirst;
         var paths = new List<BpdPathRequest>();
         for (int i = 0; i < types.Count; i++)
@@ -147,8 +143,8 @@ public static class BpdExportWindow
             var key = types[i].Key;
             var serial = serialBoxes[i].Text!.Trim();
             Serials[key] = serial;
-            paths.Add(new BpdPathRequest(key, serial));
+            paths.Add(new BpdPathRequest(key, serial, lines[i]));
         }
-        return new BpdExportChoice(_unit, _levels, paths);
+        return new BpdExportChoice(BpdDelayUnit.Ms, _levels, paths);
     }
 }

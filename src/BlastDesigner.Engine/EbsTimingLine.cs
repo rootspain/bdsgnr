@@ -77,6 +77,11 @@ public static class EbsTimingLine
     /// <summary>Raw (un-normalised) time of every point; values ≥ 1e30 in magnitude mean the point is out of reach.</summary>
     public static double[] RawTimes(IReadOnlyList<Vec3> line, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o, IReadOnlyList<Vec3> points, IReadOnlyList<Vec3>? advPoints = null)
     {
+        if ((o.Front == TimingFrontShape.Point || o.Style == TimingLineStyle.Point) && line.Count == 1)
+        {
+            if (data.Count < 1) throw new ArgumentException("A point front needs its timing values.");
+            return PointTimes(line[0], data[0], o, points);
+        }
         if (line.Count < 2) throw new ArgumentException("A timing line needs at least two points.");
         if (data.Count < line.Count - 1) throw new ArgumentException("Every segment needs timing values.");
         if (o.Style == TimingLineStyle.AdvancedBurn)
@@ -94,6 +99,28 @@ public static class EbsTimingLine
         }
         return LineTimes(line, data, o, points);
     }
+
+    /// <summary>
+    /// A point front: a hole's time is its distance in plan from the point times the delay, plus the progress as a contour line
+    /// adds it (<c>P · (d / 10)^e</c>): the delays go round the point in circles. In the reverse order
+    /// (<see cref="TimingLineOptions.ReverseOrder"/>) the farthest hole fires first and the times come back to the point.
+    /// </summary>
+    static double[] PointTimes(Vec3 at, TimingLineSegment data, TimingLineOptions o, IReadOnlyList<Vec3> points)
+    {
+        double exponent = Exponent(o.ProgressRate);
+        var t = points.Select(p =>
+        {
+            var d = Vec3.Distance2D(at, p);
+            var time = d * data.ReliefMsPerM;
+            if (o.UseProgressive && d > 1e-12) time += Prog(d, data.ProgressMs, exponent);
+            return time;
+        }).ToArray();
+        if (!o.ReverseOrder || t.Length == 0) return t;
+        var far = t.Max();
+        return t.Select(x => far - x).ToArray();
+    }
+
+    static double Exponent(int rate) => rate switch { 0 => 1.1, 1 => 1.2, 2 => 1.4, 3 => 1.6, _ => 2.0 };
 
     /// <summary>
     /// A chevron of the front tool of three points, of the "two fronts" type (as the tool makes it) or of the "front line" type
@@ -220,7 +247,7 @@ public static class EbsTimingLine
                 var itself = timer is EbsOpeningPoint && (!points.TryGetValue(timer.Id, out var was0) || was0 != nowPoints[timer.Id]);
                 if (!itself && !ids.Any(id => after.TryGetValue(id, out var now) && before.TryGetValue(id, out var was) && (now.On != was.On || (now.Point - was.Point).Length > 1e-9))) continue;
                 var holes = project.Holes.Where(h => ids.Contains(h.Id) && !h.IsDummy).ToList();
-                if (timer is TimingLineEntity line && line.Points.Count >= 2 && line.Segments.Count >= line.Points.Count - 1) Apply(project, holes, line);
+                if (timer is TimingLineEntity line && Timable(line)) Apply(project, holes, line);
                 else if (timer is EbsOpeningPoint op) EbsOpening.Apply(project, holes, op);
             }
         };
@@ -235,6 +262,10 @@ public static class EbsTimingLine
             return p.Holes.Where(h => ids.Contains(h.Id)).ToDictionary(h => h.Id, h => (TimingPoint(p, h), Charging.HasElectronicDetonator(p, h)));
         }
     }
+
+    /// <summary>A line that can time its holes: two points or more with values for every segment, or a point front with its values.</summary>
+    public static bool Timable(TimingLineEntity line) =>
+        line.IsPoint() ? line.Segments.Count >= 1 : line.Points.Count >= 2 && line.Segments.Count >= line.Points.Count - 1;
 
     /// <summary>Builds the timing line object kept in the project from the picked points and the chosen values.</summary>
     public static TimingLineEntity CreateEntity(IReadOnlyList<Vec3> points, IReadOnlyList<TimingLineSegment> data, TimingLineOptions o) => new()
@@ -337,7 +368,7 @@ public static class EbsTimingLine
             else testPts[2] = new Vec3(0, 0, -1);
         }
 
-        double exponent = o.ProgressRate switch { 0 => 1.1, 1 => 1.2, 2 => 1.4, 3 => 1.6, _ => 2.0 };
+        double exponent = Exponent(o.ProgressRate);
         var result = new double[points.Count];
         for (int p = 0; p < points.Count; p++)
             result[p] = o.Style == TimingLineStyle.TimeLine ? ContourTime(points[p]) : BurnTime(points[p]);

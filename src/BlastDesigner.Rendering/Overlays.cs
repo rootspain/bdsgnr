@@ -15,6 +15,9 @@ public sealed class PreviewOverlay : IOverlay
     /// <summary>Radius of the <see cref="Points"/>, px; a tool may draw them larger, to be clicked.</summary>
     public float PointRadius { get; set; } = DefaultPointRadius;
     public const float DefaultPointRadius = 4;
+    /// <summary>Width of the <see cref="Lines"/>, px; a tool may draw them thicker.</summary>
+    public float LineWidth { get; set; } = DefaultLineWidth;
+    public const float DefaultLineWidth = 1.5f;
     /// <summary>A point of <see cref="Points"/> under the cursor, drawn larger still: a click on it does something.</summary>
     public Vec3? HotPoint { get; set; }
     public List<(Vec3 Point, string Text)> Labels { get; } = new();
@@ -49,6 +52,7 @@ public sealed class PreviewOverlay : IOverlay
         Guides.Clear();
         Points.Clear();
         PointRadius = DefaultPointRadius;
+        LineWidth = DefaultLineWidth;
         HotPoint = null;
         Labels.Clear();
         Markers.Clear();
@@ -71,7 +75,9 @@ public sealed class PreviewOverlay : IOverlay
 
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
-        using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, PathEffect = SKPathEffect.CreateDash(new[] { 5f, 3f }, 0) };
+        // the dashes grow with the width of the line, so a thick one still reads as dashed
+        var dash = Math.Max(1, LineWidth / DefaultLineWidth);
+        using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = LineWidth, PathEffect = SKPathEffect.CreateDash(new[] { 5f * dash, 3f * dash }, 0) };
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var text = new SKPaint { IsAntialias = true, TextSize = 12, Color = PlanRenderer.DarkMode ? new SKColor(0xFFDBE7FF) : new SKColor(0xFF1D4ED8) };
         foreach (var (pts, closed, col) in Lines)
@@ -79,6 +85,7 @@ public sealed class PreviewOverlay : IOverlay
             stroke.Color = PlanRenderer.Adapt(col);
             PlanRenderer.DrawPolyline(c, cam, pts, closed, stroke);
         }
+        stroke.PathEffect = SKPathEffect.CreateDash(new[] { 5f, 3f }, 0);
         stroke.StrokeWidth = 0.75f;
         foreach (var (pts, col) in Guides)
         {
@@ -197,7 +204,7 @@ public sealed class VertexGripsOverlay : IOverlay
 /// Circles of the selected fronts (<see cref="TimingLineEntity.HasHandles"/>). A chevron: the vertex in the accent colour
 /// (drag to turn the front), the two ends of the base in the colour of the line (drag to change the angle and the length).
 /// A line: its two ends in its colour (drag to move one). A chevron opened into a straight line: only its ends, which move
-/// as a line's; no vertex circle, it is not turned by its vertex.
+/// as a line's; no vertex circle, it is not turned by its vertex. A point front: one circle on its point (drag to move it).
 /// While one is dragged the front is drawn as it will be.
 /// </summary>
 public sealed class FrontLineHandlesOverlay : IOverlay
@@ -220,9 +227,15 @@ public sealed class FrontLineHandlesOverlay : IOverlay
     /// <summary>The label in the middle of a straight front as <see cref="Hot"/>: a press on it converts the front to a chevron.</summary>
     public const int LabelHandle = -1;
 
+    /// <summary>Radius of the circles of a front, px: larger than the grips of other lines, as its line is thicker.</summary>
+    public const float Radius = 7.5f;
+    /// <summary>How near to the centre of a circle a press takes it, px.</summary>
+    public const double Reach = 10;
+
     /// <summary>The circles a front shows, by index of its points: the vertex first on a chevron, none on a straight one.</summary>
     public static int[] Circles(TimingLineEntity line, IReadOnlyList<Vec3> points) =>
-        line.Front == TimingFrontShape.Line ? new[] { 0, 1 }
+        points.Count == 1 ? new[] { 0 }
+        : line.Front == TimingFrontShape.Line ? new[] { 0, 1 }
         : Chevron.IsStraight(points) ? new[] { 0, 2 }
         : new[] { 1, 0, 2 };
 
@@ -267,7 +280,7 @@ public sealed class FrontLineHandlesOverlay : IOverlay
             foreach (var i in Circles(l, points))
             {
                 var (x, y) = cam.ToScreen(points[i]);
-                var r = (Hot is { } hot && hot.Line == l.Id && hot.Handle == i ? VertexGripsOverlay.Radius + 2 : VertexGripsOverlay.Radius) + 1;
+                var r = Hot is { } hot && hot.Line == l.Id && hot.Handle == i ? Radius + 2 : Radius;
                 fill.Color = l.Front == TimingFrontShape.Chevron && i == 1 ? _accent() : PlanRenderer.TimingLineColor(l);
                 c.DrawCircle(x, y, r, fill);
                 c.DrawCircle(x, y, r, edge);
@@ -796,6 +809,8 @@ public sealed class TimingLinePreviewOverlay : IOverlay
             }
             text.TextSize = 11;
         }
+        // a point front: its ring, no A and B (the window says from the point or to it)
+        if (Line.Points.Count == 1) { PlanRenderer.DrawTimingLine(c, cam, Line, null, text); return; }
         if (Line.Points.Count < 2) return;
         PlanRenderer.DrawTimingLine(c, cam, Line, null, text);
         // A and B in the order the line is walked, so the direction switch is visible on the plan.

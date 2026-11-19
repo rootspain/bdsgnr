@@ -14,7 +14,9 @@ namespace BlastDesigner.App.Tools;
 /// <summary>
 /// Circles of the selected fronts, shared by the front tool and the Select tool. On a chevron the vertex circle turns the
 /// front about its centre, a circle at the base changes its angle and length (the other end mirrors it); on a line a circle
-/// moves its end. The front is changed, and its holes reprogrammed, in one undo step when the button is released; Esc drops
+/// moves its end; on a point front the circle moves the point. An end put onto the other end of a line (within the pick
+/// radius) leaves one point: a point front; an end of a chevron put onto its vertex drops that segment, a straight line of
+/// the other one is left (<see cref="Chevron.DropSegment"/>). The front is changed, and its holes reprogrammed, in one undo step when the button is released; Esc drops
 /// the drag.
 /// </summary>
 public sealed class FrontLineHandles : ISelectGesture
@@ -56,7 +58,7 @@ public sealed class FrontLineHandles : ISelectGesture
     public (TimingLineEntity Line, int Handle)? HandleAt(double sx, double sy)
     {
         (TimingLineEntity, int)? best = null;
-        var bestD = VertexGripsOverlay.Reach + 1;
+        var bestD = FrontLineHandlesOverlay.Reach;
         foreach (var line in _vm.EditableFrontLines())
             foreach (var i in FrontLineHandlesOverlay.Circles(line, line.Points))
             {
@@ -105,9 +107,17 @@ public sealed class FrontLineHandles : ISelectGesture
         var cam = _vm.View.Camera;
         var pts = line.Points;
         preview.Labels.Clear();
-        if (line.Front == TimingFrontShape.Line)
+        _segments = null;
+        if (line.IsPoint())
+        {
+            // a point front: the point goes with the cursor
+            _shown = new List<Vec3> { cam.ToWorld(p.X, p.Y, pts[0].Z) };
+            preview.Labels.Add((_shown[0], Loc.T("Point")));
+        }
+        else if (line.Front == TimingFrontShape.Line)
         {
             var other = pts[1 - handle];
+            if (Near(p, other)) { Merged(line, handle, preview); return; }
             var end = cam.ToWorld(p.X, p.Y, pts[handle].Z);
             if (p.Modifiers.HasFlag(KeyModifiers.Shift)) end = FrontLineTool.Stepped(other, end);
             _shown = pts.ToList();
@@ -129,10 +139,19 @@ public sealed class FrontLineHandles : ISelectGesture
         {
             // a straight one: an end moves on its own as a line's does, the line stays straight, its vertex in its middle
             var other = pts[2 - handle];
+            if (Near(p, other)) { Merged(line, handle, preview); return; }
             var end = cam.ToWorld(p.X, p.Y, pts[1].Z);
             if (p.Modifiers.HasFlag(KeyModifiers.Shift)) end = FrontLineTool.Stepped(other, end);
             _shown = Chevron.MoveStraightEnd(pts, handle, end);
             preview.Labels.Add((_shown[handle], $"{Vec3.Distance2D(other, _shown[handle]):0.00} m · 180°"));
+        }
+        else if (Near(p, pts[1]))
+        {
+            // an end onto the vertex: its segment is gone, the straight line of the other one is left, with that one's delay
+            _shown = Chevron.DropSegment(pts, handle);
+            var kept = line.Segments.Count >= 2 ? line.Segments[handle == 0 ? 1 : 0] : line.Segments.FirstOrDefault() ?? new TimingLineSegment(0, line.BurdenReliefMsPerM, 0);
+            _segments = new List<TimingLineSegment> { kept, kept };
+            preview.Labels.Add((_shown[1], $"{kept.ReliefMsPerM:0.0} ms/m · {Vec3.Distance2D(_shown[0], _shown[2]):0.00} m · 180°"));
         }
         else
         {
@@ -148,6 +167,22 @@ public sealed class FrontLineHandles : ISelectGesture
         Overlay.Dragged = (shownLine, _shown);
     }
 
+    /// <summary>The pointer within the pick radius of <paramref name="point"/> on the screen: an end dropped there is put onto it.</summary>
+    private bool Near(ToolPointer p, Vec3 point)
+    {
+        var (x, y) = _vm.View.Camera.ToScreen(point);
+        return Math.Sqrt((x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y)) <= Math.Max(_vm.View.TargetRadius, FrontLineHandlesOverlay.Reach);
+    }
+
+    /// <summary>The end <paramref name="handle"/> of a line put onto its other end: one point is left, a point front.</summary>
+    private void Merged(TimingLineEntity line, int handle, PreviewOverlay preview)
+    {
+        _shown = Chevron.Merge(line.Points, handle);
+        _segments = line.Segments.Take(1).ToList();
+        preview.Labels.Add((_shown[0], Loc.T("Point")));
+        Overlay.Dragged = (line, _shown);
+    }
+
     /// <summary>Applies the drag (with undo, reprogramming the front's holes); a press without a drag changes nothing.</summary>
     public void Release(ToolPointer p)
     {
@@ -156,7 +191,7 @@ public sealed class FrontLineHandles : ISelectGesture
         var shown = _dragging ? _shown : null;
         var segments = _segments;
         Reset();
-        if (shown != null) _vm.SetTimingLinePoints(line.Id, shown, line.Front == TimingFrontShape.Chevron && handle == 1 ? "Rotate timing line" : "Reshape timing line", segments);
+        if (shown != null) _vm.SetTimingLinePoints(line.Id, shown, line.Front == TimingFrontShape.Chevron && handle == 1 && shown.Count == 3 ? "Rotate timing line" : line.IsPoint() ? "Move timing line" : "Reshape timing line", segments);
     }
 
     public void Cancel() => Reset();
@@ -194,7 +229,8 @@ public sealed class FrontLineHandles : ISelectGesture
 }
 
 /// <summary>
-/// Timing front tool, drawn by clicks. The first click puts the start of a line, the second its end. A click on that end
+/// Timing front tool, drawn by clicks. The first click puts the start of a line, the second its end. A second click on the
+/// start (or Enter after the start alone) finishes a point front, its delays going round the point. A click on the end
 /// (or Enter) finishes a line: its ends are put in the order that makes the times grow to the side of most holes. A click
 /// anywhere else puts the end of a second segment and finishes a chevron, its vertex at the end of the first line, its
 /// segments as long and at the angle they were clicked. Backspace takes the last point back, Esc drops the input.
@@ -206,7 +242,9 @@ public sealed class FrontLineTool : Tool
     private const double DragPx = 4;
     private const double DirectionStepDeg = 15;
     /// <summary>Radius of the vertices clicked, px: larger than the points of other tools, as the circles of a selected front.</summary>
-    public const float VertexRadius = 7;
+    public const float VertexRadius = 9;
+    /// <summary>Width of the line being drawn, px: near that of the front it makes (<see cref="PlanRenderer.TimingLineWidth"/>).</summary>
+    public const float LineWidth = 4;
 
     private readonly Action<List<Vec3>> _finish;
     private readonly FrontLineHandles _handles;
@@ -227,7 +265,7 @@ public sealed class FrontLineTool : Tool
 
     public override string Name => "Timing line";
     public override string Hint =>
-        "Click the start and the end of the line. A click on its end (or Enter) finishes a line; a click elsewhere draws a second segment and finishes a chevron, its vertex at the end of the line. Backspace takes the last point back, Esc drops the input. On a selected front drag a circle to change it, the line to move it.";
+        "Click the start and the end of the line. A click on the start again (or Enter after it) finishes a point; a click on the end (or Enter) finishes a line; a click elsewhere draws a second segment and finishes a chevron, its vertex at the end of the line. Backspace takes the last point back, Esc drops the input. On a selected front drag a circle to change it (an end onto the other end makes a point), the line to move it.";
 
     /// <summary>The points clicked of the front being drawn: none, its start, or the start and the end of its first line.</summary>
     public IReadOnlyList<Vec3> Points => _points;
@@ -280,7 +318,8 @@ public sealed class FrontLineTool : Tool
             UpdatePreview();
             return;
         }
-        // a click on the end of the first line finishes it as a line
+        // a click on the start again finishes a point; on the end of the first line, a line
+        if (_points.Count == 1 && OnPoint(p, _points[0])) { FinishPoint(); return; }
         if (_points.Count == 2 && OnEnd(p)) { FinishLine(); return; }
         var at = Next(p);
         // a point on the last one adds nothing: the shape needs a length
@@ -327,11 +366,11 @@ public sealed class FrontLineTool : Tool
         return base.KeyDown(key, mods);
     }
 
-    /// <summary>Enter: the start and the end clicked finish a line; with the start alone the input waits for its end.</summary>
+    /// <summary>Enter: the start and the end clicked finish a line; the start alone, a point front.</summary>
     public override bool FinishEntry()
     {
         if (_points.Count == 0) return false;
-        if (_points.Count == 1) { Vm.SetStatus(Loc.T("Click the end of the line")); return true; }
+        if (_points.Count == 1) { FinishPoint(); return true; }
         FinishLine();
         return true;
     }
@@ -355,11 +394,17 @@ public sealed class FrontLineTool : Tool
     }
 
     /// <summary>The pointer on the end of the first line, within the pick radius on the screen.</summary>
-    private bool OnEnd(ToolPointer p)
+    private bool OnEnd(ToolPointer p) => OnPoint(p, _points[1]);
+
+    /// <summary>The pointer on <paramref name="point"/>, within the pick radius on the screen.</summary>
+    private bool OnPoint(ToolPointer p, Vec3 point)
     {
-        var (x, y) = View.Camera.ToScreen(_points[1]);
-        return Math.Sqrt((x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y)) <= Math.Max(View.TargetRadius, VertexGripsOverlay.Reach);
+        var (x, y) = View.Camera.ToScreen(point);
+        return Math.Sqrt((x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y)) <= Math.Max(View.TargetRadius, FrontLineHandlesOverlay.Reach);
     }
+
+    /// <summary>A point front: the start clicked, alone.</summary>
+    private void FinishPoint() => Finish(new List<Vec3> { _points[0] });
 
     /// <summary>A line: its ends in order toward most of the holes (the selected ones, or all).</summary>
     private void FinishLine()
@@ -395,7 +440,12 @@ public sealed class FrontLineTool : Tool
         if (shown.Count > 1) Preview.Lines.Add((shown, false, PreviewColor));
         // the vertices large enough to be clicked: the end of the line larger still under the cursor, where a click finishes it
         Preview.PointRadius = VertexRadius;
-        Preview.HotPoint = _points.Count == 2 && _cursor is { } over && OnEnd(over) ? _points[1] : null;
+        Preview.LineWidth = LineWidth;
+        // the start under the cursor while it is alone: a click there finishes a point
+        Preview.HotPoint = _cursor is not { } over ? null
+            : _points.Count == 2 && OnEnd(over) ? _points[1]
+            : _points.Count == 1 && OnPoint(over, _points[0]) ? _points[0]
+            : null;
         foreach (var q in _points) Preview.Points.Add((q, PreviewColor));
         if (shown.Count < 2) return;
         var from = shown[^2];

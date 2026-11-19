@@ -35,8 +35,11 @@ public sealed record BpdChain(string Key, string TieTypeKey, string TieTypeName,
     public int TieCount => Ties.Count;
 }
 
-/// <summary>One line of a BPD plan: a chain of ties, programmed by one programming unit (PU).</summary>
-public sealed record BpdPathRequest(string ChainKey, string PuSerialNumber);
+/// <summary>
+/// One line of a BPD plan: a chain of ties, programmed by one programming unit (PU); <paramref name="Line"/> its ID (A–Z), by
+/// default the next one free in the order of the requests.
+/// </summary>
+public sealed record BpdPathRequest(string ChainKey, string PuSerialNumber, string? Line = null);
 
 public sealed record BpdDetonator(int OrderNumber, int Level, long Delay);
 
@@ -168,6 +171,39 @@ public static class DeviTronic
 
     public static string ChainName(BpdChain c) => $"{c.TieTypeName}: {c.FirstHole}–{c.LastHole}, {c.TieCount}";
 
+    /// <summary>A line ID a BPD file takes: one letter A–Z.</summary>
+    static bool IsLine(string? s) => s is { Length: 1 } && s[0] is >= 'A' and <= 'Z';
+
+    /// <summary>
+    /// The line (A–Z) of each chain, in the order of <paramref name="chains"/>: the letter of the route numbers of its holes
+    /// (<see cref="Hole.RouteLine"/>, the one most of them have); a chain without one, or whose letter an earlier chain
+    /// took, the first letter no chain has.
+    /// </summary>
+    public static List<string> Lines(BlastProject project, IReadOnlyList<BpdChain> chains)
+    {
+        var holes = project.Holes.ToDictionary(h => h.Id);
+        var own = chains.Select(c => c.Ties.SelectMany(t => new[] { t.FromId, t.ToId }).Distinct()
+            .Select(id => holes.TryGetValue(id, out var h) && h.RouteNumber != null ? h.RouteLine : null)
+            .Where(IsLine).GroupBy(l => l!).OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal).FirstOrDefault()?.Key).ToList();
+        return Free(own);
+    }
+
+    /// <summary>Each wanted letter where it is one and not taken before; the rest the first letters not wanted nor taken.</summary>
+    static List<string> Free(IReadOnlyList<string?> wanted)
+    {
+        var taken = new HashSet<string>();
+        var lines = wanted.Select(w => IsLine(w) && taken.Add(w!) ? w : null).ToList();
+        var next = 0;
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (lines[i] != null) continue;
+            while (next < 26 && taken.Contains(((char)('A' + next)).ToString())) next++;
+            lines[i] = next < 26 ? ((char)('A' + next)).ToString() : "?";
+            taken.Add(lines[i]!);
+        }
+        return lines!;
+    }
+
     // ---- building the plan ------------------------------------------------------------------
 
     /// <summary>
@@ -206,10 +242,11 @@ public static class DeviTronic
         var other = chosen.Where(h => chainOf.TryGetValue(h.Id, out var k) && !keys.Contains(k) && HasElectronic(project, h)).Select(h => h.Id).ToList();
         if (other.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) are on a chain not chosen for any line and are not written.", other.Count) { Holes = other });
 
+        var ids = Free(paths.Select(p => p.Line).ToList());
         for (int i = 0; i < paths.Count && i < 26; i++)
         {
             var req = paths[i];
-            var id = ((char)('A' + i)).ToString();
+            var id = ids[i];
             if (!long.TryParse(req.PuSerialNumber.Trim(), NumberStyles.None, Inv, out _))
                 errors.Add(new BpdMessage("Line {0}: PU Serial Number must be a whole number.", id));
             if (!byKey.TryGetValue(req.ChainKey, out var chain)) { errors.Add(new BpdMessage("Line {0}: the chain of ties is not in the plan.", id)); continue; }

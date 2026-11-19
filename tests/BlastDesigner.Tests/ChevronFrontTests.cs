@@ -253,7 +253,7 @@ public class ChevronFrontTests
     [Fact]
     public void OneShapeOneType_AFrontTakesTheShapeOfTheTypeChosen_APickedLineAnyType()
     {
-        var both = new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine };
+        var both = new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine, TimingLineStyle.Point };
         var front = new TimingLineEntity { Front = TimingFrontShape.Line, Points = { Apex + new Vec3(-10, 0, 0), Apex + new Vec3(10, 0, 0) }, Segments = { new(0, 6, 0) } };
         Assert.Equal(both, front.AllowedStyles());
         // a line front is a straight front: it can be converted to a chevron (its label, its context menu)
@@ -283,7 +283,7 @@ public class ChevronFrontTests
         bent.ShapeByType();
         Assert.Equal(was, bent.Points);
         var picked = new TimingLineEntity { Points = { Apex, Apex + new Vec3(10, 0, 0), Apex + new Vec3(10, 10, 0) } };
-        Assert.Equal(Enum.GetValues<TimingLineStyle>(), picked.AllowedStyles());
+        Assert.Equal(new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine, TimingLineStyle.AdvancedBurn }, picked.AllowedStyles());
     }
 
     [Fact]

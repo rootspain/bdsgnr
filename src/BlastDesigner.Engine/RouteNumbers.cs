@@ -6,7 +6,8 @@ namespace BlastDesigner.Engine;
 /// <summary>
 /// Route numbers of the holes with an electronic detonator (<see cref="Hole.RouteNumber"/>): the place of a hole in its
 /// chain of ties, in the order the ties were made. The first hole of a chain is 1, each hole tied from another the number
-/// of that one plus 1. A tie deleted takes the numbers of the holes after it back. A tie is made to a hole with an
+/// of that one plus 1. Each chain has its letter (<see cref="Hole.RouteLine"/>): A the first, B the second and so on. A tie
+/// deleted in the middle of a chain makes the holes after it a chain of their own, of the next letter, numbered from 1. A tie is made to a hole with an
 /// electronic detonator only where its chain starts: not into a hole a tie comes into already, and not one that would close
 /// the chain into a ring.
 /// </summary>
@@ -126,21 +127,31 @@ public static class RouteNumbers
             {
                 if (!Electronic(project, to, out var target)) continue;
                 int start;
+                string line;
                 if (Electronic(project, from, out var source))
                 {
                     if (source.RouteNumber is not int n)
                     {
                         // numbered by a tie still to come in this list: later
                         if (pass == 0 && pending.Any(t => t.To == from)) { waiting.Add((from, to)); continue; }
-                        // tied already to a numbered hole (its number lost to a tie deleted before): one more than it;
-                        // otherwise the start of a new chain
-                        source.RouteNumber = n = Before(project, source, made) + 1;
+                        // tied already to a numbered hole (its number lost to a tie deleted before): one more than it, on
+                        // its chain; otherwise the start of a new chain: the letter of the chain it is tied to the start
+                        // of, or the next one
+                        var (number, before) = Before(project, source, made);
+                        source.RouteNumber = n = number + 1;
+                        source.RouteLine = before ?? target.RouteLine ?? NextLine(project);
                     }
+                    line = source.RouteLine ??= target.RouteLine ?? NextLine(project);
                     start = n;
                 }
-                else start = 0;
+                else
+                {
+                    start = 0;
+                    line = target.RouteLine ?? NextLine(project);
+                }
                 var was = target.RouteNumber;
                 target.RouteNumber = start + 1;
+                target.RouteLine = line;
                 Shift(project, target, was, made);
             }
             pending = waiting;
@@ -148,16 +159,49 @@ public static class RouteNumbers
     }
 
     /// <summary>
-    /// The number of the hole before a hole without one in its chain: the largest number of a hole with an electronic
-    /// detonator tied to it (by a tie not just made); 0 when there is none.
+    /// The number and the letter of the hole before a hole without one in its chain: the largest number of a hole with an
+    /// electronic detonator tied to it (by a tie not just made); 0 and null when there is none.
     /// </summary>
-    static int Before(BlastProject project, Hole hole, HashSet<(Guid, Guid)> made)
+    static (int Number, string? Line) Before(BlastProject project, Hole hole, HashSet<(Guid, Guid)> made)
     {
-        var best = 0;
+        (int, string?) best = (0, null);
         foreach (var t in project.Ties.Where(t => (t.FromId == hole.Id || t.ToId == hole.Id) && !made.Contains((t.FromId, t.ToId))))
-            if (Electronic(project, t.FromId == hole.Id ? t.ToId : t.FromId, out var other) && other.RouteNumber is int m && m > best) best = m;
+            if (Electronic(project, t.FromId == hole.Id ? t.ToId : t.FromId, out var other) && other.RouteNumber is int m && m > best.Item1) best = (m, other.RouteLine);
         return best;
     }
+
+    /// <summary>The letter of a chain by its place: A, B … Z, then AA, AB and so on.</summary>
+    public static string LineName(int index) => index < 26 ? ((char)('A' + index)).ToString() : LineName(index / 26 - 1) + (char)('A' + index % 26);
+
+    /// <summary>The place of a chain letter (<see cref="LineName"/> back); -1 for none.</summary>
+    public static int LineIndex(string? line)
+    {
+        if (string.IsNullOrEmpty(line) || !line.All(c => c is >= 'A' and <= 'Z')) return -1;
+        var i = 0;
+        foreach (var c in line) i = i * 26 + (c - 'A' + 1);
+        return i - 1;
+    }
+
+    /// <summary>The letters of the chains of the project, A first.</summary>
+    public static List<string> Lines(BlastProject project) =>
+        project.Holes.Where(h => h.RouteNumber != null && h.RouteLine != null).Select(h => h.RouteLine!).Distinct()
+            .OrderBy(LineIndex).ThenBy(l => l, StringComparer.Ordinal).ToList();
+
+    /// <summary>
+    /// The chain of letter <paramref name="from"/> takes the letter <paramref name="to"/>, set by hand; the chain that had
+    /// <paramref name="to"/> takes <paramref name="from"/> (the two swap). The numbers stay.
+    /// </summary>
+    public static void SwapLine(BlastProject project, string from, string to)
+    {
+        if (from == to) return;
+        foreach (var h in project.Holes.Where(h => h.RouteNumber != null))
+            if (h.RouteLine == from) h.RouteLine = to;
+            else if (h.RouteLine == to) h.RouteLine = from;
+    }
+
+    /// <summary>The letter of a new chain: the one after the last letter of the chains of the project, A for the first.</summary>
+    public static string NextLine(BlastProject project) =>
+        LineName(project.Holes.Where(h => h.RouteNumber != null).Select(h => LineIndex(h.RouteLine)).DefaultIfEmpty(-1).Max() + 1);
 
     /// <summary>
     /// The holes after <paramref name="hole"/> in its chain, given its number before (<paramref name="was"/>), take the
@@ -182,16 +226,18 @@ public static class RouteNumbers
                 seen.Add(next.Id);
                 var nextWas = next.RouteNumber;
                 next.RouteNumber = n + 1;
+                next.RouteLine = h.RouteLine;
                 queue.Enqueue((next, nextWas));
             }
         }
     }
 
     /// <summary>
-    /// Before a change of the project: the ties and the numbers of their ends. After it, each tie gone (its two ends tied no
-    /// more) takes the number back from the end that came after the other in the chain (numbered one more than it, or the
-    /// first hole tied from an initiation point) and from every hole after it (tied to it, numbered one more, and so on).
-    /// The hole the tie came from keeps its number. Null without a numbered hole.
+    /// Before a change of the project: the ties and the numbers of their ends. After it, for each tie gone (its two ends tied
+    /// no more) the end that came after the other in the chain (numbered one more than it, or the first hole tied from an
+    /// initiation point) and every hole after it (tied to it, numbered one more, and so on) become a chain of their own: of
+    /// the next letter, numbered from 1, in the order of the chains and the numbers they had. A hole left with no tie at all
+    /// takes no number. The hole the tie came from keeps its number. Null without a numbered hole.
     /// </summary>
     public static Action? Follow(BlastProject project)
     {
@@ -201,6 +247,7 @@ public static class RouteNumbers
         return () =>
         {
             var now = project.Ties.Select(t => Pair(t.FromId, t.ToId)).ToHashSet();
+            var starts = new Dictionary<Guid, (Hole Hole, int Was)>();
             foreach (var (a, b) in before)
             {
                 if (now.Contains(Pair(a, b))) continue;
@@ -216,25 +263,39 @@ public static class RouteNumbers
                 else if (nb == 0 && na == 1) (later, was) = (a, 1);
                 else continue;
                 // if it is still there with the number it had
-                if (project.FindEntity(later) is Hole h && h.RouteNumber == was) Clear(project, h);
+                if (project.FindEntity(later) is Hole h && h.RouteNumber == was) starts.TryAdd(h.Id, (h, was));
+            }
+            // the parts, all found before a number changes: each ends at a tie gone
+            var parts = starts.Values.Select(s => (s.Hole, s.Was, Members: After(project, s.Hole)))
+                .OrderBy(s => LineIndex(s.Hole.RouteLine)).ThenBy(s => s.Was).ToList();
+            foreach (var (h, was, members) in parts)
+            {
+                if (members.Count == 1 && !project.Ties.Any(t => t.FromId == h.Id || t.ToId == h.Id)) { h.RouteNumber = null; h.RouteLine = null; continue; }
+                // the whole chain, cut from its initiation point: it stays as it is
+                if (was == 1) continue;
+                var line = NextLine(project);
+                foreach (var m in members) { m.RouteNumber -= was - 1; m.RouteLine = line; }
             }
         };
 
         static (Guid, Guid) Pair(Guid a, Guid b) => a.CompareTo(b) < 0 ? (a, b) : (b, a);
     }
 
-    /// <summary>Takes the number back from a hole and from the holes after it: tied to it either way, numbered one more.</summary>
-    static void Clear(BlastProject project, Hole hole)
+    /// <summary>A hole and the holes after it in its chain: tied to it either way, numbered one more, and so on.</summary>
+    static List<Hole> After(BlastProject project, Hole hole)
     {
+        var list = new List<Hole>();
+        var seen = new HashSet<Guid>();
         var stack = new Stack<Hole>();
         stack.Push(hole);
         while (stack.Count > 0)
         {
             var h = stack.Pop();
-            if (h.RouteNumber is not int n) continue;
-            h.RouteNumber = null;
+            if (h.RouteNumber is not int n || !seen.Add(h.Id)) continue;
+            list.Add(h);
             foreach (var t in project.Ties.Where(t => t.FromId == h.Id || t.ToId == h.Id))
                 if (project.FindEntity(t.FromId == h.Id ? t.ToId : t.FromId) is Hole next && next.RouteNumber == n + 1) stack.Push(next);
         }
+        return list;
     }
 }

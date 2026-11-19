@@ -1164,14 +1164,19 @@ public static class PlanRenderer
     /// <summary>Half the width of the label of a straight chevron, px (a delay of a few figures).</summary>
     private const double LabelHalfWidthPx = 13;
     /// <summary>The label is taken this far from the line and further, px: nearer is the line itself (its stroke and halo).</summary>
-    private const double LabelOffLinePx = 5;
+    private const double LabelOffLinePx = 6;
+
+    /// <summary>Radius of the ring of a point front, px.</summary>
+    public const float PointFrontRadius = 11;
+    /// <summary>Width of the line of a timing front on the plan, px: it stands out among the ties and the outlines.</summary>
+    public const float TimingLineWidth = 5;
 
     public static void DrawTimingLine(SKCanvas c, Camera cam, TimingLineEntity tl, SKColor? colorOverride, SKPaint text)
     {
         if (tl.Points.Count == 0) return;
         var color = colorOverride ?? TimingLineColor(tl);
-        using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3, Color = color };
-        using var thin = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = color };
+        using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = TimingLineWidth, Color = color };
+        using var thin = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, Color = color };
         var oldColor = text.Color;
         text.Color = color;
 
@@ -1214,7 +1219,17 @@ public static class PlanRenderer
             }
         }
 
-        if (tl.Style == TimingLineStyle.AdvancedBurn)
+        if (tl.Points.Count == 1)
+        {
+            // a point front (or a line whose ends are being put together): a ring with a cross, and its delay beside it
+            var (px, py) = cam.ToScreen(tl.Points[0]);
+            c.DrawCircle(px, py, PointFrontRadius, stroke);
+            c.DrawLine(px - PointFrontRadius - 4, py, px + PointFrontRadius + 4, py, thin);
+            c.DrawLine(px, py - PointFrontRadius - 4, px, py + PointFrontRadius + 4, thin);
+            var relief = tl.Segments.Count > 0 ? tl.Segments[0].ReliefMsPerM : 0;
+            c.DrawText($"{relief:0.0} {T("ms/m")}", px + PointFrontRadius + 6, py - PointFrontRadius - 2, text);
+        }
+        else if (tl.Style == TimingLineStyle.AdvancedBurn)
         {
             using (var red = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 3, Color = colorOverride ?? Adapt(SKColors.Red), PathEffect = SKPathEffect.CreateDash(new[] { 8f, 8f }, 0) })
                 DrawPolyline(c, cam, tl.Points, false, red);
@@ -1235,9 +1250,10 @@ public static class PlanRenderer
         else
         {
             var pts = tl.OrderedPoints;
-            DrawPolyline(c, cam, pts, false, stroke);
-            // a chevron opened into a straight line has one delay, the first segment's: one label, in its middle
+            // a chevron opened into a straight line is drawn as one: a single stroke end to end (a thick line through its
+            // vertex would join there otherwise), with one delay, the first segment's: one label, in its middle
             if (tl.Front == TimingFrontShape.Chevron && Chevron.IsStraight(tl.Points)) pts = new[] { pts[0], pts[^1] };
+            DrawPolyline(c, cam, pts, false, stroke);
             for (int i = 0; i < pts.Count - 1; i++)
             {
                 var relief = i < tl.Segments.Count ? tl.Segments[i].ReliefMsPerM : 0;
@@ -1856,7 +1872,7 @@ public static class PlanRenderer
             case HoleLabel.DeckSequence: if (DeckSequence(project, h) is string seq) yield return F("Decks: {0}", seq); break;
             case HoleLabel.Temperature: if (h.Temperature is double temp) yield return $"{temp:0} °C"; break;
             case HoleLabel.DetonatorId: if (!string.IsNullOrWhiteSpace(h.DetonatorId)) yield return h.DetonatorId; break;
-            case HoleLabel.RouteNumber: if (h.RouteNumber is int route) yield return F("R {0}", route); break;
+            case HoleLabel.RouteNumber: if (h.RouteNumber is int route) yield return h.RouteLine is string line ? $"{line} {route}" : route.ToString(); break;
             case HoleLabel.Type: yield return $"T{h.HoleType}"; break;
             case HoleLabel.HoleOrder: if (h.FiringSequence is int sequence) yield return sequence.ToString(); break;
             case HoleLabel.SurfaceTime: if (h.SurfaceTimeMs is double s) yield return $"{s:0}"; break;

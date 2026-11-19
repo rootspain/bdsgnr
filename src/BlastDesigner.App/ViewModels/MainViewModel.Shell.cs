@@ -11,7 +11,11 @@ namespace BlastDesigner.App.ViewModels;
 /// optionally a switch shown pressed while <paramref name="Checked"/> is true.
 /// </summary>
 public sealed record RibbonItem(string Label, string Icon, Action? Run, Func<bool>? Enabled = null, string? Key = null, bool Big = false,
-    Func<IEnumerable<MenuEntry>>? Drop = null, string? Lock = null, string? ToolName = null, Func<bool>? Checked = null);
+    Func<IEnumerable<MenuEntry>>? Drop = null, string? Lock = null, string? ToolName = null, Func<bool>? Checked = null)
+{
+    /// <summary>A big button whose name goes on two lines, broken at the space nearest its middle.</summary>
+    public bool TwoLines { get; init; }
+}
 
 public sealed record RibbonGroup(string Name, List<RibbonItem> Items);
 
@@ -57,12 +61,12 @@ public sealed partial class MainViewModel
     private Dictionary<string, (Action Action, string? Tool)> ToolbarIndex =>
         _toolbarIndex ??= BuildToolbars().SelectMany(g => g.Buttons).GroupBy(b => b.Tip).ToDictionary(g => g.Key, g => (g.First().Action, g.First().ToolName));
 
-    private RibbonItem M(string label, string icon, string path, string? key = null, bool big = false)
+    private RibbonItem M(string label, string icon, string path, string? key = null, bool big = false, bool twoLines = false)
     {
-        if (!CommandIndex.TryGetValue(path, out var e)) { MissingCommands.Add(path); return new RibbonItem(label, icon, null, () => false, key, big); }
+        if (!CommandIndex.TryGetValue(path, out var e)) { MissingCommands.Add(path); return new RibbonItem(label, icon, null, () => false, key, big) { TwoLines = twoLines }; }
         if (e.Children != null || e.Dynamic != null)
-            return new RibbonItem(label, icon, null, e.IsEnabled, key, big, () => e.Dynamic?.Invoke() ?? e.Children!);
-        return new RibbonItem(label, icon, e.Action, e.IsEnabled, key, big);
+            return new RibbonItem(label, icon, null, e.IsEnabled, key, big, () => e.Dynamic?.Invoke() ?? e.Children!) { TwoLines = twoLines };
+        return new RibbonItem(label, icon, e.Action, e.IsEnabled, key, big) { TwoLines = twoLines };
     }
 
     private RibbonItem Tb(string label, string icon, string tip, string? key = null, bool big = false)
@@ -142,12 +146,11 @@ public sealed partial class MainViewModel
         }),
         new Stage("Initiation", new()
         {
-            G("Display", new RibbonItem("Isolines", "iso", ToggleIsolines, () => HasProject, Big: true, Checked: () => IsolinesShown)),
             G("Tie-up", Tb("Ties", "tie", "Tie", "T", true), Tb("Initiation point", "star", "Lead-in", "I", true),
                 Tb("Dummy hole", "dummy", "Dummy hole"), M("Initiation catalogue", "palette", "Tools/Ties/Show palette"), M("Automatic tie-up", "auto", "Tools/Ties/Automatic tie-up…"),
                 M("Connect in order", "tie", "Tools/Ties/Connect selected holes in order"), M("Flip ties", "flip", "Tools/Ties/Flip selected ties"), M("Delete ties", "close", "Tools/Ties/Delete tie up")),
             G("Electronic", Tb("Time by click", "clock", "Set hole time", "E", true), Tb("Along row", "row", "Row set", big: true),
-                Tb("Timing line", "iso", "Timing line"), Tb("Opening point", "point", "Opening point"), Locked("V pattern", "vee"), Locked("Encoding sequence", "ebs"), Locked("i-kon loggers", "ebs")),
+                Tb("Timing line", "iso", "Timing line"), Tb("Opening point", "point", "Opening point")),
             G("Edit times", M("Shift time…", "clock", "Tools/Electronic timing/Add/Subtract time from holes…"), M("Scale intervals…", "optimize", "Tools/Electronic timing/Adjust intervals…"),
                 M("Constant step…", "optimize", "Tools/Electronic timing/Adjust increments of selected holes…"), M("Between horizons", "dup", "Tools/Electronic timing/Copy times between horizons…"),
                 M("Re-apply", "auto", "Tools/Electronic timing/Re-apply timing"), M("Deprogram", "empty", "Tools/Electronic timing/Deprogram holes")),
@@ -158,8 +161,8 @@ public sealed partial class MainViewModel
         }),
         new Stage("Analysis", new()
         {
-            G("Blast dynamics", M("Visualization", "play", "Calculations/Visualize timing", "Ctrl⇧V", true), M("Angle of initiation", "arrow", "Calculations/Angle of initiation"),
-                M("First movement", "arrow", "Calculations/First movement"), M("Burden relief", "chart", "Calculations/Burden relief"), M("Time envelope", "chart", "Calculations/Time envelope"),
+            G("Blast dynamics", M("Visualization", "play", "Calculations/Visualize timing", "Ctrl⇧V", true), M("Dynamics analysis", "arrow", "Calculations/Dynamics analysis", big: true, twoLines: true),
+                M("Time envelope", "chart", "Calculations/Time envelope"),
                 M("Charge vs time", "chart", "Calculations/Time envelope overview"), M("Clear analysis", "close", "View/Clear analysis display", "Esc")),
             G("Quality control", M("Bullseye", "exclusion", "View/Single hole view (bullseye)"), M("Exceptions", "eye", "View/Exceptions view"), M("Front row", "row", "View/Front row view"),
                 M("Row check", "row", "View/Row check view"), M("Burden check", "measure", "View/Burden check view"), M("Horizontal slice", "slice", "View/Horizontal slice"),

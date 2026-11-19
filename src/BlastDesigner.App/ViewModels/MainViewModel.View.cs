@@ -423,41 +423,23 @@ public sealed partial class MainViewModel
 
     public void VisualizeTiming() { if (Doc != null) AnalysisWindows.VisualizeTiming(this); }
 
-    /// <summary>The isolines of the firing times are on the plan (by the Isolines button or the Visualization window).</summary>
+    /// <summary>The isolines of the firing times are on the plan (by the Blast analysis or the Visualization window).</summary>
     public bool IsolinesShown => AnalysisOverlays.OfType<TimingContourOverlay>().Any(o => o.Contours);
 
-    /// <summary>The isolines the Isolines button put on the plan, told apart from those of the Visualization window.</summary>
-    private TimingContourOverlay? _isolines;
-
-    /// <summary>The Visualization window has its display on the plan (not the isolines of the Isolines button).</summary>
-    public bool VisualizationShown => AnalysisOverlays.OfType<TimingContourOverlay>().Any(o => o != _isolines && o != _analysisLayer);
+    /// <summary>The Visualization window has its display on the plan (not the isolines of the Blast analysis window).</summary>
+    public bool VisualizationShown => AnalysisOverlays.OfType<TimingContourOverlay>().Any(o => o != _analysisLayer);
 
     /// <summary>The layer the Blast analysis window put on the plan (its isolines are not those of the Visualization window).</summary>
     private IOverlay? _analysisLayer;
 
-    /// <summary>
-    /// The Isolines button: the isolines of the whole blast on the plan, at the interval of the Visualization window,
-    /// without the window, its animation or the colour by time; pressed again, they go.
-    /// </summary>
-    public void ToggleIsolines()
-    {
-        if (Project is not { } p) return;
-        Dialogs.CloseWindow("Visualization");
-        if (IsolinesShown) { ClearOverlays(); return; }
-        Timing.Solve(p);
-        if (!p.Holes.Any(h => h.FiringTimeMs.HasValue && !h.IsDummy))
-        {
-            _ = Dialogs.Info(Loc.T("No hole is initiated. Add an initiation point and ties, or electronic times."));
-            return;
-        }
-        ShowOverlay(_isolines = new TimingContourOverlay { IntervalMs = Settings.IsochroneIntervalMs, Contours = true, ColourHoles = false });
-    }
     /// <summary>The angle of initiation: opens the Blast analysis window on its tab.</summary>
     public void AngleOfInitiation() => BlastAnalysis(Rendering.BlastAnalysis.InitiationAngle);
     /// <summary>First movement: opens the Blast analysis window on its tab.</summary>
     public void FirstMovement() => BlastAnalysis(Rendering.BlastAnalysis.FirstMovement);
     /// <summary>Burden relief: opens the Blast analysis window on its tab.</summary>
     public void BurdenRelief() => BlastAnalysis(Rendering.BlastAnalysis.BurdenRelief);
+    /// <summary>The Dynamics analysis button: the Blast analysis window on the tab last open.</summary>
+    public void DynamicsAnalysis() { if (Doc != null) AnalysisWindows.BlastAnalysisWindow(this); }
     private void BlastAnalysis(Rendering.BlastAnalysis tab) { if (Doc != null) AnalysisWindows.BlastAnalysisWindow(this, tab); }
 
     /// <summary>

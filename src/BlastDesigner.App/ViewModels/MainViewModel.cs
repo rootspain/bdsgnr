@@ -443,7 +443,7 @@ public sealed partial class MainViewModel : ObservableObject
     internal static List<Guid> HolesTimedBy(BlastProject p, TimingLineEntity line)
     {
         var holes = p.Holes.Where(h => !h.IsDummy && h.ElectronicTimeMs.HasValue && !h.ElectronicTimeManual).ToList();
-        if (holes.Count == 0 || line.Points.Count < 2) return new();
+        if (holes.Count == 0 || !EbsTimingLine.Timable(line)) return new();
         var planned = EbsTimingLine.Plan(p, holes, line.Points, line.Segments, EbsTimingLine.OptionsOf(line), double.MaxValue, p.Electronic.AllowSubMs).Times;
         var shifts = holes.Where(h => planned.ContainsKey(h.Id)).Select(h => (h.Id, D: h.ElectronicTimeMs!.Value - planned[h.Id])).ToList();
         if (shifts.Count == 0) return new();

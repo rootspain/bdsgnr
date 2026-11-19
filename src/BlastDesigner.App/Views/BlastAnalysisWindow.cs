@@ -71,18 +71,19 @@ public static partial class AnalysisWindows
     /// firing times (at the interval of the Visualization window, without the colour by time), each on a tab, over
     /// one plan of its own (its view kept from tab to tab). It leaves the main window and the other windows free. Its
     /// switch puts the analysis of the open tab on the main plan; Clear analysis takes it off and turns the switch off.
-    /// Opened again, it only comes forward on the tab asked for.
+    /// Opened again, it only comes forward on the tab asked for. Without a tab (the Dynamics analysis button) it opens on the
+    /// tab last open, and comes forward as it is.
     /// </summary>
-    public static void BlastAnalysisWindow(MainViewModel vm, BlastAnalysis tab)
+    public static void BlastAnalysisWindow(MainViewModel vm, BlastAnalysis? tab = null)
     {
         if (Dialogs.ActivateExisting(BlastAnalysisTitle))
         {
-            _analysisSelect?.Invoke(tab);
+            if (tab is { } asked) _analysisSelect?.Invoke(asked);
             return;
         }
         var p = vm.Project!;
         Timing.Solve(p);
-        _analysisTab = tab;
+        _analysisTab = tab ?? _analysisTab;
 
         // the layers of the window, and the same of the main plan in its own style: line arrows, no second legend
         var arrows = new FirstMovementOverlay { ArrowSize = _firstMovementArrowSize };
@@ -333,7 +334,7 @@ public static partial class AnalysisWindows
             view.Redraw();
             vm.View.Redraw();
         };
-        Select(tab);
+        Select(_analysisTab);
         _analysisSelect = Select;
 
         var dock = new DockPanel { Background = Look.Ground };

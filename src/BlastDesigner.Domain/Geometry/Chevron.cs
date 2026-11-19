@@ -172,6 +172,30 @@ public static class Chevron
         return line;
     }
 
+    /// <summary>
+    /// A chevron with end <paramref name="end"/> (0 or 2) put onto its vertex: that segment is gone, and the front is the
+    /// straight line of the other one, its vertex in the middle (as <see cref="Straighten"/> leaves one), walked the way the
+    /// chevron was (point 0 to point 2), so its later side stays the one that segment had.
+    /// </summary>
+    public static List<Vec3> DropSegment(IReadOnlyList<Vec3> points, int end)
+    {
+        var apex = points[1];
+        var far = points[2 - end];
+        var a = end == 0 ? apex : new Vec3(far.X, far.Y, apex.Z);
+        var b = end == 0 ? new Vec3(far.X, far.Y, apex.Z) : apex;
+        return new List<Vec3> { a, new((a.X + b.X) / 2, (a.Y + b.Y) / 2, apex.Z), b };
+    }
+
+    /// <summary>
+    /// A straight front (or a line of two points) with end <paramref name="end"/> put onto the other end: one point is left,
+    /// the end that stayed, at the elevation of the front (a point front).
+    /// </summary>
+    public static List<Vec3> Merge(IReadOnlyList<Vec3> points, int end)
+    {
+        var stays = points[points.Count - 1 - end];
+        return new List<Vec3> { new(stays.X, stays.Y, points[points.Count == 3 ? 1 : 0].Z) };
+    }
+
     static Vec3 Turn(Vec3 v, double a)
     {
         var (s, c) = Math.SinCos(a);

@@ -187,4 +187,35 @@ public class DeviTronicTests
         var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest("chain:x", "1"), new BpdPathRequest("chain:x", "2") }, BpdDelayUnit.Ms, "t");
         Assert.NotEmpty(r.Errors);
     }
+
+    [Fact]
+    public void TheLineOfAChainIsTheLetterOfItsRouteNumbers_InTheFileToo()
+    {
+        var p = BlastProject.CreateNew();
+        var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
+        Hole H(int x, string line, int number)
+        {
+            var h = new Hole { Label = "h" + x, Collar = new Vec3(x, 0, 100), ElectronicTimeMs = x, RouteLine = line, RouteNumber = number };
+            h.Decks.Add(new Deck { Top = 3, Bottom = 10, Primers = { new Primer { Depth = 9, DetonatorId = edet.Id } } });
+            p.Entities.Add(h);
+            return h;
+        }
+        // chain B drawn first, then chain A, then a chain whose holes have no letter
+        var b1 = H(0, "B", 1); var b2 = H(5, "B", 2);
+        var a1 = H(20, "A", 1); var a2 = H(25, "A", 2);
+        var x1 = H(40, null!, 0); var x2 = H(45, null!, 0);
+        x1.RouteNumber = x2.RouteNumber = null;
+        p.Entities.Add(new TieEntity { FromId = b1.Id, ToId = b2.Id, ProductId = "w" });
+        p.Entities.Add(new TieEntity { FromId = a1.Id, ToId = a2.Id, ProductId = "w" });
+        p.Entities.Add(new TieEntity { FromId = x1.Id, ToId = x2.Id, ProductId = "w" });
+        var chains = DeviTronic.Chains(p);
+        Assert.Equal(new[] { "B", "A", "C" }, DeviTronic.Lines(p, chains));
+        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1", "B"), new BpdPathRequest(chains[1].Key, "2", "A") }, BpdDelayUnit.Ms, "t");
+        Assert.Empty(r.Errors);
+        Assert.Equal(new[] { "B", "A" }, r.Plan.Paths.Select(x => x.Id));
+        Assert.Equal("B0001", r.Plan.Paths[0].Holes[0].HoleId);
+        // without a line, or with one taken, the next free one
+        var d = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1", "A"), new BpdPathRequest(chains[1].Key, "2", "A") }, BpdDelayUnit.Ms, "t");
+        Assert.Equal(new[] { "A", "B" }, d.Plan.Paths.Select(x => x.Id));
+    }
 }

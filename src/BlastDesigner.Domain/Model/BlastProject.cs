@@ -544,7 +544,7 @@ public sealed class ViewState
     public bool CollarsOnly { get; set; } = true;
     public bool ReverseDrawOrder { get; set; }
     public bool ShowLoading { get; set; } = true;
-    public HoleLabelMode HoleLabels { get; set; } = HoleLabelMode.Label;
+    public HoleLabelMode HoleLabels { get; set; } = HoleLabelMode.Label | HoleLabelMode.RouteNumber;
     /// <summary>Font size of the hole labels on the plan and in 3D, px; a file before it reads the default.</summary>
     public int HoleLabelFontSize { get; set; } = DefaultHoleLabelFontSize;
     public const int DefaultHoleLabelFontSize = 12, MinHoleLabelFontSize = 6, MaxHoleLabelFontSize = 40;

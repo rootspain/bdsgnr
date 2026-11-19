@@ -11,7 +11,12 @@ public enum TimingLineStyle
     /// <summary>Burn line: the signal burns along the line (burn rate) and spreads sideways (relief).</summary>
     BurnLine,
     /// <summary>Advanced burn: one relief along the line, sideways relief = relief × tan(angle) per side.</summary>
-    AdvancedBurn
+    AdvancedBurn,
+    /// <summary>
+    /// A point front (<see cref="TimingFrontShape.Point"/>): the time grows with the distance from the point. The type of the
+    /// shape, as "front line" is the type of a straight front and "two fronts" of a chevron.
+    /// </summary>
+    Point
 }
 
 /// <summary>Shape a line was drawn with by the front tool.</summary>
@@ -22,7 +27,12 @@ public enum TimingFrontShape
     /// <summary>One segment: the times grow from it to one side, the holes at one distance from it fire together.</summary>
     Line,
     /// <summary>Two segments meeting at a vertex, see <see cref="Geometry.Chevron"/>.</summary>
-    Chevron
+    Chevron,
+    /// <summary>
+    /// One point: the times grow from it every way, by the distance in plan, the holes on one circle about it fire together.
+    /// The ends of a line put together make it.
+    /// </summary>
+    Point
 }
 
 /// <summary>
@@ -88,7 +98,7 @@ public sealed record TimingLineSegment(double BurnRateMsPerM, double ReliefMsPer
 /// Electronic timing line kept in the project: up to four points, the timing
 /// values of each segment and the options it programmed the holes with. Points keep the elevation they were picked at.
 /// A front drawn as a line (<see cref="Front"/>) has two points, one drawn as a chevron three: <c>[left end, vertex, right end]</c>,
-/// see <see cref="Geometry.Chevron"/>.
+/// see <see cref="Geometry.Chevron"/>; a point front one point and one segment of values (its delay and progress).
 /// </summary>
 public sealed class TimingLineEntity : Entity, IHoleTimer
 {
@@ -138,6 +148,36 @@ public sealed class TimingLineEntity : Entity, IHoleTimer
             SetSegmentRelief(0, value);
             SetSegmentRelief(1, value);
         }
+    }
+
+    /// <summary>
+    /// The delay of a point front, ms/m: the time grows by it every metre from the point. The properties panel shows it for a
+    /// point front; 0 for any other line.
+    /// </summary>
+    [JsonIgnore]
+    public double PointReliefMsPerM
+    {
+        get => IsPoint() && Segments.Count > 0 ? Segments[0].ReliefMsPerM : 0;
+        set
+        {
+            if (!IsPoint() || Segments.Count == 0 || double.IsNaN(value) || double.IsInfinity(value) || value < 0) return;
+            Segments[0] = Segments[0] with { ReliefMsPerM = value };
+        }
+    }
+
+    /// <summary>A point front of one point (<see cref="TimingFrontShape.Point"/>). A method, so the properties panel shows no field.</summary>
+    public bool IsPoint() => Front == TimingFrontShape.Point && Points.Count == 1;
+
+    /// <summary>
+    /// The shape follows its points: one point left (the ends of a line put together) makes a point front, with the values of
+    /// the first segment, of the point type. Any other line stays as it is.
+    /// </summary>
+    public void PointByPoints()
+    {
+        if (Points.Count != 1 || Front is not (TimingFrontShape.Line or TimingFrontShape.Chevron or TimingFrontShape.Point)) return;
+        Front = TimingFrontShape.Point;
+        Style = TimingLineStyle.Point;
+        if (Segments.Count > 1) Segments = Segments.Take(1).ToList();
     }
 
     private double SegmentRelief(int seg) => ChevronOfThree && Segments.Count > seg ? Segments[seg].ReliefMsPerM : 0;
@@ -192,9 +232,9 @@ public sealed class TimingLineEntity : Entity, IHoleTimer
         set { if (value) Front = TimingFrontShape.Chevron; }
     }
 
-    /// <summary>The shape is changed by its circles: a chevron of three points, a line of two.</summary>
+    /// <summary>The shape is changed by its circles: a chevron of three points, a line of two, a point front of one.</summary>
     [JsonIgnore]
-    public bool HasHandles => (Front == TimingFrontShape.Chevron && Points.Count == 3) || (Front == TimingFrontShape.Line && Points.Count == 2);
+    public bool HasHandles => (Front == TimingFrontShape.Chevron && Points.Count == 3) || (Front == TimingFrontShape.Line && Points.Count == 2) || IsPoint();
 
     private bool ChevronOfThree => Front == TimingFrontShape.Chevron && Points.Count == 3;
 
@@ -226,22 +266,51 @@ public sealed class TimingLineEntity : Entity, IHoleTimer
     public bool TimedAsChevron() => Front == TimingFrontShape.Chevron && Points.Count == 3 && Style is TimingLineStyle.TimeLine or TimingLineStyle.BurnLine;
 
     /// <summary>
-    /// The types a line can take, one to a shape: a front of the front tool is a front line (straight) or two fronts (a
-    /// chevron), and taking the other type it takes the other shape (<see cref="ShapeByType"/>). A line picked point by point
-    /// (older files) takes any. A method, so the properties panel shows no field.
+    /// The types a line can take, one to a shape: a front of the front tool is a front line (straight), two fronts (a
+    /// chevron) or a point, and taking another type it takes that shape (<see cref="ShapeByType"/>). A line picked point by
+    /// point (older files) takes any type of a line, not the point. A method, so the properties panel shows no field.
     /// </summary>
-    public TimingLineStyle[] AllowedStyles() => Front is TimingFrontShape.Line or TimingFrontShape.Chevron
-        ? new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine }
-        : Enum.GetValues<TimingLineStyle>();
+    public TimingLineStyle[] AllowedStyles() => Front is TimingFrontShape.Line or TimingFrontShape.Chevron or TimingFrontShape.Point
+        ? new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine, TimingLineStyle.Point }
+        : new[] { TimingLineStyle.TimeLine, TimingLineStyle.BurnLine, TimingLineStyle.AdvancedBurn };
+
+    /// <summary>Length of a segment of a front made from a point (<see cref="ShapeByType"/>), m.</summary>
+    public const double FromPointLength = 10;
 
     /// <summary>
     /// A front takes the shape of its type (the type changed in the properties panel): two fronts, a straight one (a line
     /// front, or a chevron opened into a straight line) is bent into a chevron as <see cref="ConvertToChevron"/> does; front
-    /// line, a bent chevron is made straight, its vertex in the middle of its ends, one delay, the first segment's.
+    /// line, a bent chevron is made straight, its vertex in the middle of its ends, one delay, the first segment's. Point: a
+    /// line or a chevron becomes a point at its vertex (the middle of a line), with the values of its first segment. From a
+    /// point: front line, a straight line through it, its segments <see cref="FromPointLength"/> each, its later side toward
+    /// <paramref name="towards"/> (the middle of its holes; north without one); two fronts, a chevron of
+    /// <see cref="Geometry.Chevron.DefaultAngleDeg"/> with its vertex at the point and its ray toward <paramref name="towards"/>.
+    /// Both segments take the delay of the point.
     /// </summary>
-    public void ShapeByType()
+    public void ShapeByType(Vec3? towards = null)
     {
         LineFrontToStraightChevron(keepStyle: true);
+        if (Style == TimingLineStyle.Point)
+        {
+            if (Front != TimingFrontShape.Chevron || Points.Count != 3) return;
+            Points = new List<Vec3> { Points[1] };
+            PointByPoints();
+            return;
+        }
+        if (IsPoint() && Style is TimingLineStyle.TimeLine or TimingLineStyle.BurnLine)
+        {
+            var at = Points[0];
+            var d = towards is Vec3 t ? (t - at).WithZ(0) : Vec3.Zero;
+            d = d.Length2D > 1e-9 ? d.Normalized() : new Vec3(0, 1, 0);
+            var seg = Segments.FirstOrDefault() ?? new TimingLineSegment(0, BurdenReliefMsPerM, 0);
+            Front = TimingFrontShape.Chevron;
+            Segments = new List<TimingLineSegment> { seg, seg };
+            if (Style == TimingLineStyle.BurnLine) { Points = Geometry.Chevron.Build(at, d, Geometry.Chevron.DefaultAngleDeg, FromPointLength); return; }
+            // walked from point 0 to point 2 a contour line is later on its left: the walk goes with d on its left
+            var w = new Vec3(d.Y, -d.X, 0) * FromPointLength;
+            Points = new List<Vec3> { at - w, at, at + w };
+            return;
+        }
         if (Front != TimingFrontShape.Chevron || Points.Count != 3) return;
         if (Style == TimingLineStyle.BurnLine) Points = Geometry.Chevron.Bend(Points);
         else if (Style == TimingLineStyle.TimeLine && !Geometry.Chevron.IsStraight(Points))
@@ -274,6 +343,7 @@ public sealed class TimingLineEntity : Entity, IHoleTimer
     /// </summary>
     public void TypeByShape()
     {
+        if (IsPoint()) { Style = TimingLineStyle.Point; return; }
         if (TimedAsChevron()) Style = Geometry.Chevron.IsStraight(Points) ? TimingLineStyle.TimeLine : TimingLineStyle.BurnLine;
     }
 

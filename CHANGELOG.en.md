@@ -6,6 +6,43 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.9 — 2026-11-20
+
+### New
+- **A point, the third shape of the EBS front:** a second click on the start of the line (or Enter after it) puts a
+  point, and the delays go round it in circles: the time grows with the distance, the holes on one circle fire together.
+  The front window has the delay, the progress and the direction From the point / To the point. An end of a line dragged
+  onto its other end makes the line a point; an end of a chevron dragged onto its vertex leaves a line of the other segment.
+- **The type of an EBS front in the properties panel:** the list Style of any front has Front line, Two fronts and Point;
+  another type chosen makes the front that shape and programs its holes again, in one undo step. The line Has handles is
+  gone from the panel.
+
+### Changed
+- **The chevron of the EBS front** is timed contour line: the time runs from the line of the ray the
+  bisector picks, the isochrones run parallel to the rays, and the holes behind the vertex get smaller times. The dashed
+  oval at the vertex is gone.
+- **DaveyTronic export (.BPD):** the choice Delays in ms / 0.1 ms is gone, the delays are always in milliseconds.
+  The column Chain of ties of the table of lines is now Holes and shows the number of holes of the line only, the
+  chain in its tooltip.
+- **Route numbers with the letter of the chain:** instead of "R", A for the first chain of ties, B for the second and so
+  on (A 1, A 2…). A tie deleted in the middle of a chain makes the holes after it a chain of the next letter, numbered
+  from 1. The Route no. label of the Visibility tab is on in a new project. In the DaveyTronic (.BPD) window the line of a
+  chain is its letter, the ID of the line (PATH) in the file too.
+- **The Isolines button is gone from the Initiation tab:** the isolines are a tab of the Blast analysis window.
+- **A thicker EBS timing front:** its line on the plan is 5 px instead of 3, its circles are larger and taken from
+  further; in the tool the line and the points being drawn are thicker too.
+- **One Dynamics analysis button** instead of Angle of initiation, First movement and Burden relief (the Blast
+  dynamics group and the Calculations menu): it opens the Blast analysis window on the tab open last. The button is a big one, its name on two lines.
+- **The compass button over the plan is Turn to north:** it turns the camera to the north. It sets the blast direction
+  no more: that is set in the pattern panel and by Set blast orientation (the View menu).
+- **The Electronic group of the Initiation tab** no longer has the unavailable V pattern, Encoding sequence and i-kon loggers buttons.
+- **Groups of the Initiation tab:** in Russian, Tie-up and Electronic have fuller names (the tie-up scheme, the
+  electronic initiation system).
+- **The route letter by hand:** the Route line field of the hole properties lists the letters of the chains of the
+  project. The whole chain takes the letter chosen, and the chain that had it the old one (A and B swap).
+- **The name of a row selected** over the Holes section of the properties panel, as the Attach holes to row list has it:
+  the name and the number of holes.
+
 ## 0.3.8 — 2026-11-18
 
 ### Changed
@@ -21,9 +58,6 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Isolines tab in the Blast analysis window:** the isolines of the firing times, as the Isolines button draws them,
   with a field for the interval (the one of the Visualization window). On the main plan with Show on plan, in print
   on a sheet of its own.
-- **The chevron of the EBS front** is timed contour line: the time runs from the line of the ray the
-  bisector picks, the isochrones run parallel to the rays, and the holes behind the vertex get smaller times. The dashed
-  oval at the vertex is gone.
 
 ## 0.3.7 — 2026-11-16
 

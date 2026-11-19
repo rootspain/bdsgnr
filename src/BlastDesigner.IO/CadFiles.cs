@@ -328,6 +328,10 @@ public static class CadFiles
                 case PolylineEntity pl:
                     Poly(pl.Points, pl.Closed, layer, pl);
                     break;
+                // a point front is a point: a polyline of one vertex is no figure
+                case TimingLineEntity { Points.Count: 1 } tp:
+                    Add(new Cad.Point { Location = P(tp.Points[0]) }, layer, null);
+                    break;
                 case TimingLineEntity tl:
                     Poly(tl.Points, false, layer, null);
                     break;
