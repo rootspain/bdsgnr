@@ -186,7 +186,7 @@ public sealed class SectionVisibility
     public bool ShowLevels { get; set; } = true;
     /// <summary>A dimension of each: the length of a hole, the spacing along the line, the subdrill.</summary>
     public bool ShowDimensions { get; set; } = true;
-    /// <summary>The ties (shock tube and EBS) across the section; off at first.</summary>
+    /// <summary>The ties (shock tube and EBS) and the EBS timing fronts across the section; off at first.</summary>
     public bool ShowTies { get; set; }
 }
 

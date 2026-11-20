@@ -42,8 +42,13 @@ public sealed record SceneOptions
     public bool DrawSummaryBlock { get; init; } = true;
     /// <summary>No labels by the holes: a section that writes their numbers over its frame (<see cref="SectionAnnotations"/>).</summary>
     public bool HideHoleLabels { get; init; }
-    /// <summary>No ties, whatever the view shows: a section that leaves them out (its Ties switch off).</summary>
+    /// <summary>
+    /// No ties and no EBS timing fronts (point, line, chevron), whatever the view shows: a section that leaves them out
+    /// (its Ties switch off).
+    /// </summary>
     public bool HideTies { get; init; }
+    /// <summary>No dashed lines of the rows, whatever the view shows: a section, where they say nothing.</summary>
+    public bool HideRows { get; init; }
     /// <summary>Allows the hole type legend (still subject to the project's "Hole legend" switch).</summary>
     public bool DrawHoleLegend { get; init; } = true;
     /// <summary>Allows the tie (connector) legend (still subject to the project's "Tie legend" switch).</summary>
@@ -168,6 +173,7 @@ public static class PlanRenderer
         // the visible blocks: only what is inside them is drawn (lines and surfaces are cut below)
         var clip = BlockClip.Of(project);
         bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && InSlice(e)
+            && !(opt.HideTies && e is TimingLineEntity)
             && (clip == null || e is PolylineEntity or CircleEntity or SurfaceEntity || clip.Shows(e));
         bool InSlice(Entity e)
         {
@@ -511,7 +517,7 @@ public static class PlanRenderer
         // each end of each tie (with a survey under the blast that was most of the frame).
         Dictionary<Guid, Entity>? byId = null;
         var showTies = (view.ShowTies || opt.HideGeometry) && !opt.HideTies;
-        var showRows = view.ShowRows && !opt.HideGeometry && !opt.HaloPass;
+        var showRows = view.ShowRows && !opt.HideGeometry && !opt.HaloPass && !opt.HideRows;
         if (showTies || showRows)
         {
             byId = new Dictionary<Guid, Entity>(project.Entities.Count);

@@ -679,7 +679,7 @@ public static partial class AnalysisWindows
             var ink = new SkiaSharp.SKColor(Look.Text.Color.R, Look.Text.Color.G, Look.Text.Color.B);
             return new SceneOptions
             {
-                Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = half, HideHoleLabels = labels.Numbers, HideTies = !settings.SectionTies,
+                Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = half, HideHoleLabels = labels.Numbers, HideTies = !settings.SectionTies, HideRows = true,
                 Overlays = new IOverlay[] { new SectionAnnotations(line.A, line.B, half, Reports.SectionTitle(Caption()), labels, ink, 12) }
             };
         });

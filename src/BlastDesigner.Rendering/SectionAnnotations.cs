@@ -17,7 +17,8 @@ public sealed record SectionLabels(bool Numbers = true, bool Levels = true, bool
 /// The labels of a section drawn over it, the same in the Section view window and on its sheet: the title, a frame from
 /// above the collars (high enough for the numbers of the holes) to the toes, the numbers of the holes over their collars,
 /// the levels on the left (the top of the frame, the collars, the grade, the toes), and one dimension of each: the length
-/// of the first hole, the distance between the second and the third along the line, the subdrill of the first. Fonts and arrows keep
+/// of a hole (two, the shortest and the longest, when the lengths differ), the distance between two neighbours along the
+/// line, the subdrill of the first; no line of a dimension crosses another (<see cref="LayoutDimensions"/>). Fonts and arrows keep
 /// their size in pixels whatever the scale.
 /// </summary>
 public sealed class SectionAnnotations : IOverlay
@@ -58,10 +59,14 @@ public sealed class SectionAnnotations : IOverlay
         // the band of the numbers over the collars, in metres at this scale
         var band = _font * 1.7 / cam.Scale;
         var top = SectionProfile.FrameTop(highest, band);
-        // the frame a little out of the outer holes: room for the subdrill and the length beside the first
+        // where the dimensions go: the lengths (one, or the shortest and the longest), the spacing between two neighbours
+        var xs = holes.Select(h => h.X).ToList();
+        var (lengths, spacingAt) = LayoutDimensions(xs, holes.Select(h => h.H.Hole.Length).ToList(), _font);
+        // the frame a little out of the outer holes: room for the subdrill, and for a length right of the last hole
         var pad = _font * 3;
-        // with two holes the length stands right of the second: more room there
-        float left = (float)(holes[0].X - pad), right = (float)(holes[^1].X + (holes.Count == 2 ? pad * 1.6f : pad));
+        float left = (float)(holes[0].X - pad), right = (float)(holes[^1].X + pad);
+        if (_show.Dimensions && lengths.Contains(xs.Count - 1))
+            right = Math.Max(right, DimensionX(xs, xs.Count - 1, _font) + text.MeasureText(Metres(holes[^1].H.Hole.Length)) + _font);
         float topY = Y(top), bottomY = Y(lowest);
 
         // the frame, the collars joined and the grade drawn double
@@ -112,28 +117,17 @@ public sealed class SectionAnnotations : IOverlay
 
         if (_show.Dimensions)
         {
-            var collar = cam.ToScreen(first.Collar);
             var toe = cam.ToScreen(first.Toe);
-            // the length of the first hole: between it and the second, its figure on the right (with two holes, of the
-            // second, right of it)
-            if (holes.Count > 2)
+            // the lengths, each right of its hole, its figure on the right
+            foreach (var i in lengths)
             {
-                var gap = Math.Min((holes[1].X - holes[0].X) * 0.3f, _font * 3);
-                VerticalDimension(canvas, line, text, holes[0].X + gap, collar.Y, toe.Y, Metres(first.Hole.Length), labelLeft: false);
+                var h = holes[i].H;
+                VerticalDimension(canvas, line, text, DimensionX(xs, i, _font), cam.ToScreen(h.Collar).Y, cam.ToScreen(h.Toe).Y, Metres(h.Hole.Length), labelLeft: false);
             }
-            else if (holes.Count == 2)
+            // the distance along the line between two neighbours no length stands between, half way down the bench
+            if (spacingAt is int k)
             {
-                // right of the second, so that the spacing between the two does not cross it
-                var second = holes[1].H;
-                VerticalDimension(canvas, line, text, holes[1].X + _font, cam.ToScreen(second.Collar).Y, cam.ToScreen(second.Toe).Y, Metres(second.Hole.Length), labelLeft: false);
-            }
-            else
-                VerticalDimension(canvas, line, text, holes[0].X + _font, collar.Y, toe.Y, Metres(first.Hole.Length), labelLeft: false);
-            // the distance along the line between the second and the third hole (the first two with two), half way
-            // down the bench: clear of the length of the first
-            if (holes.Count > 1)
-            {
-                var (p, q) = holes.Count > 2 ? (holes[1], holes[2]) : (holes[0], holes[1]);
+                var (p, q) = (holes[k], holes[k + 1]);
                 var y = (cam.ToScreen(p.H.Collar).Y + gradeY) / 2;
                 HorizontalDimension(canvas, line, text, p.X, q.X, y, Metres(Math.Abs(q.H.Along - p.H.Along)));
             }
@@ -150,6 +144,51 @@ public sealed class SectionAnnotations : IOverlay
                 text.TextAlign = SKTextAlign.Left;
             }
         }
+    }
+
+    /// <summary>Lengths differing by more than this get two dimensions, the shortest and the longest, m.</summary>
+    public const double LengthsDiffer = 0.05;
+
+    /// <summary>Where the dimension of the length of hole <paramref name="i"/> stands: right of it, towards the next one (beyond the last).</summary>
+    public static float DimensionX(IReadOnlyList<float> xs, int i, float font) =>
+        i < xs.Count - 1 ? xs[i] + Math.Min((xs[i + 1] - xs[i]) * 0.3f, font * 3) : xs[i] + font;
+
+    /// <summary>
+    /// The dimensions of a section, by the holes left to right (<paramref name="xs"/>, px) and their lengths: which holes get
+    /// a length (one when all are alike; the shortest and the longest when they differ) and between which two neighbours
+    /// the spacing goes (the second and the third first, then the first two, then on), so that no line of a dimension
+    /// crosses another. When the two lengths leave the spacing no room, one length only: the longest, else the shortest,
+    /// else that of the last hole (right of it, clear of every spacing).
+    /// </summary>
+    public static (List<int> Lengths, int? SpacingAt) LayoutDimensions(IReadOnlyList<float> xs, IReadOnlyList<double> lengths, float font)
+    {
+        var n = xs.Count;
+        if (n == 0) return (new List<int>(), null);
+        int shortest = 0, longest = 0;
+        for (int i = 1; i < n; i++)
+        {
+            if (lengths[i] < lengths[shortest]) shortest = i;
+            if (lengths[i] > lengths[longest]) longest = i;
+        }
+        var sets = new List<List<int>>();
+        if (lengths[longest] - lengths[shortest] > LengthsDiffer)
+        {
+            sets.Add(new List<int> { shortest, longest }.OrderBy(i => i).ToList());
+            sets.Add(new List<int> { longest });
+            sets.Add(new List<int> { shortest });
+        }
+        else sets.Add(new List<int> { 0 });
+        sets.Add(new List<int> { n - 1 });
+        if (n == 1) return (sets[0], null);
+        var pairs = new List<int>();
+        if (n > 2) pairs.Add(1);
+        pairs.Add(0);
+        for (int k = 2; k < n - 1; k++) pairs.Add(k);
+        foreach (var set in sets)
+            foreach (var k in pairs)
+                if (!set.Any(i => DimensionX(xs, i, font) is var x && x > xs[k] - 1 && x < xs[k + 1] + 1))
+                    return (set, k);
+        return (sets[^1], null);
     }
 
     private void Title(SKCanvas canvas, SKPaint text, float x, float y)

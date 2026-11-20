@@ -322,7 +322,7 @@ public static class Reports
         Pan(cam, shown.View);
         var labels = new SectionLabels(shown.ShowNumbers, shown.ShowLevels, shown.ShowDimensions);
         var overlays = labels.Any || title.Length > 0 ? new IOverlay[] { new SectionAnnotations(a, b, halfWidth, title, labels, SKColors.Black, 8) } : Array.Empty<IOverlay>();
-        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth, Overlays = overlays, HideHoleLabels = labels.Numbers, HideTies = !shown.ShowTies });
+        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth, Overlays = overlays, HideHoleLabels = labels.Numbers, HideTies = !shown.ShowTies, HideRows = true });
     }
 
     /// <summary>One sheet: a drawing over the title block.</summary>

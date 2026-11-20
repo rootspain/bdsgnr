@@ -20,8 +20,10 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   projects letters in their order.
 - **Labels and dimensions on a section:** the Section view window and its sheet show the title Section along line A–A,
   a frame, the numbers of the holes over their collars, the levels on the left (the top of the frame, collars, grade,
-  toes), the length of a hole, the spacing along the line and the subdrill. Hole numbers, Levels, Dimensions and Ties
-  shock tube/EBS (off at first) switches in the window and on the sheet. The half width of a section is 4 m at first.
+  toes), the length of a hole (of the shortest and the longest when they differ), the spacing along the line and the
+  subdrill, no dimension crossing another. Hole numbers, Levels, Dimensions and Ties
+  shock tube/EBS (the ties and the EBS timing fronts, off at first) switches in the window and on the sheet. The half width of a section is 4 m at first.
+  The dashed lines of the rows are not drawn in a section.
 
 ### Changed
 - **Davey Tronic export (.BPD):** Lines (PATH) take only the chains of EBS ties (the product of the tie an electronic

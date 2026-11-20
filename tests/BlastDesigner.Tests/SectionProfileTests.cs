@@ -66,6 +66,30 @@ public class SectionProfileTests
     }
 
     [Fact]
+    public void Dimensions_OneLengthOrTheShortestAndTheLongest_NeverCrossingTheSpacing()
+    {
+        var five = new List<float> { 0, 100, 200, 300, 400 };
+        // lengths alike: the first one, the spacing between the second and the third
+        var (one, at) = SectionAnnotations.LayoutDimensions(five, new double[] { 11.5, 11.5, 11.52, 11.5, 11.5 }, 12);
+        Assert.Equal(new[] { 0 }, one); Assert.Equal(1, at);
+        // lengths differing: the shortest and the longest, the spacing clear of both
+        var (two, at2) = SectionAnnotations.LayoutDimensions(five, new double[] { 10.3, 10.6, 10.9, 11.2, 11.8 }, 12);
+        Assert.Equal(new[] { 0, 4 }, two);
+        Assert.Equal(1, at2);
+        var (both, at3) = SectionAnnotations.LayoutDimensions(new List<float> { 0, 100, 200 }, new double[] { 11, 10, 12 }, 12);
+        Assert.Equal(new[] { 1, 2 }, both); Assert.Equal(0, at3);
+        // two holes of two lengths: no room for both beside the spacing, the longest only, right of the last
+        var (only, at4) = SectionAnnotations.LayoutDimensions(new List<float> { 0, 100 }, new double[] { 10, 11 }, 12);
+        Assert.Equal(new[] { 1 }, only); Assert.Equal(0, at4);
+        // two alike: the length right of the second
+        var (alike, at5) = SectionAnnotations.LayoutDimensions(new List<float> { 0, 100 }, new double[] { 10, 10 }, 12);
+        Assert.Equal(new[] { 1 }, alike); Assert.Equal(0, at5);
+        // in every case no length stands between the two holes of the spacing
+        foreach (var (lengths, k, xs) in new[] { (one, at, five), (two, at2, five) })
+            Assert.All(lengths, i => Assert.False(SectionAnnotations.DimensionX(xs, i, 12) is var x && x > xs[k!.Value] && x < xs[k.Value + 1]));
+    }
+
+    [Fact]
     public void Lengths_AreWrittenWithOneDecimal_AndAPoint() =>
         Assert.Equal(new[] { "11.5", "3.6", "1.0", "375.0" }, new[] { 11.5, 3.6, 1.0, 375.0 }.Select(SectionAnnotations.Metres));
 

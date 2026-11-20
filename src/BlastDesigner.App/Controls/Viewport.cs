@@ -140,6 +140,9 @@ public sealed class Viewport : Control
             HiddenDepths = opt.HiddenDepths,
             HideGeometry = opt.HideGeometry,
             SliceHalfWidth = opt.SliceHalfWidth,
+            HideHoleLabels = opt.HideHoleLabels,
+            HideTies = opt.HideTies,
+            HideRows = opt.HideRows,
             TopInset = opt.TopInset,
             HideWireframes = SurfaceWireframe == IO.ProgramSettings.WireframeNever
                 || (SurfaceWireframe == IO.ProgramSettings.WireframeWhileStill && System.Diagnostics.Stopwatch.GetElapsedTime(_cameraMovedAt).TotalMilliseconds < SettleMs),

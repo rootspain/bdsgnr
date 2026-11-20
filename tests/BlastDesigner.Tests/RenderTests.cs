@@ -157,6 +157,59 @@ public class RenderTests
     }
 
     [Fact]
+    public void HideRows_LeavesOutTheDashedLinesOfTheRows()
+    {
+        byte[] Shot(bool row, bool hide)
+        {
+            var p = BlastProject.CreateNew("rows");
+            var a = p.Add(new Hole { Label = "1", Collar = new Vec3(0, 0, 0), Length = 10 });
+            var b = p.Add(new Hole { Label = "2", Collar = new Vec3(40, 0, 0), Length = 10 });
+            if (row) p.Rows.Add(new HoleRow { Name = "R1", HoleIds = { a.Id, b.Id } });
+            p.View.ShowRows = true;
+            var cam = new Camera { Width = 400, Height = 300, Scale = 5, Target = new Vec3(20, 0.1, 0) };
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, HideHoleLabels = true, HideRows = hide });
+            return bitmap.Bytes;
+        }
+        Assert.NotEqual(Shot(false, false), Shot(true, false));
+        Assert.Equal(Shot(false, true), Shot(true, true));
+    }
+
+    [Fact]
+    public void HideTies_LeavesOutTheTiesAndTheEbsFronts()
+    {
+        byte[] Shot(bool hide, bool front)
+        {
+            var p = BlastProject.CreateNew("hide");
+            var a = p.Add(new Hole { Label = "1", Collar = new Vec3(0, 0, 0), Length = 10 });
+            var b = p.Add(new Hole { Label = "2", Collar = new Vec3(40, 0, 0), Length = 10 });
+            if (front) p.Add(new TimingLineEntity { Front = TimingFrontShape.Line, Points = { new Vec3(0, 10, 0), new Vec3(40, 10, 0) } });
+            else BlastDesigner.Engine.Timing.Connect(p, a.Id, b.Id, null);
+            var cam = new Camera { Width = 400, Height = 300, Scale = 5, Target = new Vec3(20, 5, 0) };
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, HideTies = hide, HideHoleLabels = true });
+            return bitmap.Bytes;
+        }
+        byte[] Bare()
+        {
+            var p = BlastProject.CreateNew("hide");
+            p.Add(new Hole { Label = "1", Collar = new Vec3(0, 0, 0), Length = 10 });
+            p.Add(new Hole { Label = "2", Collar = new Vec3(40, 0, 0), Length = 10 });
+            var cam = new Camera { Width = 400, Height = 300, Scale = 5, Target = new Vec3(20, 5, 0) };
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, HideHoleLabels = true });
+            return bitmap.Bytes;
+        }
+        Assert.NotEqual(Bare(), Shot(false, false));
+        Assert.Equal(Bare(), Shot(true, false));
+        Assert.NotEqual(Bare(), Shot(false, true));
+        Assert.Equal(Bare(), Shot(true, true));
+    }
+
+    [Fact]
     public void ASelectedTie_IsThickerThanTheOthers()
     {
         int Ink(bool selected)

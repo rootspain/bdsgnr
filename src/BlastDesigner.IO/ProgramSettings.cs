@@ -55,7 +55,7 @@ public sealed class ProgramSettings
     public bool SectionLevels { get; set; } = true;
     /// <summary>The Section view window shows a dimension of each: the length, the spacing along the line, the subdrill.</summary>
     public bool SectionDimensions { get; set; } = true;
-    /// <summary>The Section view window shows the ties (shock tube and EBS); off at first.</summary>
+    /// <summary>The Section view window shows the ties (shock tube and EBS) and the EBS timing fronts; off at first.</summary>
     public bool SectionTies { get; set; }
     /// <summary>Transparency of the surface fill, per cent: 0 opaque, 100 not seen.</summary>
     public int SurfaceTransparency { get; set; } = DefaultSurfaceTransparency;
