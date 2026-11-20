@@ -236,8 +236,10 @@ public static class RouteNumbers
     /// Before a change of the project: the ties and the numbers of their ends. After it, for each tie gone (its two ends tied
     /// no more) the end that came after the other in the chain (numbered one more than it, or the first hole tied from an
     /// initiation point) and every hole after it (tied to it, numbered one more, and so on) become a chain of their own: of
-    /// the next letter, numbered from 1, in the order of the chains and the numbers they had. A hole left with no tie at all
-    /// takes no number. The hole the tie came from keeps its number. Null without a numbered hole.
+    /// the next letter, numbered from 1, in the order of the chains and the numbers they had. A hole of a tie gone left with
+    /// no tie at all, either end, loses its number and its letter; a part left the only one of its chain so (the hole before
+    /// it alone) keeps the letter, numbered from 1. The hole the tie came from otherwise keeps its number.
+    /// Null without a numbered hole.
     /// </summary>
     public static Action? Follow(BlastProject project)
     {
@@ -248,9 +250,12 @@ public static class RouteNumbers
         {
             var now = project.Ties.Select(t => Pair(t.FromId, t.ToId)).ToHashSet();
             var starts = new Dictionary<Guid, (Hole Hole, int Was)>();
+            var ends = new HashSet<Guid>();
             foreach (var (a, b) in before)
             {
                 if (now.Contains(Pair(a, b))) continue;
+                ends.Add(a);
+                ends.Add(b);
                 numbers.TryGetValue(a, out var na);
                 numbers.TryGetValue(b, out var nb);
                 // the end that came after the other in the chain: numbered one more than it, or the first hole of a chain
@@ -268,12 +273,22 @@ public static class RouteNumbers
             // the parts, all found before a number changes: each ends at a tie gone
             var parts = starts.Values.Select(s => (s.Hole, s.Was, Members: After(project, s.Hole)))
                 .OrderBy(s => LineIndex(s.Hole.RouteLine)).ThenBy(s => s.Was).ToList();
+            // a hole of a tie gone left with no tie at all (either end: the first hole of a chain too) is in no chain: no
+            // number, no letter
+            foreach (var id in ends)
+                if (project.FindEntity(id) is Hole lone && lone.RouteNumber != null && !project.Ties.Any(t => t.FromId == id || t.ToId == id))
+                {
+                    lone.RouteNumber = null;
+                    lone.RouteLine = null;
+                }
             foreach (var (h, was, members) in parts)
             {
-                if (members.Count == 1 && !project.Ties.Any(t => t.FromId == h.Id || t.ToId == h.Id)) { h.RouteNumber = null; h.RouteLine = null; continue; }
+                if (h.RouteNumber == null) continue;
                 // the whole chain, cut from its initiation point: it stays as it is
                 if (was == 1) continue;
-                var line = NextLine(project);
+                // the rest of the chain before it gone (a hole left alone lost its number above): it keeps the letter
+                var alone = !project.Holes.Any(o => o.RouteNumber != null && o.RouteLine == h.RouteLine && !members.Contains(o));
+                var line = alone && h.RouteLine != null ? h.RouteLine : NextLine(project);
                 foreach (var m in members) { m.RouteNumber -= was - 1; m.RouteLine = line; }
             }
         };

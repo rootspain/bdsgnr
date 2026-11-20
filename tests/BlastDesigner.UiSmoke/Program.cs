@@ -4989,12 +4989,13 @@ Step("tie tool: holes with an electronic detonator take route numbers in the ord
         vm.Change("Delete", p => p.Entities.RemoveAll(e => e.Id == tie)); Pump();
         if (N(0) != 1 || N(1) != 2 || N(2) != null) throw new Exception($"after the tie deleted: {N(0)}, {N(1)}, {N(2)} instead of 1, 2, none");
         vm.Undo(); Pump();
-        // the tie E1 → E2 deleted, in the middle: E2 and E3 a chain of the next letter, from 1
+        // the tie E1 → E2 deleted: E1, left without a tie, loses its letter and number; E2 and E3, all that is left of the
+        // chain, keep its letter, numbered from 1
         var first = vm.Project.Ties.First(t => (t.FromId == ids[0] && t.ToId == ids[1]) || (t.FromId == ids[1] && t.ToId == ids[0])).Id;
         vm.Change("Delete", p => p.Entities.RemoveAll(e => e.Id == first)); Pump();
-        if (N(0) != 1 || N(1) != 1 || N(2) != 2 || Line(1) == chain || Line(2) != Line(1)) throw new Exception($"after the tie in the middle deleted: {Line(0)}{N(0)}, {Line(1)}{N(1)}, {Line(2)}{N(2)}");
+        if (N(0) != null || Line(0) != null || N(1) != 1 || N(2) != 2 || Line(1) != chain || Line(2) != chain) throw new Exception($"after the tie in the middle deleted: {Line(0)}{N(0)}, {Line(1)}{N(1)}, {Line(2)}{N(2)}");
         vm.Undo(); Pump();
-        if (N(2) != 3) throw new Exception("undo did not bring the number back");
+        if (N(2) != 3 || N(0) != 1 || Line(0) != chain) throw new Exception("undo did not bring the numbers and the letter back");
         route.IsChecked = false; Pump();
     }
     finally

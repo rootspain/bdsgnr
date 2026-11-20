@@ -214,17 +214,40 @@ public class RouteNumberTests
         // one undo brings the tie, the numbers and the letters back
         doc.Undo();
         Assert.Equal(new[] { "A1", "A2", "A3", "A4" }, new[] { a, b, c, d }.Select(L));
-        // two ties of one chain deleted at once: the parts take the letters in their order; a hole left alone, none
+        // two ties of one chain deleted at once: the parts take the letters in their order; a hole left alone (either end), none
         var bc = doc.Project.Ties.First(t => t.FromId == b.Id && t.ToId == c.Id).Id;
         var ef = doc.Project.Ties.First(t => t.FromId == e.Id && t.ToId == f.Id).Id;
         doc.Execute("Delete ties", pr => pr.Entities.RemoveAll(x => x.Id == bc || x.Id == ef));
-        Assert.Equal(new[] { "A1", "A2", "C1", "C2", "B1", null }, new[] { a, b, c, d, e, f }.Select(L));
+        Assert.Equal(new[] { "A1", "A2", "B1", "B2", null, null }, new[] { a, b, c, d, e, f }.Select(L));
         doc.Undo();
         var cd = doc.Project.Ties.First(t => t.FromId == c.Id && t.ToId == d.Id).Id;
         bc = doc.Project.Ties.First(t => t.FromId == b.Id && t.ToId == c.Id).Id;
         var ab = doc.Project.Ties.First(t => t.FromId == a.Id && t.ToId == b.Id).Id;
         doc.Execute("Delete ties", pr => pr.Entities.RemoveAll(x => x.Id == ab || x.Id == cd));
-        Assert.Equal(new[] { "A1", "C1", "C2", null }, new[] { a, b, c, d }.Select(L));
+        // a alone and d alone: b and c the whole chain A left, it keeps the letter
+        Assert.Equal(new[] { null, "A1", "A2", null }, new[] { a, b, c, d }.Select(L));
+    }
+
+    [Fact]
+    public void DeletingTheOnlyTieOfAHole_TakesItsLetterAndNumber_TheFirstHoleOfAChainToo()
+    {
+        var p = Project();
+        var a = H(p, "a", 0); var b = H(p, "b", 5); var c = H(p, "c", 10);
+        Tie(p, a, b); Tie(p, b, c);
+        var doc = new Document(p);
+        Hole Now(Hole h) => (Hole)doc.Project.FindEntity(h.Id)!;
+        var ab = p.Ties.First(t => t.FromId == a.Id && t.ToId == b.Id).Id;
+        doc.Execute("Delete tie", pr => pr.Entities.RemoveAll(x => x.Id == ab));
+        // a, the first hole, has no tie left: no letter, no number; b and c, all that is left of chain A, keep its letter
+        Assert.Null(Now(a).RouteNumber);
+        Assert.Null(Now(a).RouteLine);
+        Assert.Equal(new int?[] { 1, 2 }, new[] { b, c }.Select(h => Now(h).RouteNumber));
+        Assert.Equal(new[] { "A", "A" }, new[] { b, c }.Select(h => Now(h).RouteLine));
+        // the last tie: both holes alone
+        var bc = doc.Project.Ties.Single().Id;
+        doc.Execute("Delete tie", pr => pr.Entities.RemoveAll(x => x.Id == bc));
+        Assert.All(new[] { a, b, c }, h => Assert.Equal((null, null), (Now(h).RouteLine, Now(h).RouteNumber)));
+        Assert.Empty(RouteNumbers.Lines(doc.Project));
     }
 
     [Fact]

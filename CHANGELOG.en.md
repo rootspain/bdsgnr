@@ -54,6 +54,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   and hemisphere N/S, for this file only). The names take Latin letters and digits, Cyrillic in Latin, the rest as «_»;
   they are kept in the project. The table of lines has a Detonators column, an opened row shows the frame of the line
   (DETZONE). Below, the lines and detonators of the file. Errors show at once; the button is Write the file….
+- **A hole left without a tie loses its route letter and number:** when a tie is deleted, any hole with no tie left drops
+  them, the first hole of a chain too. When one part is all that is left of a chain, it keeps the letter, numbered from 1.
 
 ## 0.3.8 — 2026-11-18
 

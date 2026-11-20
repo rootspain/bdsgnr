@@ -234,14 +234,19 @@ public static class BpdExportWindow
             var details = FrameDetails(project, frame, chainHoles);
             details.IsVisible = false;
             details.Name = "bpdFrame" + i;
-            var chevron = new TextBlock { Text = "▸", Foreground = Look.Muted, FontSize = 13 };
+            // a chevron large enough to be seen and hit: right closed, down opened
             var opener = new Button
             {
-                Content = chevron, Width = 26, Height = 26, Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
-                Background = Brushes.Transparent, BorderThickness = new Thickness(0), Name = "bpdOpen" + i, VerticalAlignment = VerticalAlignment.Center
+                Content = Look.Icon("right", 20, Look.TextSoft, 2), Width = 34, Height = 34, Padding = new Thickness(0), CornerRadius = new CornerRadius(7),
+                HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+                Background = Look.Ribbon, BorderBrush = Look.Line, BorderThickness = new Thickness(1), Name = "bpdOpen" + i, VerticalAlignment = VerticalAlignment.Center
             };
             ToolTip.SetTip(opener, Loc.T("The frame of the line (DETZONE)"));
-            opener.Click += (_, _) => { details.IsVisible = !details.IsVisible; chevron.Text = details.IsVisible ? "▾" : "▸"; };
+            opener.Click += (_, _) =>
+            {
+                details.IsVisible = !details.IsVisible;
+                opener.Content = Look.Icon(details.IsVisible ? "down" : "right", 20, details.IsVisible ? Look.Accent : Look.TextSoft, 2);
+            };
             var id = new Border
             {
                 Width = 30, Height = 30, CornerRadius = new CornerRadius(7), Background = Look.AccentSoft, VerticalAlignment = VerticalAlignment.Center,
