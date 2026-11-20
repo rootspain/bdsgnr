@@ -191,7 +191,7 @@ public class PrimerTimingTests
         next.Collar = new Vec3(5, 0, 100);
         next.ElectronicTimeMs = 1000;
         p.Add(h); p.Add(next);
-        p.Add(new TieEntity { FromId = h.Id, ToId = next.Id, ProductId = p.Products.First(x => x.Kind == ProductKind.HarnessWire).Id });
+        p.Add(new TieEntity { FromId = h.Id, ToId = next.Id, ProductId = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator).Id });
         Timing.Solve(p);
 
         // the lower deck at the hole's time, the upper one 25 ms later; the hole fires with its first charge

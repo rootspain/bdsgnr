@@ -26,6 +26,12 @@ public class DeviTronicTests
         };
     }
 
+    /// <summary>Tie products of the electronic system (an electronic detonator on a tie) with these ids: only they make lines.</summary>
+    static void Ebs(BlastProject p, params string[] ids)
+    {
+        foreach (var id in ids) p.Products.Add(new Product { Id = id, Name = id, Kind = ProductKind.ElectronicDetonator });
+    }
+
     [Fact]
     public void Crc16X25_CheckValue() => Assert.Equal(0x906E, DeviTronic.Crc16X25(Encoding.ASCII.GetBytes("123456789")));
 
@@ -41,12 +47,80 @@ public class DeviTronicTests
     }
 
     [Fact]
-    public void SanitizeName_PadsAndCutsToEight()
+    public void TheDisplayedName_IsPaddedAndCutToEight()
     {
-        Assert.Equal("Trial___", DeviTronic.SanitizeName("Trial"));
-        Assert.Equal("Blast12_", DeviTronic.SanitizeName("Blast 12"));
-        Assert.Equal("ABCDEFGH", DeviTronic.SanitizeName("ABCDEFGHIJ"));
-        Assert.Equal("BLAST___", DeviTronic.SanitizeName("Взрыв"));
+        Assert.Equal("Trial___", DeviTronic.PadDisplayed("Trial"));
+        Assert.Equal("Blast_12", DeviTronic.PadDisplayed("Blast 12"));
+        Assert.Equal("ABCDEFGH", DeviTronic.PadDisplayed("ABCDEFGHIJ"));
+        Assert.Equal("Vzryv___", DeviTronic.PadDisplayed("Взрыв"));
+        Assert.Equal("BLAST___", DeviTronic.PadDisplayed("—"));
+    }
+
+    [Fact]
+    public void Names_TakeLatinLettersAndDigits_CyrillicInLatin_TheRestOneUnderscore()
+    {
+        Assert.Equal("Karer_Sever_blok_12", DeviTronic.ToFileName("Карьер Север, блок 12", 30));
+        Assert.Equal("YoZhKhTsChShShchYEYuYa", DeviTronic.ToFileName("ЁЖХЦЧШЩЫЭЮЯ", 30));
+        Assert.Equal("yozhshch", DeviTronic.ToFileName("ёжщ", 30));
+        // Ь and Ъ go; the signs, spaces and other letters become one '_' in a row
+        Assert.Equal("obekt", DeviTronic.ToFileName("объект", 30));
+        Assert.Equal("Blok_12", DeviTronic.ToFileName("Блок - 12", 30));
+        Assert.Equal("A_B", DeviTronic.ToFileName("A__ß/€B", 30));
+        Assert.Equal("_12_", DeviTronic.ToFileName("-12-", 30));
+        // the limit counts the Latin text: Щ is four characters
+        Assert.Equal("Shchuk", DeviTronic.ToFileName("Щука", 6));
+        Assert.Equal(30, DeviTronic.ToFileName(new string('Щ', 20), 30).Length);
+        // by default: the number of the blast, else its name; the displayed one its first 8 in capitals
+        var p = BlastProject.CreateNew("Карьер Север");
+        Assert.Equal("Karer_Sever", DeviTronic.DefaultFullName(p));
+        p.Header.BlastNumber = "Блок 12/3";
+        Assert.Equal("Blok_12_3", DeviTronic.DefaultFullName(p));
+        Assert.Equal("BLOK_12_", DeviTronic.DefaultDisplayedName("Blok_12_3"));
+    }
+
+    [Fact]
+    public void TheHeaderSet_IsWrittenAsGiven_TheZoneInEveryLine_AndChecked()
+    {
+        var p = BlastProject.CreateNew();
+        var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
+        Hole H(int x)
+        {
+            var h = new Hole { Label = "h" + x, Collar = new Vec3(x, 0, 100), ElectronicTimeMs = x };
+            h.Decks.Add(new Deck { Top = 3, Bottom = 10, Primers = { new Primer { Depth = 9, DetonatorId = edet.Id }, new Primer { Depth = 5, DetonatorId = edet.Id } } });
+            p.Entities.Add(h);
+            return h;
+        }
+        var a = H(0); var b = H(5); var c = H(20); var d = H(25); var e = H(26);
+        p.Entities.Add(new TieEntity { FromId = a.Id, ToId = b.Id, ProductId = edet.Id });
+        p.Entities.Add(new TieEntity { FromId = c.Id, ToId = d.Id, ProductId = edet.Id });
+        p.Entities.Add(new TieEntity { FromId = d.Id, ToId = e.Id, ProductId = edet.Id });
+        p.Coordinates.UtmZone = 29;
+        var chains = DeviTronic.Chains(p);
+        var full = "Karer_Sever_blok_12_2026_11_20";
+        Assert.Equal(30, full.Length);
+        var header = new BpdHeader(new DateTime(2026, 11, 20, 2, 7, 41), full, "BLOK12", "Blast Designer 0.3.9", 33, true);
+        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1"), new BpdPathRequest(chains[1].Key, "2") }, BpdDelayUnit.Ms, "ignored", header: header);
+        Assert.Empty(r.Errors);
+        var text = DeviTronic.Write(r.Plan);
+        Assert.Contains("<DATE>2026/11/20</DATE>", text);
+        Assert.Contains("<TIME>02:07:41</TIME>", text);
+        Assert.Contains("<FULL_NAME>" + full + "</FULL_NAME>", text);
+        Assert.Contains("<DISPLAYED_NAME>BLOK12__</DISPLAYED_NAME>", text);
+        Assert.Contains("<SOURCE_FILE>Blast Designer 0.3.9</SOURCE_FILE>", text);
+        Assert.Equal(2, text.Split("<UTM_ZONE_LETTER>S</UTM_ZONE_LETTER>").Length - 1);
+        Assert.Equal(2, text.Split("<UTM_ZONE_NUMBER>33</UTM_ZONE_NUMBER>").Length - 1);
+        Assert.True(DeviTronic.CheckCrc(text));
+        // the zone of the file only: the site keeps its own
+        Assert.Equal((29, false), (p.Coordinates.UtmZone, p.Coordinates.SouthernHemisphere));
+        // what the window shows of each line is what the file has: two detonators a hole, the frame of its holes
+        var preview = DeviTronic.Preview(p, p.Holes, chains, new[] { "A", "B" });
+        Assert.Equal(new[] { 4, 6 }, preview.Select(x => x.Detonators));
+        Assert.Equal(r.Plan.Paths.Select(x => ((long, long, long, long)?)(x.West, x.South, x.East, x.North)), preview.Select(x => x.Frame));
+        Assert.Equal(new[] { 4, 6 }, r.Plan.Paths.Select(x => x.DetonatorCount));
+        // names not of the rule, a zone out of 1–60 and a source not of printable Latin: no file
+        var bad = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t",
+            header: header with { FullName = full + "X", DisplayedName = "Блок", SourceFile = "Источник", UtmZone = 0 });
+        Assert.Equal(4, bad.Errors.Count);
     }
 
     [Fact]
@@ -54,8 +128,10 @@ public class DeviTronicTests
     {
         var p = BlastProject.CreateNew();
         var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
-        var c17 = p.Products.First(x => x.Kind == ProductKind.SurfaceConnector && x.DelayMs == 17);
-        var c42 = p.Products.First(x => x.Kind == ProductKind.SurfaceConnector && x.DelayMs == 42);
+        // two EBS tie types: one line each
+        Ebs(p, "c17", "c42");
+        var c17 = p.FindProduct("c17")!;
+        var c42 = p.FindProduct("c42")!;
         Hole H(string label, double x, double y, double t, params double[] primerDepths)
         {
             var h = new Hole { Label = label, Collar = new Vec3(x, y, 100), Length = 10, ElectronicTimeMs = t };
@@ -101,6 +177,7 @@ public class DeviTronicTests
     public void OrderAlongTies_FollowsTiesInTheOrderTheyWereDrawn()
     {
         var p = BlastProject.CreateNew();
+        Ebs(p, "w", "x");
         var ip = new InitiationPoint { Position = new Vec3(0, 0, 100) };
         p.Entities.Add(ip);
         Hole H(string label) { var h = new Hole { Label = label, Collar = new Vec3(0, 0, 100) }; p.Entities.Add(h); return h; }
@@ -116,6 +193,7 @@ public class DeviTronicTests
     public void Build_WarnsAboutMoreThan800TiesOfAType()
     {
         var p = BlastProject.CreateNew();
+        Ebs(p, "w", "x");
         var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
         Hole prev = null!;
         for (int i = 0; i <= 801; i++)
@@ -138,6 +216,7 @@ public class DeviTronicTests
     public void Chains_SplitOneTieTypeIntoSeparateChains()
     {
         var p = BlastProject.CreateNew();
+        Ebs(p, "w", "x");
         Hole H(string label) { var h = new Hole { Label = label }; p.Entities.Add(h); return h; }
         var h1 = H("1"); var h2 = H("2"); var h3 = H("3"); var h4 = H("4"); var h5 = H("5");
         void Tie(Hole a, Hole b, string type) => p.Entities.Add(new TieEntity { FromId = a.Id, ToId = b.Id, ProductId = type });
@@ -156,6 +235,7 @@ public class DeviTronicTests
     public void Build_NamesTheHolesLeftOut_ToBeSelected()
     {
         var p = BlastProject.CreateNew();
+        Ebs(p, "w", "x");
         var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
         Hole H(string label, double x)
         {
@@ -173,7 +253,7 @@ public class DeviTronicTests
         var chains = DeviTronic.Chains(p);
         var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t");
         Assert.Empty(r.Errors);
-        var untied = Assert.Single(r.Warnings, w => w.Format.Contains("have no ties"));
+        var untied = Assert.Single(r.Warnings, w => w.Format.Contains("no chain of EBS ties"));
         Assert.Equal(new[] { h5.Id }, untied.Holes);
         var other = Assert.Single(r.Warnings, w => w.Format.Contains("not chosen for any line"));
         Assert.Equal(new[] { h3.Id, h4.Id }, other.Holes);
@@ -184,6 +264,7 @@ public class DeviTronicTests
     public void Build_RejectsTheSameChainTwice()
     {
         var p = BlastProject.CreateNew();
+        Ebs(p, "w", "x");
         var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest("chain:x", "1"), new BpdPathRequest("chain:x", "2") }, BpdDelayUnit.Ms, "t");
         Assert.NotEmpty(r.Errors);
     }
@@ -192,6 +273,7 @@ public class DeviTronicTests
     public void TheLineOfAChainIsTheLetterOfItsRouteNumbers_InTheFileToo()
     {
         var p = BlastProject.CreateNew();
+        Ebs(p, "w", "x");
         var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
         Hole H(int x, string line, int number)
         {
@@ -217,5 +299,43 @@ public class DeviTronicTests
         // without a line, or with one taken, the next free one
         var d = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1", "A"), new BpdPathRequest(chains[1].Key, "2", "A") }, BpdDelayUnit.Ms, "t");
         Assert.Equal(new[] { "A", "B" }, d.Plan.Paths.Select(x => x.Id));
+    }
+
+    [Fact]
+    public void OnlyTheTiesOfTheElectronicSystemMakeLines()
+    {
+        var p = BlastProject.CreateNew();
+        var edet = p.Products.First(x => x.Kind == ProductKind.ElectronicDetonator);
+        var tube = p.Products.First(x => x.Kind == ProductKind.SurfaceConnector);
+        Hole H(int x)
+        {
+            var h = new Hole { Label = "h" + x, Collar = new Vec3(x, 0, 100), ElectronicTimeMs = x };
+            h.Decks.Add(new Deck { Top = 3, Bottom = 10, Primers = { new Primer { Depth = 9, DetonatorId = edet.Id } } });
+            p.Entities.Add(h);
+            return h;
+        }
+        var a = H(0); var b = H(5); var c = H(20); var d = H(25); var e = H(40); var f = H(45);
+        p.Entities.Add(new TieEntity { FromId = a.Id, ToId = b.Id, ProductId = edet.Id });
+        p.Entities.Add(new TieEntity { FromId = c.Id, ToId = d.Id, ProductId = tube.Id });
+        p.Entities.Add(new TieEntity { FromId = e.Id, ToId = f.Id, DelayMs = 17 });
+        var chain = Assert.Single(DeviTronic.Chains(p));
+        Assert.Equal(edet.Id, chain.TieTypeKey);
+        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chain.Key, "1") }, BpdDelayUnit.Ms, "t");
+        Assert.Empty(r.Errors);
+        Assert.Equal(new[] { "h0", "h5" }, r.Plan.Paths[0].Holes.Select(h => h.Source!.Label));
+        // the holes on the shock tube and the bare ties are left out, and named
+        var left = Assert.Single(r.Warnings, w => w.Format.Contains("no chain of EBS ties"));
+        Assert.Equal(new[] { c.Id, d.Id, e.Id, f.Id }.OrderBy(x => x), left.Holes.OrderBy(x => x));
+    }
+
+    [Fact]
+    public void TheNamesOfTheExport_GoWithTheProject_AnOldProjectHasNone()
+    {
+        var p = BlastProject.CreateNew();
+        p.BpdExport = new BpdExportSettings { FullName = "Karer_Sever_blok_12", DisplayedName = "BLOK12" };
+        var back = System.Text.Json.JsonSerializer.Deserialize<BlastProject>(BlastDesigner.Domain.ProjectJson.Serialize(p), BlastDesigner.Domain.ProjectJson.Options)!;
+        Assert.Equal(("Karer_Sever_blok_12", "BLOK12"), (back.BpdExport!.FullName, back.BpdExport.DisplayedName));
+        var old = System.Text.Json.JsonSerializer.Deserialize<BlastProject>(BlastDesigner.Domain.ProjectJson.Serialize(BlastProject.CreateNew()), BlastDesigner.Domain.ProjectJson.Options)!;
+        Assert.Null(old.BpdExport);
     }
 }

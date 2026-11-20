@@ -470,7 +470,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         var title = TitleBox(arrows.Title, v => arrows.Title = v);
         var chips = new WrapPanel();
         var list = new List<(BlastAnalysis Analysis, Button Chip)>();
-        foreach (var a in Enum.GetValues<BlastAnalysis>())
+        foreach (var a in Enum.GetValues<BlastAnalysis>().Where(AnalysisWindows.Printable))
         {
             var chip = Ui.Chip(AnalysisWindows.AnalysisName(a), () =>
             {

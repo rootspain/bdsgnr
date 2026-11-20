@@ -16,6 +16,10 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The type of an EBS front in the properties panel:** the list Style of any front has Front line, Two fronts and Point;
   another type chosen makes the front that shape and programs its holes again, in one undo step. The line Has handles is
   gone from the panel.
+- **Unconnected tab in the Blast analysis window:** the loaded holes not connected, in the colour of the selection. A
+  shock tube hole is not connected when no signal of an initiation point reaches it, an electronic one when no tie
+  comes to it; one with both when either is not. On top, the Only with a primer switch (off at first). Show on plan
+  selects these holes on the main plan and brings the view to them. The tab has no print.
 
 ### Changed
 - **The chevron of the EBS front** is timed contour line: the time runs from the line of the ray the
@@ -42,6 +46,14 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   project. The whole chain takes the letter chosen, and the chain that had it the old one (A and B swap).
 - **The name of a row selected** over the Holes section of the properties panel, as the Attach holes to row list has it:
   the name and the number of holes.
+- **Davey Tronic export (.BPD):** Lines (PATH) take only the chains of EBS ties (the product of the tie an electronic
+  detonator, the EBS detonators type of the initiation catalogue); shock tube, cord and ties without a product make
+  no line. The export item is Davey Tronic file (.BPD)….
+- **The Davey Tronic export window (.BPD) remade:** the file header — the full name (up to 30 characters) and the
+  displayed one (up to 8), the date and the time (YYYY/MM/DD, HH24:MI:SS), the source, the UTM zone of the lines (number
+  and hemisphere N/S, for this file only). The names take Latin letters and digits, Cyrillic in Latin, the rest as «_»;
+  they are kept in the project. The table of lines has a Detonators column, an opened row shows the frame of the line
+  (DETZONE). Below, the lines and detonators of the file. Errors show at once; the button is Write the file….
 
 ## 0.3.8 — 2026-11-18
 

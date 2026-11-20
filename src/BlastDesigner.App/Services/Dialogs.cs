@@ -155,7 +155,8 @@ public static class Dialogs
     /// that take Enter themselves and is applied with Ctrl+Enter; <paramref name="bare"/> content reaches the edges of the window.
     /// Given only a width the window takes the height of its content.
     /// </summary>
-    public static async Task<bool> Custom(string title, Control content, Func<bool>? validate = null, Control? focus = null, double? width = null, double? height = null, string? subtitle = null, bool form = false, bool bare = false, Control? aside = null)
+    /// <param name="okText">The name of the button that applies (OK by default), translated.</param>
+    public static async Task<bool> Custom(string title, Control content, Func<bool>? validate = null, Control? focus = null, double? width = null, double? height = null, string? subtitle = null, bool form = false, bool bare = false, Control? aside = null, string? okText = null)
     {
         var w = new Window
         {
@@ -178,7 +179,7 @@ public static class Dialogs
             ok = true;
             w.Close();
         }
-        var apply = FormKit.Primary(Loc.T("OK"), Apply);
+        var apply = FormKit.Primary(okText ?? Loc.T("OK"), Apply);
         apply.IsDefault = !form;
         ToolTip.SetTip(apply, apply.Content + " (Ctrl+Enter)");
         var cancel = FormKit.Secondary(Loc.T("Cancel"), w.Close);

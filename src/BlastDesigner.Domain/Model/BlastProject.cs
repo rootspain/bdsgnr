@@ -56,6 +56,8 @@ public sealed class BlastProject
     /// previewed (and in files from before): the program settings give it then.
     /// </summary>
     public ReportDesign? ReportDesign { get; set; }
+    /// <summary>The names of the blast in its last Davey Tronic plan (BPD); null until it is first exported.</summary>
+    public BpdExportSettings? BpdExport { get; set; }
 
     [JsonIgnore] public IEnumerable<Hole> Holes => Entities.OfType<Hole>();
     [JsonIgnore] public IEnumerable<TieEntity> Ties => Entities.OfType<TieEntity>();

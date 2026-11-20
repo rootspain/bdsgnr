@@ -2924,7 +2924,7 @@ My properties	Мои
 Insert a calculated field…	Вставить вычисляемое поле…
 ui:Insert a calculated field…	Вставить вычисляемое поле…
 # DaveyTronic (.BPD)
-BPD file…	Файл BPD...
+Davey Tronic file (.BPD)…	Файл Davey Tronic (.BPD)...
 Line	Линия
 Tie type	Тип связи
 Lines (PATH)	Линии (PATH)
@@ -2938,7 +2938,7 @@ Write the file?	Записать файл?
 The UTM zone is not set (Edit ▸ Site coordinate system): zone 0 is written.	Не задана зона UTM (Правка ▸ Система координат участка): будет записана зона 0.
 No more than 26 lines (A–Z) can be written.	Можно записать не более 26 линий (A–Z).
 The tie type is chosen for more than one line: {0}	Тип связи выбран для нескольких линий: {0}
-{0} hole(s) with electronic detonators have no ties and are not written.	Скважин с электронными детонаторами без связей: {0}, они не записаны.
+{0} hole(s) with electronic detonators are on no chain of EBS ties and are not written.	Скважин с электронными детонаторами вне цепочек связей ЭСИ: {0}, они не записаны.
 Select the holes not written	Выделить эти скважины
 {0} hole(s) are tied with a type not chosen for any line and are not written.	Скважин с типом связи, не выбранным ни для одной линии: {0}, они не записаны.
 Line {0}: {1} hole(s) without electronic detonators are not written.	Линия {0}: скважин без электронных детонаторов: {1}, они не записаны.
@@ -2951,7 +2951,7 @@ Line {0} ({1}): {2} ties, more than {3}.	Линия {0} ({1}): связей {2},
 {0} ties in the chain: more than {1}.	Связей в цепочке: {0}, больше {1}.
 Each line takes the holes of its chain of ties. Holes are numbered along the ties in the order they were drawn.	В линию попадают скважины её цепочки связей. Нумерация идёт по связям в порядке их построения.
 Each chain can be chosen for one line only.	Каждую цепочку можно выбрать только для одной линии.
-There are no ties in the plan: the lines (PATH) are made by chains of ties.	В плане нет связей: линии (PATH) формируются по цепочкам связей.
+There are no EBS ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators.	В плане нет связей ЭСИ: линии (PATH) строятся по цепочкам связей электронных детонаторов.
 The chain is chosen for more than one line: {0}	Цепочка выбрана для нескольких линий: {0}
 {0} hole(s) are on a chain not chosen for any line and are not written.	Скважин на цепочках, не выбранных ни для одной линии: {0}, они не записаны.
 Line {0}: the chain of ties is not in the plan.	Линия {0}: цепочки связей нет в плане.
@@ -3425,3 +3425,48 @@ Route line	Литера маршрута
 ui:The letter of the chain of ties of the hole: chosen, the whole chain takes it, and the chain that had it takes the letter of this one	Литера цепочки связей скважины: выбранную литеру получает вся цепочка, а цепочка, у которой она была, — литеру этой
 The route letter is set for one chain: select holes of one chain of ties	Литера маршрута задаётся одной цепочке: выделите скважины одной цепочки связей
 Not on a chain of ties	Не в цепочке связей
+ui:Unconnected	Не связанные
+Only with a primer	Только с боевиком
+On: the holes with a charge and a primer. Off: every hole with a charge	Включено — скважины с зарядом ВВ и боевиком. Выключено — все скважины с зарядом ВВ
+There are no holes with a charge and a primer.	Нет скважин с зарядом ВВ и боевиком.
+There are no loaded holes.	Нет заряженных скважин.
+All loaded holes are connected.	Все заряженные скважины связаны.
+{0} of {1} loaded holes are not connected	Не связаны {0} из {1} заряженных скважин
+no signal to the shock tube: {0}, electronic without a tie: {1}	НСИ без сигнала: {0}, ЭСИ без связи: {1}
+Chain of ties	Цепочка связей
+Now	Сейчас
+N · northern	N · северное
+S · southern	S · южное
+As the programming unit shows it	Так имя покажет пульт
+Full name	Полное имя
+Displayed name	Отображаемое имя
+Latin letters, digits and _, up to {0}; Cyrillic in Latin letters	Латиница, цифры и _, до {0} знаков; кириллица — транслитом
+8 characters on the programming unit, a shorter name is padded with _	8 знаков на экране пульта, короче — дополняется _
+Date and time	Дата и время
+UTM zone of the lines	Зона UTM линий
+For this file only: the coordinate system of the site does not change	Только для этого файла: система координат площадки не меняется
+The names are kept in the project	Имена сохраняются в проекте
+File header	Заголовок файла
+Delays in milliseconds	Замедления — в миллисекундах
+Order of the detonators in a hole	Порядок детонаторов в скважине
+Which of them is LEVEL 1	Какой из них LEVEL 1
+Detonators	Детонаторов
+The frame of the line (DETZONE)	Рамка линии (DETZONE)
+PU number	Номер пульта
+Only the chains of EBS ties make lines; the letter of a line is that of its route numbers. Holes are numbered along the ties in the order they were drawn.	Линии строятся только из цепочек связей ЭСИ; литера линии — литера её маршрутных номеров. Нумерация идёт по связям в порядке их построения.
+Enter the full name (FULL_NAME).	Введите полное имя (FULL_NAME).
+Enter the displayed name (DISPLAYED_NAME).	Введите отображаемое имя (DISPLAYED_NAME).
+The date is YYYY/MM/DD.	Дата — в виде YYYY/MM/DD.
+The time is HH24:MI:SS.	Время — в виде HH24:MI:SS.
+The UTM zone number is 1 to 60.	Номер зоны UTM — от 1 до 60.
+Write the file…	Записать файл…
+The line gives the file no holes.	Линия не даёт скважин в файл.
+Upper left	Верхний левый
+Upper right	Верхний правый
+Lower left	Нижний левый
+Lower right	Нижний правый
+The frame of the holes of the line, to the metre. Computed, not edited.	Рамка по скважинам линии, до метра. Считается, не правится.
+FULL_NAME: Latin letters, digits and '_', 1 to {0} characters.	FULL_NAME: латиница, цифры и «_», от 1 до {0} знаков.
+DISPLAYED_NAME: Latin letters, digits and '_', 1 to {0} characters.	DISPLAYED_NAME: латиница, цифры и «_», от 1 до {0} знаков.
+SOURCE_FILE: printable Latin characters, up to {0}.	SOURCE_FILE: печатные латинские знаки, до {0}.
+BPD export names	Имена экспорта BPD

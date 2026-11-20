@@ -887,6 +887,48 @@ Step("blast analysis window: everything in view on opening, a tab per analysis, 
             throw new Exception("Blast dynamics should have one Dynamics analysis button: " + string.Join(", ", dynamics.Select(i => i.Label)));
         vm.DynamicsAnalysis(); Pump();
         if (BlastDesigner.App.Services.Dialogs.LastShown != w || Window() != "TimingVectorOverlay") throw new Exception("Dynamics analysis should bring the open window forward on its tab");
+        // the Unconnected tab: the loaded holes the tie-up leaves out, in the colour of the selection, no sheet to print;
+        // only with a primer at the top, off at first; the switch selects them on the main plan and brings the plan to them
+        var loose = new List<Guid>();
+        vm.Change("Smoke loose holes", p =>
+        {
+            var like = p.Holes.First(h => !h.IsDummy && BlastDesigner.Engine.Charging.ExplosiveRuns(p, h).Count > 0 && BlastDesigner.Engine.Charging.Primers(h).Any());
+            for (int i = 0; i < 2; i++)
+            {
+                var h = new Hole { Collar = like.Collar + new Vec3(300 + i * 6, 0, 0), Label = "L" + i, Length = like.Length };
+                h.Decks.AddRange(like.Decks.Select(d => d.Clone()));
+                if (i == 1) foreach (var d in h.Decks) d.Primers.Clear();
+                p.Add(h); loose.Add(h.Id);
+            }
+        }); Pump();
+        Tab("tabUnconnected");
+        HashSet<Guid> Marked() => view.OptionsSource!().Selection.ToHashSet();
+        if (Window() != "HighlightOverlay" || !loose.All(Marked().Contains)) throw new Exception($"the unconnected tab should mark the loose holes: window {Window()}, marked {Marked().Count}");
+        if (Shown("print") || !Shown("primedOnly") || Shown("arrowSize")) throw new Exception("the unconnected tab: no print, its own switch on top");
+        var primed = w.GetLogicalDescendants().OfType<ToggleSwitch>().First(t => t.Name == "primedOnly");
+        if (primed.IsChecked != false) throw new Exception("Only with a primer should be off at first");
+        primed.IsChecked = true; Pump();
+        if (!Marked().Contains(loose[0]) || Marked().Contains(loose[1])) throw new Exception("Only with a primer should leave out the charge without one");
+        primed.IsChecked = false; Pump();
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "06j_blast_analysis_unconnected.png"));
+        planSwitch.IsChecked = false; Pump();
+        planSwitch.IsChecked = true; Pump();
+        var expected = BlastDesigner.Engine.TieUpCheck.Unconnected(vm.Project!, false).Holes.Select(h => h.Id).ToHashSet();
+        if (!vm.Doc!.Selection.SetEquals(expected) || vm.AnalysisOverlays.Count != 0) throw new Exception($"the switch should select the unconnected holes on the main plan: {vm.Doc.Selection.Count} of {expected.Count}");
+        var (lx, ly) = vm.View.Camera.ToScreen(((Hole)vm.Project!.FindEntity(loose[0])!).Collar);
+        if (lx < 0 || ly < 0 || lx > vm.View.Camera.Width || ly > vm.View.Camera.Height) throw new Exception("the main plan should come to the unconnected holes");
+        // a tie from a connected hole: the hole leaves the check, and the selection follows
+        vm.Change("Smoke tie a loose hole", p => Timing.Connect(p, p.Holes.First(h => h.SurfaceTimeMs != null && !loose.Contains(h.Id)).Id, loose[0], null)); Pump();
+        if (Marked().Contains(loose[0]) || vm.Doc.Selection.Contains(loose[0]) || !vm.Doc.Selection.Contains(loose[1])) throw new Exception("a hole tied should leave the check and the selection");
+        // other holes selected by hand: the switch goes off
+        vm.Doc.Select(new[] { loose[0] }); Pump();
+        if (planSwitch.IsChecked != false) throw new Exception("another selection should turn the switch off");
+        vm.Doc.ClearSelection(); Pump();
+        for (int i = 0; i < 20 && vm.Project.FindEntity(loose[0]) != null; i++) { vm.Undo(); Pump(); }
+        if (vm.Project.FindEntity(loose[0]) != null) throw new Exception("the loose holes of the smoke are still there");
+        Tab("tabInitiationAngle");
+        planSwitch.IsChecked = true; Pump();
         // the window leaves the main window free: another window opens, its display takes the plan, the switch goes off
         vm.VisualizeTiming(); Pump();
         if (!BlastDesigner.App.Services.Dialogs.IsOpen("Visualization") || !BlastDesigner.App.Services.Dialogs.IsOpen("Blast analysis")) throw new Exception("the two windows should be open together");
@@ -4975,6 +5017,65 @@ Step("a row selected: its name before the holes in the properties panel, as the 
         if (window.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Name == "rowName")) throw new Exception("a row name for one hole of a row");
     }
     finally { vm.Doc!.ClearSelection(); Pump(); }
+});
+Step("Davey Tronic export window: the header with its rules, the zone for the file only, a line per EBS chain with its detonators and frame", () =>
+{
+    var made = new List<Guid>();
+    vm.Change("Smoke EBS chain", p =>
+    {
+        var det = p.Products.First(d => d.Kind == ProductKind.ElectronicDetonator);
+        var explosive = p.Products.First(e => e.IsExplosive).Id;
+        var x0 = p.Holes.Max(h => h.Collar.X) + 400;
+        for (int i = 0; i < 3; i++)
+        {
+            var h = new Hole { Collar = new Vec3(x0 + i * 6, 0, 100), Label = "D" + i, Length = 10, ElectronicTimeMs = 100 + i * 25 };
+            h.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = explosive, Primers = { new Primer { Depth = 9.5, DetonatorId = det.Id }, new Primer { Depth = 5, DetonatorId = det.Id } } });
+            p.Add(h); made.Add(h.Id);
+        }
+        p.Add(new TieEntity { FromId = made[0], ToId = made[1], ProductId = det.Id });
+        p.Add(new TieEntity { FromId = made[1], ToId = made[2], ProductId = det.Id });
+    }); Pump();
+    var zoneWas = (vm.Project!.Coordinates.UtmZone, vm.Project.Coordinates.SouthernHemisphere);
+    var task = BlastDesigner.App.Views.BpdExportWindow.Show(vm.Project, made.Select(id => (Hole)vm.Project.FindEntity(id)!).ToList());
+    Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    try
+    {
+        T Get<T>(string name) where T : Control => w.GetLogicalDescendants().OfType<T>().FirstOrDefault(c => c.Name == name) ?? throw new Exception("no " + name + " in the export window");
+        var full = Get<TextBox>("bpdFullName");
+        var displayed = Get<TextBox>("bpdDisplayedName");
+        if (full.Text != BlastDesigner.IO.DeviTronic.DefaultFullName(vm.Project) || displayed.Text != BlastDesigner.IO.DeviTronic.DefaultDisplayedName(full.Text!)) throw new Exception($"the names by default: {full.Text}, {displayed.Text}");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(Get<TextBox>("bpdDate").Text ?? "", @"^\d{4}/\d{2}/\d{2}$") || !System.Text.RegularExpressions.Regex.IsMatch(Get<TextBox>("bpdTime").Text ?? "", @"^\d{2}:\d{2}:\d{2}$")) throw new Exception("the date and the time by default");
+        // the rule of the names as typed: Cyrillic in Latin, the rest one '_'; the displayed one follows until typed itself
+        full.Text = "Карьер Север, блок 12"; Pump();
+        if (full.Text != "Karer_Sever_blok_12" || displayed.Text != "KARER_SE" || Get<TextBlock>("bpdDisplayedShown").Text != "KARER_SE") throw new Exception($"the rule of the names: {full.Text}, {displayed.Text}");
+        displayed.Text = "Блок 1"; Pump();
+        if (displayed.Text != "Blok_1" || Get<TextBlock>("bpdDisplayedShown").Text != "Blok_1__") throw new Exception($"the displayed name: {displayed.Text}, shown {Get<TextBlock>("bpdDisplayedShown").Text}");
+        full.Text = "Other"; Pump();
+        if (displayed.Text != "Blok_1") throw new Exception("a displayed name typed in should no more follow the full one");
+        // a line per chain of EBS ties, its electronic detonators (two a hole) and, opened, its frame
+        var line = w.GetLogicalDescendants().OfType<TextBlock>().Where(t => t.Name?.StartsWith("bpdDets") == true).ToList();
+        var mine = BlastDesigner.IO.DeviTronic.Chains(vm.Project).FindIndex(c => c.Ties.Any(t => t.FromId == made[0]));
+        if (mine < 0 || !line.Any(t => t.Text == "6")) throw new Exception("the detonators of the line: " + string.Join(",", line.Select(t => t.Text)));
+        if (Get<TextBlock>("bpdTotalDets").Text != line.Sum(t => int.Parse(t.Text!)).ToString()) throw new Exception("the total of the detonators");
+        var row = line.First(t => t.Text == "6").Name!["bpdDets".Length..];
+        Get<Button>("bpdOpen" + row).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (!Get<Control>("bpdFrame" + row).IsEffectivelyVisible) throw new Exception("the frame of the line did not open");
+        // the zone: for the file only
+        Get<NumericUpDown>("bpdZone").Value = 33; Pump();
+        Get<Button>("bpdSouth").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (Get<TextBlock>("bpdZoneShown").Text != "UTM 33S") throw new Exception("the zone shown: " + Get<TextBlock>("bpdZoneShown").Text);
+        if ((vm.Project.Coordinates.UtmZone, vm.Project.Coordinates.SouthernHemisphere) != zoneWas) throw new Exception("the zone of the file changed the site");
+        // a date not of the mask: an error at once
+        Get<TextBox>("bpdDate").Text = "20.11.2026"; Pump();
+        var error = Get<TextBlock>("bpdError");
+        if (!error.IsVisible || !error.Text!.Contains(BlastDesigner.App.Services.Loc.T("The date is YYYY/MM/DD."))) throw new Exception("no error for a date not of the mask");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "52_bpd_export.png"));
+    }
+    finally { w.Close(); Pump(); }
+    if (!task.IsCompleted || task.Result != null) throw new Exception("the export window closed should give nothing");
+    for (int i = 0; i < 10 && vm.Project.FindEntity(made[0]) != null; i++) { vm.Undo(); Pump(); }
 });
 Step("a selected hole has a ring round its collar in the colour of the selection", () =>
 {

@@ -37,7 +37,7 @@ public sealed partial class MainViewModel
             Item("KML file…", Run(() => ExportKml(false)), P),
             Item("KMZ file…", Run(() => ExportKml(true)), P),
             Item("IREDES Plan file…", Run(ExportIredes), P),
-            Item("BPD file…", Run(ExportBpd), P),
+            Item("Davey Tronic file (.BPD)…", Run(ExportBpd), P),
             Item("Extended firing data with cosines…", Run(ExportExtendedFiring), P),
             Item("Strata intercepts…", Run(ExportStrataIntercepts), P),
             Item("Profile logs…", Run(ExportProfileLogs), P)
@@ -389,14 +389,16 @@ public sealed partial class MainViewModel
     }
 
     public Task ExportIredes() => ExportText("Export IREDES plan", BaseName + "_iredes", ".xml", Interchange.ExportIredes(Project!, ExportHolesSet()), "XML");
-    /// <summary>DaveyTronic blast plan (PU_AUTO_BLASTPLAN.BPD): one line per tie type, with its programming unit.</summary>
+    /// <summary>
+    /// Davey Tronic blast plan (PU_AUTO_BLASTPLAN.BPD): one line per chain of EBS ties, with its programming unit, and the
+    /// header of the export window; written, the names of the blast stay in the project for the next export.
+    /// </summary>
     public async Task ExportBpd()
     {
-        var choice = await BpdExportWindow.Show(Project!);
+        var holes = ExportHolesSet().ToList();
+        var choice = await BpdExportWindow.Show(Project!, holes);
         if (choice == null) return;
-        var version = typeof(MainViewModel).Assembly.GetName().Version;
-        var source = "Blast Designer " + (version == null ? "6" : $"{version.Major}.{version.Minor}.{version.Build}");
-        var r = DeviTronic.Build(Project!, ExportHolesSet(), choice.Paths, choice.Unit, source, levels: choice.Levels);
+        var r = DeviTronic.Build(Project!, holes, choice.Paths, choice.Unit, choice.Header.SourceFile, levels: choice.Levels, header: choice.Header);
         string Text(IEnumerable<BpdMessage> list) => string.Join("\n", list.Take(12).Select(m => "• " + Loc.F(m.Format, m.Args)));
         if (r.Errors.Count > 0) { await Dialogs.Info(Loc.T("The BPD file was not written:") + "\n" + Text(r.Errors), Loc.T("DaveyTronic (.BPD)")); return; }
         if (r.Warnings.Count > 0)
@@ -416,6 +418,10 @@ public sealed partial class MainViewModel
         var path = await Dialogs.SaveFile("DaveyTronic (.BPD)", DeviTronic.DefaultFileName, ".BPD", ("BPD", new[] { "*.BPD", "*.bpd" }));
         if (path == null) return;
         DeviTronic.Save(path, r.Plan);
+        // the names written go with the project, for its next export
+        var (full, displayed) = (choice.Header.FullName, choice.Header.DisplayedName);
+        if (Project!.BpdExport is not { } kept || kept.FullName != full || kept.DisplayedName != displayed)
+            Change("BPD export names", p => p.BpdExport = new BpdExportSettings { FullName = full, DisplayedName = displayed });
         SetStatus(Loc.F("Exported to {0}", path) + " · " + Loc.F("{0} lines, {1} detonators", r.Plan.Paths.Count, r.Plan.Paths.Sum(x => x.DetonatorCount)));
     }
 

@@ -84,6 +84,17 @@ public sealed record BpdMessage(string Format, params object[] Args)
 public sealed record BpdBuildResult(BpdPlan Plan, List<BpdMessage> Errors, List<BpdMessage> Warnings);
 
 /// <summary>
+/// The HEADER of a BPD file and the UTM zone of its lines (DETZONE), as set in the export window: written as given (the
+/// displayed name padded with '_' to 8), each checked by <see cref="DeviTronic.Build"/>.
+/// </summary>
+/// <param name="FullName">FULL_NAME: Latin letters, digits and '_', up to <see cref="DeviTronic.FullNameLength"/>.</param>
+/// <param name="DisplayedName">DISPLAYED_NAME: the same, up to <see cref="DeviTronic.NameLength"/>.</param>
+/// <param name="SourceFile">SOURCE_FILE: printable ASCII, up to <see cref="DeviTronic.SourceLength"/>.</param>
+/// <param name="UtmZone">UTM_ZONE_NUMBER, 1–60.</param>
+/// <param name="Southern">UTM_ZONE_LETTER: S for the southern hemisphere, N for the northern.</param>
+public sealed record BpdHeader(DateTime Created, string FullName, string DisplayedName, string SourceFile, int UtmZone, bool Southern);
+
+/// <summary>
 /// Blast plan for the DaveyTronic electronic initiation system (PU_AUTO_BLASTPLAN, *.BPD): an XML-like text with a header,
 /// one PATH per programming unit, its detonation zone in UTM and the holes with their detonators. The CRC is checked by the
 /// programming unit, so the text is written byte for byte in the layout of the reference file (ASCII, CRLF, fixed indents).
@@ -93,7 +104,12 @@ public static class DeviTronic
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
     public const string DefaultFileName = "PU_AUTO_BLASTPLAN.BPD";
+    /// <summary>Characters of DISPLAYED_NAME: the programming unit shows 8, padded with '_'.</summary>
     public const int NameLength = 8;
+    /// <summary>Characters of FULL_NAME at most, written as they are.</summary>
+    public const int FullNameLength = 30;
+    /// <summary>Characters of SOURCE_FILE at most.</summary>
+    public const int SourceLength = 32;
     /// <summary>Ties of one chain above which the export warns (a line of the programming unit takes no more).</summary>
     public const int MaxTiesPerPath = 800;
 
@@ -118,12 +134,18 @@ public static class DeviTronic
     }
 
     /// <summary>
-    /// The chains of ties of the plan: for each tie type, the groups of its ties joined end to end. Chains come in the order
-    /// their first tie was drawn; the key of a chain is the id of that tie.
+    /// A tie of the electronic system: its product is an electronic detonator (the EBS detonators type of the initiation
+    /// catalogue). Only these make the lines of a BPD plan; shock tube, cord, wire and ties without a product do not.
+    /// </summary>
+    public static bool IsElectronicTie(BlastProject project, TieEntity tie) => project.FindProduct(tie.ProductId)?.Kind == ProductKind.ElectronicDetonator;
+
+    /// <summary>
+    /// The chains of EBS ties of the plan (<see cref="IsElectronicTie"/>): for each tie type, the groups of its ties joined
+    /// end to end. Chains come in the order their first tie was drawn; the key of a chain is the id of that tie.
     /// </summary>
     public static List<BpdChain> Chains(BlastProject project)
     {
-        var all = project.Ties.ToList();
+        var all = project.Ties.Where(t => IsElectronicTie(project, t)).ToList();
         var parent = new Dictionary<Guid, Guid>();
         Guid Find(Guid x)
         {
@@ -162,10 +184,11 @@ public static class DeviTronic
         foreach (var c in chains) foreach (var t in c.Ties) chainOf[t.Id] = c.Key;
         var map = new Dictionary<Guid, string>();
         var holes = project.Holes.Select(h => h.Id).ToHashSet();
+        // the ties of no chain (not of the electronic system) give a hole none
         foreach (var t in project.Ties)
-            if (holes.Contains(t.ToId)) map.TryAdd(t.ToId, chainOf[t.Id]);
+            if (holes.Contains(t.ToId) && chainOf.TryGetValue(t.Id, out var into)) map.TryAdd(t.ToId, into);
         foreach (var t in project.Ties)
-            if (holes.Contains(t.FromId)) map.TryAdd(t.FromId, chainOf[t.Id]);
+            if (holes.Contains(t.FromId) && chainOf.TryGetValue(t.Id, out var from)) map.TryAdd(t.FromId, from);
         return map;
     }
 
@@ -212,24 +235,37 @@ public static class DeviTronic
     /// deepest or the topmost detonator of a hole (<paramref name="levels"/>), and within a hole the order numbers follow the
     /// levels. Delays are the holes' programmed electronic times.
     /// </summary>
-    public static BpdBuildResult Build(BlastProject project, IEnumerable<Hole> holes, IReadOnlyList<BpdPathRequest> paths, BpdDelayUnit unit, string sourceFile, DateTime? now = null, BpdLevelOrder levels = BpdLevelOrder.BottomFirst)
+    /// <param name="header">The header and the zone set in the export window; without it, the name of the blast
+    /// (<see cref="DefaultFullName"/>), the moment of <paramref name="now"/> and the zone of the site.</param>
+    public static BpdBuildResult Build(BlastProject project, IEnumerable<Hole> holes, IReadOnlyList<BpdPathRequest> paths, BpdDelayUnit unit, string sourceFile, DateTime? now = null, BpdLevelOrder levels = BpdLevelOrder.BottomFirst, BpdHeader? header = null)
     {
         var errors = new List<BpdMessage>();
         var warnings = new List<BpdMessage>();
-        var name = SanitizeName(project.Header.BlastNumber.Length > 0 ? project.Header.BlastNumber : project.Header.Name);
+        var full = header?.FullName ?? DefaultFullName(project);
         var plan = new BpdPlan
         {
-            Created = now ?? DateTime.Now,
-            FullName = name,
-            DisplayedName = name.ToUpperInvariant(),
-            SourceFile = sourceFile,
-            UtmZoneNumber = project.Coordinates.UtmZone,
-            UtmZoneLetter = project.Coordinates.SouthernHemisphere ? "S" : "N"
+            Created = header?.Created ?? now ?? DateTime.Now,
+            FullName = full,
+            DisplayedName = PadDisplayed(header?.DisplayedName ?? DefaultDisplayedName(full)),
+            SourceFile = header?.SourceFile ?? sourceFile,
+            UtmZoneNumber = header?.UtmZone ?? project.Coordinates.UtmZone,
+            UtmZoneLetter = (header?.Southern ?? project.Coordinates.SouthernHemisphere) ? "S" : "N"
         };
         var chains = Chains(project);
         var byKey = chains.ToDictionary(c => c.Key);
-        if (project.Coordinates.UtmZone < 1) warnings.Add(new BpdMessage("The UTM zone is not set (Edit ▸ Site coordinate system): zone 0 is written."));
-        if (paths.Count == 0) errors.Add(new BpdMessage("There are no ties in the plan: the lines (PATH) are made by chains of ties."));
+        if (header != null)
+        {
+            // what the window let through is checked again: a file the programming unit refuses is never written
+            if (header.FullName.Length == 0 || header.FullName.Length > FullNameLength || ToFileName(header.FullName, FullNameLength) != header.FullName)
+                errors.Add(new BpdMessage("FULL_NAME: Latin letters, digits and '_', 1 to {0} characters.", FullNameLength));
+            if (header.DisplayedName.Length == 0 || header.DisplayedName.Length > NameLength || ToFileName(header.DisplayedName, NameLength) != header.DisplayedName)
+                errors.Add(new BpdMessage("DISPLAYED_NAME: Latin letters, digits and '_', 1 to {0} characters.", NameLength));
+            if (header.SourceFile.Length > SourceLength || header.SourceFile.Any(c => c < 32 || c > 126))
+                errors.Add(new BpdMessage("SOURCE_FILE: printable Latin characters, up to {0}.", SourceLength));
+            if (header.UtmZone is < 1 or > 60) errors.Add(new BpdMessage("The UTM zone number is 1 to 60."));
+        }
+        else if (project.Coordinates.UtmZone < 1) warnings.Add(new BpdMessage("The UTM zone is not set (Edit ▸ Site coordinate system): zone 0 is written."));
+        if (paths.Count == 0) errors.Add(new BpdMessage("There are no EBS ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators."));
         if (paths.Count > 26) errors.Add(new BpdMessage("No more than 26 lines (A–Z) can be written."));
         foreach (var dup in paths.GroupBy(p => p.ChainKey).Where(g => g.Count() > 1))
             errors.Add(new BpdMessage("The chain is chosen for more than one line: {0}", byKey.TryGetValue(dup.Key, out var dc) ? ChainName(dc) : dup.Key));
@@ -238,7 +274,7 @@ public static class DeviTronic
         var chosen = holes.Where(h => !h.IsDummy).ToList();
         var keys = paths.Select(p => p.ChainKey).ToHashSet();
         var notTied = chosen.Where(h => !chainOf.ContainsKey(h.Id) && HasElectronic(project, h)).Select(h => h.Id).ToList();
-        if (notTied.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) with electronic detonators have no ties and are not written.", notTied.Count) { Holes = notTied });
+        if (notTied.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) with electronic detonators are on no chain of EBS ties and are not written.", notTied.Count) { Holes = notTied });
         var other = chosen.Where(h => chainOf.TryGetValue(h.Id, out var k) && !keys.Contains(k) && HasElectronic(project, h)).Select(h => h.Id).ToList();
         if (other.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) are on a chain not chosen for any line and are not written.", other.Count) { Holes = other });
 
@@ -323,12 +359,77 @@ public static class DeviTronic
         return result;
     }
 
-    /// <summary>The blast name as the programming unit shows it: letters, digits and '_', cut or padded with '_' to 8 characters.</summary>
-    public static string SanitizeName(string name)
+    // ---- names --------------------------------------------------------------------------------
+
+    /// <summary>Cyrillic letters in Latin ones, after GOST 7.79-2000 system B without diacritics (Ц as Ts); Ь and Ъ go.</summary>
+    static readonly Dictionary<char, string> Translit = BuildTranslit();
+
+    static Dictionary<char, string> BuildTranslit()
     {
-        var s = new string(name.Where(c => c < 128 && (char.IsLetterOrDigit(c) || c == '_')).ToArray());
-        if (s.Length == 0) s = "BLAST";
-        return s.Length >= NameLength ? s[..NameLength] : s.PadRight(NameLength, '_');
+        var map = new Dictionary<char, string>();
+        void Add(char upper, string latin)
+        {
+            map[upper] = latin;
+            map[char.ToLowerInvariant(upper)] = latin.ToLowerInvariant();
+        }
+        foreach (var (c, l) in new[]
+        {
+            ('А', "A"), ('Б', "B"), ('В', "V"), ('Г', "G"), ('Д', "D"), ('Е', "E"), ('Ё', "Yo"), ('Ж', "Zh"), ('З', "Z"), ('И', "I"),
+            ('Й', "Y"), ('К', "K"), ('Л', "L"), ('М', "M"), ('Н', "N"), ('О', "O"), ('П', "P"), ('Р', "R"), ('С', "S"), ('Т', "T"),
+            ('У', "U"), ('Ф', "F"), ('Х', "Kh"), ('Ц', "Ts"), ('Ч', "Ch"), ('Ш', "Sh"), ('Щ', "Shch"), ('Ъ', ""), ('Ы', "Y"), ('Ь', ""),
+            ('Э', "E"), ('Ю', "Yu"), ('Я', "Ya")
+        })
+            Add(c, l);
+        return map;
+    }
+
+    /// <summary>
+    /// A name as FULL_NAME and DISPLAYED_NAME take it: Latin letters and digits stay, Cyrillic goes into Latin
+    /// (<see cref="Translit"/>), any other character becomes '_', '_' in a row become one; cut to <paramref name="max"/>.
+    /// "Карьер Север, блок 12" → "Karer_Sever_blok_12".
+    /// </summary>
+    public static string ToFileName(string text, int max)
+    {
+        var s = new StringBuilder();
+        foreach (var c in text)
+        {
+            string piece = c < 128 && char.IsLetterOrDigit(c) ? c.ToString() : Translit.TryGetValue(c, out var latin) ? latin : "_";
+            foreach (var x in piece)
+                if (x != '_' || s.Length == 0 || s[^1] != '_') s.Append(x);
+        }
+        return s.Length > max ? s.ToString(0, max) : s.ToString();
+    }
+
+    /// <summary>FULL_NAME by default: the number of the blast, or its name without one (<see cref="ToFileName"/>); BLAST for none.</summary>
+    public static string DefaultFullName(BlastProject project)
+    {
+        var s = ToFileName(project.Header.BlastNumber.Length > 0 ? project.Header.BlastNumber : project.Header.Name, FullNameLength);
+        return s.Trim('_').Length == 0 ? "BLAST" : s;
+    }
+
+    /// <summary>DISPLAYED_NAME by default: the first 8 characters of the full name, in capitals.</summary>
+    public static string DefaultDisplayedName(string fullName) => ToFileName(fullName, NameLength).ToUpperInvariant();
+
+    /// <summary>DISPLAYED_NAME as written: padded with '_' to 8 characters (BLAST for none).</summary>
+    public static string PadDisplayed(string name)
+    {
+        var s = ToFileName(name, NameLength);
+        if (s.Trim('_').Length == 0) s = "BLAST";
+        return s.PadRight(NameLength, '_');
+    }
+
+    /// <summary>
+    /// What each chain gives the file, in the order of <paramref name="chains"/>: its electronic detonators and its frame
+    /// (DETZONE: west, south, east, north, UTM metres); built as the file is (<see cref="Build"/>), so the window shows what
+    /// is written. A chain with nothing to write gives 0 and no frame.
+    /// </summary>
+    public static List<(int Detonators, (long West, long South, long East, long North)? Frame)> Preview(BlastProject project, IEnumerable<Hole> holes, IReadOnlyList<BpdChain> chains, IReadOnlyList<string> lines)
+    {
+        var requests = chains.Select((c, i) => new BpdPathRequest(c.Key, "1", lines[i])).ToList();
+        var plan = Build(project, holes, requests, BpdDelayUnit.Ms, "").Plan;
+        return lines.Select(l => plan.Paths.FirstOrDefault(p => p.Id == l) is { } p
+            ? (p.DetonatorCount, ((long, long, long, long)?)(p.West, p.South, p.East, p.North))
+            : (0, null)).ToList();
     }
 
     // ---- writing --------------------------------------------------------------------------
