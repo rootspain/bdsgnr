@@ -180,6 +180,14 @@ public sealed class SectionVisibility
     public List<string> HiddenKinds { get; set; } = new();
     public bool ShowGrid { get; set; }
     public DrawingView View { get; set; } = new();
+    /// <summary>The numbers of the holes over them.</summary>
+    public bool ShowNumbers { get; set; } = true;
+    /// <summary>The levels on the left: the top of the frame, collars, grade, toes.</summary>
+    public bool ShowLevels { get; set; } = true;
+    /// <summary>A dimension of each: the length of a hole, the spacing along the line, the subdrill.</summary>
+    public bool ShowDimensions { get; set; } = true;
+    /// <summary>The ties (shock tube and EBS) across the section; off at first.</summary>
+    public bool ShowTies { get; set; }
 }
 
 /// <summary>What is drawn around the content of every report: it belongs to the user, not to one blast.</summary>

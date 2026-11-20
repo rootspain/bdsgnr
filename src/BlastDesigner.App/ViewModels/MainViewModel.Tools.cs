@@ -752,8 +752,15 @@ public sealed partial class MainViewModel
 
     public void FlipTies()
     {
-        var ids = Doc!.SelectedEntities.OfType<TieEntity>().Select(t => t.Id).ToHashSet();
-        Change("Flip selected ties", p => Timing.FlipTies(p.Ties.Where(t => ids.Contains(t.Id))));
+        var ids = Doc!.SelectedEntities.OfType<TieEntity>().Select(t => t.Id).ToList();
+        // a tie of a chain of electronic holes turns its whole chain, the route numbers with it; other ties one by one
+        var plan = RouteNumbers.PlanFlip(Project!, ids);
+        if (!plan.IsEmpty) Change("Flip selected ties", p => RouteNumbers.Flip(p, plan));
+        var said = new List<string>();
+        if (plan.Chains.Count == 1) said.Add(Loc.F("Chain {0} flipped: {1} ties", plan.Chains[0].Line, plan.Chains[0].Ties));
+        else if (plan.Chains.Count > 1) said.Add(Loc.F("Chains flipped: {0}, ties: {1}", plan.Chains.Count, plan.Chains.Sum(c => c.Ties)));
+        if (plan.Refused.Count > 0) said.Add(Loc.F("Chain {0} starts from an initiation point or a hole outside it: delete that tie first", string.Join(", ", plan.Refused)));
+        if (said.Count > 0) SetStatus(string.Join(". ", said));
     }
 
     public async Task DeleteTieUp()

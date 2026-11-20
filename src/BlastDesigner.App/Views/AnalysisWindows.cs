@@ -665,14 +665,24 @@ public static partial class AnalysisWindows
     public static void ShowSection(MainViewModel vm, Vec3 a, Vec3 b)
     {
         if (_sectionAim is { } aim && Dialogs.ActivateExisting("Section view")) { aim(a, b); return; }
-        var width = new NumericUpDown { Value = (decimal)(_sectionHalfWidth ?? Reports.SectionHalfWidth(vm.Project!)), Minimum = 0.5m, Maximum = 500, Width = 120, FormatString = "0.#" };
+        var width = new NumericUpDown { Value = (decimal)(_sectionHalfWidth ?? Reports.DefaultSectionHalfWidth), Minimum = 0.5m, Maximum = 500, Width = 120, FormatString = "0.#" };
         Viewport? view = null;
+        var line = (A: a, B: b);
+        // the name of the line of the window, A–A; empty for a line only picked
+        string Caption() => vm.Project is { } pr && Reports.SectionLines(pr).FirstOrDefault(l => l.Points[0].Equals(line.A) && l.Points[1].Equals(line.B)) is { } named ? SectionNames.Caption(named.Label) : "";
+        var settings = vm.Settings;
         view = SecondaryViewport(vm, () =>
         {
             var o = vm.BuildSceneOptions();
-            return new SceneOptions { Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = (double)(width.Value ?? 5) };
+            var half = (double)(width.Value ?? 5);
+            var labels = new SectionLabels(settings.SectionNumbers, settings.SectionLevels, settings.SectionDimensions);
+            var ink = new SkiaSharp.SKColor(Look.Text.Color.R, Look.Text.Color.G, Look.Text.Color.B);
+            return new SceneOptions
+            {
+                Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = half, HideHoleLabels = labels.Numbers, HideTies = !settings.SectionTies,
+                Overlays = new IOverlay[] { new SectionAnnotations(line.A, line.B, half, Reports.SectionTitle(Caption()), labels, ink, 12) }
+            };
         });
-        var line = (A: a, B: b);
         var number = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 44, TextAlignment = TextAlignment.Center, FontFamily = Look.Mono, Foreground = Look.Text, Name = "sectionNumber" };
         Button previous = null!, next = null!;
         // where the line of the window stands among those of the blast, -1 for one that was only picked
@@ -682,7 +692,9 @@ public static partial class AnalysisWindows
             if (vm.Project is not { } project) return;
             var lines = Reports.SectionLines(project);
             var at = Index(lines);
-            number.Text = at >= 0 ? $"{at + 1} / {lines.Count}" : "";
+            // the name of the section before its place among them: A–A · 1 / 3
+            var name = at >= 0 ? SectionNames.Caption(lines[at].Label) : "";
+            number.Text = at >= 0 ? (name.Length > 0 ? $"{name} · " : "") + $"{at + 1} / {lines.Count}" : "";
             previous.IsEnabled = next.IsEnabled = lines.Count > 0;
         }
         void Fit()
@@ -693,6 +705,8 @@ public static partial class AnalysisWindows
             foreach (var e in project.Entities.Where(e => e is Hole)) foreach (var v in e.GetVertices()) if (Math.Abs(view.Camera.Depth(v)) <= (double)(width.Value ?? 5)) bb.Add(v);
             if (!bb.IsEmpty)
             {
+                // room over the collars for the numbers of the holes and the title of the section
+                bb.Add(bb.Max.WithZ(bb.Max.Z + bb.Size.Z * 0.3));
                 view.Camera.Fit(bb, 0.1);
                 // the fit goes to the middle of what it found: the slice stays on the line
                 view.Camera.MoveTargetToDepth(view.Camera.Depth(mid.WithZ(view.Camera.Target.Z)));
@@ -733,7 +747,19 @@ public static partial class AnalysisWindows
             _ = ReportPreviewWindow.Show(vm, ReportKind.CrossSection, sections: SectionPage(at >= 0 ? null : (line.A, line.B)), page: Math.Max(0, at));
         });
         print.Name = "print";
-        var top = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(6), Children = { new TextBlock { Text = Loc.T("Half width (m)"), VerticalAlignment = VerticalAlignment.Center }, width, fit, Ui.Row(2, previous, number, next), print } };
+        // what the section shows over it: kept in the settings of the program
+        CheckBox Show(string name, string text, bool on, Action<bool> set)
+        {
+            var box = new CheckBox { Content = Loc.T(text), IsChecked = on, Name = name, VerticalAlignment = VerticalAlignment.Center };
+            box.IsCheckedChanged += (_, _) => { set(box.IsChecked == true); vm.Settings.Save(); view!.Redraw(); };
+            return box;
+        }
+        var shown = Ui.Row(10,
+            Show("sectionNumbers", "Hole numbers", settings.SectionNumbers, v => settings.SectionNumbers = v),
+            Show("sectionLevels", "Levels", settings.SectionLevels, v => settings.SectionLevels = v),
+            Show("sectionDimensions", "Dimensions", settings.SectionDimensions, v => settings.SectionDimensions = v),
+            Show("sectionTies", "Ties shock tube/EBS", settings.SectionTies, v => settings.SectionTies = v));
+        var top = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 4, Margin = new Thickness(6), Children = { new TextBlock { Text = Loc.T("Half width (m)"), VerticalAlignment = VerticalAlignment.Center }, width, fit, Ui.Row(2, previous, number, next), print, shown } };
         var dock = new DockPanel();
         DockPanel.SetDock(top, Dock.Top);
         dock.Children.Add(top);

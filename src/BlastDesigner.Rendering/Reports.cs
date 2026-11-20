@@ -96,7 +96,7 @@ public static class Reports
             {
                 writer.StartPage();
                 writer.Heading($"{T("Cross section")} {caption}".Trim());
-                writer.Image((c, rect) => DrawSection(c, rect, project, a, b, SectionHalfWidth(project), design.SectionOf(line)), writer.Remaining - 10, section: new PageSection(line, caption));
+                writer.Image((c, rect) => DrawSection(c, rect, project, a, b, SectionHalfWidth(project), design.SectionOf(line), SectionTitle(caption)), writer.Remaining - 10, section: new PageSection(line, caption));
             }
         }
         if (opt.Sections.HasFlag(ReportSections.Quantities))
@@ -263,13 +263,16 @@ public static class Reports
         project.Entities.OfType<PolylineEntity>().Where(l => l.Kind == LineKind.CrossSection && l.Points.Count >= 2).ToList();
 
     /// <summary>The objects a section shows on each side of its line unless told otherwise, m.</summary>
-    public static double SectionHalfWidth(BlastProject project) => Math.Max(2, project.Design.Spacing);
+    public const double DefaultSectionHalfWidth = 4;
 
-    /// <summary>The ends of the section lines, each with what tells it from the others: its label, or its number among several.</summary>
+    /// <summary>The objects a section shows on each side of its line unless told otherwise, m: <see cref="DefaultSectionHalfWidth"/>.</summary>
+    public static double SectionHalfWidth(BlastProject project) => DefaultSectionHalfWidth;
+
+    /// <summary>The ends of the section lines, each with what tells it from the others: its name (A–A), or its number among several.</summary>
     private static List<(Vec3 A, Vec3 B, string Caption, Guid? Line)> SectionEnds(BlastProject project)
     {
         var lines = SectionLines(project);
-        return lines.Select((l, i) => (l.Points[0], l.Points[1], l.Label.Length > 0 ? l.Label : lines.Count > 1 ? (i + 1).ToString() : "", (Guid?)l.Id)).ToList();
+        return lines.Select((l, i) => (l.Points[0], l.Points[1], l.Label.Trim().Length > 0 ? SectionNames.Caption(l.Label) : lines.Count > 1 ? (i + 1).ToString() : "", (Guid?)l.Id)).ToList();
     }
 
     /// <summary>The sections on sheets, of a project whose times are solved.</summary>
@@ -284,15 +287,21 @@ public static class Reports
         for (int i = 0; i < lines.Count; i++)
         {
             var (a, b, caption, id) = lines[i];
-            pages.Add(SheetPage(project, layout, i, $"{opt.Title} {caption}".Trim(), w, h, null, now, false, (c, rect) => DrawSection(c, rect, project, a, b, half, design.SectionOf(id)), new PageSection(id, caption)));
+            pages.Add(SheetPage(project, layout, i, $"{opt.Title} {caption}".Trim(), w, h, null, now, false, (c, rect) => DrawSection(c, rect, project, a, b, half, design.SectionOf(id), SectionTitle(caption)), new PageSection(id, caption)));
         }
         // no line yet: an empty sheet, not a document with no pages
         if (pages.Count == 0) pages.Add(SheetPage(project, layout, 0, opt.Title, w, h, null, now, false, (_, _) => { }));
         return new ReportDocument(opt.Title, project.Header.Author, layout.Finish(pages, ReportLayout.Fields(project, opt.Title, now)));
     }
 
-    /// <summary>What the objects look like across a line, seen square on to it and fitted to the holes near it.</summary>
-    public static void DrawSection(SKCanvas c, SKRect rect, BlastProject project, Vec3 a, Vec3 b, double halfWidth, SectionVisibility shown)
+    /// <summary>The title over the drawing of a section: Section along line A–A, or Section view for a line without a name.</summary>
+    public static string SectionTitle(string caption) => caption.Length > 0 ? string.Format(T("Section along line {0}"), caption) : T("Section view");
+
+    /// <summary>
+    /// What the objects look like across a line, seen square on to it and fitted to the holes near it, with the labels of
+    /// the section (<see cref="SectionAnnotations"/>) the visibility asks for, in black.
+    /// </summary>
+    public static void DrawSection(SKCanvas c, SKRect rect, BlastProject project, Vec3 a, Vec3 b, double halfWidth, SectionVisibility shown, string title = "")
     {
         var hidden = Hidden(project, shown.HiddenKinds);
         var unframed = Unframed(project, shown.View, hidden);
@@ -304,12 +313,16 @@ public static class Reports
             foreach (var v in hole.GetVertices())
                 if (Math.Abs(cam.Depth(v)) <= halfWidth) fit.Add(v);
         if (fit.IsEmpty) { fit.Add(a.WithZ(depth)); fit.Add(b.WithZ(depth)); }
+        // room over the collars for the numbers of the holes and the title of the section
+        else fit.Add(fit.Max.WithZ(fit.Max.Z + fit.Size.Z * 0.3));
         cam.Fit(fit, 0.1);
         // the fit goes to the middle of what it found: the slice stays on the line
         cam.MoveTargetToDepth(cam.Depth(mid.WithZ(cam.Target.Z)));
         cam.Scale *= shown.View.Zoom;
         Pan(cam, shown.View);
-        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth });
+        var labels = new SectionLabels(shown.ShowNumbers, shown.ShowLevels, shown.ShowDimensions);
+        var overlays = labels.Any || title.Length > 0 ? new IOverlay[] { new SectionAnnotations(a, b, halfWidth, title, labels, SKColors.Black, 8) } : Array.Empty<IOverlay>();
+        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth, Overlays = overlays, HideHoleLabels = labels.Numbers, HideTies = !shown.ShowTies });
     }
 
     /// <summary>One sheet: a drawing over the title block.</summary>

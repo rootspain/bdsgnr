@@ -3478,3 +3478,17 @@ short:Electric	Электрич.
 short:Harness	Harness
 short:EBS	EBS
 short:Own delay	Свой
+Section name	Название разреза
+Section {0}	Разрез {0}
+Open section {0}	Открыть разрез {0}
+Empty: the next free letter	Пусто — следующая свободная буква
+Section name {0} is taken by another section line	Название {0} уже у другой линии разреза
+The old name stays	осталось прежнее
+Chain {0} flipped: {1} ties	Перевёрнута цепочка {0}: связей {1}
+Chains flipped: {0}, ties: {1}	Перевёрнуто цепочек: {0}, связей: {1}
+Chain {0} starts from an initiation point or a hole outside it: delete that tie first	Цепочка {0} начинается от точки инициирования или скважины вне её: сначала удалите эту связь
+Section along line {0}	Разрез по линии {0}
+Hole numbers	Номера
+Levels	Отметки
+Dimensions	Размеры
+Ties shock tube/EBS	Связи НСИ/ЭСИ

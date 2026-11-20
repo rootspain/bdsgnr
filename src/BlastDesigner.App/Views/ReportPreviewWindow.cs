@@ -801,6 +801,20 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
             Rebuild();
         };
         Add(coordinates);
+        if (_aimedSection is { } section)
+        {
+            // the labels of the section: of this sheet only
+            CheckBox Label(string tag, string text, bool on, Action<bool> set)
+            {
+                var box = new CheckBox { Content = new TextBlock { Text = Loc.T(text), TextWrapping = TextWrapping.Wrap }, IsChecked = on, Tag = tag, Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Top };
+                box.IsCheckedChanged += (_, _) => { set(box.IsChecked == true); Rebuild(); };
+                return box;
+            }
+            Add(Label("sectionNumbers", "Hole numbers", section.ShowNumbers, v => section.ShowNumbers = v));
+            Add(Label("sectionLevels", "Levels", section.ShowLevels, v => section.ShowLevels = v));
+            Add(Label("sectionDimensions", "Dimensions", section.ShowDimensions, v => section.ShowDimensions = v));
+            Add(Label("sectionTies", "Ties shock tube/EBS", section.ShowTies, v => section.ShowTies = v));
+        }
         return grid;
     }
 

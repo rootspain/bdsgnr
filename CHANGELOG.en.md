@@ -13,6 +13,15 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   shock tube hole is not connected when no signal of an initiation point reaches it, an electronic one when no tie
   comes to it; one with both when either is not. On top, the Only with a primer switch (off at first). Show on plan
   selects these holes on the main plan and brings the view to them. The tab has no print.
+- **Names of the section lines:** a new line takes a Latin letter in turn (A, B, C…, the first free one); on the plan
+  the letter stands at both ends, and the section is called A–A in the Section view window and on its sheet. The
+  properties panel has a Section name card and an Open section A–A button; the name can be changed, cleared it takes a
+  free letter again, one another line has is not taken. A copied line takes the next letter, the lines of older
+  projects letters in their order.
+- **Labels and dimensions on a section:** the Section view window and its sheet show the title Section along line A–A,
+  a frame, the numbers of the holes over their collars, the levels on the left (the top of the frame, collars, grade,
+  toes), the length of a hole, the spacing along the line and the subdrill. Hole numbers, Levels, Dimensions and Ties
+  shock tube/EBS (off at first) switches in the window and on the sheet. The half width of a section is 4 m at first.
 
 ### Changed
 - **Davey Tronic export (.BPD):** Lines (PATH) take only the chains of EBS ties (the product of the tie an electronic
@@ -30,6 +39,10 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   instead of 0 ms connection.
 - **The short name of a type:** a Short name field on the Types tab of Resources, the name of the type in the
   Initiation catalogue.
+- **Flip ties for EBS, the whole chain:** one selected tie of an EBS chain flips every tie of it, the route numbers go
+  the other way, the letter stays. A chain from an initiation point is not flipped (a word in the status bar). Shock
+  tube ties flip as before.
+- **Thicker selected ties:** 4.5 px instead of 3, easier to see among the others.
 
 ## 0.3.9 — 2026-11-20
 

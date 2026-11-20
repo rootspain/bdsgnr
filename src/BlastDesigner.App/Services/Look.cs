@@ -27,6 +27,8 @@ public static class Look
     public static readonly SolidColorBrush AccentHover = Brush(0xFFFFB956);
     public static readonly SolidColorBrush AccentPressed = Brush(0xFFE0962A);
     public static readonly SolidColorBrush Blue = Brush(0xFF4C9BFF);
+    /// <summary>A value not taken: the border and the message of a field.</summary>
+    public static readonly SolidColorBrush Danger = Brush(0xFFE5484D);
     public static readonly SolidColorBrush OnAccent = Brush(0xFF15181C);
     /// <summary>Menus lie over the ribbon and the panels: a ground and an outline of their own keep them apart from what is under them.</summary>
     public static readonly SolidColorBrush Popup = Brush(0xFF2A2F36);

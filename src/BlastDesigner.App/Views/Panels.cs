@@ -254,6 +254,14 @@ public sealed partial class PropertiesPanel : DockPanel
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
         var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HasHandles", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset", "U", "V", "Center", "Current", "KindName" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid, first is TieEntity ? sel.OfType<TieEntity>().ToList() : null);
+        if (sel.All(e => e is PolylineEntity { Kind: LineKind.CrossSection }))
+        {
+            // a section line: its name has a card of its own (SectionNameCard); a section goes along an open segment
+            _header.Text = sel.Count == 1 ? Loc.T("Section line") : $"{Loc.T("Section line")} × {sel.Count}";
+            grid.Exclude.Add(nameof(PolylineEntity.Label));
+            grid.Exclude.Add(nameof(PolylineEntity.Closed));
+            grid.Exclude.Add(nameof(PolylineEntity.Area));
+        }
         if (first is TimingLineEntity)
         {
             // the angles of the advanced burn are set in the timing line window; a chevron shows the bearings of its segments
@@ -409,11 +417,28 @@ public sealed partial class PropertiesPanel : DockPanel
             edit.Click += async (_, _) => await _vm.EditOpeningPoint(opening);
             panel.Children.Add(edit);
         }
-        if (first is PolylineEntity { Kind: LineKind.CrossSection, Points.Count: >= 2 } section && sel.Count == 1)
+        if (first is PolylineEntity { Kind: LineKind.CrossSection } section && sel.Count == 1)
         {
-            var open = new Button { Content = Loc.T("Section along line"), Margin = new Thickness(6), Name = "sectionAlongLine" };
-            open.Click += (_, _) => AnalysisWindows.ShowSection(_vm, section.Points[0], section.Points[1]);
-            panel.Children.Add(open);
+            // the name first, then the section it opens, then the layer and the fields
+            panel.Children.Insert(0, SectionNameCard(doc, section));
+            if (section.Points.Count >= 2)
+            {
+                var caption = SectionNames.Caption(section.Label);
+                var open = new Button
+                {
+                    Content = caption.Length > 0 ? Loc.F("Open section {0}", caption) : Loc.T("Section along line"),
+                    Height = 32,
+                    Margin = new Thickness(6, 0, 6, 6),
+                    CornerRadius = new CornerRadius(7),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Classes = { "primary" },
+                    Name = "sectionAlongLine"
+                };
+                open.Click += (_, _) => AnalysisWindows.ShowSection(_vm, section.Points[0], section.Points[1]);
+                panel.Children.Insert(1, open);
+            }
         }
         panel.Children.Add(grid);
         _content.Content = panel;
@@ -455,6 +480,86 @@ public sealed partial class PropertiesPanel : DockPanel
         Grid.SetColumn(combo, 1);
         // the columns and margin of the property grid under it, so the row lines up with its fields
         return new Grid { ColumnDefinitions = new ColumnDefinitions("2*,3*"), Margin = new Thickness(4, 4, 4, 0), Children = { label, combo } };
+    }
+
+    /// <summary>
+    /// The name of a section line (<see cref="SectionNames"/>): a field for the letter, the section as it is called (A–A)
+    /// and the line with the letter at its ends. Typed in (Enter, or leaving the field) it is the line's, one undo step; empty,
+    /// the next free letter. A name another section line has is not taken: the field goes red and says so, the name stays.
+    /// </summary>
+    private Control SectionNameCard(Document doc, PolylineEntity line)
+    {
+        var name = line.Label.Trim();
+        var box = new TextBox
+        {
+            Name = "sectionName",
+            Text = name,
+            MaxLength = SectionNames.MaxLength,
+            Width = 56, Height = 38, MinHeight = 38,
+            Padding = new Thickness(4, 0),
+            FontFamily = Look.Mono, FontSize = 20, FontWeight = FontWeight.Bold,
+            TextAlignment = TextAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Background = Look.Field, BorderBrush = Look.LineStrong,
+            IsReadOnly = doc.IsReadOnly
+        };
+        ToolTip.SetTip(box, Loc.T("Empty: the next free letter"));
+        var caption = new TextBlock { Text = Loc.F("Section {0}", SectionNames.Caption(name)), FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, Name = "sectionCaption" };
+        var hint = new TextBlock { Text = Loc.T("Empty: the next free letter"), FontSize = 10.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap };
+        var error = new TextBlock { FontSize = 11.5, Foreground = Look.Danger, TextWrapping = TextWrapping.Wrap, IsVisible = false, Name = "sectionNameError" };
+        var normalBorder = box.BorderBrush;
+        void Commit()
+        {
+            if (doc.IsReadOnly) return;
+            var v = (box.Text ?? "").Trim();
+            if (v == name) { error.IsVisible = false; box.BorderBrush = normalBorder; return; }
+            if (SectionNames.Taken(doc.Project, line.Id, v))
+            {
+                // not taken: the field says why, the line keeps its name
+                error.Text = Loc.F("Section name {0} is taken by another section line", v);
+                error.IsVisible = true;
+                box.BorderBrush = Look.Danger;
+                hint.Text = Loc.T("The old name stays");
+                return;
+            }
+            var id = line.Id;
+            _vm.Change(Loc.F("Edit {0}", Loc.T("Section name")), p => { if (p.FindEntity(id) is PolylineEntity l) l.Label = v; });
+        }
+        box.LostFocus += (_, _) => Commit();
+        box.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { Commit(); e.Handled = true; } };
+        // the line with its letter at each end, in the colour of section lines
+        var lineBrush = new SolidColorBrush(Color.FromUInt32(_vm.Settings.SectionLineColor));
+        TextBlock End() => new() { Text = name, FontFamily = Look.Mono, FontSize = 12, FontWeight = FontWeight.Bold, Foreground = lineBrush, VerticalAlignment = VerticalAlignment.Center };
+        var sketch = new Border
+        {
+            Height = 30, CornerRadius = new CornerRadius(6), Background = Look.Ground, Padding = new Thickness(10, 0),
+            Child = new DockPanel
+            {
+                Children =
+                {
+                    new Border { [DockPanel.DockProperty] = Dock.Left, Child = End() },
+                    new Border { [DockPanel.DockProperty] = Dock.Right, Child = End() },
+                    new Border { Height = 2, Background = lineBrush, Margin = new Thickness(8, 0), VerticalAlignment = VerticalAlignment.Center }
+                }
+            }
+        };
+        return new Border
+        {
+            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10), Margin = new Thickness(6, 6, 6, 8),
+            Child = new StackPanel
+            {
+                Spacing = 8,
+                Children =
+                {
+                    new TextBlock { Text = Loc.T("Section name"), FontSize = 11, Foreground = Look.Muted },
+                    new DockPanel { Children = { new Border { [DockPanel.DockProperty] = Dock.Left, Margin = new Thickness(0, 0, 10, 0), Child = box }, new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2, Children = { caption, hint } } } },
+                    error,
+                    sketch
+                }
+            }
+        };
     }
 
     /// <summary>

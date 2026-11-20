@@ -296,6 +296,89 @@ public static class RouteNumbers
         static (Guid, Guid) Pair(Guid a, Guid b) => a.CompareTo(b) < 0 ? (a, b) : (b, a);
     }
 
+    /// <summary>
+    /// The chain of ties of an electronic hole with a route number: the holes of its letter tied to it, numbered one more
+    /// or one less, and so on (by <see cref="Hole.RouteNumber"/>, whichever way the ties are drawn). Empty for a hole
+    /// without a number.
+    /// </summary>
+    public static List<Hole> Chain(BlastProject project, Hole hole)
+    {
+        var list = new List<Hole>();
+        if (hole.RouteNumber == null) return list;
+        var seen = new HashSet<Guid> { hole.Id };
+        var queue = new Queue<Hole>();
+        queue.Enqueue(hole);
+        while (queue.Count > 0)
+        {
+            var h = queue.Dequeue();
+            list.Add(h);
+            foreach (var t in project.Ties.Where(t => t.FromId == h.Id || t.ToId == h.Id))
+                if (Electronic(project, t.FromId == h.Id ? t.ToId : t.FromId, out var next) && Linked(h, next) && seen.Add(next.Id))
+                    queue.Enqueue(next);
+        }
+        return list.OrderBy(h => h.RouteNumber).ToList();
+    }
+
+    /// <summary>Two holes next to each other on one chain: the same letter, numbers one apart.</summary>
+    static bool Linked(Hole a, Hole b) =>
+        a.RouteNumber is int n && b.RouteNumber is int m && Math.Abs(n - m) == 1 && a.RouteLine == b.RouteLine;
+
+    /// <summary>A tie of a chain: between two holes next to each other on it.</summary>
+    static bool ChainTie(BlastProject project, TieEntity t, out Hole from) =>
+        Electronic(project, t.FromId, out from) & Electronic(project, t.ToId, out var to) && Linked(from, to);
+
+    /// <summary>What the Flip ties button does with a selection: the ties it turns, the chains it turns whole, those it leaves.</summary>
+    public sealed record FlipPlan(HashSet<Guid> Ties, List<(string Line, List<Guid> Holes, int Ties)> Chains, List<string> Refused)
+    {
+        public bool IsEmpty => Ties.Count == 0;
+    }
+
+    /// <summary>
+    /// The ties the Flip ties button turns for the ties selected. A tie of a chain of electronic holes turns the whole chain
+    /// (every tie of it, selected or not), and the route numbers of the chain go the other way: the last hole is the first.
+    /// A chain that starts from an initiation point or a hole outside it (a tie into its first hole from there) is left as
+    /// it is: <see cref="FlipPlan.Refused"/>. Any other tie selected (shock tube, cord) turns by itself, as before.
+    /// </summary>
+    public static FlipPlan PlanFlip(BlastProject project, IEnumerable<Guid> selected)
+    {
+        var ties = new HashSet<Guid>();
+        var chains = new List<(string, List<Guid>, int)>();
+        var refused = new List<string>();
+        var done = new HashSet<Guid>();
+        foreach (var id in selected)
+        {
+            if (project.FindEntity(id) is not TieEntity tie || done.Contains(tie.Id)) continue;
+            if (!ChainTie(project, tie, out var end)) { ties.Add(tie.Id); done.Add(tie.Id); continue; }
+            var holes = Chain(project, end);
+            var members = holes.Select(h => h.Id).ToHashSet();
+            var own = project.Ties.Where(t => members.Contains(t.FromId) && members.Contains(t.ToId) && ChainTie(project, t, out _)).Select(t => t.Id).ToList();
+            done.UnionWith(own);
+            var line = holes[0].RouteLine ?? "";
+            var first = holes[0].Id;
+            if (project.Ties.Any(t => t.ToId == first && !members.Contains(t.FromId) || t.FromId == first && project.FindEntity(t.ToId) is InitiationPoint))
+            {
+                refused.Add(line);
+                continue;
+            }
+            ties.UnionWith(own);
+            chains.Add((line, holes.Select(h => h.Id).ToList(), own.Count));
+        }
+        return new FlipPlan(ties, chains, refused);
+    }
+
+    /// <summary>Turns the ties of a <see cref="PlanFlip"/> and numbers its chains the other way round (n + 1 − k); the letters stay.</summary>
+    public static void Flip(BlastProject project, FlipPlan plan)
+    {
+        Timing.FlipTies(project.Ties.Where(t => plan.Ties.Contains(t.Id)).ToList());
+        foreach (var (_, ids, _) in plan.Chains)
+        {
+            var holes = ids.Select(project.FindEntity).OfType<Hole>().Where(h => h.RouteNumber != null).ToList();
+            if (holes.Count == 0) continue;
+            int low = holes.Min(h => h.RouteNumber!.Value), high = holes.Max(h => h.RouteNumber!.Value);
+            foreach (var h in holes) h.RouteNumber = low + high - h.RouteNumber!.Value;
+        }
+    }
+
     /// <summary>A hole and the holes after it in its chain: tied to it either way, numbered one more, and so on.</summary>
     static List<Hole> After(BlastProject project, Hole hole)
     {

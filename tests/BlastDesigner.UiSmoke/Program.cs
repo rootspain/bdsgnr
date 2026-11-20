@@ -4996,6 +4996,18 @@ Step("tie tool: holes with an electronic detonator take route numbers in the ord
         vm.Doc.Select(ids); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
         Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
         window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "50b_route_numbers.png"));
+        // Flip ties with one tie of the chain selected: the whole chain turns, its numbers the other way, one undo step
+        var oneTie = vm.Project.Ties.First(t => t.FromId == ids[0] && t.ToId == ids[1]).Id;
+        vm.Doc.Select(new[] { oneTie }); Pump();
+        vm.FlipTies(); Pump();
+        if (N(0) != 3 || N(1) != 2 || N(2) != 1 || Line(0) != chain) throw new Exception($"the flipped chain should be numbered 3, 2, 1: {N(0)}, {N(1)}, {N(2)}");
+        if (!vm.Project.Ties.Any(t => t.FromId == ids[1] && t.ToId == ids[0]) || !vm.Project.Ties.Any(t => t.FromId == ids[2] && t.ToId == ids[1])) throw new Exception("every tie of the chain should be flipped, not only the one selected");
+        if (vm.Status != BlastDesigner.App.Services.Loc.F("Chain {0} flipped: {1} ties", chain, 2)) throw new Exception("the status should say the chain flipped: " + vm.Status);
+        vm.Doc.ClearSelection(); Pump();
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "50c_route_numbers_flipped.png"));
+        for (int i = 0; i < 5 && N(0) != 1; i++) { vm.Undo(); Pump(); }
+        if (N(0) != 1 || N(2) != 3 || !vm.Project.Ties.Any(t => t.FromId == ids[0] && t.ToId == ids[1])) throw new Exception("undo should bring the ties and the numbers back");
         // the tie E2 → E3 deleted: E3 loses its number, E1 and E2 keep theirs
         var tie = vm.Project.Ties.First(t => (t.FromId == ids[1] && t.ToId == ids[2]) || (t.FromId == ids[2] && t.ToId == ids[1])).Id;
         vm.Change("Delete", p => p.Entities.RemoveAll(e => e.Id == tie)); Pump();
@@ -6770,25 +6782,43 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     SectionClick(-20, 3); SectionClick(20, 3); Pump();
     var sectionLines = BlastDesigner.Rendering.Reports.SectionLines(vm.Project);
     if (sectionLines.Count != 2 || sectionLines.Any(l => l.Points.Count != 2 || l.Closed)) throw new Exception("two clicks should make one section line: " + sectionLines.Count);
+    // each line its letter in turn, at both its ends on the plan
+    if (sectionLines[0].Label != "A" || sectionLines[1].Label != "B") throw new Exception($"the section lines should be A and B: {sectionLines[0].Label}, {sectionLines[1].Label}");
     vm.SelectTool(); Pump();
+    vm.View.Redraw(); Pump();
+    Shot(window, "81a_section_names_on_plan");
     // the window goes from line to line and prints
     AnalysisWindows.ShowSection(vm, sectionLines[0].Points[0], sectionLines[0].Points[1]); Pump();
     var sectionWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
     string SectionNumber() => sectionWindow.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "sectionNumber").Text ?? "";
     void SectionPress(string name) { sectionWindow.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
-    if (SectionNumber() != "1 / 2") throw new Exception("the section window shows " + SectionNumber());
+    if (SectionNumber() != "A–A · 1 / 2") throw new Exception("the section window shows " + SectionNumber());
     SectionPress("sectionNext");
-    if (SectionNumber() != "2 / 2") throw new Exception("the arrow did not go to the next line: " + SectionNumber());
+    if (SectionNumber() != "B–B · 2 / 2") throw new Exception("the arrow did not go to the next line: " + SectionNumber());
     SectionPress("sectionNext");
-    if (SectionNumber() != "1 / 2") throw new Exception("the arrow did not go round: " + SectionNumber());
+    if (SectionNumber() != "A–A · 1 / 2") throw new Exception("the arrow did not go round: " + SectionNumber());
     SectionPress("sectionPrevious");
-    if (SectionNumber() != "2 / 2") throw new Exception("the arrow did not go back: " + SectionNumber());
+    if (SectionNumber() != "B–B · 2 / 2") throw new Exception("the arrow did not go back: " + SectionNumber());
     Shot(sectionWindow, "81_section_window");
+    // the labels of the section: numbers, levels, dimensions, on at first, kept in the settings
+    CheckBox SectionShow(string name) => sectionWindow.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == name) ?? throw new Exception("no " + name + " in the section window");
+    if (SectionShow("sectionNumbers").IsChecked != true || SectionShow("sectionLevels").IsChecked != true || SectionShow("sectionDimensions").IsChecked != true) throw new Exception("the labels of the section should be on at first");
+    // the ties across the section: off at first, kept in the settings
+    if (SectionShow("sectionTies").IsChecked != false || vm.Settings.SectionTies) throw new Exception("the ties should be left out of the section at first");
+    SectionShow("sectionTies").IsChecked = true; Pump();
+    if (!vm.Settings.SectionTies) throw new Exception("turning the ties on should go into the settings");
+    SectionShow("sectionTies").IsChecked = false; Pump();
+    SectionShow("sectionDimensions").IsChecked = false; Pump();
+    if (vm.Settings.SectionDimensions) throw new Exception("turning the dimensions off should go into the settings");
+    Shot(sectionWindow, "81g_section_window_no_dimensions");
+    SectionShow("sectionDimensions").IsChecked = true; Pump();
+    if (!vm.Settings.SectionDimensions) throw new Exception("the dimensions did not come back on");
     SectionPress("print");
     var sectionSheet = BlastDesigner.App.Services.Dialogs.LastShown!;
     var sectionForm = sectionSheet.GetLogicalDescendants().OfType<ReportPreviewForm>().Single();
     Wait(sectionForm);
     if (sectionForm.Document!.Pages.Count != 2 || sectionForm.Page != 1) throw new Exception($"the sheets of the sections: {sectionForm.Document.Pages.Count}, on {sectionForm.Page}");
+    if (!sectionForm.Design.SectionOf(sectionForm.Document.Pages[1].Section!.Line).ShowDimensions) throw new Exception("a sheet of a section should show its dimensions at first");
     Shot(sectionSheet, "81b_section_sheet");
     sectionForm.GoTo(0); Pump();
     Shot(sectionSheet, "81c_section_sheet_holes");
@@ -6802,8 +6832,30 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     window.ShowInspectorTab(0); Pump();
     (SectionButton() ?? throw new Exception("no section button on a section line")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     sectionWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
-    if (SectionNumber() != "2 / 2") throw new Exception("the button opened the section of " + SectionNumber());
+    if (SectionNumber() != "B–B · 2 / 2") throw new Exception("the button opened the section of " + SectionNumber());
     sectionWindow.Close(); Pump();
+    // the name in the properties: a card with the letter, the section as it is called, the line with its letters
+    TextBox NameBox() => window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "sectionName") ?? throw new Exception("no section name field on a section line");
+    TextBlock NamePart(string name) => window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == name);
+    string? Named() => vm.Project!.Entities.OfType<BlastDesigner.Domain.Model.PolylineEntity>().First(l => l.Id == secondLine).Label;
+    void TypeName(string text) { var box = NameBox(); box.Text = text; box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
+    var sectionCaptionWord = BlastDesigner.App.Services.Loc.F("Section {0}", "B–B");
+    if (NameBox().Text != "B" || NamePart("sectionCaption").Text != sectionCaptionWord) throw new Exception($"the card should show B and {sectionCaptionWord}: {NameBox().Text}, {NamePart("sectionCaption").Text}");
+    if (SectionButton()?.Content as string != BlastDesigner.App.Services.Loc.F("Open section {0}", "B–B")) throw new Exception("the button should open the section by its name: " + SectionButton()?.Content);
+    if (window.GetLogicalDescendants().OfType<Control>().Any(c => c.IsEffectivelyVisible && c.Name == "prop" + nameof(BlastDesigner.Domain.Model.PolylineEntity.Closed))) throw new Exception("a section line should not offer Closed");
+    Shot(window, "81e_section_properties");
+    // the name of the other line is not taken
+    var undoSteps = vm.Doc!.UndoNames.Count;
+    TypeName("a");
+    if (Named() != "B" || !NamePart("sectionNameError").IsVisible || vm.Doc.UndoNames.Count != undoSteps) throw new Exception("a name another section line has should not be taken: " + Named());
+    Shot(window, "81f_section_name_taken");
+    TypeName("Sever");
+    if (Named() != "Sever") throw new Exception("the name typed in was not taken: " + Named());
+    vm.Undo(); Pump();
+    if (Named() != "B") throw new Exception("undo should bring the name back: " + Named());
+    // cleared: the first free letter
+    TypeName("");
+    if (Named() != "B") throw new Exception("a name cleared should be the first free letter: " + Named());
     SectionKind(BlastDesigner.Domain.Model.LineKind.General);
     if (SectionButton() != null) throw new Exception("the section button stayed on a plain polyline");
     SectionKind(BlastDesigner.Domain.Model.LineKind.CrossSection);
@@ -6825,8 +6877,15 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     string? Drawing() => sectionReport.Window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "visibilityDrawing").Text;
     var sectionWord = BlastDesigner.App.Services.Loc.Ui("Section");
     if (!SectionGridBox().IsEffectivelyVisible || !SectionPad().IsEffectivelyEnabled) throw new Exception("the visibility should be there with a section on the screen");
-    if (Drawing() != sectionWord + " 1") throw new Exception("the visibility does not say whose it is: " + Drawing());
+    if (Drawing() != sectionWord + " A–A") throw new Exception("the visibility does not say whose it is: " + Drawing());
     var firstId = sectionReport.Form.Document!.Pages[0].Section!.Line!.Value;
+    // the labels of a section sheet: of that sheet only
+    var sheetDimensions = sectionReport.Window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Tag as string == "sectionDimensions") ?? throw new Exception("no Dimensions box on a section sheet");
+    sheetDimensions.IsChecked = false; Pump();
+    Wait(sectionReport.Form);
+    if (sectionDesign.SectionOf(firstId).ShowDimensions || !sectionDesign.SectionOf(sectionReport.Form.Document!.Pages[1].Section!.Line).ShowDimensions) throw new Exception("the Dimensions box should act on this section only");
+    sectionReport.Window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Tag as string == "sectionDimensions").IsChecked = true; Pump();
+    Wait(sectionReport.Form);
     var secondId = sectionReport.Form.Document.Pages[1].Section!.Line!.Value;
     var (planGrid, planPan, planLocked) = (sectionDesign.ShowGrid, sectionDesign.View.PanX, sectionDesign.View.Locked);
     var otherGrid = SectionGridBox().IsChecked;
@@ -6837,7 +6896,7 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     if (sectionDesign.Sections[firstId].View.PanX == 0 || !sectionDesign.Sections[firstId].View.Locked) throw new Exception("the buttons did not act on the section");
     if (sectionDesign.ShowGrid != planGrid || sectionDesign.View.PanX != planPan || sectionDesign.View.Locked != planLocked) throw new Exception("the section changed the visibility of the plan");
     sectionReport.Form.GoTo(1); Pump();
-    if (Drawing() != sectionWord + " 2" || SectionPad().Locked || SectionGridBox().IsChecked != otherGrid) throw new Exception("the second section should have its own visibility");
+    if (Drawing() != sectionWord + " B–B" || SectionPad().Locked || SectionGridBox().IsChecked != otherGrid) throw new Exception("the second section should have its own visibility");
     if (sectionDesign.Sections[secondId].View.PanX != 0) throw new Exception("the second section took the view of the first");
     sectionReport.Form.GoTo(0); Pump();
     if (!SectionPad().Locked || SectionGridBox().IsChecked == otherGrid) throw new Exception("the first section lost its visibility");

@@ -114,6 +114,8 @@ public static class ProjectFile
             if (s.Color is uint own) s.Color = ProgramSettings.NewSurfaceColor(own);
         // one shape, one type: a line front of two points is now the straight chevron (its vertex in the middle)
         foreach (var l in p.Entities.OfType<TimingLineEntity>()) { l.LineFrontToStraightChevron(); l.PointByPoints(); }
+        // section lines from before their names (0.3.10) take letters in their order
+        Engine.SectionNames.NameAll(p);
         p.SchemaVersion = BlastProject.CurrentSchemaVersion;
     }
 

@@ -40,6 +40,10 @@ public sealed record SceneOptions
     public SKColor SelectionColor { get; init; } = new(0xFFFF00FF);
     public float CollarPixels { get; init; } = 6;
     public bool DrawSummaryBlock { get; init; } = true;
+    /// <summary>No labels by the holes: a section that writes their numbers over its frame (<see cref="SectionAnnotations"/>).</summary>
+    public bool HideHoleLabels { get; init; }
+    /// <summary>No ties, whatever the view shows: a section that leaves them out (its Ties switch off).</summary>
+    public bool HideTies { get; init; }
     /// <summary>Allows the hole type legend (still subject to the project's "Hole legend" switch).</summary>
     public bool DrawHoleLegend { get; init; } = true;
     /// <summary>Allows the tie (connector) legend (still subject to the project's "Tie legend" switch).</summary>
@@ -169,6 +173,8 @@ public static class PlanRenderer
         {
             // a surface is cut to the band when it is drawn: its triangles can cross the band with no vertex in it
             if (opt.SliceHalfWidth is not double w || e is SurfaceEntity) return true;
+            // the line a section is cut along lies on its collars: not drawn in the section
+            if (e is PolylineEntity { Kind: LineKind.CrossSection }) return false;
             foreach (var v in e.GetVertices()) if (Math.Abs(cam.Depth(v)) <= w) return true;
             return false;
         }
@@ -448,6 +454,9 @@ public static class PlanRenderer
                         canvas.DrawText(pl.Label, x + 2, y - 2, text);
                     }
                     if (pl.ZoneArrows is { Count: > 0 } arrows && !opt.HaloPass) DrawZoneArrows(canvas, cam, arrows, color, opt.Background);
+                    // the name of a section line at each end of the segment it is cut along
+                    if (showText && !opt.HaloPass && cam.IsPlan && pl.Kind == LineKind.CrossSection && pl.Points.Count >= 2 && pl.Label.Trim().Length > 0)
+                        DrawSectionName(canvas, cam, pl.Points[0], pl.Points[1], pl.Label.Trim(), color);
                     break;
                 case PointEntity p:
                     DrawPoint(canvas, cam, p, stroke, fill, text, showText);
@@ -501,7 +510,7 @@ public static class PlanRenderer
         // Ties and rows refer to holes by id: one lookup table per frame, instead of searching the whole project for
         // each end of each tie (with a survey under the blast that was most of the frame).
         Dictionary<Guid, Entity>? byId = null;
-        var showTies = view.ShowTies || opt.HideGeometry;
+        var showTies = (view.ShowTies || opt.HideGeometry) && !opt.HideTies;
         var showRows = view.ShowRows && !opt.HideGeometry && !opt.HaloPass;
         if (showTies || showRows)
         {
@@ -1053,6 +1062,25 @@ public static class PlanRenderer
 
     /// <summary>Point kinds drawn as a plain cross (batched by <see cref="Render"/>).</summary>
     private static bool IsCross(PointKind kind) => kind is not (PointKind.Monitoring or PointKind.GradePeg or PointKind.SurveyStation or PointKind.NorthPoint);
+
+    /// <summary>Size of the name of a section line on the plan, px: larger than the labels of the holes.</summary>
+    public const float SectionNameSize = 16;
+
+    /// <summary>The name of a section line beyond each end of its segment, along it, in the colour of the line.</summary>
+    private static void DrawSectionName(SKCanvas c, Camera cam, Vec3 a, Vec3 b, string name, SKColor color)
+    {
+        var (ax, ay) = cam.ToScreen(a);
+        var (bx, by) = cam.ToScreen(b);
+        double dx = bx - ax, dy = by - ay, length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1) return;
+        dx /= length; dy /= length;
+        using var paint = new SKPaint { IsAntialias = true, TextSize = SectionNameSize, Color = color, FakeBoldText = true, TextAlign = SKTextAlign.Center, Typeface = SKTypeface.Default };
+        // clear of the end by half the name, whichever way the line goes
+        var off = 6 + Math.Max(paint.MeasureText(name), SectionNameSize) / 2;
+        var middle = SectionNameSize * 0.36f;
+        c.DrawText(name, (float)(ax - dx * off), (float)(ay - dy * off) + middle, paint);
+        c.DrawText(name, (float)(bx + dx * off), (float)(by + dy * off) + middle, paint);
+    }
 
     private static void DrawPoint(SKCanvas c, Camera cam, PointEntity p, SKPaint stroke, SKPaint fill, SKPaint text, bool showText)
     {
@@ -1665,7 +1693,7 @@ public static class PlanRenderer
                 var col = selected ? opt.SelectionColor : product != null ? new SKColor(product.Color) : new SKColor(0xFF6B7280);
                 if (!_dark && col.Red > 230 && col.Green > 230 && col.Blue > 230) col = new SKColor(0xFF374151);
                 col = Adapt(col);
-                arrows.Line(col, selected ? 3f : 2f, x0, y0, x1, y1);
+                arrows.Line(col, selected ? SelectedTieWidth : TieWidth, x0, y0, x1, y1);
                 var ang = Math.Atan2(y1 - y0, x1 - x0);
                 arrows.Triangle(col, new SKPoint(x1, y1),
                     new SKPoint((float)(x1 - head * Math.Cos(ang - 0.4)), (float)(y1 - head * Math.Sin(ang - 0.4))),
@@ -1728,6 +1756,9 @@ public static class PlanRenderer
             c.DrawCircle(tx, ty, 1.5f, fill);
         }
     }
+
+    /// <summary>Width of a tie on the plan, px; a selected one thicker, to be seen among the others.</summary>
+    public const float TieWidth = 2, SelectedTieWidth = 4.5f;
 
     /// <summary>The ring round a selected hole: how far out of the collar, and how thick, px.</summary>
     public const float SelectedRingGap = 4, SelectedRingWidth = 2;
@@ -1807,7 +1838,7 @@ public static class PlanRenderer
 
     private static void DrawHoleLabels(Camera cam, BlastProject project, Hole h, ViewState view, (List<HoleLabel> Left, List<HoleLabel> Right) sides, SceneOptions opt, SKPaint text, TextBatch batch)
     {
-        if (cam.Scale < 1.2) return;
+        if (cam.Scale < 1.2 || opt.HideHoleLabels) return;
         var (x, y) = cam.ToScreen(h.Collar);
         if (x < -100 || y < -100 || x > cam.Width + 100 || y > cam.Height + 100) return;
         // the Labels chip over the plan takes the columns of every hole off, the layer's own switch those of its holes

@@ -157,6 +157,29 @@ public class RenderTests
     }
 
     [Fact]
+    public void ASelectedTie_IsThickerThanTheOthers()
+    {
+        int Ink(bool selected)
+        {
+            var p = BlastProject.CreateNew("tie");
+            var a = p.Add(new Hole { Label = "1", Collar = new Vec3(0, 0, 0), Length = 10 });
+            var b = p.Add(new Hole { Label = "2", Collar = new Vec3(40, 0, 0), Length = 10 });
+            BlastDesigner.Engine.Timing.Connect(p, a.Id, b.Id, null);
+            var tie = p.Ties.Single().Id;
+            var colour = new SKColor(0xFF2266FF);
+            var cam = new Camera { Width = 400, Height = 300, Scale = 5, Target = new Vec3(20, 0.1, 0) };
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, SelectionColor = colour, Selection = selected ? new HashSet<Guid> { tie } : new HashSet<Guid>() });
+            // how thick it is across, a quarter of the way along (clear of the holes and of the delay in the middle)
+            var bg = bitmap.GetPixel(5, 5);
+            return Enumerable.Range(0, 300).Count(y => bitmap.GetPixel(150, y) != bg);
+        }
+        Assert.True(PlanRenderer.SelectedTieWidth >= PlanRenderer.TieWidth * 2);
+        Assert.True(Ink(true) > Ink(false) * 1.5, $"{Ink(true)} {Ink(false)}");
+    }
+
+    [Fact]
     public void ASectionLineHasItsColourOnTheScreen()
     {
         var section = new SKColor(0xFFEA580C);

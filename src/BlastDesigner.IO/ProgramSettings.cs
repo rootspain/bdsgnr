@@ -49,6 +49,14 @@ public sealed class ProgramSettings
     /// or <see cref="WireframeNever"/>.
     /// </summary>
     public string SurfaceWireframe { get; set; } = WireframeWhileStill;
+    /// <summary>The Section view window shows the numbers of the holes over them.</summary>
+    public bool SectionNumbers { get; set; } = true;
+    /// <summary>The Section view window shows the levels on the left: the top of the frame, collars, grade, toes.</summary>
+    public bool SectionLevels { get; set; } = true;
+    /// <summary>The Section view window shows a dimension of each: the length, the spacing along the line, the subdrill.</summary>
+    public bool SectionDimensions { get; set; } = true;
+    /// <summary>The Section view window shows the ties (shock tube and EBS); off at first.</summary>
+    public bool SectionTies { get; set; }
     /// <summary>Transparency of the surface fill, per cent: 0 opaque, 100 not seen.</summary>
     public int SurfaceTransparency { get; set; } = DefaultSurfaceTransparency;
     /// <summary>Transparency of the surface wireframe (the triangle edges), per cent.</summary>

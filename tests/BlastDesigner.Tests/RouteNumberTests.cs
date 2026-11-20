@@ -251,6 +251,67 @@ public class RouteNumberTests
     }
 
     [Fact]
+    public void FlippingOneTieOfAChain_FlipsTheWholeChain_AndItsNumbersGoTheOtherWay()
+    {
+        var p = Project();
+        var a = H(p, "a", 0); var b = H(p, "b", 5); var c = H(p, "c", 10); var d = H(p, "d", 15);
+        Tie(p, a, b); Tie(p, b, c); Tie(p, c, d);
+        var doc = new Document(p);
+        Hole Now(Hole h) => (Hole)doc.Project.FindEntity(h.Id)!;
+        var middle = p.Ties.First(t => t.FromId == b.Id).Id;
+        var plan = RouteNumbers.PlanFlip(doc.Project, new[] { middle });
+        Assert.Equal(3, plan.Ties.Count);
+        Assert.Equal(("A", 3), (plan.Chains.Single().Line, plan.Chains.Single().Ties));
+        doc.Execute("Flip selected ties", pr => RouteNumbers.Flip(pr, plan));
+        // every tie the other way, the numbers along the new direction, the letter kept
+        Assert.True(doc.Project.Ties.Any(t => t.FromId == d.Id && t.ToId == c.Id) && doc.Project.Ties.Any(t => t.FromId == b.Id && t.ToId == a.Id));
+        Assert.Equal(new int?[] { 4, 3, 2, 1 }, new[] { a, b, c, d }.Select(h => Now(h).RouteNumber));
+        Assert.All(new[] { a, b, c, d }, h => Assert.Equal("A", Now(h).RouteLine));
+        // the rules of the ties follow: a tie goes to the new start only, out of the new end only
+        var e = H(doc.Project, "e", 20);
+        Assert.False(RouteNumbers.CanTie(doc.Project, e.Id, a.Id));
+        Assert.True(RouteNumbers.CanTie(doc.Project, e.Id, d.Id));
+        Assert.True(RouteNumbers.CanTie(doc.Project, a.Id, e.Id));
+        Assert.False(RouteNumbers.CanTie(doc.Project, d.Id, e.Id));
+        // the order of a Davey Tronic line goes the new way too
+        Assert.Equal(new[] { "d", "c", "b", "a" }, BlastDesigner.IO.DeviTronic.OrderAlongTies(doc.Project.Ties.ToList(), new[] { a, b, c, d }.Select(Now).ToList()).Select(h => h.Label));
+        // one undo brings the ties and the numbers back
+        doc.Undo();
+        Assert.Equal(new int?[] { 1, 2, 3, 4 }, new[] { a, b, c, d }.Select(h => Now(h).RouteNumber));
+        Assert.True(doc.Project.Ties.Any(t => t.FromId == a.Id && t.ToId == b.Id));
+    }
+
+    [Fact]
+    public void FlippingTies_AChainFromAnInitiationPointStays_OtherTiesTurnAsBefore()
+    {
+        var p = Project();
+        var ip = new InitiationPoint { Position = new Vec3(-5, 0, 100) };
+        p.Add(ip);
+        var a = H(p, "a", 0); var b = H(p, "b", 5);
+        Timing.Connect(p, ip.Id, a.Id, null);
+        RouteNumbers.Number(p, new[] { (ip.Id, a.Id) });
+        Tie(p, a, b);
+        var c = H(p, "c", 30); var d = H(p, "d", 35);
+        Tie(p, c, d);
+        var x = H(p, "x", 50, electronic: false); var y = H(p, "y", 55, electronic: false);
+        Timing.Connect(p, x.Id, y.Id, null);
+        var ab = p.Ties.First(t => t.FromId == a.Id).Id;
+        var cd = p.Ties.First(t => t.FromId == c.Id).Id;
+        var xy = p.Ties.First(t => t.FromId == x.Id).Id;
+        var plan = RouteNumbers.PlanFlip(p, new[] { ab, cd, xy });
+        Assert.Equal(new[] { "A" }, plan.Refused);
+        Assert.Equal("B", plan.Chains.Single().Line);
+        RouteNumbers.Flip(p, plan);
+        // the chain from the initiation point as it was; the other chain flipped; the shock tube tie turned by itself
+        Assert.True(p.Ties.Any(t => t.FromId == a.Id && t.ToId == b.Id));
+        Assert.Equal((1, 2), (a.RouteNumber!.Value, b.RouteNumber!.Value));
+        Assert.True(p.Ties.Any(t => t.FromId == d.Id && t.ToId == c.Id));
+        Assert.Equal((2, 1), (c.RouteNumber!.Value, d.RouteNumber!.Value));
+        Assert.True(p.Ties.Any(t => t.FromId == y.Id && t.ToId == x.Id));
+        Assert.Null(x.RouteNumber);
+    }
+
+    [Fact]
     public void DeletingATie_KeepsTheNumbersBeforeIt_AndUndoBringsThemBack()
     {
         var p = Project();

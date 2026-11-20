@@ -25,6 +25,8 @@ internal static class EngineModule
         Document.Followers.Add(EbsTimingLine.Follow);
         // a tie deleted takes the route numbers of the holes after it back
         Document.Followers.Add(RouteNumbers.Follow);
+        // a section line takes its name, a letter in turn, and keeps it its own
+        Document.Followers.Add(SectionNames.Follow);
         // a surface built from objects keeps with them
         Document.Followers.Add(SurfaceSources.Follow);
         // one block a layer, and a block layer goes with its block
