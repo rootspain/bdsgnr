@@ -17,6 +17,11 @@ public sealed class CatalogueType : ICatalogueRecord
 {
     public string Id { get; set; } = ProductCatalogue.NewId();
     public string Name { get; set; } = string.Empty;
+    /// <summary>
+    /// The name on the chip of the initiation catalogue (НСИ, ДШ…); empty in a type from before or one without:
+    /// <see cref="ProductCatalogue.ShortNameOf"/> takes the built-in type's then, else the name.
+    /// </summary>
+    public string ShortName { get; set; } = string.Empty;
     public int Order { get; set; }
     /// <summary>Takes a delay of its own instead of a product.</summary>
     public bool UserDelay { get; set; }
@@ -327,12 +332,33 @@ public sealed class ProductCatalogue
         _ => Other
     };
 
+    /// <summary>The short names of the built-in types, by their id (English; the program translates them as "short:…").</summary>
+    public static readonly IReadOnlyDictionary<string, string> BuiltInShortNames = new Dictionary<string, string>
+    {
+        ["cff81fcf-0398-4a18-a4d9-b6214389f566"] = "Shock tube",
+        ["3d8f503e-e82f-414c-993b-f022fd8159a2"] = "Cord delay",
+        ["e323b18e-f698-45f6-b9d3-f6807e006efc"] = "Det. cord",
+        ["f85e4a61-ee14-434e-aa5d-4c8f4cf26f5e"] = "Electric",
+        ["20fdd1af-dc46-4f59-8002-7e6329cc360d"] = "Harness",
+        ["4fc83e10-6074-4dac-a664-e708cc5e8319"] = "EBS",
+        ["63354b1d-e3ff-4bd7-893a-063e1ecaa568"] = "Own delay",
+    };
+
+    /// <summary>
+    /// The short name of a type: its own; without one (a type from before the field) the built-in type's of its id; else
+    /// its name. The program shows it translated as "short:…", or as a name when there is no such entry.
+    /// </summary>
+    public static string ShortNameOf(CatalogueType type) =>
+        type.ShortName.Trim() is { Length: > 0 } own ? own
+        : BuiltInShortNames.TryGetValue(type.Id, out var builtIn) ? builtIn
+        : type.Name;
+
     /// <summary>The records of the program, as the catalogue was when it was written in the code.</summary>
     public static ProductCatalogue BuiltIn()
     {
         var c = new ProductCatalogue();
         void Kind(string name, ProductKind behaviour) => c.Kinds.Add(new CatalogueKind { Id = KindId(behaviour), Name = name, Order = c.Kinds.Count, Behaviour = behaviour });
-        void Type(string id, string name, params string[] kinds) => c.Types.Add(new CatalogueType { Id = id, Name = name, Order = c.Types.Count, KindIds = kinds.ToList(), UserDelay = kinds.Length == 0 });
+        void Type(string id, string name, params string[] kinds) => c.Types.Add(new CatalogueType { Id = id, Name = name, ShortName = BuiltInShortNames.GetValueOrDefault(id, ""), Order = c.Types.Count, KindIds = kinds.ToList(), UserDelay = kinds.Length == 0 });
         void Group(string id, string name, params string[] kinds) => c.Groups.Add(new CatalogueGroup { Id = id, Name = name, Order = c.Groups.Count, KindIds = kinds.ToList() });
         void Family(string id, string name, string kind) => c.Families.Add(new CatalogueFamily { Id = id, Name = name, KindId = kind });
 

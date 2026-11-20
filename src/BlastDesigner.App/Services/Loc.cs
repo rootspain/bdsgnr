@@ -27,6 +27,13 @@ public static partial class Loc
 
     public static string F(string englishFormat, params object?[] args) => string.Format(T(englishFormat), args);
 
+    /// <summary>A short name of a catalogue type: translated as "short:…", else as a name (the full one it falls back to).</summary>
+    public static string Short(string english)
+    {
+        var t = T("short:" + english);
+        return t.StartsWith("short:", StringComparison.Ordinal) ? T(english) : t;
+    }
+
     /// <summary>Label of the work-stage shell (ribbon, rail, panels): translated as "ui:…" so short shell labels do not change menu translations.</summary>
     public static string Ui(string english)
     {

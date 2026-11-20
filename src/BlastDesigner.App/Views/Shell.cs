@@ -119,6 +119,17 @@ public static class Ui
         return b;
     }
 
+    /// <summary>A small chip for narrow windows (the initiation catalogue): 22 high, square corners of 6, text of 11.</summary>
+    public static Button CompactChip(string text, Action click, bool active = false, string? tip = null)
+    {
+        var b = Chip(text, click, active, tip);
+        b.Height = 22;
+        b.Padding = new Thickness(8, 0);
+        b.CornerRadius = new CornerRadius(6);
+        b.FontSize = 11;
+        return b;
+    }
+
     public static void SetChip(Button b, bool active)
     {
         b.Background = active ? Look.AccentSoft : Look.Panel;

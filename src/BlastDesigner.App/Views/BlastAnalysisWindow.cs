@@ -37,7 +37,7 @@ public static partial class AnalysisWindows
         BlastAnalysis.InitiationAngle => "Angle of initiation",
         BlastAnalysis.BurdenRelief => "Burden relief",
         BlastAnalysis.Isolines => "Isolines",
-        BlastAnalysis.Unconnected => "Unconnected",
+        BlastAnalysis.Unconnected => "Tie-up check",
         _ => "First movement"
     });
 

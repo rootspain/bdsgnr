@@ -31,6 +31,26 @@ public class ProductCatalogueTests
     }
 
     [Fact]
+    public void BuiltInTypes_HaveShortNames_AnOldOneTakesItByItsId_AnOwnOneItsName()
+    {
+        var c = ProductCatalogue.BuiltIn();
+        Assert.All(c.Types, t => Assert.False(string.IsNullOrWhiteSpace(t.ShortName)));
+        Assert.Equal("EBS", ProductCatalogue.ShortNameOf(Type(c, "EBS detonators")));
+        Assert.Equal("Own delay", ProductCatalogue.ShortNameOf(Type(c, "User defined")));
+        // a built-in type from a file before the field: its short name by its id
+        var old = Type(c, "Shock tube");
+        old.ShortName = "";
+        Assert.Equal("Shock tube", ProductCatalogue.ShortNameOf(old));
+        // a type of the user without one: its name; with one, that
+        var own = new CatalogueType { Name = "Нонель Плюс" };
+        Assert.Equal("Нонель Плюс", ProductCatalogue.ShortNameOf(own));
+        own.ShortName = "  НП ";
+        Assert.Equal("НП", ProductCatalogue.ShortNameOf(own));
+        // kept with the catalogue
+        Assert.Equal("  НП ", ProjectJson.DeepClone(new ProductCatalogue { Types = { own } }).Types[0].ShortName);
+    }
+
+    [Fact]
     public void NewId_IsUuidV4Text()
     {
         var id = ProductCatalogue.NewId();

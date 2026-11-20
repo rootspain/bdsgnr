@@ -201,12 +201,14 @@ public static class TiePaletteWindow
     /// <summary>Key of the window position in the settings file (ProgramSettings.Window).</summary>
     public const string PositionKey = "TiePalette";
     public const string Title = "Initiation catalogue";
+    /// <summary>Width of the window: narrow, so that it takes little of the plan.</summary>
+    public const double Width = 260;
 
     public static void Show(MainViewModel vm)
     {
         if (vm.Project == null) return;
         if (_open != null) { Fill(vm); _open.Activate(); return; }
-        _panel = new StackPanel { Spacing = 14, Margin = new Thickness(16, 14, 16, 18) };
+        _panel = new StackPanel { Spacing = 10, Margin = new Thickness(10, 10, 10, 12) };
         Fill(vm);
         // where it was left last time (settings file), if that spot is still on a screen; it opens there directly,
         // so the centring of a new window does not move it (and write the centre over the saved place)
@@ -214,7 +216,7 @@ public static class TiePaletteWindow
         if (vm.Settings.Window.TryGetValue(PositionKey, out var saved) && saved.Split(',') is [var sx, var sy]
             && int.TryParse(sx, out var x) && int.TryParse(sy, out var y) && OnScreen(new PixelPoint(x + 40, y + 20)))
             at = new PixelPoint(x, y);
-        _open = Dialogs.ShowWindow(Title, new ScrollViewer { Content = _panel, Background = Look.Ground }, 380, 640, at: at);
+        _open = Dialogs.ShowWindow(Title, new ScrollViewer { Content = _panel, Background = Look.Ground }, Width, 560, at: at);
         _open.Background = Look.Ground;
         _open.PositionChanged += (_, e) => vm.Settings.Window[PositionKey] = $"{e.Point.X},{e.Point.Y}";
         _open.Closed += (_, _) => { _open = null; _panel = null; vm.Settings.Save(); };
@@ -281,29 +283,24 @@ public static class TiePaletteWindow
     private static TextBlock Caption(string text) => new()
     {
         Text = Loc.T(text).ToUpper(System.Globalization.CultureInfo.CurrentCulture),
-        FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue, Margin = new Thickness(2, 0, 0, 6)
+        FontSize = 10, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Blue, Margin = new Thickness(1, 0, 0, 5)
     };
 
-    private static Control Step(string number, string title, Control content) => new StackPanel
-    {
-        Children =
-        {
-            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children =
-            {
-                new Border { Width = 18, Height = 18, CornerRadius = new CornerRadius(9), Background = Look.AccentSoft, Child = new TextBlock { Text = number, FontSize = 10.5, FontWeight = FontWeight.SemiBold, Foreground = Look.Accent, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } },
-                Caption(title)
-            } },
-            content
-        }
-    };
+    /// <summary>A part of the window under its caption (Type, Family, Variant).</summary>
+    private static Control Step(string title, Control content) => new StackPanel { Children = { Caption(title), content } };
 
     private static Border Card(Control child, string? name = null) => new()
     {
-        Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
-        Padding = new Thickness(12, 10), Child = child, Name = name
+        Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8),
+        Padding = new Thickness(8, 7), Child = child, Name = name
     };
 
-    private static WrapPanel Wrap() => new() { Orientation = Orientation.Horizontal, ItemSpacing = 6, LineSpacing = 6 };
+    private static TextBlock Empty() => new() { Text = Loc.T("No products of this type in Available resources"), FontSize = 11, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap };
+
+    /// <summary>The short name of a type on its chip, in the language of the program.</summary>
+    private static string ShortName(CatalogueType type) => Loc.Short(ProductCatalogue.ShortNameOf(type));
+
+    private static WrapPanel Wrap() => new() { Orientation = Orientation.Horizontal, ItemSpacing = 4, LineSpacing = 4 };
 
     // Rebuilds the content in place (to show the choice) without reopening the window, which would recentre it.
     private static void Fill(MainViewModel vm)
@@ -314,7 +311,7 @@ public static class TiePaletteWindow
         var types = Types(vm);
         if (TypeOf(vm) is not { } typeInfo)
         {
-            _panel.Children.Add(Card(new TextBlock { Text = Loc.T("No products of this type in Available resources"), Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap }));
+            _panel.Children.Add(Card(Empty()));
             return;
         }
         var type = typeInfo.Id;
@@ -322,31 +319,34 @@ public static class TiePaletteWindow
         // ---- current choice
         var current = vm.ActiveTieDelayMs is double ud ? Loc.F("{0} ms", ud.ToString("0.#"))
             : vm.ActiveConnector is { } ac ? $"{ac.FamilyName} · {VariantText(ac)}" : Loc.T("0 ms connection");
-        var path = vm.ActiveTieDelayMs != null || vm.ActiveConnector == null ? Loc.T(typeInfo.Name)
-            : $"{Loc.T(typeInfo.Name)}  ›  {KindName(vm, vm.ActiveConnector.KindId)}";
-        var none = Ui.Chip(Loc.T("0 ms connection"), () => Use(vm, null, null, (types.FirstOrDefault(x => !x.UserDelay) ?? typeInfo).Id), vm.ActiveConnector == null && vm.ActiveTieDelayMs == null, Loc.T("A tie without a connector"));
+        var path = vm.ActiveTieDelayMs != null || vm.ActiveConnector == null ? ShortName(typeInfo)
+            : $"{ShortName(typeInfo)} › {KindName(vm, vm.ActiveConnector.KindId)}";
+        var fullPath = vm.ActiveTieDelayMs != null || vm.ActiveConnector == null ? Loc.T(typeInfo.Name)
+            : $"{Loc.T(typeInfo.Name)} › {KindName(vm, vm.ActiveConnector.KindId)}";
+        var none = Ui.CompactChip(Loc.T("0 ms"), () => Use(vm, null, null, (types.FirstOrDefault(x => !x.UserDelay) ?? typeInfo).Id), vm.ActiveConnector == null && vm.ActiveTieDelayMs == null, Loc.T("0 ms connection") + " — " + Loc.T("A tie without a connector"));
         none.Tag = "none";
+        none.Name = "tieNone";
         _panel.Children.Add(Card(new DockPanel
         {
             Children =
             {
-                new Border { [DockPanel.DockProperty] = Dock.Left, Width = 10, Height = 38, CornerRadius = new CornerRadius(5), Margin = new Thickness(0, 0, 10, 0),
+                new Border { [DockPanel.DockProperty] = Dock.Left, Width = 6, Height = 30, CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 8, 0),
                     Background = new SolidColorBrush(Color.FromUInt32(vm.ActiveTieDelayMs == null ? vm.ActiveConnector?.Color ?? 0xFF9CA3AF : 0xFF9CA3AF)) },
-                new Border { [DockPanel.DockProperty] = Dock.Right, VerticalAlignment = VerticalAlignment.Center, Child = none },
-                new StackPanel { VerticalAlignment = VerticalAlignment.Center, Children =
+                new Border { [DockPanel.DockProperty] = Dock.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0), Child = none },
+                new StackPanel { VerticalAlignment = VerticalAlignment.Center, [ToolTip.TipProperty] = current + "\n" + fullPath, Children =
                 {
-                    new TextBlock { Text = current, FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, Name = "tieCurrent" },
-                    new TextBlock { Text = path, FontSize = 11.5, Foreground = Look.Faint, TextTrimming = TextTrimming.CharacterEllipsis }
+                    new TextBlock { Text = current, FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, Name = "tieCurrent" },
+                    new TextBlock { Text = path, FontSize = 10.5, Foreground = Look.Faint, TextTrimming = TextTrimming.CharacterEllipsis, Name = "tiePath" }
                 } }
             }
         }, "tieCurrentCard"));
 
-        // ---- 1 Type
+        // ---- Type
         var typeChips = Wrap();
         typeChips.Name = "tieTypes";
         foreach (var item in types)
         {
-            var chip = Ui.Chip(Loc.T(item.Name), () =>
+            var chip = Ui.CompactChip(ShortName(item), () =>
             {
                 if (TypeOf(vm)?.Id == item.Id) return;
                 if (item.UserDelay) { Use(vm, null, vm.ActiveTieDelayMs ?? 0, item.Id); return; }
@@ -354,84 +354,91 @@ public static class TiePaletteWindow
                 var fams = Families(vm, item);
                 var chosen = FamilyOf(vm, item, fams);
                 Use(vm, fams.FirstOrDefault(g => g.Key == chosen)?.OrderBy(p => p.DelayMs).First(), null, item.Id);
-            }, item.Id == type);
+            }, item.Id == type, Loc.T(item.Name));
             chip.Tag = "type:" + item.Id;
             typeChips.Children.Add(chip);
         }
-        _panel.Children.Add(Step("1", "Type", typeChips));
+        _panel.Children.Add(Step("Type", typeChips));
 
         if (typeInfo.UserDelay)
         {
             // user defined: a delay of its own on every new tie
-            var box = new TextBox { Text = (vm.ActiveTieDelayMs ?? 0).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture), Width = 120, Height = 32, FontFamily = Look.Mono, Name = "tieUserDelay" };
+            var box = new TextBox { Text = (vm.ActiveTieDelayMs ?? 0).ToString("0.#", System.Globalization.CultureInfo.CurrentCulture), Width = 90, Height = 26, MinHeight = 26, Padding = new Thickness(6, 3), FontSize = 12, FontFamily = Look.Mono, Name = "tieUserDelay" };
             void Commit()
             {
                 if (double.TryParse(box.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out var v) && v >= 0 && v != vm.ActiveTieDelayMs) Use(vm, null, v, type);
             }
             box.LostFocus += (_, _) => Commit();
             box.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { Commit(); e.Handled = true; } };
-            _panel.Children.Add(Step("2", "Delay", Card(Ui.Row(8, box, new TextBlock { Text = Loc.T("ms"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center }))));
+            _panel.Children.Add(Step("Delay", Ui.Row(6, box, new TextBlock { Text = Loc.T("ms"), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center })));
             return;
         }
 
-        // ---- 2 Family
+        // ---- Family
         var families = Families(vm, typeInfo);
         if (families.Count == 0)
         {
-            _panel.Children.Add(Step("2", "Family", Card(new TextBlock { Text = Loc.T("No products of this type in Available resources"), Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap })));
+            _panel.Children.Add(Step("Family", Card(Empty())));
             return;
         }
         var family = FamilyOf(vm, typeInfo, families);
         // a type of several kinds says the kind of each family
         var mixed = families.Select(g => g.Key.KindId).Distinct().Count() > 1;
-        var famList = new StackPanel { Spacing = 4, Name = "tieFamilies" };
+        var famList = new StackPanel { Name = "tieFamilies" };
+        var famIndex = 0;
         foreach (var g in families)
         {
+            var first = famIndex++ == 0;
             var key = g.Key;
             var on = key == family;
             var note = string.Join(" · ", (mixed ? new[] { KindName(vm, key.KindId) } : Array.Empty<string>()).Concat(g.Select(p => p.Manufacturer).Where(m => m.Length > 0).Distinct()));
+            // a row of one framed list: a line between rows, the one chosen with a stripe of the accent on its left;
+            // the kind and the maker in its tooltip
             var row = new Button
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                Padding = new Thickness(12, 8),
-                CornerRadius = new CornerRadius(8),
-                BorderThickness = new Thickness(1),
+                Height = 28,
+                MinHeight = 28,
+                Padding = new Thickness(on ? 6 : 9, 0, 8, 0),
+                CornerRadius = new CornerRadius(0),
+                BorderThickness = new Thickness(on ? 3 : 0, first ? 0 : 1, 0, 0),
                 Background = on ? Look.AccentSoft : Look.Panel,
                 BorderBrush = on ? Look.Accent : Look.Line,
+                VerticalContentAlignment = VerticalAlignment.Center,
                 Tag = "family:" + key.Name,
                 Content = new DockPanel
                 {
                     Children =
                     {
-                        new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = Loc.F("{0} var.", g.Count()), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
-                        new StackPanel { Children =
-                        {
-                            new TextBlock { Text = key.Name, FontWeight = FontWeight.SemiBold, Foreground = on ? Look.Accent : Look.Text },
-                            new TextBlock { Text = note, FontSize = 11, Foreground = Look.Faint, IsVisible = note.Length > 0 }
-                        } }
+                        new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = g.Count().ToString(), FontSize = 10.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) },
+                        new TextBlock { Text = key.Name, FontSize = 12, FontWeight = on ? FontWeight.SemiBold : FontWeight.Medium, Foreground = on ? Look.Accent : Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center }
                     }
                 }
             };
             row.Classes.Add("flat");
+            ToolTip.SetTip(row, note.Length > 0 ? $"{key.Name}\n{note}\n{Loc.F("{0} var.", g.Count())}" : $"{key.Name}\n{Loc.F("{0} var.", g.Count())}");
             row.Click += (_, _) => { if (key != FamilyOf(vm, typeInfo, families)) Use(vm, g.OrderBy(p => p.DelayMs).First(), null, type); };
             famList.Children.Add(row);
         }
-        _panel.Children.Add(Step("2", "Family", famList));
+        _panel.Children.Add(Step("Family", new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), ClipToBounds = true, Child = famList }));
 
-        // ---- 3 Variant
+        // ---- Variant
         var variants = Wrap();
         variants.Name = "tieVariants";
         foreach (var p in families.First(g => g.Key == family).OrderBy(p => p.DelayMs))
         {
             var prod = p;
             var on = vm.ActiveTieDelayMs == null && vm.ActiveConnector?.Id == p.Id;
-            var chip = Ui.Chip("", () => Use(vm, prod, null, type), on, p.Name);
-            chip.Content = Ui.Row(6, new Border { Width = 12, Height = 12, CornerRadius = new CornerRadius(3), Background = new SolidColorBrush(Color.FromUInt32(p.Color)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center },
-                new TextBlock { Text = VariantText(p), VerticalAlignment = VerticalAlignment.Center });
+            var chip = Ui.CompactChip("", () => Use(vm, prod, null, type), on, p.Name);
+            // a delay in figures of one width; a name in the font of the window
+            var figures = p.Kind is not (ProductKind.HarnessWire or ProductKind.ElectronicDetonator);
+            var text = new TextBlock { Text = VariantText(p), VerticalAlignment = VerticalAlignment.Center, Name = "tieVariantText" };
+            if (figures) text.FontFamily = Look.Mono;
+            chip.Content = Ui.Row(5, new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(Color.FromUInt32(p.Color)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center }, text);
             chip.Tag = "variant:" + p.Id;
             variants.Children.Add(chip);
         }
-        _panel.Children.Add(Step("3", "Variant", variants));
+        _panel.Children.Add(Step("Variant", variants));
     }
 }

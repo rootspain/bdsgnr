@@ -185,6 +185,17 @@ public sealed class CatalogueEditor : Grid
             case CatalogueKind kind: _props.Children.Add(Labeled("How the program calculates it", Behaviour(kind))); break;
             case CatalogueGroup group: _props.Children.Add(Labeled("Kinds", KindChecks(group.KindIds))); break;
             case CatalogueType type:
+                // the name on the chip of the initiation catalogue; as shown, a built-in one in the language of the program
+                var shown = Loc.Short(ProductCatalogue.ShortNameOf(type));
+                var shortName = new TextBox { Name = "tableShortName", Text = shown, MaxLength = 24, Height = 32, MinHeight = 32, Padding = new Thickness(8, 5), Background = Look.Field, BorderBrush = Look.LineStrong };
+                shortName.LostFocus += (_, _) =>
+                {
+                    var v = (shortName.Text ?? "").Trim();
+                    if (v == shown) return;
+                    type.ShortName = v;
+                    Fill();
+                };
+                _props.Children.Add(Labeled("Short name", shortName));
                 var own = new CheckBox { Content = L("Own delay instead of a product"), IsChecked = type.UserDelay, Name = "tableUserDelay" };
                 own.IsCheckedChanged += (_, _) => type.UserDelay = own.IsChecked == true;
                 _props.Children.Add(own);

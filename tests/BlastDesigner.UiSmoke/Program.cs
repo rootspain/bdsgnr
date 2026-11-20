@@ -3166,6 +3166,18 @@ Step("resources: the tables add, edit, delete with their children and restore th
     if (shownName.Text != BlastDesigner.App.Services.Loc.T(ed.Tables.Kinds[0].Name)) throw new Exception("the name field should show the translated name: " + shownName.Text);
     shownName.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
     if (ed.Tables.Kinds[0].Name != "Bulk explosive") throw new Exception("leaving the field unchanged should keep the stored name");
+    // a type has its short name, the one on the chip of the initiation catalogue: built-in in the language of the program
+    Click(ByTag("section:Types"));
+    var ebsType = ed.Tables.Types.First(t => t.Name == "EBS detonators");
+    Click(ByTag("row:" + ebsType.Id));
+    TextBox ShortBox() => dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "tableShortName" && t.IsEffectivelyVisible);
+    if (ShortBox().Text != BlastDesigner.App.Services.Loc.Short("EBS")) throw new Exception("the short name field should show the translated short name: " + ShortBox().Text);
+    ShortBox().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    if (ebsType.ShortName != "EBS") throw new Exception("leaving the short name unchanged should keep the stored one: " + ebsType.ShortName);
+    var sb = ShortBox(); sb.Text = "ЭСИ"; sb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    if (ebsType.ShortName != "ЭСИ") throw new Exception("the short name was not taken: " + ebsType.ShortName);
+    sb = ShortBox(); sb.Text = "EBS"; sb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    Click(ByTag("section:Kinds"));
     Click(ByTag("row:" + kind.Id));
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39f_resources_kinds.png"));
@@ -5384,6 +5396,12 @@ Step("initiation catalogue: Type → Family → Variant, user-defined delay, the
     void Press(string tag) { Chip(tag).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
     var types = win.GetLogicalDescendants().OfType<Button>().Count(b => (b.Tag as string)?.StartsWith("type:") == true);
     if (types != 7) throw new Exception($"{types} types instead of 7");
+    // narrow: the types by their short names, the full one in the tooltip
+    if (win.Width > 260) throw new Exception("the catalogue should be 260 wide at most: " + win.Width);
+    var ebs = vm.Project!.Catalogue.Types.First(t => t.Name == "EBS detonators");
+    var ebsChip = Chip("type:" + ebs.Id);
+    if (ebsChip.Content as string != BlastDesigner.App.Services.Loc.Short("EBS") || ToolTip.GetTip(ebsChip) as string != BlastDesigner.App.Services.Loc.T("EBS detonators") || ebsChip.Height > 24)
+        throw new Exception($"the EBS chip: '{ebsChip.Content}', tip '{ToolTip.GetTip(ebsChip)}', height {ebsChip.Height}");
     // Cord delay: the family of the cord relays and its variants by delay
     string TypeTag(string name) => "type:" + vm.Project!.Catalogue.Types.First(t => t.Name == name).Id;
     Press(TypeTag("Cord delay"));
@@ -5396,8 +5414,16 @@ Step("initiation catalogue: Type → Family → Variant, user-defined delay, the
     var last = vm.Project.Products.Where(p => p.Kind == ProductKind.CordRelay).OrderBy(p => p.DelayMs).Last();
     Press("variant:" + last.Id);
     if (vm.ActiveConnector?.Id != last.Id) throw new Exception("the variant was not taken");
+    // the families a list of rows 28 high; the path in the card the short name of the type
+    if (Chip("family:Cord relay").Height > 30) throw new Exception("a family row should be 28 high: " + Chip("family:Cord relay").Height);
+    var path = win.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "tiePath");
+    if (!path.Text!.StartsWith(BlastDesigner.App.Services.Loc.Short("Cord delay"))) throw new Exception("the path should start with the short name of the type: " + path.Text);
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39d_initiation_catalogue.png"));
+    // 0 ms: a tie without a connector, and back
+    Press("none");
+    if (vm.ActiveConnector != null || vm.ActiveTieDelayMs != null) throw new Exception("0 ms should leave the ties without a connector");
+    Press(TypeTag("Cord delay"));
     // user defined: a delay of its own on the new ties
     Press(TypeTag("User defined"));
     var delay = win.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "tieUserDelay") ?? throw new Exception("no delay for the user-defined type");

@@ -3425,7 +3425,7 @@ Route line	Литера маршрута
 ui:The letter of the chain of ties of the hole: chosen, the whole chain takes it, and the chain that had it takes the letter of this one	Литера цепочки связей скважины: выбранную литеру получает вся цепочка, а цепочка, у которой она была, — литеру этой
 The route letter is set for one chain: select holes of one chain of ties	Литера маршрута задаётся одной цепочке: выделите скважины одной цепочки связей
 Not on a chain of ties	Не в цепочке связей
-ui:Unconnected	Не связанные
+ui:Tie-up check	Проверка монтажа
 Only with a primer	Только с боевиком
 On: the holes with a charge and a primer. Off: every hole with a charge	Включено — скважины с зарядом ВВ и боевиком. Выключено — все скважины с зарядом ВВ
 There are no holes with a charge and a primer.	Нет скважин с зарядом ВВ и боевиком.
@@ -3470,3 +3470,11 @@ FULL_NAME: Latin letters, digits and '_', 1 to {0} characters.	FULL_NAME: лат
 DISPLAYED_NAME: Latin letters, digits and '_', 1 to {0} characters.	DISPLAYED_NAME: латиница, цифры и «_», от 1 до {0} знаков.
 SOURCE_FILE: printable Latin characters, up to {0}.	SOURCE_FILE: печатные латинские знаки, до {0}.
 BPD export names	Имена экспорта BPD
+ui:Short name	Краткое имя
+short:Shock tube	НСИ
+short:Cord delay	Замедл. шнура
+short:Det. cord	ДШ
+short:Electric	Электрич.
+short:Harness	Harness
+short:EBS	EBS
+short:Own delay	Свой
