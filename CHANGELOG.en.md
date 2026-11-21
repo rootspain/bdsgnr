@@ -6,7 +6,7 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.3.10 — 2026-11-20
+## 0.3.10 — 2026-11-21
 
 ### New
 - **Tie-up check tab in the Blast analysis window:** the loaded holes not connected, in the colour of the selection. A
