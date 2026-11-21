@@ -3491,4 +3491,112 @@ Section along line {0}	Разрез по линии {0}
 Hole numbers	Номера
 Levels	Отметки
 Dimensions	Размеры
-Ties shock tube/EBS	Связи НСИ/ЭСИ
+Section style	Оформление
+Snaps	Привязки
+Click or drag a box to select · drag a grip of a selected mark to move its point · double click to edit its figure	Щелчок или рамка — выбор · ручка выделенного объекта переносит его точку · двойной щелчок — правка подписи
+Across	Горизонт.
+Up	Вертик.
+Along	Параллельный
+Leader	Выноска
+Chain	Цепочка
+Slope	Уклон
+Point Z	Точка Z
+Angles	Углы
+Drawing	Рисование
+Line style	Стиль линии
+Solid	Сплошная
+Colour	Цвет
+Weight	Толщ.
+Preset	Стиль
+Of the section	Как у разреза
+Blue	Синий
+Yellow	Жёлтый
+Red	Красный
+Green	Зелёный
+Orange	Оранжевый
+Grey	Серый
+White	Белый
+Black	Чёрный
+Other colour…	Другой цвет…
+Ends	Концы
+Decimals	Точность
+Text size	Размер текста
+Angle shown	Угол как
+Slope as	Уклон как
+Own text…	Свой текст…
+Select the marks to change first	Сначала выделите объекты, которые нужно изменить
+Own text (<> is the value)	Свой текст (<> — значение)
+Save as style…	Сохранить как стиль…
+Select the mark whose style to keep	Выделите объект, стиль которого нужно сохранить
+Make style default	Сделать по умолчанию
+New marks of this kind take this style	Новые объекты этого вида получат этот стиль
+Delete style	Удалить стиль
+Copy style	Копировать стиль
+Delete all	Удалить все
+Delete all the marks drawn on this section?	Удалить все объекты, нанесённые на этот разрез?
+Figure	Подпись
+Angle and slope	Угол и уклон
+Styles	Стили
+Hole toe	Низ
+Perpendicular	Перпендикуляр
+Frame	Рамка
+Ortho F8	Орто F8
+Ticks	Засечки
+Dots	Точки
+No ends	Без концов
+As drawn	Как нарисован
+Acute	Острый
+Obtuse	Тупой
+Degrees, 50°	Градусы, 50°
+Per cent, 119%	Проценты, 119%
+Ratio, 1:0.84	Отношение, 1:0.84
+Bench level	Уровень уступа
+Grade level	Уровень подошвы
+Helping line	Вспомогательная
+Angle: pick the first line	Угол: выберите первую линию
+Angle: pick the second line, or H for the level, V for the upright	Угол: выберите вторую линию или нажмите Г — горизонталь, В — вертикаль
+Angle: click where the arc goes · Tab: as drawn, acute, obtuse	Угол: щёлкните, где пройдёт дуга · Tab — как нарисован, острый, тупой
+Slope: pick the line	Уклон: выберите линию
+Slope: click where the figure goes	Уклон: щёлкните, где поставить подпись
+Level: click a point, or press Enter and type the height	Уровень: щёлкните точку или нажмите Enter и введите отметку
+Text: click where it goes	Текст: щёлкните, где поставить
+Line: click its first point	Линия: щёлкните первую точку
+Line: click the next point · double click or Enter ends it	Линия: щёлкните следующую точку · двойной щелчок или Enter — конец
+Height: click the point	Точка Z: щёлкните точку
+Height: click where its shelf goes	Точка Z: щёлкните, где поставить полку
+Leader: click where the figure goes	Выноска: щёлкните, где поставить подпись
+Chain: click the next point · Esc ends it	Цепочка: щёлкните следующую точку · Esc — конец
+Dimension: click the first point	Размер: щёлкните первую точку
+Dimension: click the second point	Размер: щёлкните вторую точку
+Dimension: click where its line goes	Размер: щёлкните, где пройдёт размерная линия
+Copy style: click the marks to give it to · Esc takes another	Копировать стиль: щёлкайте объекты, которым его передать · Esc — взять другой
+Copy style: click the mark whose style to take	Копировать стиль: щёлкните объект, стиль которого взять
+Level Z	Отметка Z
+Drawn by hand	Ручные
+Section	Разрез
+Finish	Завершить
+Add section mark	Объект разреза
+Move section mark point	Перенос точки объекта разреза
+Edit section mark	Правка объекта разреза
+Delete section marks	Удаление объектов разреза
+Paste section marks	Вставка объектов разреза
+Copy section style	Копирование стиля
+Section mark colour	Цвет объектов разреза
+Section mark line type	Тип линии объектов разреза
+Section mark line weight	Толщина объектов разреза
+Section mark style	Стиль объектов разреза
+Section mark ends	Концы размеров
+Section mark decimals	Точность подписи
+Section mark text size	Размер текста
+Section angle	Угол
+Section slope	Уклон
+Section mark text	Свой текст
+Slope face	Откос
+A style kept: its colour, line type and weight go to the selected marks and to those drawn next. Save as style… keeps the style of a selected mark under a name.	Стиль: его цвет, тип и толщина линии переходят к выделенным объектам и к следующим нарисованным. «Сохранить как стиль…» сохраняет стиль выделенного объекта под своим именем.
+Automatic dimensions	Автоматические размеры
+Edit automatic dimensions	Правка автоматических размеров
+Rebuild dimensions	Пересоздать размеры
+Section dimensions	Размеры разреза
+Apply style	Применить стиль
+Apply style: click the marks to give it to · Esc ends	Применить стиль: щёлкайте объекты, которым его передать · Esc — конец
+ui:Other colour…	Другой цвет…

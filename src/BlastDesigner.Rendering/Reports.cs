@@ -308,10 +308,9 @@ public static class Reports
         var mid = Vec3.Lerp(a, b, 0.5);
         var depth = project.Holes.Any() ? project.Holes.Average(h => h.Collar.Z - h.Length / 2) : mid.Z;
         var cam = new Camera { Width = rect.Width, Height = rect.Height, Pitch = 0, Yaw = GeoMath.Bearing(a, b) - 90, Target = mid.WithZ(depth) };
+        // fitted to the holes of its frame: their collars within the half width, as the frame and its labels take them
         var fit = Bounds3.Empty;
-        foreach (var hole in project.Holes.Where(h => !unframed.Contains(h.Id)))
-            foreach (var v in hole.GetVertices())
-                if (Math.Abs(cam.Depth(v)) <= halfWidth) fit.Add(v);
+        foreach (var hole in SectionProfile.Build(project, a, b, halfWidth, unframed).Holes) { fit.Add(hole.Collar); fit.Add(hole.Toe); }
         if (fit.IsEmpty) { fit.Add(a.WithZ(depth)); fit.Add(b.WithZ(depth)); }
         // room over the collars for the numbers of the holes and the title of the section
         else fit.Add(fit.Max.WithZ(fit.Max.Z + fit.Size.Z * 0.3));
@@ -321,8 +320,14 @@ public static class Reports
         cam.Scale *= shown.View.Zoom;
         Pan(cam, shown.View);
         var labels = new SectionLabels(shown.ShowNumbers, shown.ShowLevels, shown.ShowDimensions);
-        var overlays = labels.Any || title.Length > 0 ? new IOverlay[] { new SectionAnnotations(a, b, halfWidth, title, labels, SKColors.Black, 8) } : Array.Empty<IOverlay>();
-        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth, Overlays = overlays, HideHoleLabels = labels.Numbers, HideTies = !shown.ShowTies, HideRows = true });
+        var own = SectionMarking.LineAt(project, a, b) is { } owner && project.SectionOwnDimensions.Contains(owner.Id);
+        var annotations = new SectionAnnotations(a, b, halfWidth, title, labels, SKColors.Black, 8) { SkipDimensions = own, HiddenHoles = hidden };
+        var overlays = new List<IOverlay>();
+        if (labels.Any || title.Length > 0) overlays.Add(annotations);
+        // the marks drawn by hand on the section of its line, in black where they have no colour of their own
+        if (shown.ShowMarks && SectionMarking.LineAt(project, a, b) is { } line)
+            overlays.Add(new SectionMarksOverlay(line.Id, a, b, SKColors.Black, 8, annotations.Frame, PointsPerMm));
+        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth, SectionCut = true, Overlays = overlays, HideHoleLabels = labels.Numbers, HideTies = true, HideRows = true, HideAxes = true, ClipScene = annotations.Frame });
     }
 
     /// <summary>One sheet: a drawing over the title block.</summary>

@@ -22,7 +22,8 @@ public static class ProductsWindow
         {
             Title = Loc.T("Available resources"),
             Width = 980,
-            Height = 680,
+            // high enough for the colour of a product (the last section) without scrolling
+            Height = 820,
             MinWidth = 760,
             MinHeight = 480,
             Background = Look.Ground,
@@ -613,6 +614,23 @@ public sealed class ProductsEditor : DockPanel
             b.Click += (_, _) => SetColour(colour);
             row.Children.Add(b);
         }
+        // any colour: the full picker (spectrum, hue, hex) under the button, Cancel and OK
+        var any = new Button
+        {
+            Width = 26,
+            Height = 26,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0, 0, 6, 6),
+            CornerRadius = new CornerRadius(6),
+            Name = "colourPicker",
+            Content = Look.Icon("palette", 16, Look.TextSoft),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center
+        };
+        ToolTip.SetTip(any, L("Other colour…"));
+        var flyout = ColourFlyout.Make(() => p.Color, SetColour);
+        any.Click += (_, _) => flyout.ShowAt(any);
+        row.Children.Add(any);
         var dock = new DockPanel();
         DockPanel.SetDock(hex, Dock.Right);
         hex.VerticalAlignment = VerticalAlignment.Top;

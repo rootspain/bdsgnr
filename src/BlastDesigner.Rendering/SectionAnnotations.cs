@@ -40,10 +40,51 @@ public sealed class SectionAnnotations : IOverlay
     /// <summary>A length as the section writes it: one decimal, a point, no unit.</summary>
     public static string Metres(double v) => v.ToString("0.0", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// The frame of the section on the screen: from the top of the frame to the lowest toe, a little out of the outer holes
+    /// (more on the right for a length dimension there); null with no hole in the section. The scene is drawn inside it only.
+    /// </summary>
+    public SKRect? Frame(Camera cam, BlastProject project)
+    {
+        var profile = SectionProfile.Build(project, _a, _b, _halfWidth, HiddenHoles);
+        if (profile.Holes.Count == 0) return null;
+        using var text = new SKPaint { IsAntialias = true, TextSize = _font, Typeface = SKTypeface.Default };
+        var holes = profile.Holes.Select(h => (H: h, X: cam.ToScreen(h.Collar).X)).OrderBy(h => h.X).ToList();
+        return Frame(cam, holes, text);
+    }
+
+    private SKRect Frame(Camera cam, List<(SectionHole H, float X)> holes, SKPaint text)
+    {
+        float Y(double z) => cam.ToScreen(cam.Target.WithZ(z)).Y;
+        double highest = holes.Max(h => h.H.Collar.Z), lowest = holes.Min(h => h.H.Toe.Z);
+        var top = SectionProfile.FrameTop(highest, _font * 1.7 / cam.Scale);
+        var xs = holes.Select(h => h.X).ToList();
+        var (lengths, _) = LayoutDimensions(xs, holes.Select(h => h.H.Hole.Length).ToList(), _font);
+        // a little out of the outer holes: room for the subdrill, and for a length right of the last hole
+        var pad = _font * 3;
+        float left = (float)(holes[0].X - pad), right = (float)(holes[^1].X + pad);
+        if (_show.Dimensions && lengths.Contains(xs.Count - 1))
+            right = Math.Max(right, DimensionX(xs, xs.Count - 1, _font) + text.MeasureText(Metres(holes[^1].H.Hole.Length)) + _font);
+        return new SKRect(left, Y(top), right, Y(lowest));
+    }
+
+    /// <summary>The holes a sheet leaves out: no number, level or dimension of theirs either.</summary>
+    public ISet<Guid>? HiddenHoles { get; init; }
+
+    /// <summary>The automatic dimensions are left out: the section line has them as marks of its own.</summary>
+    public bool SkipDimensions { get; init; }
+
+    /// <summary>
+    /// Filled when drawn: each automatic dimension as a mark held on its holes (its points in the plane of the section)
+    /// with the lines and the figure it took on the screen, for the window to pick it and make it a mark of its own.
+    /// </summary>
+    public List<AutoDimension>? Recorded { get; init; }
+
     public void Draw(SKCanvas canvas, Camera cam, BlastProject project)
     {
+        Recorded?.Clear();
         if (!_show.Any && _title.Length == 0) return;
-        var profile = SectionProfile.Build(project, _a, _b, _halfWidth);
+        var profile = SectionProfile.Build(project, _a, _b, _halfWidth, HiddenHoles);
         using var text = new SKPaint { IsAntialias = true, TextSize = _font, Color = _ink, Typeface = SKTypeface.Default };
         using var line = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = _ink };
         float Y(double z) => cam.ToScreen(cam.Target.WithZ(z)).Y;
@@ -62,12 +103,8 @@ public sealed class SectionAnnotations : IOverlay
         // where the dimensions go: the lengths (one, or the shortest and the longest), the spacing between two neighbours
         var xs = holes.Select(h => h.X).ToList();
         var (lengths, spacingAt) = LayoutDimensions(xs, holes.Select(h => h.H.Hole.Length).ToList(), _font);
-        // the frame a little out of the outer holes: room for the subdrill, and for a length right of the last hole
-        var pad = _font * 3;
-        float left = (float)(holes[0].X - pad), right = (float)(holes[^1].X + pad);
-        if (_show.Dimensions && lengths.Contains(xs.Count - 1))
-            right = Math.Max(right, DimensionX(xs, xs.Count - 1, _font) + text.MeasureText(Metres(holes[^1].H.Hole.Length)) + _font);
-        float topY = Y(top), bottomY = Y(lowest);
+        var frame = Frame(cam, holes, text);
+        float left = frame.Left, right = frame.Right, topY = frame.Top, bottomY = frame.Bottom;
 
         // the frame, the collars joined and the grade drawn double
         canvas.DrawRect(new SKRect(left, topY, right, bottomY), line);
@@ -115,14 +152,27 @@ public sealed class SectionAnnotations : IOverlay
             foreach (var (h, x) in holes) canvas.DrawText(h.Hole.Label, x, cam.ToScreen(h.Collar).Y - size * 0.4f, number);
         }
 
-        if (_show.Dimensions)
+        if (_show.Dimensions && !SkipDimensions)
         {
             var toe = cam.ToScreen(first.Toe);
+            var frame2 = new SectionFrame(_a, _b);
+            SectionPoint Held(SectionHole h, SectionHolePart part)
+            {
+                var (s, z) = frame2.ToSection(part switch { SectionHolePart.Toe => h.Toe, SectionHolePart.Grade => h.Hole.GradePoint, _ => h.Collar });
+                return new SectionPoint(s, z) { HoleId = h.Hole.Id, HolePart = part };
+            }
+            SectionPoint At(float x, float y) { var (s, z) = frame2.ToSection(cam.ToWorld(x, y)); return new SectionPoint(s, z); }
+            void Record(SectionMarkKind kind, SectionMarkStyle style, SKRect figure, params (SKPoint A, SKPoint B)[] lines) => Recorded?.Add(new AutoDimension(new SectionMark { Kind = kind, Auto = true, Style = style }, lines.ToList(), figure));
             // the lengths, each right of its hole, its figure on the right
             foreach (var i in lengths)
             {
                 var h = holes[i].H;
-                VerticalDimension(canvas, line, text, DimensionX(xs, i, _font), cam.ToScreen(h.Collar).Y, cam.ToScreen(h.Toe).Y, Metres(h.Hole.Length), labelLeft: false);
+                var x = DimensionX(xs, i, _font);
+                float cy = cam.ToScreen(h.Collar).Y, ty = cam.ToScreen(h.Toe).Y;
+                VerticalDimension(canvas, line, text, x, cy, ty, Metres(h.Hole.Length), labelLeft: false);
+                var w = text.MeasureText(Metres(h.Hole.Length));
+                Record(SectionMarkKind.Vertical, new SectionMarkStyle(), new SKRect(x, (cy + ty) / 2 - _font, x + _font * 0.35f + w, (cy + ty) / 2 + _font * 0.5f), (new SKPoint(x, cy), new SKPoint(x, ty)));
+                Recorded?[^1].Mark.Points.AddRange(new[] { Held(h, SectionHolePart.Collar), Held(h, SectionHolePart.Toe), At(x, (cy + ty) / 2) });
             }
             // the distance along the line between two neighbours no length stands between, half way down the bench
             if (spacingAt is int k)
@@ -130,6 +180,9 @@ public sealed class SectionAnnotations : IOverlay
                 var (p, q) = (holes[k], holes[k + 1]);
                 var y = (cam.ToScreen(p.H.Collar).Y + gradeY) / 2;
                 HorizontalDimension(canvas, line, text, p.X, q.X, y, Metres(Math.Abs(q.H.Along - p.H.Along)));
+                var w = text.MeasureText(Metres(Math.Abs(q.H.Along - p.H.Along)));
+                Record(SectionMarkKind.Horizontal, new SectionMarkStyle(), new SKRect((p.X + q.X) / 2 - w / 2, y - _font, (p.X + q.X) / 2 + w / 2, y + _font * 0.5f), (new SKPoint(p.X, y), new SKPoint(q.X, y)));
+                Recorded?[^1].Mark.Points.AddRange(new[] { Held(p.H, SectionHolePart.Collar), Held(q.H, SectionHolePart.Collar), At((p.X + q.X) / 2, y) });
             }
             // the subdrill of the first hole: from the grade to its toe, close to its left, the figure under it on a leader
             if (subdrill)
@@ -140,8 +193,12 @@ public sealed class SectionAnnotations : IOverlay
                 canvas.DrawLine(sx, toe.Y, sx, baseline, line);
                 canvas.DrawLine(sx - _font * 0.3f, baseline, sx, baseline, line);
                 text.TextAlign = SKTextAlign.Right;
-                canvas.DrawText(Metres(first.GradeZ - first.Toe.Z), sx - _font * 0.35f, baseline, text);
+                var figure = Metres(first.GradeZ - first.Toe.Z);
+                canvas.DrawText(figure, sx - _font * 0.35f, baseline, text);
                 text.TextAlign = SKTextAlign.Left;
+                var w = text.MeasureText(figure);
+                Record(SectionMarkKind.Leader, new SectionMarkStyle { Ends = SectionMarkEnds.Tick }, new SKRect(sx - _font * 0.35f - w, baseline - _font, sx, baseline + _font * 0.3f), (new SKPoint(sx, gradeY), new SKPoint(sx, baseline)));
+                Recorded?[^1].Mark.Points.AddRange(new[] { Held(first, SectionHolePart.Grade), Held(first, SectionHolePart.Toe), At(sx - _font * 0.5f - w, baseline) });
             }
         }
     }
@@ -241,3 +298,6 @@ public sealed class SectionAnnotations : IOverlay
         Arrow(canvas, line, x2, y, 1, 0);
     }
 }
+
+/// <summary>An automatic dimension of a section as last drawn: the mark it would be, its lines and its figure on the screen.</summary>
+public sealed record AutoDimension(SectionMark Mark, List<(SKPoint A, SKPoint B)> Lines, SKRect Figure);

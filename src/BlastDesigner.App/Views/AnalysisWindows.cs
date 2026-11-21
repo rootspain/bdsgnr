@@ -11,6 +11,7 @@ using Avalonia.Threading;
 using BlastDesigner.App.Controls;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.Tools;
+using BlastDesigner.App.Tools.Section;
 using BlastDesigner.App.ViewModels;
 using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
@@ -671,18 +672,60 @@ public static partial class AnalysisWindows
         // the name of the line of the window, A–A; empty for a line only picked
         string Caption() => vm.Project is { } pr && Reports.SectionLines(pr).FirstOrDefault(l => l.Points[0].Equals(line.A) && l.Points[1].Equals(line.B)) is { } named ? SectionNames.Caption(named.Label) : "";
         var settings = vm.Settings;
+        SectionSession session = null!;
+        var takeOverPosted = false;
         view = SecondaryViewport(vm, () =>
         {
             var o = vm.BuildSceneOptions();
             var half = (double)(width.Value ?? 5);
             var labels = new SectionLabels(settings.SectionNumbers, settings.SectionLevels, settings.SectionDimensions);
             var ink = new SkiaSharp.SKColor(Look.Text.Color.R, Look.Text.Color.G, Look.Text.Color.B);
+            var own = vm.Project is { } owning && SectionMarking.LineAt(owning, line.A, line.B) is { } owner && owning.SectionOwnDimensions.Contains(owner.Id);
+            // the automatic dimensions recorded as drawn: a click on one makes them marks of their own
+            var annotations = new SectionAnnotations(line.A, line.B, half, Reports.SectionTitle(Caption()), labels, ink, 12) { SkipDimensions = own, Recorded = session.AutoDimensions };
+            // the dimensions of a section line are marks like those drawn by hand: made so as soon as it is shown (after
+            // this frame, which records them), to be selected, moved, edited and deleted
+            if (!own && labels.Dimensions && vm.Project is { } shownProject && SectionMarking.LineAt(shownProject, line.A, line.B) != null && !takeOverPosted)
+            {
+                takeOverPosted = true;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    takeOverPosted = false;
+                    if (vm.Project is { } pr && SectionMarking.LineAt(pr, line.A, line.B) is { } l && !pr.SectionOwnDimensions.Contains(l.Id) && session.AutoDimensions.Count > 0)
+                        session.TakeOverAutoDimensions(Array.Empty<int>(), "Section dimensions");
+                }, DispatcherPriority.Background);
+            }
+            var overlays = new List<IOverlay> { annotations };
+            session.Box = annotations.Frame;
+            // the marks drawn by hand on the section of its line, with those selected and the one being drawn
+            var lineId = vm.Project is { } project && SectionMarking.LineAt(project, line.A, line.B) is { } entity ? entity.Id : Guid.Empty;
+            // one overlay while the line and the look stay: what it drew last is what a click picks, and the view asks for
+            // its options again for every pick
+            var marks = session.Marks;
+            if (marks == null || marks.LineId != lineId || !marks.Frame.A.Equals(line.A) || !marks.Frame.B.Equals(line.B) || marks.Ink != ink)
+                session.Marks = marks = new SectionMarksOverlay(lineId, line.A, line.B, ink, 12)
+                {
+                    Selected = session.SelectedMarks,
+                    SelectionColor = new SkiaSharp.SKColor(Look.Accent.Color.R, Look.Accent.Color.G, Look.Accent.Color.B)
+                };
+            marks.Box = annotations.Frame;
+            marks.Preview = session.Preview;
+            marks.MoveBy = session.MoveBy;
+            // with the marks hidden the one being drawn still shows
+            if (settings.SectionMarks) overlays.Add(marks);
+            else if (session.Preview != null) overlays.Add(new SectionMarksOverlay(Guid.Empty, line.A, line.B, ink, 12, annotations.Frame) { Preview = session.Preview });
             return new SceneOptions
             {
-                Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = half, HideHoleLabels = labels.Numbers, HideTies = !settings.SectionTies, HideRows = true,
-                Overlays = new IOverlay[] { new SectionAnnotations(line.A, line.B, half, Reports.SectionTitle(Caption()), labels, ink, 12) }
+                Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = half, SectionCut = true, HideHoleLabels = labels.Numbers, HideTies = true, HideRows = true, HideAxes = true,
+                Overlays = overlays,
+                // nothing of the plan beyond the frame
+                ClipScene = annotations.Frame
             };
         });
+        session = new SectionSession(vm, view, () => line, () => (double)(width.Value ?? 5));
+        // what the section shows is selected in it: a click or a box, in the project, so the main window shows it too;
+        // the marks drawn by hand in the window
+        var picking = new SectionSelectTool(vm, view, session);
         var number = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 44, TextAlignment = TextAlignment.Center, FontFamily = Look.Mono, Foreground = Look.Text, Name = "sectionNumber" };
         Button previous = null!, next = null!;
         // where the line of the window stands among those of the blast, -1 for one that was only picked
@@ -700,9 +743,12 @@ public static partial class AnalysisWindows
         void Fit()
         {
             if (vm.Project is not { } project) return;
+            // the camera takes its size at render time; a window just opened has not drawn yet: take it from the layout
+            if (view.Bounds.Width >= 1 && view.Bounds.Height >= 1) { view.Camera.Width = view.Bounds.Width; view.Camera.Height = view.Bounds.Height; }
             var mid = Vec3.Lerp(line.A, line.B, 0.5);
             var bb = Bounds3.Empty;
-            foreach (var e in project.Entities.Where(e => e is Hole)) foreach (var v in e.GetVertices()) if (Math.Abs(view.Camera.Depth(v)) <= (double)(width.Value ?? 5)) bb.Add(v);
+            // the holes of the frame: their collars within the half width, as the frame and its labels take them
+            foreach (var h in SectionProfile.Build(project, line.A, line.B, (double)(width.Value ?? 5)).Holes) { bb.Add(h.Collar); bb.Add(h.Toe); }
             if (!bb.IsEmpty)
             {
                 // room over the collars for the numbers of the holes and the title of the section
@@ -716,6 +762,7 @@ public static partial class AnalysisWindows
         void Aim(Vec3 from, Vec3 to)
         {
             line = (from, to);
+            session.SelectedMarks.Clear();
             var mid = Vec3.Lerp(from, to, 0.5);
             var holesZ = vm.Project!.Holes.Any() ? vm.Project.Holes.Average(h => h.Collar.Z - h.Length / 2) : mid.Z;
             view.Camera.Pitch = 0;
@@ -733,8 +780,8 @@ public static partial class AnalysisWindows
             Aim(target.Points[0], target.Points[1]);
             Fit();
         }
-        previous = Ui.Flat(Look.Icon("left", 16, Look.TextSoft), Loc.T("Previous section line"), () => Step(-1), 32, 32);
-        next = Ui.Flat(Look.Icon("right", 16, Look.TextSoft), Loc.T("Next section line"), () => Step(1), 32, 32);
+        previous = Ui.Flat(Look.Icon("left", 16, Look.TextSoft), Loc.T("Previous section line"), () => Step(-1), 32, 30);
+        next = Ui.Flat(Look.Icon("right", 16, Look.TextSoft), Loc.T("Next section line"), () => Step(1), 32, 30);
         previous.Name = "sectionPrevious";
         next.Name = "sectionNext";
         Aim(a, b);
@@ -754,22 +801,93 @@ public static partial class AnalysisWindows
             box.IsCheckedChanged += (_, _) => { set(box.IsChecked == true); vm.Settings.Save(); view!.Redraw(); };
             return box;
         }
-        var shown = Ui.Row(10,
-            Show("sectionNumbers", "Hole numbers", settings.SectionNumbers, v => settings.SectionNumbers = v),
-            Show("sectionLevels", "Levels", settings.SectionLevels, v => settings.SectionLevels = v),
-            Show("sectionDimensions", "Dimensions", settings.SectionDimensions, v => settings.SectionDimensions = v),
-            Show("sectionTies", "Ties shock tube/EBS", settings.SectionTies, v => settings.SectionTies = v));
-        var top = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 4, Margin = new Thickness(6), Children = { new TextBlock { Text = Loc.T("Half width (m)"), VerticalAlignment = VerticalAlignment.Center }, width, fit, Ui.Row(2, previous, number, next), print, shown } };
+        var shown = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), VerticalAlignment = VerticalAlignment.Center };
+        void PutShown(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); c.Margin = new Thickness(0, 0, 12, 0); c.MinHeight = 24; shown.Children.Add(c); }
+        PutShown(Show("sectionNumbers", "Hole numbers", settings.SectionNumbers, v => settings.SectionNumbers = v), 0, 0);
+        PutShown(Show("sectionLevels", "Levels", settings.SectionLevels, v => settings.SectionLevels = v), 0, 1);
+        PutShown(Show("sectionDimensions", "Dimensions", settings.SectionDimensions, v => settings.SectionDimensions = v), 1, 0);
+        PutShown(Show("sectionMarks", "Drawn by hand", settings.SectionMarks, v => settings.SectionMarks = v), 1, 1);
+        var halfRow = Ui.Row(8, new TextBlock { Text = Loc.T("Half width (m)"), VerticalAlignment = VerticalAlignment.Center }, width);
+        width.Height = 24; width.MinHeight = 24;
+        fit.Height = 24; fit.MinHeight = 24; fit.Padding = new Thickness(10, 0); fit.VerticalContentAlignment = VerticalAlignment.Center;
+        var section = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Children = { halfRow, fit } };
+        var ribbon = new SectionRibbon(vm, session, picking, new (string, Control)[] { ("Section", section), ("Show", shown) }, Ui.Row(6, Ui.Row(2, previous, number, next), print));
+        view.ToolSource = () => ribbon.Active;
+        view.PointerMoved += (_, e) => { var p = e.GetPosition(view); ribbon.ShowWhere(p.X, p.Y); };
+
+        // the box a value is typed in at the cursor: the height of a level, the words of a text, a text of its own
+        var askLayer = new Canvas();
+        session.AskAt = (at, prompt, value, done) =>
+        {
+            askLayer.Children.Clear();
+            var box = new TextBox { Text = value, Width = 150, Name = "sectionAsk" };
+            var holder = new Border
+            {
+                Background = Look.Panel, BorderBrush = Look.Accent, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Padding = new Thickness(6),
+                Child = new StackPanel { Spacing = 4, Children = { new TextBlock { Text = Loc.T(prompt), FontSize = 11, Foreground = Look.Muted }, box } }
+            };
+            Canvas.SetLeft(holder, Math.Max(4, Math.Min(at.X + 12, view.Bounds.Width - 180)));
+            Canvas.SetTop(holder, Math.Max(4, Math.Min(at.Y + 12, view.Bounds.Height - 70)));
+            askLayer.Children.Add(holder);
+            void Close() { askLayer.Children.Clear(); view.Focus(); }
+            box.KeyDown += (_, e) =>
+            {
+                if (e.Key == Avalonia.Input.Key.Enter) { var text = box.Text ?? ""; Close(); Ui.Safe(() => done(text)); e.Handled = true; }
+                else if (e.Key == Avalonia.Input.Key.Escape) { Close(); e.Handled = true; }
+            };
+            box.LostFocus += (_, _) => { if (askLayer.Children.Count > 0) Close(); };
+            Dispatcher.UIThread.Post(() => { box.Focus(); box.SelectAll(); }, DispatcherPriority.Input);
+        };
+        var area = new Panel { Children = { view, askLayer } };
+
         var dock = new DockPanel();
-        DockPanel.SetDock(top, Dock.Top);
-        dock.Children.Add(top);
-        dock.Children.Add(view);
-        var w = Dialogs.ShowWindow("Section view", dock, 900, 520);
-        w.Opened += (_, _) => Fit();
+        DockPanel.SetDock(ribbon.Top, Dock.Top);
+        DockPanel.SetDock(ribbon.Status, Dock.Bottom);
+        dock.Children.Add(ribbon.Top);
+        dock.Children.Add(ribbon.Status);
+        dock.Children.Add(area);
+        // Zoom all on opening, once the view has its size. Show raises Opened inside ShowWindow, before a handler added
+        // after it: so the first size of the view fits, and once more after the window is laid out.
+        var fitted = false;
+        void FitOnce() { if (fitted || view.Bounds.Width < 1 || view.Bounds.Height < 1) return; fitted = true; Fit(); }
+        view.SizeChanged += (_, _) => FitOnce();
+        var w = Dialogs.ShowWindow("Section view", dock, 1100, 640);
+        FitOnce();
+        Dispatcher.UIThread.Post(() => { fitted = false; FitOnce(); }, DispatcherPriority.Loaded);
+        // Esc on its way down, before the program closes a window with it: it drops what a tool began, then goes back to
+        // selecting, then clears the selection, and never closes the window (Esc is pressed again and again to drop an
+        // entry, and the window went with it). F8 Ortho.
+        w.AddHandler(Avalonia.Input.InputElement.KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Avalonia.Input.Key.F8) { ribbon.ToggleOrtho(); e.Handled = true; return; }
+            // Ctrl+Z, Ctrl+Y (Ctrl+Shift+Z) undo and redo the project, as in the main window; a box being typed in keeps them
+            var ctrl = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
+            if (ctrl && e.Key is Avalonia.Input.Key.Z or Avalonia.Input.Key.Y && w.FocusManager?.GetFocusedElement() is not TextBox)
+            {
+                var redo = e.Key == Avalonia.Input.Key.Y || e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Shift);
+                ribbon.Active.Cancel();
+                if (redo) vm.Redo(); else vm.Undo();
+                // the marks selected that the step took away are selected no more
+                if (vm.Project is { } undone) session.SelectedMarks.RemoveWhere(id => undone.SectionMarks.All(m => m.Id != id));
+                session.Touch();
+                ribbon.Refresh();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key != Avalonia.Input.Key.Escape || askLayer.Children.Count > 0) return;
+            if (!ribbon.Active.KeyDown(e.Key, e.KeyModifiers) && ribbon.Active is not SectionSelectTool) ribbon.SetTool(null);
+            e.Handled = true;
+            view.Redraw();
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _sectionAim = (from, to) => { Aim(from, to); Fit(); };
-        vm.ModelRefreshed += ShowNumber;
-        w.Closed += (_, _) => { _sectionAim = null; vm.ModelRefreshed -= ShowNumber; };
+        SectionRibbonShown = ribbon;
+        void Refreshed() { ShowNumber(); ribbon.Refresh(); }
+        vm.ModelRefreshed += Refreshed;
+        w.Closed += (_, _) => { _sectionAim = null; SectionRibbonShown = null; vm.ModelRefreshed -= Refreshed; };
     }
+
+    /// <summary>The ribbon of the open Section view window, for the smoke test.</summary>
+    public static SectionRibbon? SectionRibbonShown { get; private set; }
 
     public static void HorizontalSlice(MainViewModel vm)
     {

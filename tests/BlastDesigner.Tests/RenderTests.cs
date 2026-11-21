@@ -177,14 +177,133 @@ public class RenderTests
     }
 
     [Fact]
-    public void HideTies_LeavesOutTheTiesAndTheEbsFronts()
+    public void ASection_TheHalfWidthForTheHolesOnly_ASurfaceALineOf3Pixels()
     {
-        byte[] Shot(bool hide, bool front)
+        // a section along X through y = 0, seen from the side
+        int Ink(Action<BlastProject> add, bool section = true)
+        {
+            var p = BlastProject.CreateNew("cut");
+            p.View.ShowAxes = false;
+            add(p);
+            var cam = new Camera { Width = 400, Height = 300, Scale = 10, Pitch = 0, Yaw = 0, Target = new Vec3(0, 0, 0) };
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.White);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, HideHoleLabels = true, SliceHalfWidth = 4, SectionCut = section, Background = SKColors.White });
+            return bitmap.Pixels.Count(c => c != SKColors.White);
+        }
+        // what is drawn with no objects (the scale bar and the like)
+        var bare = Ink(_ => { });
+        // a hole 3 m off the line: in the half width
+        Assert.True(Ink(p => p.Add(new Hole { Label = "1", Collar = new Vec3(0, 3, 5), Length = 10 })) > bare);
+        // a line 3 m off: not on the line, left out; on it: drawn
+        Assert.Equal(bare, Ink(p => p.Add(new PolylineEntity { Points = { new Vec3(-10, 3, 0), new Vec3(10, 3, 0) } })));
+        Assert.True(Ink(p => p.Add(new PolylineEntity { Points = { new Vec3(-10, 0, 0), new Vec3(10, 0, 0) } })) > bare);
+        // a level surface across the line: a line 3 px thick, 20 m long at 10 px a metre
+        void Surface(BlastProject p) => p.Add(new SurfaceEntity
+        {
+            Vertices = { new Vec3(-10, -10, 0), new Vec3(10, -10, 0), new Vec3(10, 10, 0), new Vec3(-10, 10, 0) },
+            Triangles = { 0, 1, 2, 0, 2, 3 }
+        });
+        var cut = Ink(Surface) - bare;
+        Assert.InRange(cut, 200 * 3 * 0.8, 200 * 3 * 1.4);
+        // a slice that is not a section (the horizontal slice) keeps its band of everything
+        Assert.True(Ink(p => p.Add(new PolylineEntity { Points = { new Vec3(-10, 3, 0), new Vec3(10, 3, 0) } }), section: false) > bare);
+    }
+
+    [Fact]
+    public void InASection_WhatIsDrawnIsWhatIsPicked_ASurfaceByItsCut()
+    {
+        var cam = new Camera { Width = 400, Height = 300, Scale = 10, Pitch = 0, Yaw = 0, Target = new Vec3(0, 0, 0) };
+        var section = new SceneOptions { SliceHalfWidth = 4, SectionCut = true, HideTies = true };
+        Assert.True(PlanRenderer.InSlice(section, cam, new Hole { Collar = new Vec3(0, 3, 0), Length = 10 }));
+        Assert.False(PlanRenderer.InSlice(section, cam, new Hole { Collar = new Vec3(0, 5, 0), Length = 10 }));
+        Assert.False(PlanRenderer.InSlice(section, cam, new PolylineEntity { Points = { new Vec3(-1, 3, 0), new Vec3(1, 3, 0) } }));
+        Assert.True(PlanRenderer.InSlice(section, cam, new PolylineEntity { Points = { new Vec3(-1, 0, 0), new Vec3(1, 0, 0) } }));
+        Assert.False(PlanRenderer.InSlice(section, cam, new InitiationPoint { Position = new Vec3(0, 0, 0) }));
+        // the plane through y = 0 across a level square: one line from x = -10 to 10 at z = 0
+        var s = new SurfaceEntity { Vertices = { new Vec3(-10, -10, 0), new Vec3(10, -10, 0), new Vec3(10, 10, 0), new Vec3(-10, 10, 0) }, Triangles = { 0, 1, 2, 0, 2, 3 } };
+        var cut = PlanRenderer.SurfaceCut(cam, s);
+        Assert.Equal(2, cut.Count);
+        var xs = cut.SelectMany(c => new[] { c.A.X, c.B.X }).ToList();
+        Assert.Equal(-10, xs.Min(), 6); Assert.Equal(10, xs.Max(), 6);
+        Assert.All(cut, c => { Assert.Equal(0, c.A.Y, 6); Assert.Equal(0, c.B.Y, 6); });
+    }
+
+    [Fact]
+    public void ASectionPrintedToPdf_HasTheColumnsOfItsHoles()
+    {
+        // a PDF leaves out a mesh of vertices: the columns of the holes are drawn as lines on a sheet
+        int Lines(bool depths)
+        {
+            var p = BlastProject.CreateNew();
+            p.View.CollarsOnly = !depths;
+            var explosive = p.Products.First(x => x.IsExplosive);
+            for (int i = 0; i < 6; i++)
+            {
+                var h = p.Add(new Hole { Label = i.ToString(), Collar = new Vec3(i * 4, 0, 1.5), Length = 14, Subdrill = 1 });
+                if (i % 2 == 0) h.Decks.Add(new Deck { Top = 4, Bottom = 14, ProductId = explosive.Id });
+            }
+            using var ms = new MemoryStream();
+            using (var pdf = SKDocument.CreatePdf(ms))
+            {
+                var page = pdf.BeginPage(842, 595);
+                Reports.DrawSection(page, new SKRect(20, 20, 820, 500), p, new Vec3(-6, 0, 1), new Vec3(30, 0, 1), 4, new SectionVisibility());
+                pdf.EndPage();
+                pdf.Close();
+            }
+            // the "l" (line to) of the page streams
+            var data = ms.ToArray();
+            var text = System.Text.Encoding.Latin1.GetString(data);
+            var n = 0;
+            for (var at = text.IndexOf("stream", StringComparison.Ordinal); at >= 0; at = text.IndexOf("stream", at + 6, StringComparison.Ordinal))
+            {
+                var start = at + 6;
+                while (start < data.Length && (data[start] == '\r' || data[start] == '\n')) start++;
+                var end = text.IndexOf("endstream", start, StringComparison.Ordinal);
+                if (end < 0) break;
+                try
+                {
+                    using var z = new System.IO.Compression.ZLibStream(new MemoryStream(data, start, end - start), System.IO.Compression.CompressionMode.Decompress);
+                    using var r = new StreamReader(z, System.Text.Encoding.Latin1);
+                    n += r.ReadToEnd().Split('\n').Count(l => l.EndsWith(" l"));
+                }
+                catch (InvalidDataException) { }
+                at = end;
+            }
+            return n;
+        }
+        Assert.True(Lines(true) >= Lines(false) + 6, $"{Lines(true)} {Lines(false)}");
+    }
+
+    [Fact]
+    public void HideAxes_LeavesOutTheAxesInTheCorner()
+    {
+        byte[] Shot(bool axes, bool hide)
+        {
+            var p = BlastProject.CreateNew("axes");
+            p.Add(new Hole { Label = "1", Collar = new Vec3(0, 0, 0), Length = 10 });
+            p.View.ShowAxes = axes;
+            var cam = new Camera { Width = 400, Height = 300, Scale = 5, Target = new Vec3(0, 0, 0) };
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, HideHoleLabels = true, HideAxes = hide });
+            return bitmap.Bytes;
+        }
+        Assert.NotEqual(Shot(false, false), Shot(true, false));
+        Assert.Equal(Shot(false, true), Shot(true, true));
+    }
+
+    [Fact]
+    public void HideTies_LeavesOutTheTiesTheEbsFrontsAndTheInitiationPoints()
+    {
+        byte[] Shot(bool hide, int what)
         {
             var p = BlastProject.CreateNew("hide");
             var a = p.Add(new Hole { Label = "1", Collar = new Vec3(0, 0, 0), Length = 10 });
             var b = p.Add(new Hole { Label = "2", Collar = new Vec3(40, 0, 0), Length = 10 });
-            if (front) p.Add(new TimingLineEntity { Front = TimingFrontShape.Line, Points = { new Vec3(0, 10, 0), new Vec3(40, 10, 0) } });
+            if (what == 1) p.Add(new TimingLineEntity { Front = TimingFrontShape.Line, Points = { new Vec3(0, 10, 0), new Vec3(40, 10, 0) } });
+            else if (what == 2) p.Add(new InitiationPoint { Position = new Vec3(20, 10, 0) });
             else BlastDesigner.Engine.Timing.Connect(p, a.Id, b.Id, null);
             var cam = new Camera { Width = 400, Height = 300, Scale = 5, Target = new Vec3(20, 5, 0) };
             using var bitmap = new SKBitmap(400, 300);
@@ -203,10 +322,11 @@ public class RenderTests
             PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, ShowGrid = false, HideHoleLabels = true });
             return bitmap.Bytes;
         }
-        Assert.NotEqual(Bare(), Shot(false, false));
-        Assert.Equal(Bare(), Shot(true, false));
-        Assert.NotEqual(Bare(), Shot(false, true));
-        Assert.Equal(Bare(), Shot(true, true));
+        for (int what = 0; what < 3; what++)
+        {
+            Assert.NotEqual(Bare(), Shot(false, what));
+            Assert.Equal(Bare(), Shot(true, what));
+        }
     }
 
     [Fact]

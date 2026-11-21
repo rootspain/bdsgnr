@@ -48,6 +48,13 @@ public sealed class BlastProject
     /// </summary>
     public double? MinStemmingDiameters { get; set; }
     public List<VibrationRecord> VibrationRecords { get; set; } = new();
+    /// <summary>The dimensions, angles, levels, lines and texts drawn by hand on the sections, each of its section line.</summary>
+    public List<SectionMark> SectionMarks { get; set; } = new();
+    /// <summary>
+    /// The section lines whose automatic dimensions (length, spacing, subdrill) were made marks of their own to be edited:
+    /// the section draws them no more, the marks stand in their place.
+    /// </summary>
+    public List<Guid> SectionOwnDimensions { get; set; } = new();
     public SiteCoordinateSystem Coordinates { get; set; } = new();
     /// <summary>Профиль расчёта проекта; null — встроенный «SHOTPlus 6» (так открываются файлы до движка вычислений).</summary>
     public ProjectCalc? Calc { get; set; }

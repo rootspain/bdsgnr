@@ -813,7 +813,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
             Add(Label("sectionNumbers", "Hole numbers", section.ShowNumbers, v => section.ShowNumbers = v));
             Add(Label("sectionLevels", "Levels", section.ShowLevels, v => section.ShowLevels = v));
             Add(Label("sectionDimensions", "Dimensions", section.ShowDimensions, v => section.ShowDimensions = v));
-            Add(Label("sectionTies", "Ties shock tube/EBS", section.ShowTies, v => section.ShowTies = v));
+            Add(Label("sectionMarks", "Drawn by hand", section.ShowMarks, v => section.ShowMarks = v));
         }
         return grid;
     }

@@ -17,6 +17,13 @@ using BlastDesigner.IO;
 
 var outDir = args.Length > 0 ? args[0] : Path.Combine(Path.GetTempPath(), "BlastDesignerSmoke");
 Directory.CreateDirectory(outDir);
+// the settings, catalogue and templates of the run in a folder of its own, empty at the start: the user's are never
+// opened, also when a run is broken off (it left the smoke settings in the user's file, holes hidden on sections)
+var smokeData = Path.Combine(outDir, "appdata");
+if (Directory.Exists(smokeData)) Directory.Delete(smokeData, true);
+Directory.CreateDirectory(smokeData);
+Environment.SetEnvironmentVariable(ProgramSettings.DataFolderVariable, smokeData);
+if (!ProgramSettings.SettingsPath.StartsWith(smokeData, StringComparison.OrdinalIgnoreCase)) throw new Exception("the smoke run should keep its settings in its own folder");
 
 AppBuilder.Configure<App>()
     .UseSkia()
@@ -3061,6 +3068,15 @@ Step("hole form for several holes", () => { _ = HoleEditWindow.Show(vm, vm.Proje
 WindowShot("38b_hole_form_several");
 Step("resources window", () => { _ = ProductsWindow.Show(vm.Project!); });
 WindowShot("39_resources");
+Step("resources: the colour of a product shows at the window's size, with the full picker", () =>
+{
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Pump();
+    var picker = dlg.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "colourPicker") ?? throw new Exception("the colour of a product should have the full picker");
+    // the colour seen without scrolling the properties: its button within the window
+    var at = picker.TranslatePoint(new Point(0, picker.Bounds.Height), dlg) ?? throw new Exception("the picker is not in the window");
+    if (at.Y > dlg.Bounds.Height) throw new Exception($"the colour should fit the window as it opens: {at.Y} > {dlg.Bounds.Height}");
+});
 Step("resources: the last row scrolls clear of the buttons under the list", () =>
 {
     var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
@@ -6787,12 +6803,189 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     vm.SelectTool(); Pump();
     vm.View.Redraw(); Pump();
     Shot(window, "81a_section_names_on_plan");
+    // a double click on a section line on the plan opens its section
+    {
+        var (lx, ly) = vm.View.Camera.ToScreen(Vec3.Lerp(sectionLines[0].Points[0], sectionLines[0].Points[1], 0.5));
+        var twice = new BlastDesigner.App.Controls.ToolPointer { X = lx, Y = ly, World = Vec3.Lerp(sectionLines[0].Points[0], sectionLines[0].Points[1], 0.5), Hit = sectionLines[0], Left = true, ClickCount = 2 };
+        vm.ActiveTool!.PointerPressed(twice); vm.ActiveTool.PointerReleased(twice); Pump();
+        if (AnalysisWindows.SectionRibbonShown == null || BlastDesigner.App.Services.Dialogs.LastShown?.Title != BlastDesigner.App.Services.Loc.T("Section view")) throw new Exception("a double click on a section line should open its section");
+        if (!vm.Doc!.Selection.Contains(sectionLines[0].Id)) throw new Exception("the section line double clicked should be selected");
+    }
     // the window goes from line to line and prints
     AnalysisWindows.ShowSection(vm, sectionLines[0].Points[0], sectionLines[0].Points[1]); Pump();
     var sectionWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
     string SectionNumber() => sectionWindow.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "sectionNumber").Text ?? "";
     void SectionPress(string name) { sectionWindow.GetLogicalDescendants().OfType<Button>().First(b => b.Name == name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
     if (SectionNumber() != "A–A · 1 / 2") throw new Exception("the section window shows " + SectionNumber());
+    // opened with Zoom all: the camera of the size of the view, the holes of the band all on screen
+    {
+        var sectionView = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(sectionWindow).OfType<BlastDesigner.App.Controls.Viewport>().First();
+        var cam = sectionView.Camera;
+        if (Math.Abs(cam.Width - sectionView.Bounds.Width) > 1 || Math.Abs(cam.Height - sectionView.Bounds.Height) > 1) throw new Exception($"the section camera should take the size of its view: {cam.Width}x{cam.Height} vs {sectionView.Bounds.Width}x{sectionView.Bounds.Height}");
+        var band = vm.Project.Holes.Where(h => Math.Abs(cam.Depth(h.Collar)) <= BlastDesigner.Rendering.Reports.DefaultSectionHalfWidth).ToList();
+        if (band.Count == 0) throw new Exception("no holes in the band of the section");
+        foreach (var h in band)
+            foreach (var v in new[] { h.Collar, h.Toe })
+                if (cam.ToScreen(v) is var s && (s.X < 0 || s.X > cam.Width || s.Y < 0 || s.Y > cam.Height)) throw new Exception($"hole {h.Label} should be on screen after Zoom all: {s}");
+        // fitted, not lost in the middle: the holes take a good part of the view across or up
+        var onScreen = band.SelectMany(h => new[] { cam.ToScreen(h.Collar), cam.ToScreen(h.Toe) }).ToList();
+        if (onScreen.Max(s => s.X) - onScreen.Min(s => s.X) < cam.Width * 0.4 && onScreen.Max(s => s.Y) - onScreen.Min(s => s.Y) < cam.Height * 0.4) throw new Exception($"Zoom all should fill the section window with its holes: scale {cam.Scale}");
+        // selecting in the section: a click on the shaft of a hole selects it in the project, the main window too
+        var picking = sectionView.ToolSource!.Invoke()!;
+        BlastDesigner.App.Controls.ToolPointer At(double x, double y, Avalonia.Input.KeyModifiers mods = Avalonia.Input.KeyModifiers.None) => new() { X = x, Y = y, Left = true, Modifiers = mods, ClickCount = 1 };
+        var picked = band[0];
+        var (mx, my) = cam.ToScreen(Vec3.Lerp(picked.Collar, picked.Toe, 0.5));
+        picking.PointerPressed(At(mx, my)); picking.PointerReleased(At(mx, my)); Pump();
+        if (!vm.Doc!.Selection.SetEquals(new[] { picked.Id })) throw new Exception("a click on the shaft of a hole in the section should select it: " + vm.Doc.Selection.Count);
+        if (!vm.BuildSceneOptions().Selection.Contains(picked.Id)) throw new Exception("the hole selected in the section should be selected in the main window");
+        Shot(sectionWindow, "81h_section_selected_hole");
+        // a box round the whole view: the holes of the band, nothing that the section does not show
+        picking.PointerPressed(At(1, 1)); picking.PointerMoved(At(cam.Width - 1, cam.Height - 1)); picking.PointerReleased(At(cam.Width - 1, cam.Height - 1)); Pump();
+        var boxed = vm.Doc.SelectedEntities.ToList();
+        if (!band.All(h => vm.Doc.Selection.Contains(h.Id))) throw new Exception("a box round the section should select all its holes");
+        if (boxed.OfType<Hole>().Any(h => !band.Contains(h))) throw new Exception("a box in the section should not select holes beyond the half width");
+        // a click on nothing clears, Esc too
+        picking.PointerPressed(At(cam.Width - 2, 2)); picking.PointerReleased(At(cam.Width - 2, 2)); Pump();
+        if (vm.Doc.Selection.Count != 0) throw new Exception("a click on nothing in the section should clear the selection");
+        // a small box round a collar only (left to right): the whole hole, as the user draws it round the number
+        {
+            var (kx, ky) = cam.ToScreen(band[0].Collar);
+            picking.PointerPressed(At(kx - 14, ky - 14)); picking.PointerMoved(At(kx + 14, ky + 14)); picking.PointerReleased(At(kx + 14, ky + 14)); Pump();
+            if (!vm.Doc.Selection.Contains(band[0].Id)) throw new Exception("a box round the collar of a hole in the section should select the hole");
+            picking.PointerPressed(At(cam.Width - 2, 2)); picking.PointerReleased(At(cam.Width - 2, 2)); Pump();
+        }
+        // the marks drawn by hand: the ribbon of the window, its tabs, the tools of the Dimensions tab
+        var ribbon = AnalysisWindows.SectionRibbonShown ?? throw new Exception("the section window should have its ribbon");
+        Button RibbonButton(string name) => sectionWindow.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == name) ?? throw new Exception("no " + name + " in the section ribbon");
+        void RibbonPress(string name) { RibbonButton(name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+        foreach (var tab in new[] { "sectionTabView", "sectionTabDimensions", "sectionTabSectionstyle" }) RibbonButton(tab);
+        RibbonPress("sectionTabView");
+        if (sectionWindow.GetLogicalDescendants().OfType<CheckBox>().All(c => c.Name != "sectionMarks")) throw new Exception("the View tab should switch the marks drawn by hand");
+        RibbonPress("sectionTabDimensions");
+        var line = BlastDesigner.Engine.SectionMarking.LineAt(vm.Project, sectionLines[0].Points[0], sectionLines[0].Points[1]) ?? throw new Exception("the window should stand on line A");
+        int Marks() => vm.Project!.SectionMarks.Count(m => m.SectionLineId == line.Id);
+        var marksBefore = Marks();
+        if (band.Count >= 2)
+        {
+            // a dimension across from collar to collar, its line over them: held on the holes
+            RibbonPress("markHorizontal");
+            if (ribbon.Active is not BlastDesigner.App.Tools.Section.SectionMarkTool) throw new Exception("the Across button should take the dimension tool");
+            var tool = sectionView.ToolSource!.Invoke()!;
+            var (ax, ay) = cam.ToScreen(band[0].Collar);
+            var (bx, by) = cam.ToScreen(band[1].Collar);
+            tool.PointerMoved(At(ax, ay)); tool.PointerPressed(At(ax, ay));
+            tool.PointerMoved(At(bx, by)); tool.PointerPressed(At(bx, by));
+            tool.PointerMoved(At((ax + bx) / 2, Math.Min(ay, by) - 30)); tool.PointerPressed(At((ax + bx) / 2, Math.Min(ay, by) - 30)); Pump();
+            var dim = vm.Project.SectionMarks.LastOrDefault(m => m.Kind == SectionMarkKind.Horizontal) ?? throw new Exception("three clicks should draw a dimension across");
+            if (dim.Points[0].HoleId != band[0].Id || dim.Points[1].HoleId != band[1].Id) throw new Exception("the dimension should be held on the collars it snapped to");
+            // an angle: the shaft of a hole and the level (H)
+            RibbonPress("markAngle");
+            tool = sectionView.ToolSource!.Invoke()!;
+            var (sx, sy) = cam.ToScreen(Vec3.Lerp(band[0].Collar, band[0].Toe, 0.5));
+            tool.PointerPressed(At(sx, sy));
+            tool.KeyDown(Avalonia.Input.Key.H, Avalonia.Input.KeyModifiers.None);
+            tool.PointerMoved(At(sx + 25, sy - 25)); tool.PointerPressed(At(sx + 25, sy - 25)); Pump();
+            var angle = vm.Project.SectionMarks.LastOrDefault(m => m.Kind == SectionMarkKind.Angle) ?? throw new Exception("a line, H and a click should draw an angle");
+            var angleText = BlastDesigner.Engine.SectionMarking.Label(angle, BlastDesigner.Engine.SectionMarking.Resolve(vm.Project, new BlastDesigner.Engine.SectionFrame(line.Points[0], line.Points[1]), angle));
+            if (angleText != "90°") throw new Exception("the shaft of an upright hole should stand at 90° to the level: " + angleText);
+        }
+        // a level, one click: blue, as the bench level
+        RibbonPress("markLevel");
+        var levelTool = sectionView.ToolSource!.Invoke()!;
+        levelTool.PointerPressed(At(cam.Width / 2, cam.Height / 3)); Pump();
+        var level = vm.Project.SectionMarks.LastOrDefault(m => m.Kind == SectionMarkKind.Level) ?? throw new Exception("a click should draw a level");
+        if (level.Style.Color != SectionMarkPreset.Blue) throw new Exception("a level should be blue at first");
+        if (Marks() != marksBefore + (band.Count >= 2 ? 3 : 1)) throw new Exception("the marks should go on line A: " + Marks());
+        Shot(sectionWindow, "81i_section_marks");
+        // back to selecting with Esc; the level picked by its line, its type changed in the ribbon, deleted, undone
+        sectionView.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape });
+        Pump();
+        if (ribbon.Active is not SectionSelectTool selecting) throw new Exception("Esc should go back to selecting");
+        if (!sectionWindow.IsVisible || !ReferenceEquals(ribbon, AnalysisWindows.SectionRibbonShown)) throw new Exception("Esc in a tool should not close the section window");
+        // Esc again and again, with nothing begun and nothing selected: the window stays
+        for (int i = 0; i < 3; i++) { sectionView.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape }); Pump(); }
+        if (!sectionWindow.IsVisible || !ReferenceEquals(ribbon, AnalysisWindows.SectionRibbonShown)) throw new Exception("Esc should never close the section window");
+        sectionView.Redraw(); Pump();
+        var levelY = cam.Height / 3;
+        selecting.PointerPressed(At(cam.Width / 2 + 40, levelY)); selecting.PointerReleased(At(cam.Width / 2 + 40, levelY)); Pump();
+        RibbonPress("sectionTabSectionstyle");
+        // the colours of the menu each with its square of colour
+        RibbonPress("markColour");
+        var colourItems = BlastDesigner.App.Views.Ui.LastMenu?.ItemsSource?.OfType<MenuItem>().ToList() ?? new();
+        if (colourItems.Count(i => i.Icon is Border { Background: Avalonia.Media.SolidColorBrush }) < 9) throw new Exception("each colour of the menu should show its colour: " + colourItems.Count);
+        BlastDesigner.App.Views.Ui.LastMenu?.Close(); Pump();
+        var typeBox = sectionWindow.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "markLineType");
+        // the types by their names in the language of the program, the name of AutoCAD after it
+        var dashedName = BlastDesigner.App.Views.LineStyleFields.TypeName("DASHED");
+        if (BlastDesigner.App.Services.Loc.T("line type:DASHED") != "line type:DASHED" && dashedName == "DASHED") throw new Exception("the line types should be named in the language of the program");
+        typeBox.SelectedItem = typeBox.Items.OfType<string>().First(n => n == dashedName); Pump();
+        if (vm.Project.SectionMarks.First(m => m.Id == level.Id).Style.LineType != "DASHED") throw new Exception("the line type of the ribbon should go to the selected level");
+        // a box drawn round the figure of the level only takes the level; a drag on it moves it, the arrows too
+        selecting.PointerPressed(At(cam.Width - 2, 2)); selecting.PointerReleased(At(cam.Width - 2, 2)); Pump();
+        sectionView.Redraw(); Pump();
+        var figureBox = ribbon.Session.Marks!.LastDrawn.First(d => d.Mark.Id == level.Id).Texts[0];
+        selecting.PointerPressed(At(figureBox.Left - 4, figureBox.Top - 4)); selecting.PointerMoved(At(figureBox.Right + 4, figureBox.Bottom + 4)); selecting.PointerReleased(At(figureBox.Right + 4, figureBox.Bottom + 4)); Pump();
+        if (!ribbon.Session.SelectedMarks.SetEquals(new[] { level.Id })) throw new Exception("a box round the figure of a level should select the level: " + ribbon.Session.SelectedMarks.Count);
+        var levelZ = vm.Project.SectionMarks.First(m => m.Id == level.Id).Points[0].Z;
+        selecting.PointerPressed(At(cam.Width / 2 + 40, levelY)); selecting.PointerMoved(At(cam.Width / 2 + 40, levelY + 30)); selecting.PointerReleased(At(cam.Width / 2 + 40, levelY + 30)); Pump();
+        var movedZ = vm.Project.SectionMarks.First(m => m.Id == level.Id).Points[0].Z;
+        if (Math.Abs(levelZ - 30 / cam.Scale - movedZ) > 0.05) throw new Exception($"a drag should move the level 30 px down: {levelZ} {movedZ}");
+        selecting.KeyDown(Avalonia.Input.Key.Up, Avalonia.Input.KeyModifiers.None); Pump();
+        if (Math.Abs(vm.Project.SectionMarks.First(m => m.Id == level.Id).Points[0].Z - movedZ - 0.1) > 1e-6) throw new Exception("the arrow up should lift the level 0.1 m");
+        // Copy style: off with nothing selected; with the level selected it takes its style and becomes Apply style,
+        // which a click gives to another mark
+        {
+            var paintButton = RibbonButton("markCopyStyle");
+            if (!paintButton.IsEnabled) throw new Exception("Copy style should be on with a mark selected");
+            var otherMark = vm.Project.SectionMarks.First(m => m.SectionLineId == line.Id && m.Id != level.Id && m.Kind != SectionMarkKind.Level);
+            RibbonPress("markCopyStyle");
+            if (ribbon.Active is not BlastDesigner.App.Tools.Section.SectionStyleTool paintTool) throw new Exception("Copy style should take the Apply style tool");
+            if (paintButton.Content is not StackPanel paintRow || paintRow.Children.OfType<TextBlock>().First().Text != BlastDesigner.App.Services.Loc.T("Apply style")) throw new Exception("the button should read Apply style");
+            sectionView.Redraw(); Pump();
+            var otherFigure = ribbon.Session.Marks!.LastDrawn.First(d => d.Mark.Id == otherMark.Id);
+            var (ox, oy) = otherFigure.Texts.Count > 0 ? (otherFigure.Texts[0].MidX, otherFigure.Texts[0].MidY) : ((otherFigure.Lines[0].A.X + otherFigure.Lines[0].B.X) / 2, (otherFigure.Lines[0].A.Y + otherFigure.Lines[0].B.Y) / 2);
+            paintTool.PointerPressed(At(ox, oy)); Pump();
+            if (vm.Project.SectionMarks.First(m => m.Id == otherMark.Id).Style.LineType != "DASHED") throw new Exception("Apply style should give the style of the level to the mark clicked");
+            RibbonPress("markCopyStyle");
+            if (ribbon.Active is not SectionSelectTool) throw new Exception("Apply style pressed again should end it");
+            ribbon.Session.SelectedMarks.Clear(); ribbon.Refresh();
+            if (paintButton.IsEnabled) throw new Exception("Copy style should be off with nothing selected");
+            ribbon.Session.SelectedMarks.Add(level.Id); ribbon.Refresh();
+        }
+        // a text of its own, undone and redone with Ctrl+Z and Ctrl+Y in the section window
+        vm.Doc.Execute("Section mark text", p => p.SectionMarks.First(m => m.Id == level.Id).Style.Text = "<> м");
+        Pump();
+        void SectionKey(Avalonia.Input.Key key, Avalonia.Input.KeyModifiers mods) { sectionView.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = key, KeyModifiers = mods }); Pump(); }
+        SectionKey(Avalonia.Input.Key.Z, Avalonia.Input.KeyModifiers.Control);
+        if (vm.Project.SectionMarks.First(m => m.Id == level.Id).Style.Text != null) throw new Exception("Ctrl+Z in the section window should undo the text of its own");
+        SectionKey(Avalonia.Input.Key.Y, Avalonia.Input.KeyModifiers.Control);
+        if (vm.Project.SectionMarks.First(m => m.Id == level.Id).Style.Text != "<> м") throw new Exception("Ctrl+Y in the section window should redo it");
+        if (!sectionWindow.IsVisible) throw new Exception("undo should leave the section window open");
+        selecting.KeyDown(Avalonia.Input.Key.Delete, Avalonia.Input.KeyModifiers.None); Pump();
+        if (vm.Project.SectionMarks.Any(m => m.Id == level.Id)) throw new Exception("Delete should delete the selected level");
+        vm.Doc!.Undo(); Pump();
+        if (!vm.Project.SectionMarks.Any(m => m.Id == level.Id)) throw new Exception("undo should bring the level back");
+        // the dimensions of the section are marks from the first: selected by their figure, deleted; Rebuild dimensions
+        // makes them again
+        sectionView.Redraw(); Pump();
+        if (!vm.Project.SectionOwnDimensions.Contains(line.Id)) throw new Exception("the dimensions of a section line should be marks as it is shown");
+        var autoCount = vm.Project.SectionMarks.Count(m => m.SectionLineId == line.Id && m.Auto);
+        if (autoCount == 0 || ribbon.Session.AutoDimensions.Count != 0) throw new Exception("the dimensions should be drawn as marks only: " + autoCount);
+        var autoMark = vm.Project.SectionMarks.First(m => m.SectionLineId == line.Id && m.Auto);
+        var autoFigure = ribbon.Session.Marks!.LastDrawn.First(d => d.Mark.Id == autoMark.Id).Texts[0];
+        selecting.PointerPressed(At(autoFigure.MidX, autoFigure.MidY)); selecting.PointerReleased(At(autoFigure.MidX, autoFigure.MidY)); Pump();
+        if (!ribbon.Session.SelectedMarks.SetEquals(new[] { autoMark.Id })) throw new Exception("a click on the figure of a dimension should select it: " + ribbon.Session.SelectedMarks.Count);
+        Shot(sectionWindow, "81j_section_own_dimensions");
+        selecting.KeyDown(Avalonia.Input.Key.Delete, Avalonia.Input.KeyModifiers.None); Pump();
+        if (vm.Project.SectionMarks.Count(m => m.SectionLineId == line.Id && m.Auto) != autoCount - 1) throw new Exception("Delete should delete a dimension of the section");
+        RibbonPress("sectionTabSectionstyle");
+        RibbonPress("markRestoreAuto");
+        sectionView.Redraw(); Pump(); Pump();
+        if (vm.Project.SectionMarks.Count(m => m.SectionLineId == line.Id && m.Auto) != autoCount) throw new Exception("Rebuild dimensions should make them all again");
+        // the marks of the test go, the blast as it was for the steps after; the View tab as the window opens
+        vm.Doc.Execute("clear", p => { p.SectionMarks.Clear(); p.SectionOwnDimensions.Clear(); }); Pump();
+        RibbonPress("sectionTabView");
+    }
     SectionPress("sectionNext");
     if (SectionNumber() != "B–B · 2 / 2") throw new Exception("the arrow did not go to the next line: " + SectionNumber());
     SectionPress("sectionNext");
@@ -6803,11 +6996,8 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     // the labels of the section: numbers, levels, dimensions, on at first, kept in the settings
     CheckBox SectionShow(string name) => sectionWindow.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == name) ?? throw new Exception("no " + name + " in the section window");
     if (SectionShow("sectionNumbers").IsChecked != true || SectionShow("sectionLevels").IsChecked != true || SectionShow("sectionDimensions").IsChecked != true) throw new Exception("the labels of the section should be on at first");
-    // the ties across the section: off at first, kept in the settings
-    if (SectionShow("sectionTies").IsChecked != false || vm.Settings.SectionTies) throw new Exception("the ties should be left out of the section at first");
-    SectionShow("sectionTies").IsChecked = true; Pump();
-    if (!vm.Settings.SectionTies) throw new Exception("turning the ties on should go into the settings");
-    SectionShow("sectionTies").IsChecked = false; Pump();
+    // no switch for the ties: a section never shows them
+    if (sectionWindow.GetLogicalDescendants().OfType<CheckBox>().Any(c => c.Name == "sectionTies")) throw new Exception("the section window should have no ties switch");
     SectionShow("sectionDimensions").IsChecked = false; Pump();
     if (vm.Settings.SectionDimensions) throw new Exception("turning the dimensions off should go into the settings");
     Shot(sectionWindow, "81g_section_window_no_dimensions");

@@ -27,6 +27,8 @@ internal static class EngineModule
         Document.Followers.Add(RouteNumbers.Follow);
         // a section line takes its name, a letter in turn, and keeps it its own
         Document.Followers.Add(SectionNames.Follow);
+        // the marks drawn by hand on a section go with its line
+        Document.Followers.Add(SectionMarking.Follow);
         // a surface built from objects keeps with them
         Document.Followers.Add(SurfaceSources.Follow);
         // one block a layer, and a block layer goes with its block

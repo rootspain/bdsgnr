@@ -140,9 +140,12 @@ public sealed class Viewport : Control
             HiddenDepths = opt.HiddenDepths,
             HideGeometry = opt.HideGeometry,
             SliceHalfWidth = opt.SliceHalfWidth,
+            SectionCut = opt.SectionCut,
             HideHoleLabels = opt.HideHoleLabels,
             HideTies = opt.HideTies,
             HideRows = opt.HideRows,
+            HideAxes = opt.HideAxes,
+            ClipScene = opt.ClipScene,
             TopInset = opt.TopInset,
             HideWireframes = SurfaceWireframe == IO.ProgramSettings.WireframeNever
                 || (SurfaceWireframe == IO.ProgramSettings.WireframeWhileStill && System.Diagnostics.Stopwatch.GetElapsedTime(_cameraMovedAt).TotalMilliseconds < SettleMs),
@@ -268,20 +271,26 @@ public sealed class Viewport : Control
         double bestD = TargetRadius;
         Entity? block = null;
         double blockD = TargetRadius;
-        var selection = OptionsSource?.Invoke().Selection;
+        var options = OptionsSource?.Invoke();
+        var selection = options?.Selection;
+        // a section picks what it draws: holes in the half width by their shaft, the rest on the line, surfaces by their cut
+        var section = options is { SectionCut: true, SliceHalfWidth: not null } ? options : null;
         foreach (var e in project.Entities)
         {
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
             if (!includeLocked && (layer.Frozen)) continue;
             if (accept != null && !accept(e)) continue;
-            var d = ScreenDistance(e, sx, sy, clip, selection);
+            if (section != null && !PlanRenderer.InSlice(section, Camera, e)) continue;
+            var d = section != null && e is Hole sh ? SegmentsDistance(new[] { sh.Collar, sh.Toe }, false, sx, sy)
+                : section != null && e is SurfaceEntity ss ? PlanRenderer.SurfaceCut(Camera, ss).Select(c => SegmentsDistance(new[] { c.A, c.B }, false, sx, sy)).DefaultIfEmpty(double.MaxValue).Min()
+                : ScreenDistance(e, sx, sy, clip, selection);
             if (e is Hole) d -= 2;
             // a block gives way to anything else on the spot: it is taken only where nothing else is
             if (e is BlockEntity) { if (d < blockD) { blockD = d; block = e; } continue; }
             if (d < bestD) { bestD = d; best = e; }
         }
         best ??= block;
-        if (best == null)
+        if (best == null && section == null)
         {
             var shown = project.Entities.OfType<SurfaceEntity>().Where(s =>
                 layers.TryGetValue(s.LayerId, out var l) && l.Visible && (includeLocked || !l.Frozen) && Shown(project, s, hidden, clip) && (accept == null || accept(s)));
@@ -455,14 +464,28 @@ public sealed class Viewport : Control
         var project = Project;
         if (project == null || shape.Empty) yield break;
         var layers = project.Layers.ToDictionary(l => l.Id);
-        var hidden = OptionsSource?.Invoke().HiddenEntities;
+        var options = OptionsSource?.Invoke();
+        var hidden = options?.HiddenEntities;
         // the visible blocks: what is outside them is not drawn, nor picked
         var clip = BlockClip.Of(project);
+        // a section: what it draws, a hole by its shaft, a surface by its cut
+        var section = options is { SectionCut: true, SliceHalfWidth: not null } ? options : null;
         foreach (var e in project.Entities)
         {
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || layer.Frozen) continue;
             if (!Shown(project, e, hidden, clip)) continue;
-            var verts = e is Hole hh ? new[] { hh.Collar } : e is TieEntity t ? new[] { t.FromPos, t.ToPos }
+            if (section != null && !PlanRenderer.InSlice(section, Camera, e)) continue;
+            if (section != null && e is Hole sh)
+            {
+                // a hole of a section: a box round its collar takes the whole hole (the number over it is drawn there);
+                // a crossing also takes it by its toe or its shaft running through the box
+                var (cx, cy) = Camera.ToScreen(sh.Collar);
+                var (tx, ty) = Camera.ToScreen(sh.Toe);
+                if (shape.Contains(cx, cy) || (crossing && (shape.Contains(tx, ty) || shape.CutsEdge(cx, cy, tx, ty)))) yield return e;
+                continue;
+            }
+            var verts = section != null && e is SurfaceEntity ss ? PlanRenderer.SurfaceCut(Camera, ss).SelectMany(c => new[] { c.A, c.B }).ToArray()
+                : e is Hole hh ? new[] { hh.Collar } : e is TieEntity t ? new[] { t.FromPos, t.ToPos }
                 : clip != null && e is PolylineEntity pl ? clip.Pieces(pl.Points, pl.Closed).SelectMany(x => x).ToArray()
                 : clip != null && e is SurfaceEntity se ? PlanRenderer.CutSurface(clip, se)?.Vertices.ToArray() ?? Array.Empty<Vec3>()
                 // a dimension by what is drawn of it: its measured points and the ends of its dimension line

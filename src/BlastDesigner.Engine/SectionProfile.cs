@@ -20,8 +20,11 @@ public sealed record SectionProfile(IReadOnlyList<SectionHole> Holes, double? Sp
     /// <summary>The top of the frame is a multiple of this, m.</summary>
     public const double FrameStep = 0.5;
 
-    /// <summary>The holes whose collar is within <paramref name="halfWidth"/> of the line from a to b (square to it), along it.</summary>
-    public static SectionProfile Build(BlastProject project, Vec3 a, Vec3 b, double halfWidth)
+    /// <summary>
+    /// The holes whose collar is within <paramref name="halfWidth"/> of the line from a to b (square to it), along it;
+    /// those in <paramref name="hidden"/> (left out of a sheet) not.
+    /// </summary>
+    public static SectionProfile Build(BlastProject project, Vec3 a, Vec3 b, double halfWidth, ISet<Guid>? hidden = null)
     {
         var dx = b.X - a.X;
         var dy = b.Y - a.Y;
@@ -31,6 +34,7 @@ public sealed record SectionProfile(IReadOnlyList<SectionHole> Holes, double? Sp
         var holes = new List<SectionHole>();
         foreach (var h in project.Holes)
         {
+            if (hidden?.Contains(h.Id) == true) continue;
             double ox = h.Collar.X - a.X, oy = h.Collar.Y - a.Y;
             var across = -ox * dy + oy * dx;
             if (Math.Abs(across) > halfWidth) continue;

@@ -99,6 +99,14 @@ internal sealed class LineMesh
     private readonly List<SKPoint> _points = new();
     private readonly List<SKColor> _colors = new();
     private const float Fringe = 0.5f;
+    /// <summary>A sheet: each line and triangle drawn at once as a path, not collected.</summary>
+    private readonly SKCanvas? _direct;
+
+    /// <param name="direct">
+    /// The canvas of a sheet. A PDF leaves out a mesh of vertices (the hole columns, the arrows of the ties were missing in a
+    /// printed section), so on a sheet the pieces are drawn one by one as paths.
+    /// </param>
+    public LineMesh(SKCanvas? direct = null) => _direct = direct;
 
     public bool IsEmpty => _points.Count == 0;
 
@@ -119,6 +127,12 @@ internal sealed class LineMesh
     {
         float dx = x1 - x0, dy = y1 - y0, len = MathF.Sqrt(dx * dx + dy * dy);
         if (len < 1e-3f) return;
+        if (_direct != null)
+        {
+            using var stroke = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = width, Color = color, StrokeCap = SKStrokeCap.Butt };
+            _direct.DrawLine(x0, y0, x1, y1, stroke);
+            return;
+        }
         float nx = -dy / len, ny = dx / len;
         float core = MathF.Max(width / 2 - Fringe, 0), outer = width / 2 + Fringe;
         // a line thinner than the fringe keeps its weight in the colour
@@ -135,6 +149,14 @@ internal sealed class LineMesh
     /// <summary>A filled triangle with a fading fringe along its edges.</summary>
     public void Triangle(SKColor color, SKPoint a, SKPoint b, SKPoint c)
     {
+        if (_direct != null)
+        {
+            using var path = new SKPath();
+            path.MoveTo(a); path.LineTo(b); path.LineTo(c); path.Close();
+            using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = color };
+            _direct.DrawPath(path, fill);
+            return;
+        }
         var clear = color.WithAlpha(0);
         Tri(a, color, b, color, c, color);
         // the fringe goes outwards from each edge, whichever way the triangle winds

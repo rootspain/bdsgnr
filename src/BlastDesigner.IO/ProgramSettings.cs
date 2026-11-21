@@ -55,8 +55,20 @@ public sealed class ProgramSettings
     public bool SectionLevels { get; set; } = true;
     /// <summary>The Section view window shows a dimension of each: the length, the spacing along the line, the subdrill.</summary>
     public bool SectionDimensions { get; set; } = true;
-    /// <summary>The Section view window shows the ties (shock tube and EBS) and the EBS timing fronts; off at first.</summary>
-    public bool SectionTies { get; set; }
+    /// <summary>The Section view window shows the marks drawn by hand: dimensions, angles, levels, lines, texts.</summary>
+    public bool SectionMarks { get; set; } = true;
+    /// <summary>The styles offered for the marks of a section, by name.</summary>
+    public List<SectionMarkPreset> SectionMarkPresets { get; set; } = SectionMarkPreset.Defaults();
+    /// <summary>The style a new mark of a kind takes (Make default), by the name of the kind; a kind not here takes its built-in one.</summary>
+    public Dictionary<string, SectionMarkStyle> SectionMarkDefaults { get; set; } = new();
+    /// <summary>The snaps of the Section view window turned off, by name (Collar, Toe, Grade, Surface, End, Intersection, Perpendicular, Frame).</summary>
+    public List<string> SectionSnapsOff { get; set; } = new();
+    /// <summary>In the Section view window a point is taken straight across or up from the one before.</summary>
+    public bool SectionOrtho { get; set; }
+
+    /// <summary>The style a new mark of a kind takes: the one made default, else the built-in one.</summary>
+    public SectionMarkStyle SectionMarkStyleFor(SectionMarkKind kind) =>
+        (SectionMarkDefaults.TryGetValue(kind.ToString(), out var s) ? s : SectionMarkPreset.BuiltIn(kind)).Copy();
     /// <summary>Transparency of the surface fill, per cent: 0 opaque, 100 not seen.</summary>
     public int SurfaceTransparency { get; set; } = DefaultSurfaceTransparency;
     /// <summary>Transparency of the surface wireframe (the triangle edges), per cent.</summary>
@@ -168,6 +180,8 @@ public sealed class ProgramSettings
     /// </summary>
     public void Upgrade()
     {
+        // the style of a slope face kept as Slope read as the slope tool (Уклон): it takes its own name
+        foreach (var p in SectionMarkPresets.Where(p => p.Name == "Slope")) p.Name = SectionMarkPreset.SlopeFace;
         if (SettingsVersion < 2)
         {
             if (BackgroundColor == LightBackground) BackgroundColor = DarkBackground;
@@ -189,10 +203,17 @@ public sealed class ProgramSettings
     public bool ShowCoordinatesBox { get; set; } = true;
     public Dictionary<string, string> Window { get; set; } = new();
 
+    /// <summary>
+    /// An environment variable that puts the folder of the settings, catalogue, templates and logs elsewhere: the smoke
+    /// test runs in a folder of its own and never touches the user's settings (a run broken off left its settings there).
+    /// </summary>
+    public const string DataFolderVariable = "BLASTDESIGNER_DATA";
+
     public static string AppDataFolder
     {
         get
         {
+            if (Environment.GetEnvironmentVariable(DataFolderVariable) is { Length: > 0 } own) return own;
             var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             if (string.IsNullOrEmpty(root)) root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
             return Path.Combine(root, "BlastDesigner");

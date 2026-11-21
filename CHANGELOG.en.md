@@ -17,15 +17,33 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the letter stands at both ends, and the section is called A–A in the Section view window and on its sheet. The
   properties panel has a Section name card and an Open section A–A button; the name can be changed, cleared it takes a
   free letter again, one another line has is not taken. A copied line takes the next letter, the lines of older
-  projects letters in their order.
+  projects letters in their order. A double click on a section line on the plan opens the Section view window, its
+  properties are in the Properties item of the context menu.
 - **Labels and dimensions on a section:** the Section view window and its sheet show the title Section along line A–A,
   a frame, the numbers of the holes over their collars, the levels on the left (the top of the frame, collars, grade,
   toes), the length of a hole (of the shortest and the longest when they differ), the spacing along the line and the
-  subdrill, no dimension crossing another. Hole numbers, Levels, Dimensions and Ties
-  shock tube/EBS (the ties and the EBS timing fronts, off at first) switches in the window and on the sheet. The half width of a section is 4 m at first.
-  The dashed lines of the rows are not drawn in a section.
+  subdrill, no dimension crossing another. Hole numbers, Levels and Dimensions
+  switches in the window and on the sheet. The half width of a section is 4 m at first.
+  The dashed lines of the rows, the ties, the EBS timing fronts, the initiation points and the X, Y, Z axes are not drawn in a section; the window opens zoomed to all. The half width takes in the holes only, other objects only when they lie on the line; a surface is the line of its cut, 3 px thick. Objects are drawn inside the frame only. In the Section view window the objects it shows are selected with a click or a box, the same selection as in the main window;
+  a box round a collar takes the whole hole. Esc no longer closes the Section view window.
+- **Dimensions drawn by hand on a section:** the Section view window has a ribbon with the View, Dimensions and Section
+  style tabs and a line of snaps below. The Dimensions tab draws a dimension across, up, along, with a leader and a
+  chain, the angle between two lines (H to the level, V to the upright; Tab acute or obtuse), a slope (°, %, 1:n), a
+  level (by a click or its height typed), a point height, a line and a text. The colour, type and weight of the line are
+  set in the ribbon, with styles ready (Bench level, Grade level, Slope…) and Copy style. Points snap to the collar, toe,
+  grade, surface, ends, crossings, perpendicular and frame; a dimension held on a hole or a surface is worked out again
+  with them, and goes red with a «?» when the object is gone. The marks are selected with a click or a box (a box round
+  a figure too), moved by a drag and the arrows, a point by its grip, deleted with Delete, copied with Ctrl+C/V, a
+  figure edited by a double click. They are kept in the project with their section line and printed on its sheet (the
+  Drawn by hand switch); a section picked by two clicks keeps its line by itself with the first mark. The dimensions of
+  the section (length, spacing, subdrill) are such marks too: made as the window shows the line and edited as the
+  others; Rebuild dimensions makes them again. The ribbon is low, in two rows; the line style and the styles kept are in
+  the Styles group of the Section style tab, the colours of its menu with their square of colour. Ctrl+Z and Ctrl+Y undo and redo in the Section view window too. Copy style takes the style of the
+  selected mark and becomes Apply style (clicks give it out); the weight goes to the lines of dimensions too.
 
 ### Changed
+- **A higher Available resources window:** the colour of a product shows without scrolling; the colour has a button of
+  the full colour picker (spectrum, hue, code).
 - **Davey Tronic export (.BPD):** Lines (PATH) take only the chains of EBS ties (the product of the tie an electronic
   detonator, the EBS detonators type of the initiation catalogue); shock tube, cord and ties without a product make
   no line. The export item is Davey Tronic file (.BPD)….
@@ -45,6 +63,11 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   the other way, the letter stays. A chain from an initiation point is not flipped (a word in the status bar). Shock
   tube ties flip as before.
 - **Thicker selected ties:** 4.5 px instead of 3, easier to see among the others.
+
+### Fixed
+- **Holes on a section sheet in a PDF:** the shafts and charge columns are printed (before, only the numbers of the
+  holes were left on the sheet in a PDF); the arrows of the ties show on PDF sheets too. Holes hidden on a section sheet
+  (Visibility ▸ Hole) leave no numbers or dimensions on it.
 
 ## 0.3.9 — 2026-11-20
 

@@ -37,6 +37,11 @@ public sealed class MenuEntry
 
     public MenuEntry WithIcon(string key) { Icon = key; return this; }
 
+    /// <summary>A square of a colour left of the header, in place of an icon (ARGB): a colour to choose.</summary>
+    public uint? Swatch { get; private set; }
+
+    public MenuEntry WithSwatch(uint argb) { Swatch = argb; return this; }
+
     public static MenuEntry Separator => new() { IsSeparator = true };
 
     public static MenuEntry Item(string header, Action action, Func<bool>? enabled = null, string? gesture = null) =>
@@ -82,6 +87,12 @@ public sealed class MenuEntry
         if (e.Later != null) FillLater(e, mi);
         if (e.Gesture != null) mi.InputGesture = KeyGesture.Parse(e.Gesture);
         if (e.Icon != null) mi.Icon = Look.Icon(e.Icon, 16, Look.TextSoft, 2);
+        if (e.Swatch is uint argb)
+            mi.Icon = new Border
+            {
+                Width = 14, Height = 14, CornerRadius = new Avalonia.CornerRadius(3), BorderThickness = new Avalonia.Thickness(1), BorderBrush = Look.Line,
+                Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromUInt32(argb))
+            };
         if (e.IsEnabled != null) mi.IsEnabled = e.IsEnabled();
         if (e.Children != null || e.Dynamic != null)
         {

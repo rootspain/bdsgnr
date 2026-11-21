@@ -113,22 +113,69 @@ public class SectionProfileTests
     }
 
     [Fact]
-    public void TheTies_AreLeftOutOfASectionAtFirst_TheHalfWidthIs4()
+    public void ThePlan_IsDrawnInsideTheFrameOnly()
     {
-        Assert.Equal(4, Reports.SectionHalfWidth(BlastProject.CreateNew()));
-        Assert.False(new SectionVisibility().ShowTies);
-        var p = Row(3);
-        var holes = p.Holes.ToList();
-        BlastDesigner.Engine.Timing.Connect(p, holes[0].Id, holes[1].Id, p.Products.First(x => x.Kind == ProductKind.SurfaceConnector));
-        BlastDesigner.Engine.Timing.Connect(p, holes[1].Id, holes[2].Id, p.Products.First(x => x.Kind == ProductKind.SurfaceConnector));
-        byte[] Pixels(bool ties)
+        // a ground surface far wider than the row: in the section it is cut to the frame
+        SKBitmap Sheet(bool surface)
+        {
+            var p = Row();
+            if (surface)
+                p.Add(new SurfaceEntity { Vertices = { new Vec3(-200, -50, 370), new Vec3(200, -50, 370), new Vec3(200, 50, 370), new Vec3(-200, 50, 370) }, Triangles = { 0, 1, 2, 0, 2, 3 } });
+            var bitmap = new SKBitmap(600, 400);
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.White);
+            Reports.DrawSection(canvas, new SKRect(0, 0, 600, 400), p, new Vec3(-5, 0, 373), new Vec3(20, 0, 373), 2, new SectionVisibility(), Reports.SectionTitle("A–A"));
+            return bitmap;
+        }
+        using var bare = Sheet(false);
+        using var cut = Sheet(true);
+        int Differ(int x0, int x1) { int n = 0; for (int x = x0; x < x1; x++) for (int y = 0; y < 400; y++) if (bare.GetPixel(x, y) != cut.GetPixel(x, y)) n++; return n; }
+        // the surface is there, inside the frame
+        Assert.True(Differ(0, 600) > 0);
+        // and nothing of it at the sides, beyond the frame (with its levels on the left)
+        Assert.Equal(0, Differ(0, 20));
+        Assert.Equal(0, Differ(580, 600));
+    }
+
+    [Fact]
+    public void HolesLeftOutOfTheSheet_HaveNoNumbersNorDimensions()
+    {
+        var p = Row();
+        int Ink(BlastProject project, SectionVisibility shown)
         {
             using var bitmap = new SKBitmap(600, 400);
             using var canvas = new SKCanvas(bitmap);
             canvas.Clear(SKColors.White);
-            Reports.DrawSection(canvas, new SKRect(0, 0, 600, 400), p, new Vec3(-5, 0, 373), new Vec3(12, 0, 373), 2, new SectionVisibility { ShowNumbers = false, ShowLevels = false, ShowDimensions = false, ShowTies = ties });
+            Reports.DrawSection(canvas, new SKRect(0, 0, 600, 400), project, new Vec3(-5, 0, 373), new Vec3(20, 0, 373), 2, shown);
+            return bitmap.Pixels.Count(c => c.Red < 100 && c.Green < 100 && c.Blue < 100);
+        }
+        // the holes hidden on the sheet: as a blast with no holes, their labels left out too
+        var none = Ink(Row(0), new SectionVisibility());
+        Assert.Equal(none, Ink(p, new SectionVisibility { HiddenKinds = { new Hole().KindName } }));
+        Assert.True(Ink(p, new SectionVisibility()) > none);
+        Assert.Empty(SectionProfile.Build(p, new Vec3(-5, 0, 373), new Vec3(20, 0, 373), 2, p.Holes.Select(h => h.Id).ToHashSet()).Holes);
+    }
+
+    [Fact]
+    public void TheTiesAndTheInitiationPoints_AreNeverInASection_TheHalfWidthIs4()
+    {
+        Assert.Equal(4, Reports.SectionHalfWidth(BlastProject.CreateNew()));
+        byte[] Pixels(bool ties)
+        {
+            var p = Row(3);
+            if (ties)
+            {
+                var holes = p.Holes.ToList();
+                BlastDesigner.Engine.Timing.Connect(p, holes[0].Id, holes[1].Id, p.Products.First(x => x.Kind == ProductKind.SurfaceConnector));
+                BlastDesigner.Engine.Timing.Connect(p, holes[1].Id, holes[2].Id, p.Products.First(x => x.Kind == ProductKind.SurfaceConnector));
+                p.Add(new InitiationPoint { Position = holes[0].Collar, HoleId = holes[0].Id });
+            }
+            using var bitmap = new SKBitmap(600, 400);
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.White);
+            Reports.DrawSection(canvas, new SKRect(0, 0, 600, 400), p, new Vec3(-5, 0, 373), new Vec3(12, 0, 373), 2, new SectionVisibility { ShowNumbers = false, ShowLevels = false, ShowDimensions = false });
             return bitmap.Bytes;
         }
-        Assert.NotEqual(Pixels(false), Pixels(true));
+        Assert.Equal(Pixels(false), Pixels(true));
     }
 }

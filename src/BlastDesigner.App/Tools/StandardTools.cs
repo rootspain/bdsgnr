@@ -114,6 +114,14 @@ public sealed class SelectTool : Tool
         _rows.TryPress(p);
         _box.TryPress(p);
         // quick clicks that edit a line go on editing it, they are no double click
+        // a double click on a section line opens its section; its properties are in its context menu
+        if (p.ClickCount >= 2 && p.Hit is PolylineEntity { Kind: LineKind.CrossSection, Points.Count: >= 2 } section && !_vertices.EditsLine)
+        {
+            Vm.Doc!.Select(new[] { section.Id });
+            Views.AnalysisWindows.ShowSection(Vm, section.Points[0], section.Points[1]);
+            _down = null;
+            return;
+        }
         if (p.ClickCount >= 2 && p.Hit != null && !_vertices.EditsLine)
         {
             Vm.Doc!.Select(new[] { p.Hit.Id });

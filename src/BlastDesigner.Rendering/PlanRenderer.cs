@@ -43,12 +43,19 @@ public sealed record SceneOptions
     /// <summary>No labels by the holes: a section that writes their numbers over its frame (<see cref="SectionAnnotations"/>).</summary>
     public bool HideHoleLabels { get; init; }
     /// <summary>
-    /// No ties and no EBS timing fronts (point, line, chevron), whatever the view shows: a section that leaves them out
-    /// (its Ties switch off).
+    /// No ties, no EBS timing fronts (point, line, chevron) and no initiation points, whatever the view shows: a section,
+    /// which never shows them.
     /// </summary>
     public bool HideTies { get; init; }
     /// <summary>No dashed lines of the rows, whatever the view shows: a section, where they say nothing.</summary>
     public bool HideRows { get; init; }
+    /// <summary>No X, Y, Z axes in the bottom-left corner, whatever the view shows: a section.</summary>
+    public bool HideAxes { get; init; }
+    /// <summary>
+    /// The objects of the project are drawn inside this rectangle of the screen only (a section: inside its frame); null,
+    /// or a null result, draws them everywhere. The grid and the overlays are not cut.
+    /// </summary>
+    public Func<Camera, BlastProject, SKRect?>? ClipScene { get; init; }
     /// <summary>Allows the hole type legend (still subject to the project's "Hole legend" switch).</summary>
     public bool DrawHoleLegend { get; init; } = true;
     /// <summary>Allows the tie (connector) legend (still subject to the project's "Tie legend" switch).</summary>
@@ -66,6 +73,11 @@ public sealed record SceneOptions
     public ISet<Guid>? HiddenEntities { get; init; }
     /// <summary>Optional clipping band (section and slice views): only geometry within this distance of the camera target plane is drawn.</summary>
     public double? SliceHalfWidth { get; init; }
+    /// <summary>
+    /// The slice is a section along a line: its half width takes in the holes only, anything else is drawn when it lies on
+    /// the line (<see cref="PlanRenderer.SectionOnLine"/>), and a surface is the line where the plane cuts it.
+    /// </summary>
+    public bool SectionCut { get; init; }
     /// <summary>Space kept free at the top of the view for controls drawn over it (north arrow and summary block move below).</summary>
     public float TopInset { get; init; }
     /// <summary>Leave out surface wireframes (switched off, or the camera is moving and they wait until it stops).</summary>
@@ -172,18 +184,8 @@ public static class PlanRenderer
         var layerById = project.Layers.ToDictionary(l => l.Id);
         // the visible blocks: only what is inside them is drawn (lines and surfaces are cut below)
         var clip = BlockClip.Of(project);
-        bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && InSlice(e)
-            && !(opt.HideTies && e is TimingLineEntity)
+        bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && InSlice(opt, cam, e)
             && (clip == null || e is PolylineEntity or CircleEntity or SurfaceEntity || clip.Shows(e));
-        bool InSlice(Entity e)
-        {
-            // a surface is cut to the band when it is drawn: its triangles can cross the band with no vertex in it
-            if (opt.SliceHalfWidth is not double w || e is SurfaceEntity) return true;
-            // the line a section is cut along lies on its collars: not drawn in the section
-            if (e is PolylineEntity { Kind: LineKind.CrossSection }) return false;
-            foreach (var v in e.GetVertices()) if (Math.Abs(cam.Depth(v)) <= w) return true;
-            return false;
-        }
         SKColor ColorOf(Entity e)
         {
             if (opt.SectionLineColor is SKColor section && e.Color == null && e is PolylineEntity { Kind: LineKind.CrossSection })
@@ -230,6 +232,9 @@ public static class PlanRenderer
         // a sheet of a section asks for its grid: the views on the screen go by the switch of the plan, and have none
         if (!opt.HaloPass && opt.ShowGrid == true && opt.SliceHalfWidth != null && cam.Pitch == 0) DrawSectionGrid(canvas, cam, stroke, text);
 
+        // a section: its objects inside its frame only, the ends of the holes and lines just on it
+        var sceneSave = canvas.Save();
+        if (opt.ClipScene?.Invoke(cam, project) is { } frameRect) { frameRect.Inflate(2, 2); canvas.ClipRect(frameRect); }
         var replaced = opt.Replaced is { Count: > 0 } swap ? swap : null;
         var entities = (replaced == null ? project.Entities : project.Entities.Select(e => replaced.TryGetValue(e.Id, out var c) ? c : e)).Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity) && (!opt.HaloPass || opt.Selection.Contains(e.Id))).ToList();
         if (clip != null) entities = entities.SelectMany(e => CutByBlocks(clip, e)).ToList();
@@ -535,14 +540,15 @@ public static class PlanRenderer
         // were three or four thick lines per hole, thousands of draws a frame. Dragged holes draw their own.
         // the halo pass keeps the colour range of the scene: the selected holes alone would make another one
         if (!opt.HaloPass) _colorBy = ColorRange(project, holes);
-        var columns = new LineMesh();
+        // on a sheet drawn piece by piece: a PDF leaves out a mesh
+        var columns = new LineMesh(opt.UnitsPerMm != null ? canvas : null);
         foreach (var h in holes)
             if (moved?.Contains(h.Id) != true) DrawHoleColumn(canvas, cam, project, h, opt, fill, columns);
         columns.Flush(canvas);
         foreach (var h in holes)
         {
             var mc = BeginMove(h);
-            if (mc >= 0) { var own = new LineMesh(); DrawHoleColumn(canvas, cam, project, h, opt, fill, own); own.Flush(canvas); }
+            if (mc >= 0) { var own = new LineMesh(opt.UnitsPerMm != null ? canvas : null); DrawHoleColumn(canvas, cam, project, h, opt, fill, own); own.Flush(canvas); }
             DrawHole(canvas, cam, project, h, opt, stroke, fill);
             EndMove(mc);
         }
@@ -572,6 +578,7 @@ public static class PlanRenderer
             DrawLoadingWarning(canvas, cam, h, opt, fill);
             EndMove(mc);
         }
+        canvas.RestoreToCount(sceneSave);
 
         if (opt.HaloPass)
         {
@@ -598,7 +605,7 @@ public static class PlanRenderer
             if (o is IMovePreviewOverlay mp) mp.Draw(canvas, cam, project, opt.MovedEntities, opt.MoveOffset);
             else o.Draw(canvas, cam, project);
 
-        if (view.ShowAxes) DrawAxes(canvas, cam, stroke, text);
+        if (view.ShowAxes && !opt.HideAxes) DrawAxes(canvas, cam, stroke, text);
         if (opt.DrawNorthArrow) DrawNorth(canvas, cam, stroke, fill, text);
         if (opt.DrawScaleBar) DrawScaleBar(canvas, cam, stroke, text);
         if (opt.DrawElevationScale && opt.SurfaceColors == null && range is { } r)
@@ -1397,15 +1404,72 @@ public static class PlanRenderer
         // A point cloud coloured by kind shows its measured points, not a mesh made up between them.
         if (fill is SKColor pc && s.Kind == SurfaceKind.PointCloud)
         {
-            DrawPointCloud(c, cam, s, selected ?? pc, slice, alphas.Points);
+            DrawPointCloud(c, cam, s, selected ?? pc, opt?.SectionCut == true && slice != null ? SectionCloudBand : slice, alphas.Points);
             return;
         }
         int tri = s.TriangleCount;
         if (tri == 0) return;
 
         var mesh = _surfaceMeshes.GetValue(s, _ => new SurfaceMesh());
-        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe, slice, alphas.Fill, alphas.Wire, depth);
+        lock (mesh) DrawSurfaceMesh(c, cam, s, mesh, tri, fill is SKColor f ? Shade(f, 0.62) : color, selected, fill, range, hideWireframe, slice, alphas.Fill, alphas.Wire, depth, opt?.SectionCut == true);
     }
+
+    /// <summary>
+    /// True when a slice or a section of <paramref name="opt"/> draws the object, seen by <paramref name="cam"/> (its target
+    /// on the plane of the line): in the half width for a hole, on the line for anything else in a section; no ties, fronts
+    /// and initiation points where they are hidden. Without a slice everything is in. Picking in a section asks the same.
+    /// </summary>
+    public static bool InSlice(SceneOptions opt, Camera cam, Entity e)
+    {
+        if (opt.HideTies && e is TieEntity or TimingLineEntity or InitiationPoint) return false;
+        // a surface is cut along the line when it is drawn: its triangles cross the line with no vertex on it
+        if (opt.SliceHalfWidth is not double w || e is SurfaceEntity) return true;
+        // the line a section is cut along lies on its collars: not drawn in the section
+        if (e is PolylineEntity { Kind: LineKind.CrossSection }) return false;
+        // the half width is for the holes; anything else only when it lies on the line of the section
+        if (opt.SectionCut && e is not Hole) return e.GetVertices().All(v => Math.Abs(cam.Depth(v)) <= SectionOnLine);
+        foreach (var v in e.GetVertices()) if (Math.Abs(cam.Depth(v)) <= w) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Where the plane through the target of <paramref name="cam"/>, square to the view, cuts a surface: a segment across
+    /// each triangle it crosses, in the world. What a section draws of the surface, and picks it by.
+    /// </summary>
+    public static List<(Vec3 A, Vec3 B)> SurfaceCut(Camera cam, SurfaceEntity s)
+    {
+        var cut = new List<(Vec3, Vec3)>();
+        var vs = s.Vertices;
+        var d = new double[vs.Count];
+        for (int i = 0; i < d.Length; i++) d[i] = cam.Depth(vs[i]);
+        var tris = s.Triangles;
+        Span<Vec3> ends = stackalloc Vec3[2];
+        for (int t = 0; t + 2 < tris.Count; t += 3)
+        {
+            int n = 0;
+            for (int k = 0; k < 3 && n < 2; k++)
+            {
+                int i = tris[t + k], j = tris[t + (k + 1) % 3];
+                double a = d[i], b = d[j];
+                if (a == 0) { ends[n++] = vs[i]; continue; }
+                if ((a < 0 && b > 0) || (a > 0 && b < 0)) ends[n++] = Vec3.Lerp(vs[i], vs[j], a / (a - b));
+            }
+            if (n == 2) cut.Add((ends[0], ends[1]));
+        }
+        return cut;
+    }
+
+    /// <summary>
+    /// In a section the half width takes in the holes only: an object other than a hole is drawn when it lies within this
+    /// of the line, m; a point cloud shows its points this close to it.
+    /// </summary>
+    public const double SectionOnLine = 0.05;
+
+    /// <summary>The points of a cloud a section shows: within this of its line, m (exactly on it there would be none).</summary>
+    public const double SectionCloudBand = 0.25;
+
+    /// <summary>The width of the line of a surface cut by a section, px.</summary>
+    public const float SectionSurfaceWidth = 3;
 
     private static void DrawPointCloud(SKCanvas c, Camera cam, SurfaceEntity s, SKColor color, double? slice, byte alpha)
     {
@@ -1421,7 +1485,7 @@ public static class PlanRenderer
         c.DrawPoints(SKPointMode.Points, pts, paint);
     }
 
-    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe, double? slice, byte alpha, byte wireAlpha, DepthMap? depth = null)
+    private static void DrawSurfaceMesh(SKCanvas c, Camera cam, SurfaceEntity s, SurfaceMesh mesh, int tri, SKColor color, SKColor? selected, SKColor? fill, (double Min, double Max)? range, bool hideWireframe, double? slice, byte alpha, byte wireAlpha, DepthMap? depth = null, bool cut = false)
     {
         // The per-triangle fill colour depends only on the geometry, the theme, the fill and the shared elevation range,
         // so compute the expensive normal shading and colouring once and reuse it; only the projection runs per frame.
@@ -1488,6 +1552,12 @@ public static class PlanRenderer
         }
         var pts = mesh.Points;
         var tris = s.Triangles;
+        // a section: the surface where the plane of its line cuts it, a line of 3 px, not a band
+        if (slice != null && cut)
+        {
+            DrawSurfaceCut(c, tris, tri, vs, vd, selected ?? color);
+            return;
+        }
         for (int k = 0; k < tri * 3; k++) pts[k] = vs[tris[k]];
 
         // One GPU draw call for the whole mesh. Oblique views need far-to-near order so translucent triangles blend.
@@ -1579,6 +1649,37 @@ public static class PlanRenderer
                 c.DrawPath(behindPath, wire);
             }
         }
+    }
+
+    /// <summary>
+    /// Where the plane of a section (depth 0) cuts a surface: across each triangle it crosses, a segment between the points
+    /// where two of its edges cross the plane, stroked <see cref="SectionSurfaceWidth"/> px wide.
+    /// </summary>
+    private static void DrawSurfaceCut(SKCanvas c, List<int> tris, int tri, SKPoint[] vs, float[] vd, SKColor color)
+    {
+        using var path = new SKPath();
+        Span<SKPoint> ends = stackalloc SKPoint[3];
+        for (int t = 0; t < tri; t++)
+        {
+            int n = 0;
+            for (int k = 0; k < 3 && n < 2; k++)
+            {
+                int i = tris[3 * t + k], j = tris[3 * t + (k + 1) % 3];
+                float a = vd[i], b = vd[j];
+                // an edge from one side to the other, or ending on the plane (counted at its start only)
+                if (a == 0) { ends[n++] = vs[i]; continue; }
+                if ((a < 0 && b > 0) || (a > 0 && b < 0))
+                {
+                    var u = a / (a - b);
+                    ends[n++] = new SKPoint(vs[i].X + (vs[j].X - vs[i].X) * u, vs[i].Y + (vs[j].Y - vs[i].Y) * u);
+                }
+            }
+            if (n < 2) continue;
+            path.MoveTo(ends[0]);
+            path.LineTo(ends[1]);
+        }
+        using var paint = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = SectionSurfaceWidth, StrokeCap = SKStrokeCap.Round, StrokeJoin = SKStrokeJoin.Round, Color = color.WithAlpha(255) };
+        c.DrawPath(path, paint);
     }
 
     /// <summary>The triangles of a surface cut to the band around the target plane. The view is a parallel projection, so depth runs straight across a triangle on the screen too.</summary>
@@ -1676,7 +1777,7 @@ public static class PlanRenderer
         // filled paths, half of a blast frame; as paths, Skia stroked them on the CPU. Ties outside the view are skipped.
         var products = new Dictionary<string, Product>();
         foreach (var p in project.Products) products.TryAdd(p.Id, p);
-        var arrows = new LineMesh();
+        var arrows = new LineMesh(opt.UnitsPerMm != null ? c : null);
         var labels = new TextBatch();
         float w = (float)cam.Width, h = (float)cam.Height;
         // the head of the arrow, px: large enough to tell the way of a tie at a glance
