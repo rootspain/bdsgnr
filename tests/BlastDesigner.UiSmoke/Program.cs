@@ -705,6 +705,78 @@ Step("hole angle from horizontal (Program settings ▸ Units): the field shows 9
         vm.Doc.Select(selected); Pump();
     }
 });
+Step("hot keys (Program settings ▸ Hot keys): every assigned key by the place it works in, translated, the filter finds a key", () =>
+{
+    var groups = vm.HotKeyGroups();
+    var menu = groups.FirstOrDefault(g => g.Place == BlastDesigner.App.Services.Loc.Ui("Main menu")) ?? throw new Exception("no main menu keys");
+    if (!menu.Keys.Any(k => k.Keys == "Ctrl+S")) throw new Exception("Ctrl+S is not among the menu keys: " + string.Join(", ", menu.Keys.Select(k => k.Keys)));
+    var rail = groups.Single(g => g.Place == BlastDesigner.App.Services.Loc.Ui("View rail"));
+    if (!rail.Keys.Any(k => k.Keys == "Ctrl+Shift+T")) throw new Exception("the rail key of the hole table is not written as Ctrl+Shift+T");
+    if (groups.Count(g => g.Keys.Count > 0) < 10) throw new Exception("too few places with keys: " + groups.Count);
+    var untranslated = BlastDesigner.App.ViewModels.MainViewModel.ListedHotKeyTexts.Where(t => !BlastDesigner.App.Services.Loc.HasTranslation("ui:" + t)).ToList();
+    if (untranslated.Count > 0) throw new Exception("hot keys not translated: " + string.Join(" | ", untranslated));
+    var form = new SettingsForm(vm.Settings, groups);
+    var list = form.GetLogicalDescendants().OfType<StackPanel>().FirstOrDefault(p => p.Name == "hotKeyList") ?? throw new Exception("no Hot keys page in the settings");
+    var filter = form.GetLogicalDescendants().OfType<TextBox>().Single(t => t.Name == "hotKeyFilter");
+    filter.Text = "ctrl+shift+t"; Pump();
+    var shown = list.Children.OfType<StackPanel>().Where(b => b.IsVisible).ToList();
+    if (shown.Count == 0 || shown.SelectMany(b => b.Children.OfType<Grid>()).Count(r => r.IsVisible) == 0) throw new Exception("the filter found no Ctrl+Shift+T");
+    if (shown.Count == list.Children.OfType<StackPanel>().Count()) throw new Exception("the filter hid no place");
+    if (new SettingsForm(vm.Settings).GetLogicalDescendants().OfType<StackPanel>().Any(p => p.Name == "hotKeyList")) throw new Exception("a Hot keys page without keys");
+});
+Step("interface fonts (Program settings ▸ Appearance): the ribbon, its spacing, the tabs, the right panel and the tooltip in the sizes typed, seen at once, as before by default", () =>
+{
+    var s = vm.Settings;
+    var was = (s.RibbonFontSize, s.RibbonButtonPadding, s.RibbonButtonGap, s.TabFontSize, s.PanelFontSize, s.ToolTipFontSize, s.ToolTipBackground, s.ToolTipForeground);
+    Button SmallRibbonButton() => window.GetLogicalDescendants().OfType<StackPanel>().First(p => p.Name == "ribbonSmalls" && p.IsEffectivelyVisible).GetLogicalDescendants().OfType<Button>().First();
+    Button StageTab() => window.GetLogicalDescendants().OfType<StackPanel>().First(p => p.Name == "stageTabs").Children.OfType<Button>().First();
+    TabItem PanelTab() => window.GetLogicalDescendants().OfType<TabItem>().First(t => t.Tag as string == "Properties");
+    double PanelScale() => (window.GetLogicalDescendants().OfType<LayoutTransformControl>().First(c => c.Name == "panelScale").LayoutTransform as Avalonia.Media.ScaleTransform)?.ScaleX ?? 1;
+    try
+    {
+        // the defaults: the interface as it was
+        if (SmallRibbonButton().Height != 24 || SmallRibbonButton().Margin.Bottom != 1) throw new Exception($"a small ribbon button by default: {SmallRibbonButton().Height}, {SmallRibbonButton().Margin}");
+        if (StageTab().Height != 30) throw new Exception("a stage tab by default: " + StageTab().Height);
+        if (PanelTab().FontSize != 13 || PanelScale() != 1) throw new Exception($"the right panel by default: tab {PanelTab().FontSize}, scale {PanelScale()}");
+        // typed in the window: seen before Apply
+        var form = new SettingsForm(s);
+        var host = new Window { Content = form, Width = 900, Height = 700 };
+        host.Show(); Pump();
+        var box = form.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "ribbonFont") ?? throw new Exception("no font of the ribbon in the settings");
+        box.Text = "16"; box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+        if (BlastDesigner.App.Services.Look.RibbonFont != 16) throw new Exception("the font of the ribbon was not seen at once");
+        if (form.GetLogicalDescendants().OfType<Border>().All(b => b.Name != "toolTipSample")) throw new Exception("no tooltip sample");
+        var e = form.Edited;
+        e.RibbonButtonPadding = 6; e.RibbonButtonGap = 3; e.TabFontSize = 16; e.PanelFontSize = 15; e.ToolTipFontSize = 16; e.ToolTipBackground = 0xFFFFF7D6;
+        host.Close(); Pump();
+        vm.ApplyProgramSettings(e); Pump();
+        // the ribbon: the text, the room above and below, between the rows; the key marks keep their size
+        var small = SmallRibbonButton();
+        if (small.Height != BlastDesigner.App.Views.RibbonBar.SmallButtonHeight(16, 6) || small.Margin.Bottom != 3) throw new Exception($"a small ribbon button: {small.Height}, {small.Margin}");
+        var big = window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "bigLabel" && t.IsEffectivelyVisible);
+        if (big.FontSize != 15.5) throw new Exception("the name of a large ribbon button: " + big.FontSize);
+        if (window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "ribbonCaption").FontSize != 14.5) throw new Exception("the caption of a ribbon group");
+        // the tabs: the stages and every TabItem
+        if (StageTab().Height != BlastDesigner.App.Views.RibbonBar.StageTabHeight(16)) throw new Exception("a stage tab: " + StageTab().Height);
+        if (PanelTab().FontSize != 16) throw new Exception("a tab of the right panel: " + PanelTab().FontSize);
+        // the right panel scaled; the tooltip from the resources of the theme
+        if (Math.Abs(PanelScale() - 1.25) > 1e-9) throw new Exception("the right panel: " + PanelScale());
+        var res = Avalonia.Application.Current!.Resources;
+        if ((res["ToolTipBackground"] as Avalonia.Media.SolidColorBrush)?.Color != Avalonia.Media.Color.FromUInt32(0xFFFFF7D6)) throw new Exception("the ground of the tooltips");
+        if ((res["ToolTipForeground"] as Avalonia.Media.SolidColorBrush)?.Color.R > 0x80) throw new Exception("a light ground takes a dark text");
+        if (!Equals(res["ToolTipContentThemeFontSize"], 16.0)) throw new Exception("the font of the tooltips: " + res["ToolTipContentThemeFontSize"]);
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "03h_interface_fonts.png"));
+    }
+    finally
+    {
+        var back = BlastDesigner.Domain.ProjectJson.DeepClone(s);
+        (back.RibbonFontSize, back.RibbonButtonPadding, back.RibbonButtonGap, back.TabFontSize, back.PanelFontSize, back.ToolTipFontSize, back.ToolTipBackground, back.ToolTipForeground) = was;
+        vm.ApplyProgramSettings(back); Pump();
+    }
+    if (SmallRibbonButton().Height != 24 || PanelTab().FontSize != 13 || PanelScale() != 1) throw new Exception("the fonts did not come back");
+    if (Avalonia.Application.Current!.Resources.ContainsKey("ToolTipBackground")) throw new Exception("the tooltip should follow the theme again");
+});
 Step("imperial units (Program settings ▸ Units): the fields of a hole in feet and inches, a length typed in feet kept in metres, captions and messages in feet", () =>
 {
     var selected = vm.Doc!.Selection.ToList();
@@ -1373,7 +1445,6 @@ Step("strata intercepts", () => AnalisysWindows.StrataIntercepts(vm));
 WindowShot("21_strata");
 Step("v6 exports", () =>
 {
-    File.WriteAllText(Path.Combine(outDir, "blast.kml"), Interchange.ExportKml(vm.Project!, vm.Project!.Entities));
     File.WriteAllText(Path.Combine(outDir, "iredes.xml"), Interchange.ExportIredes(vm.Project!, vm.Project!.Holes));
     File.WriteAllText(Path.Combine(outDir, "firing_ext.csv"), Interchange.ExportExtendedFiringData(vm.Project!, vm.Project!.Holes));
     if (Interchange.ImportIredes(Path.Combine(outDir, "iredes.xml"), vm.Project!.Design).Count != vm.Project!.Holes.Count(h => !h.IsDummy)) throw new Exception("IREDES round trip lost holes");
@@ -1386,9 +1457,9 @@ Step("ribbon commands resolve", () =>
     var stages = vm.BuildStages();
     if (vm.MissingCommands.Count > 0) throw new Exception("unresolved: " + string.Join(" | ", vm.MissingCommands.Distinct()));
     Console.WriteLine($"     {stages.Count} stages, {stages.Sum(s => s.Groups.Count)} groups, {stages.Sum(s => s.Groups.Sum(g => g.Items.Count))} commands");
-    // the fragmentation group opens the available resources
-    var resources = stages.SelectMany(s => s.Groups).First(g => g.Name == "Fragmentation").Items.Single(i => i.Label == "Resources");
-    if (BlastDesigner.App.Services.Loc.Language == "ru" && BlastDesigner.App.Services.Loc.Ui(resources.Label) != "Ресурсы") throw new Exception("the button is not translated");
+    // the available resources open from the Loading stage only (no longer from the fragmentation group)
+    if (stages.SelectMany(s => s.Groups).First(g => g.Name == "Fragmentation").Items.Any(i => i.Label == "Resources")) throw new Exception("Resources is still in the fragmentation group");
+    var resources = stages.SelectMany(s => s.Groups).First(g => g.Name == "Rules and products").Items.Single(i => i.Label == "Products");
     resources.Run!(); Pump();
     var resourcesWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
     if (resourcesWindow.Title != BlastDesigner.App.Services.Loc.T("Available resources")) throw new Exception("the button opened " + resourcesWindow.Title);
@@ -1415,7 +1486,9 @@ Step("object context menus", () =>
     void Check(string kind, IEnumerable<Guid> ids, string expect)
     {
         vm.Doc!.Select(ids);
-        var items = vm.ObjectContextMenu().Where(e => !e.IsSeparator).Select(e => e.Header).ToList();
+        // the commands and those of its submenus (Apply loading rules is under Loading)
+        IEnumerable<BlastDesigner.App.Tools.MenuEntry> All(IEnumerable<BlastDesigner.App.Tools.MenuEntry> list) => list.SelectMany(e => e.Children == null ? new[] { e } : new[] { e }.Concat(All(e.Children)));
+        var items = All(vm.ObjectContextMenu()).Where(e => !e.IsSeparator).Select(e => e.Header).ToList();
         if (!items.Contains(expect)) throw new Exception($"{kind} menu lacks '{expect}': {string.Join(", ", items)}");
     }
     Check("holes", p.Holes.Take(3).Select(h => h.Id), "Apply loading rules");
@@ -2556,7 +2629,7 @@ Step("analysis maps toggle and clear", () =>
     vm.VibrationMap(false);
     if (vm.AnalysisOverlays.Count != 0) throw new Exception("second click did not remove the map");
     vm.VibrationMap(true);
-    var chip = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().FirstOrDefault(b => Avalonia.Controls.ToolTip.GetTip(b) as string == BlastDesigner.App.Services.Loc.Ui("Remove maps, isochrones and arrows from the plan (Esc)")) ?? throw new Exception("no clear chip");
+    var chip = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().FirstOrDefault(b => Avalonia.Controls.ToolTip.GetTip(b) as string == BlastDesigner.App.Services.Loc.Ui("Remove maps, isochrones and arrows from the plan")) ?? throw new Exception("no clear chip");
     chip.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
     if (vm.AnalysisOverlays.Count != 0) throw new Exception("clear chip did not clear");
 });

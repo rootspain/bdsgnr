@@ -113,7 +113,7 @@ Blast properties	Свойства взрыва
 Blast properties…	Свойства взрыва…
 Blast report	Отчёт по взрыву
 Blast tools	Проектирование взрыва
-Blast view	Вид взрыва
+Blast view	Вид по направлению взрыва
 Blocked	Завалена
 Booster	Боевик
 Booster id	Боевик
@@ -696,6 +696,7 @@ Place an initiation point (lead-in) first.	Сначала поставьте т�
 Plan	План
 Plan area {0:0.00} m², 3D area {1:0.00} m², perimeter {2:0.00} m	Площадь в плане {0:0.00} м², 3D {1:0.00} м², периметр {2:0.00} м
 Plan view	Вид в плане
+Previous view	Предыдущий вид
 Plan…	План…
 Play	Пуск
 Pause	Пауза
@@ -754,6 +755,7 @@ Report designer	Дизайнер отчётов
 Report designer…	Дизайнер отчётов…
 Reports	Отчёты
 Reports…	Отчёты…
+Reset all view filters	Сбросить все фильтры вида
 Reset design tracks	Сбросить фактические траектории
 Reset orientation	Сбросить поворот
 Resolution	Разрешение
@@ -1438,8 +1440,6 @@ Exclusion zone radius: {0:0} m	Радиус опасной зоны: {0:0} м
 Exclusion zone {0:0} m	Опасная зона {0:0} м
 Expand surface to polygon	Расширить поверхность до полигона
 Export IREDES plan	Экспорт плана IREDES
-Export KML	Экспорт KML
-Export KMZ	Экспорт KMZ
 Export charge vs time	Экспорт заряда по времени
 Export flyrock	Экспорт разлёта
 Export fragmentation	Экспорт фрагментации
@@ -1484,8 +1484,6 @@ IREDES XML	IREDES XML
 Import CSV…	Импорт CSV…
 Import IREDES plan	Импорт плана IREDES
 Import IREDES quality file	Импорт файла качества IREDES
-Import KML	Импорт KML
-Import KML/KMZ	Импорт KML/KMZ
 Import LIDAR file	Импорт файла LIDAR
 Import MWD data	Импорт данных MWD
 Import vibration events	Импорт сейсмических событий
@@ -1495,10 +1493,6 @@ Initiation rules…	Правила инициирования…
 Inputs…	Исходные данные…
 Interval (ms)	Интервал (мс)
 Joint factor	Коэффициент трещиноватости
-KML file…	Файл KML…
-KML/KMZ	KML/KMZ
-KML/KMZ files…	Файлы KML/KMZ…
-KMZ file…	Файл KMZ…
 Keep lowest	Оставлять нижнюю точку
 Kuz-Ram (Rosin-Rammler)	Кузнецов-Рам (Розин-Раммлер)
 LAS {0}.{1}, format {2}: {3} points read, {4} kept	LAS {0}.{1}, формат {2}: прочитано точек {3}, оставлено {4}
@@ -1862,7 +1856,6 @@ ui:Firing data	Данные взрывания
 ui:With cosines	С косинусами
 ui:Extended firing data	Расширенные данные
 ui:Other formats	Другие форматы
-ui:KML / KMZ	KML / KMZ
 ui:DXF	DXF
 ui:BlastIQ cloud	Облако BlastIQ
 ui:Send plan	Отправить план
@@ -1951,6 +1944,7 @@ Tracks and points	Траектории и точки
 Expand	Расширить
 Simplify	Упростить
 ui:Clear analysis	Убрать анализ
+ui:Remove maps, isochrones and arrows from the plan	Убрать с плана карты, изолинии, стрелки, подсветку скважин и опасную зону
 ui:Remove maps, isochrones and arrows from the plan (Esc)	Убрать с плана карты, изолинии, стрелки, подсветку скважин и опасную зону (Esc)
 No firing times: add an initiation point and ties, or electronic times.	Нет времён взрывания: добавьте точку инициирования и связи или задайте времена ЭСИ.
 Chart could not be drawn:	Не удалось нарисовать график:
@@ -3627,3 +3621,155 @@ ui:An angle from horizontal is read as 90 less it; a dip of −75° is 15° from
 Units	Единицы
 Drawing in feet	Чертёж в футах
 The coordinates of the drawing are in feet: they are taken to metres, as the blast keeps them	Координаты чертежа в футах: при импорте они переводятся в метры, как их хранит проект
+Hole diameters	Диаметры скважин
+Read from the file	Взять из файла
+Do not import	Не импортировать
+Firing data	Данные взрывания
+Firing data with cosines	Данные взрывания с косинусами
+Extended firing data with cosines	Расширенные данные взрывания с косинусами
+Create points at holes…	Создать точки на скважинах…
+Create points at holes	Создать точки на скважинах
+At the collar	На устье
+At grade	На подошве
+At the toe	На забое
+Lock / unlock holes	Заблокировать / разблокировать скважины
+ui:Lock / unlock holes	Заблокировать / разблокировать скважины
+{0} holes locked	Заблокировано скважин: {0}
+{0} holes unlocked	Разблокировано скважин: {0}
+Lines are breaklines	Линии — структурные линии
+Method	Способ
+By vertical tolerance	По допуску по высоте
+By vertical tolerance with smoothing	По допуску по высоте со сглаживанием
+Decimate to a grid	Проредить по сетке
+Minimum or maximum surface…	Минимальная или максимальная поверхность…
+Minimum or maximum surface	Минимальная или максимальная поверхность
+Lower of the two (minimum)	Нижняя из двух (минимум)
+Upper of the two (maximum)	Верхняя из двух (максимум)
+How to expand	Как расширить
+By a distance	На расстояние
+To the selected polygon	До выбранного полигона
+Create intersection of surfaces	Пересечение поверхностей
+ui:Main window, anywhere	Главное окно, везде
+ui:Switch the ribbon stage	Переключить этап ленты
+ui:Full screen and back	Полный экран и обратно
+ui:Command search	Поиск команды
+ui:Find hole by label	Найти скважину по номеру
+ui:Find empty hole	Найти пустую скважину
+ui:Find misfire hole	Найти отказавшую скважину
+ui:Select holes with an actual length	Выбрать скважины с фактической длиной
+ui:Select holes not programmed	Выбрать незапрограммированные скважины
+ui:Group the selection	Сгруппировать выбранное
+ui:Transform tool	Инструмент «Трансформация»
+ui:Visualize timing	Визуализация замедлений
+ui:Show loading	Показать заряжание
+ui:Section view	Разрез
+ui:Export IREDES plan	Экспорт плана IREDES
+ui:Overview	Обзор
+ui:Single hole view (bullseye)	Вид одной скважины
+ui:Row check view	Проверка рядов
+ui:Plan and 3D view	План и 3D
+ui:Select tool	Инструмент «Выбор»
+ui:Pan	Панорама
+ui:Drawing tool	Инструмент рисования
+ui:Snap to objects on or off	Привязка к объектам вкл./выкл.
+ui:Coordinate grid on or off	Сетка координат вкл./выкл.
+ui:Hole tool	Инструмент «Скважина»
+ui:Row tool	Инструмент «Ряд»
+ui:Pattern tool	Инструмент «Сетка»
+ui:Loading tool	Инструмент «Заряжание»
+ui:Ties with the initiation catalogue	Связи с каталогом инициирования
+ui:Set time tool	Инструмент «Задать время»
+ui:Cross-section	Разрез
+ui:Layers tab of the inspector	Вкладка слоёв в инспекторе
+ui:Fade what is behind a surface	Бледнее то, что за поверхностью
+ui:Leave the tool; with the Select tool, clear the selection	Выйти из инструмента; при выборе снять выделение
+ui:Add to the selection	Добавить к выделению
+ui:Add or remove from the selection	Добавить или убрать из выделения
+ui:Move the selection	Сдвинуть выделенное
+ui:Move the selection up and down (Z)	Сдвинуть выделенное вверх и вниз (Z)
+ui:Move in fine steps	Сдвинуть мелким шагом
+ui:Drag up and down (Z)	Перетащить вверх и вниз (Z)
+ui:Drag in fine steps	Перетащить мелким шагом
+ui:Properties of the selection	Свойства выделенного
+ui:Clear the selection	Снять выделение
+ui:Drawing and placing tools	Инструменты рисования и расстановки
+ui:Finish the line or entry	Закончить линию или ввод
+ui:Remove the last point	Убрать последнюю точку
+ui:Type the coordinates of the next point	Ввести координаты следующей точки
+ui:Drop the entry; again, leave the tool	Сбросить ввод; повторно выйти из инструмента
+ui:Row: go on past two points	Ряд: продолжить после двух точек
+ui:Front line: angle in steps	Линия фронта: угол с шагом
+ui:Ties tool	Инструмент «Связи»
+ui:Show or hide the capture zone	Показать или скрыть зону захвата
+ui:Pick radius larger or smaller	Радиус захвата больше или меньше
+ui:Go on from the last hole	Продолжить от последней скважины
+ui:Type the exact value while dragging a handle	Ввести точное значение при перетаскивании ручки
+ui:Remove the last typed character	Стереть последний введённый символ
+ui:Take the typed value	Принять введённое значение
+ui:Delete the selected marks	Удалить выбранные отметки
+ui:Move the selected marks 0.1 m	Сдвинуть выбранные отметки на 0,1 м
+ui:Move the selected marks 0.01 m	Сдвинуть выбранные отметки на 0,01 м
+ui:Copy and paste the marks	Копировать и вставить отметки
+ui:Angle mark: level second line	Отметка угла: горизонтальная вторая линия
+ui:Angle mark: upright second line	Отметка угла: вертикальная вторая линия
+ui:Angle mark: as drawn, acute or obtuse	Отметка угла: как нарисовано, острый или тупой
+ui:Finish the polyline mark or type the level	Закончить ломаную или ввести отметку уровня
+ui:Point not snapped	Точка без привязки
+ui:Cancel, then clear the selection	Отменить, затем снять выделение
+ui:Mouse in the view	Мышь в окне вида
+ui:Zoom at the cursor	Масштаб у курсора
+ui:Orbit in 3D	Вращение в 3D
+ui:Context menu	Контекстное меню
+ui:Move through the results	Перейти по результатам
+ui:Run the command	Выполнить команду
+ui:Close the search	Закрыть поиск
+ui:Windows and dialogs	Окна и диалоги
+ui:OK; in a form, confirm the field	OK; в форме подтвердить поле
+ui:OK in a form	OK в форме
+ui:Step the number in a field	Шаг числа в поле
+ui:Startup window	Стартовое окно
+ui:Open a file	Открыть файл
+ui:Search the list	Поиск по списку
+ui:Choose in the list	Выбрать в списке
+ui:Open the chosen one	Открыть выбранное
+ui:Clear the search, then close	Очистить поиск, затем закрыть
+ui:Main menu	Главное меню
+ui:Ribbon	Лента
+ui:View rail	Панель видов
+ui:Quick filter buttons	Кнопки быстрых фильтров
+ui:Hot keys	Горячие клавиши
+ui:Filter by key or command	Фильтр по клавише или команде
+ui:Where they work: the main window first, then the tools, windows and the mouse	Где действуют: сначала главное окно, затем инструменты, окна и мышь
+ui:Wheel	Колесо
+ui:Middle button	Средняя кнопка
+ui:Shift+middle button	Shift+средняя кнопка
+ui:Alt+left button	Alt+левая кнопка
+ui:Right click	Правый щелчок
+ui:Shift+click	Shift+щелчок
+ui:Ctrl+click	Ctrl+щелчок
+ui:Ctrl+arrows	Ctrl+стрелки
+ui:Shift+drag	Shift+перетаскивание
+ui:Ctrl+drag	Ctrl+перетаскивание
+ui:Main window keys come first: a menu key that is also a window key does what the window key does.	Клавиши окна важнее: если клавиша меню совпадает с клавишей окна, работает клавиша окна.
+ui:Fonts	Шрифты
+ui:Ribbon buttons	Кнопки ленты
+ui:The names of the buttons and of the groups; the icons and the key marks keep their size	Названия кнопок и групп; иконки и метки клавиш — прежнего размера
+ui:Ribbon buttons: room above and below	Отступ кнопок ленты сверху и снизу
+ui:One value for the top and the bottom; a large button has 2 more	Одно значение сверху и снизу; у крупной кнопки на 2 больше
+ui:Ribbon buttons: room between them	Промежуток между кнопками ленты
+ui:Between the rows of small buttons; between the large buttons 1 more	Между рядами малых кнопок; между крупными — на 1 больше
+ui:Tab names	Названия вкладок
+ui:The stages of the ribbon, the right panel and the windows	Этапы ленты, правая панель и окна
+ui:Right panel	Правая панель
+ui:Properties, Layers, Visibility: the fields grow with the text	Свойства, Слои, Видимость: поля растут вместе с текстом
+ui:Tooltip	Подсказка
+ui:As the theme	Как в теме
+ui:The colour of the theme, dark or light	Цвет темы, тёмной или светлой
+ui:Background	Фон
+ui:Text	Текст
+ui:As the theme: stands out from the background	«Как в теме» — контрастный к фону
+ui:Sample	Образец
+ui:A tooltip looks like this	Так выглядит подсказка
+ui:Reset the fonts	Сбросить шрифты
+ui:The sizes and the tooltip colours as they were at first	Размеры и цвета подсказки — как при установке
+ui:pt	пт

@@ -226,6 +226,17 @@ public sealed class RibbonBar : DockPanel
         Children.Add(_band);
         Select(2);
         AttachedToVisualTree += (_, _) => FitTallest();
+        // Program settings ▸ Appearance: the buttons made again in the new sizes, the ribbon measured again
+        void Refit()
+        {
+            _tallest = 0;
+            _band.MinHeight = 0;
+            if (Current >= 0) Select(Current);
+            FitTallest();
+        }
+        Look.FontsChanged += Refit;
+        DetachedFromVisualTree += (_, _) => Look.FontsChanged -= Refit;
+        AttachedToVisualTree += (_, _) => { Look.FontsChanged -= Refit; Look.FontsChanged += Refit; };
     }
 
     /// <summary>
@@ -267,10 +278,10 @@ public sealed class RibbonBar : DockPanel
             var active = i == index;
             var b = new Button
             {
-                Content = Ui.Row(6, new TextBlock { Text = (i + 1).ToString(), FontFamily = Look.Mono, FontSize = 10, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
-                    new TextBlock { Text = Loc.Ui(_stages[i].Name), FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal, Foreground = active ? Look.Accent : Look.Muted }),
-                // from the bottom of the header: the active one runs on into its ribbon below
-                Height = 30,
+                Content = Ui.Row(6, new TextBlock { Text = (i + 1).ToString(), FontFamily = Look.Mono, FontSize = Math.Max(8, Look.TabFont - 3), Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center },
+                    new TextBlock { Text = Loc.Ui(_stages[i].Name), FontSize = Look.TabFont, FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal, Foreground = active ? Look.Accent : Look.Muted, VerticalAlignment = VerticalAlignment.Center }),
+                // from the bottom of the header: the active one runs on into its ribbon below; higher for a larger font
+                Height = StageTabHeight(Look.TabFont),
                 VerticalAlignment = VerticalAlignment.Bottom,
                 Padding = new Thickness(12, 0),
                 CornerRadius = new CornerRadius(6, 6, 0, 0),
@@ -287,13 +298,19 @@ public sealed class RibbonBar : DockPanel
         _vm.View.Redraw();
     }
 
+    /// <summary>A stage tab: 30 high for the default font of 13, higher for a larger one.</summary>
+    public static double StageTabHeight(double font) => Math.Max(30, Math.Ceiling(font * 4 / 3 + 12));
+
+    /// <summary>A small ribbon button: 24 high for the default font of 12 and room of 4, the line of its text and the room above and below.</summary>
+    public static double SmallButtonHeight(double font, double padding) => Math.Ceiling(font * 4 / 3) + 2 * padding;
+
     private void BuildGroups(Stage stage)
     {
         _groups.Children.Clear();
         _buttons.Clear();
         foreach (var g in stage.Groups)
         {
-            var bigs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+            var bigs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Look.RibbonGap + 1 };
             // the small buttons in columns of three, made here and not by a wrap panel: a wrap panel exactly three buttons
             // high put two in a column when it measured them on a scaled screen (150 %, 175 %: a button rounds to a little
             // more than a third) and three when it arranged them, so the group kept room for columns it never filled
@@ -318,7 +335,7 @@ public sealed class RibbonBar : DockPanel
             if (bigs.Children.Count > 0) body.Children.Add(bigs);
             if (smalls.Children.Count > 0) body.Children.Add(smalls);
             var group = new DockPanel { Margin = new Thickness(8, 6, 8, 3) };
-            var caption = new TextBlock { Text = Loc.Ui(g.Name), Foreground = Look.Accent, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, Name = "ribbonCaption" };
+            var caption = new TextBlock { Text = Loc.Ui(g.Name), Foreground = Look.Accent, FontSize = Look.RibbonSize(11), HorizontalAlignment = HorizontalAlignment.Center, Name = "ribbonCaption" };
             DockPanel.SetDock(caption, Dock.Bottom);
             group.Children.Add(caption);
             group.Children.Add(body);
@@ -347,14 +364,15 @@ public sealed class RibbonBar : DockPanel
         if (it.Lock != null || it.Drop != null)
             icon.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -2, -10, 0), Child = Look.Icon(it.Lock != null ? "lock" : "down", 11, Look.Faint, 2) });
         stack.Children.Add(icon);
-        stack.Children.Add(new TextBlock { Text = it.TwoLines ? TwoLines(Loc.Ui(it.Label)) : Loc.Ui(it.Label), FontSize = 11.5, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.NoWrap, Foreground = Look.Text, Name = "bigLabel" });
+        stack.Children.Add(new TextBlock { Text = it.TwoLines ? TwoLines(Loc.Ui(it.Label)) : Loc.Ui(it.Label), FontSize = Look.RibbonSize(11.5), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.NoWrap, Foreground = Look.Text, Name = "bigLabel" });
         if (it.Key != null) stack.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Center, Child = Look.Kbd(it.Key, 9) });
         var b = new Button
         {
             Content = stack,
             MinWidth = 72,
-            MinHeight = 76,
-            Padding = new Thickness(2, 6),
+            // room of 4: 76 high and 6 above and below the content, as before
+            MinHeight = 76 + 2 * (Look.RibbonPadding - IO.ProgramSettings.DefaultRibbonPadding),
+            Padding = new Thickness(2, Look.RibbonPadding + 2),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(6),
@@ -369,16 +387,16 @@ public sealed class RibbonBar : DockPanel
     private Button SmallButton(RibbonItem it)
     {
         var row = Ui.Row(6, Look.Icon(it.Icon, 15, it.Lock != null ? Look.Faint : Look.Muted),
-            new TextBlock { Text = Loc.Ui(it.Label), FontSize = 12, Foreground = it.Lock != null ? Look.Faint : Look.TextSoft, VerticalAlignment = VerticalAlignment.Center });
+            new TextBlock { Text = Loc.Ui(it.Label), FontSize = Look.RibbonSize(12), Foreground = it.Lock != null ? Look.Faint : Look.TextSoft, VerticalAlignment = VerticalAlignment.Center });
         if (it.Drop != null) row.Children.Add(Look.Icon("down", 11, Look.Faint, 2));
         if (it.Lock != null) row.Children.Add(Look.Icon("lock", 11, Look.Faint, 2));
         if (it.Key != null) row.Children.Add(Look.Kbd(it.Key, 9));
         var b = new Button
         {
             Content = row,
-            Height = 24,
+            Height = SmallButtonHeight(Look.RibbonSize(12), Look.RibbonPadding),
             Padding = new Thickness(8, 0),
-            Margin = new Thickness(0, 0, 2, 1),
+            Margin = new Thickness(0, 0, 2, Look.RibbonGap),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(5),
@@ -881,7 +899,7 @@ public sealed class Inspector : DockPanel
         _vm = vm;
         Background = Look.Panel;
         var wrap = new WrapPanel { Margin = new Thickness(12, 8, 12, 0) };
-        foreach (var (label, action) in new (string, Action)[] { ("Like", vm.SelectLike), ("Exact", vm.SelectExact), ("Invert", vm.InvertSelection), ("Only selected", vm.ShowOnlySelected), ("Show all", vm.ShowAllEntities) })
+        foreach (var (label, action) in new (string, Action)[] { ("Like", vm.SelectLike), ("Exact", vm.SelectExact), ("Invert", vm.InvertSelection) })
         {
             var chip = Ui.Chip(Loc.Ui(label), action);
             chip.Margin = new Thickness(0, 0, 4, 4);
@@ -902,10 +920,13 @@ public sealed class Inspector : DockPanel
         props.Children.Add(properties);
         _tabs.ItemsSource = new[]
         {
-            new TabItem { Header = Loc.Ui("Properties"), Tag = "Properties", Content = props },
-            new TabItem { Header = Loc.Ui("Layers"), Tag = "Layers", Content = layers },
-            new TabItem { Header = Loc.Ui("Visibility"), Tag = "Visibility", Content = new ScrollViewer { Content = _visibility } }
+            new TabItem { Header = Loc.Ui("Properties"), Tag = "Properties", Content = Scaled(props) },
+            new TabItem { Header = Loc.Ui("Layers"), Tag = "Layers", Content = Scaled(layers) },
+            new TabItem { Header = Loc.Ui("Visibility"), Tag = "Visibility", Content = new ScrollViewer { Content = Scaled(_visibility) } }
         };
+        // Program settings ▸ Appearance ▸ Right panel: the panel drawn larger or smaller, the fields with the text
+        void Rescale() { foreach (var s in _scaled) s.LayoutTransform = PanelTransform(); }
+        Look.FontsChanged += Rescale;
         _tabs.SelectionChanged += (_, e) =>
         {
             if (e.Source != _tabs) return;
@@ -919,6 +940,18 @@ public sealed class Inspector : DockPanel
     }
 
     private bool _switching;
+
+    /// <summary>The contents of the tabs, drawn at the scale of the font of the panel; the tab names keep the font of the tabs.</summary>
+    private readonly List<LayoutTransformControl> _scaled = new();
+
+    private Control Scaled(Control content)
+    {
+        var host = new LayoutTransformControl { Child = content, LayoutTransform = PanelTransform(), Name = "panelScale" };
+        _scaled.Add(host);
+        return host;
+    }
+
+    private static ScaleTransform? PanelTransform() => Math.Abs(Look.PanelScale - 1) < 1e-9 ? null : new ScaleTransform(Look.PanelScale, Look.PanelScale);
 
     public int SelectedTab
     {
@@ -963,6 +996,8 @@ public sealed class Inspector : DockPanel
         Check("Grid", v => v.ShowGrid, v => v.ShowGrid = !v.ShowGrid);
         Check("Axes", v => v.ShowAxes, v => v.ShowAxes = !v.ShowAxes);
         Check("Hole legend", v => v.ShowHoleLegend, v => v.ShowHoleLegend = !v.ShowHoleLegend);
+        Check("Tie legend", v => v.ShowTieLegend, v => v.ShowTieLegend = !v.ShowTieLegend);
+        Check("Reverse draw order", v => v.ReverseDrawOrder, v => v.ReverseDrawOrder = !v.ReverseDrawOrder);
         _visibility.Children.Add(grid);
 
         _visibility.Children.Add(HoleLabelsHeader());
@@ -990,13 +1025,34 @@ public sealed class Inspector : DockPanel
         Check("MWD profile", v => v.ShowProfile, v => v.ShowProfile = !v.ShowProfile, ui: true,
             tip: "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.");
         _visibility.Children.Add(grid);
+        // hole types (dummy holes first), material types and hole states: the filters that were in the View menu
         _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole types"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
+        void Filter(string text, bool shown, Action toggle)
+        {
+            var cb = new CheckBox { Content = text, IsChecked = shown };
+            cb.IsCheckedChanged += (_, _) => toggle();
+            _visibility.Children.Add(cb);
+        }
+        Filter(Loc.T("Dummy holes"), !p.View.HiddenHoleTypes.Contains(0), () => _vm.ToggleHoleType(0));
         foreach (var t in p.Design.HoleTypes)
         {
             var idx = t.Index;
-            var cb = new CheckBox { Content = Loc.Name(t.Name), IsChecked = !p.View.HiddenHoleTypes.Contains(idx) };
-            cb.IsCheckedChanged += (_, _) => _vm.ToggleHoleType(idx);
-            _visibility.Children.Add(cb);
+            Filter(Loc.Name(t.Name), !p.View.HiddenHoleTypes.Contains(idx), () => _vm.ToggleHoleType(idx));
+        }
+        if (p.Design.MaterialTypes.Any())
+        {
+            _visibility.Children.Add(new TextBlock { Text = Loc.T("Material types"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
+            foreach (var t in p.Design.MaterialTypes)
+            {
+                var idx = t.Index;
+                Filter(Loc.Name(t.Name), !p.View.HiddenMaterialTypes.Contains(idx), () => _vm.ToggleMaterialType(idx));
+            }
+        }
+        _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole state"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
+        foreach (var st in Enum.GetValues<HoleState>())
+        {
+            var state = st;
+            Filter(Loc.Enum(state), !p.View.HiddenStates.Contains(state), () => _vm.ToggleState(state));
         }
         var symbols = new Expander
         {

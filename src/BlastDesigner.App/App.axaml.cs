@@ -20,6 +20,7 @@ public partial class App : Application
         var settings = ProgramSettings.Load();
         Loc.Language = settings.Language;
         Look.ApplyTheme(settings.IsLight, settings.AccentColor);
+        Look.ApplyFonts(settings);
         // ↑/↓ add or take away 1 in every number field
         NumberStep.Attach();
         // Esc closes every dialog and tool window as Cancel; the main window keeps it for the tools. What uses Esc itself

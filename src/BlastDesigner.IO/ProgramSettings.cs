@@ -31,6 +31,36 @@ public sealed class ProgramSettings
     /// <summary>Accent of the interface (active tab, chips, primary buttons, group captions).</summary>
     public uint AccentColor { get; set; } = DefaultAccent;
     public const uint DefaultAccent = 0xFFF0A63A;
+    /// <summary>Font of the ribbon buttons, points; their captions keep their proportions to it.</summary>
+    public double RibbonFontSize { get; set; } = DefaultRibbonFont;
+    /// <summary>Room above and below the text of a ribbon button, pixels (a large button has 2 more).</summary>
+    public double RibbonButtonPadding { get; set; } = DefaultRibbonPadding;
+    /// <summary>Room between the rows of small ribbon buttons and between the large ones, pixels (the large: 1 more).</summary>
+    public double RibbonButtonGap { get; set; } = DefaultRibbonGap;
+    /// <summary>Font of the names of every tab: the stages of the ribbon, the right panel, the windows; points.</summary>
+    public double TabFontSize { get; set; } = DefaultTabFont;
+    /// <summary>Font of the right panel (Properties, Layers, Visibility), points; the whole panel scales with it.</summary>
+    public double PanelFontSize { get; set; } = DefaultPanelFont;
+    /// <summary>Font of the tooltips, points.</summary>
+    public double ToolTipFontSize { get; set; } = DefaultToolTipFont;
+    /// <summary>Ground of the tooltips; 0 follows the theme.</summary>
+    public uint ToolTipBackground { get; set; }
+    /// <summary>Text of the tooltips; 0 follows the theme, or stands out from a ground of the user's.</summary>
+    public uint ToolTipForeground { get; set; }
+    public const double DefaultRibbonFont = 12, DefaultRibbonPadding = 4, DefaultRibbonGap = 1, DefaultTabFont = 13, DefaultPanelFont = 12, DefaultToolTipFont = 12;
+    public const double MinFont = 9, MaxFont = 18, MaxTabFont = 20, MaxToolTipFont = 20, MaxRibbonSpacing = 12;
+
+    /// <summary>The sizes inside their ranges: a settings file edited by hand cannot make the interface unusable.</summary>
+    public void ClampFonts()
+    {
+        static double C(double v, double min, double max, double fallback) => double.IsFinite(v) ? Math.Clamp(v, min, max) : fallback;
+        RibbonFontSize = C(RibbonFontSize, MinFont, MaxFont, DefaultRibbonFont);
+        RibbonButtonPadding = C(RibbonButtonPadding, 0, MaxRibbonSpacing, DefaultRibbonPadding);
+        RibbonButtonGap = C(RibbonButtonGap, 0, MaxRibbonSpacing, DefaultRibbonGap);
+        TabFontSize = C(TabFontSize, 10, MaxTabFont, DefaultTabFont);
+        PanelFontSize = C(PanelFontSize, MinFont, MaxFont, DefaultPanelFont);
+        ToolTipFontSize = C(ToolTipFontSize, MinFont, MaxToolTipFont, DefaultToolTipFont);
+    }
     /// <summary>Plan background of each theme; switching themes moves a background still at one default to the other.</summary>
     public const uint DarkBackground = 0xFF101215, LightBackground = 0xFFFFFFFF;
     /// <summary>Colour of lines, points, polygons and other drawing objects without their own colour; null keeps the layer colours.</summary>
@@ -202,6 +232,7 @@ public sealed class ProgramSettings
         if (Theme != LightTheme) Theme = DarkTheme;
         if (SettingsVersion < 5)
             foreach (var kind in SurfaceColors.Keys.ToList()) SurfaceColors[kind] = NewSurfaceColor(SurfaceColors[kind]);
+        ClampFonts();
         SettingsVersion = CurrentVersion;
     }
 

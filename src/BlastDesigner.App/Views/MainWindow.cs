@@ -359,7 +359,8 @@ public sealed class MainWindow : Window
 
         var tabs = _ribbon.TabStrip;
         // as high as the tabs: no empty band between the title bar of the window and the header
-        var bar = new DockPanel { Background = Look.Panel, Height = 31 };
+        var bar = new DockPanel { Background = Look.Panel, Height = RibbonBar.StageTabHeight(Look.TabFont) + 1 };
+        Look.FontsChanged += () => bar.Height = RibbonBar.StageTabHeight(Look.TabFont) + 1;
         DockPanel.SetDock(left, Dock.Left);
         DockPanel.SetDock(right, Dock.Right);
         bar.Children.Add(left);
@@ -571,7 +572,7 @@ public sealed class MainWindow : Window
         Chip("Ties", v?.ShowTies == true, () => _vm.ToggleView(x => x.ShowTies = !x.ShowTies), "Surface ties");
         if (_vm.HasAnalysisDisplay)
         {
-            var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { _vm.ClearAnalysis(); RefreshChips(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan (Esc)"));
+            var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { _vm.ClearAnalysis(); RefreshChips(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan"));
             _chips.Children.Add(clear);
         }
         if (_eye != null)
@@ -614,7 +615,8 @@ public sealed class MainWindow : Window
                 IsEnabled = holes.Count > 0
             };
             b.Classes.Add("flat");
-            ToolTip.SetTip(b, $"{Loc.Ui(f.Label)} ({f.Key})");
+            // Ctrl+E finds an empty hole; the filter itself has no key
+            ToolTip.SetTip(b, f.Key.Length > 0 ? $"{Loc.Ui(f.Label)} ({f.Key})" : Loc.Ui(f.Label));
             b.Click += (_, _) => _vm.SelectHoles(holes);
             _filters.Children.Add(b);
         }
@@ -636,6 +638,7 @@ public sealed class MainWindow : Window
         if (_vm.CommandIndex.TryGetValue(path, out var e) && e.Action != null && e.IsEnabled?.Invoke() != false) e.Action();
     }
 
+    // the keys handled here are listed by place for the Hot keys page of the settings (MainViewModel.HotKeys.cs): change both
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -672,7 +675,7 @@ public sealed class MainWindow : Window
             Key.T => ToggleTable,
             Key.V => () => Cmd("Calculations/Visualize timing"),
             Key.Q => () => Cmd("Calculations/Quantities"),
-            Key.L => () => Cmd("View/Loading"),
+            Key.L => () => _vm.ToggleView(v => v.ShowLoading = !v.ShowLoading),
             Key.S => () => Cmd("View/Section view"),
             Key.X => () => Cmd("File/Export/IREDES Plan file…"),
             Key.D => () => Cmd("View/Dashboard"),
@@ -727,8 +730,8 @@ public sealed class MainWindow : Window
             {
                 _vm.ActiveTool?.Cancel();
                 if (_vm.ActiveTool is not SelectTool) _vm.SelectTool();
+                // the analysis stays: it is cleared by its chip, the ribbon or the View menu, not by Esc
                 else if (_vm.HasSelection) _vm.Doc?.ClearSelection();
-                else if (_vm.HasAnalysisDisplay) _vm.ClearAnalysis();
             };
         if (a == null) return;
         if (_vm.Doc == null && e.Key is not (Key.N or Key.O or Key.K) && m != KeyModifiers.Alt) return;

@@ -80,6 +80,79 @@ public static class Look
         ThemeChanged?.Invoke();
     }
 
+    // ---------- fonts (Program settings ▸ Appearance) ----------
+
+    /// <summary>Font of the ribbon buttons, points (<see cref="IO.ProgramSettings.RibbonFontSize"/>).</summary>
+    public static double RibbonFont { get; private set; } = IO.ProgramSettings.DefaultRibbonFont;
+    /// <summary>Room above and below the text of a ribbon button, pixels.</summary>
+    public static double RibbonPadding { get; private set; } = IO.ProgramSettings.DefaultRibbonPadding;
+    /// <summary>Room between the rows of small ribbon buttons (the large ones: 1 more), pixels.</summary>
+    public static double RibbonGap { get; private set; } = IO.ProgramSettings.DefaultRibbonGap;
+    /// <summary>Font of the names of the tabs, points.</summary>
+    public static double TabFont { get; private set; } = IO.ProgramSettings.DefaultTabFont;
+    /// <summary>Font of the right panel, points: the panel is drawn at <see cref="PanelScale"/>.</summary>
+    public static double PanelFont { get; private set; } = IO.ProgramSettings.DefaultPanelFont;
+    public static double PanelScale => PanelFont / IO.ProgramSettings.DefaultPanelFont;
+
+    /// <summary>A size of the ribbon written for the default font, in the font chosen; to half a point, the proportions kept.</summary>
+    public static double RibbonSize(double size) => Math.Round(size * RibbonFont / IO.ProgramSettings.DefaultRibbonFont * 2) / 2;
+
+    /// <summary>Raised after <see cref="ApplyFonts"/> changed a size: what makes its controls with them builds them again.</summary>
+    public static event Action? FontsChanged;
+
+    /// <summary>The resource keys the tabs (App.axaml) and the tooltips (Fluent theme) take their look from.</summary>
+    public const string TabFontKey = "TabFontSize", TabHeightKey = "TabMinHeight";
+    private static readonly string[] ToolTipKeys = { "ToolTipBackground", "ToolTipForeground", "ToolTipBorderBrush" };
+
+    /// <summary>
+    /// Sizes of the fonts and the ribbon spacing, and the tooltip look, from the settings. The tabs and the tooltips take
+    /// them from the resources of the application at once; the ribbon and the right panel through <see cref="FontsChanged"/>.
+    /// Called after <see cref="ApplyTheme"/>: a tooltip colour left to the theme follows it.
+    /// </summary>
+    public static void ApplyFonts(IO.ProgramSettings s)
+    {
+        var changed = RibbonFont != s.RibbonFontSize || RibbonPadding != s.RibbonButtonPadding || RibbonGap != s.RibbonButtonGap
+            || TabFont != s.TabFontSize || PanelFont != s.PanelFontSize;
+        RibbonFont = s.RibbonFontSize;
+        RibbonPadding = s.RibbonButtonPadding;
+        RibbonGap = s.RibbonButtonGap;
+        TabFont = s.TabFontSize;
+        PanelFont = s.PanelFontSize;
+        if (Application.Current is { } app)
+        {
+            app.Resources[TabFontKey] = TabFont;
+            app.Resources[TabHeightKey] = TabHeight(TabFont);
+            app.Resources["ToolTipContentThemeFontSize"] = s.ToolTipFontSize;
+            var tip = ToolTipColours(s.ToolTipBackground, s.ToolTipForeground);
+            if (tip == null)
+                foreach (var key in ToolTipKeys) app.Resources.Remove(key);
+            else
+            {
+                app.Resources["ToolTipBackground"] = new SolidColorBrush(tip.Value.Ground);
+                app.Resources["ToolTipForeground"] = new SolidColorBrush(tip.Value.Text);
+                app.Resources["ToolTipBorderBrush"] = new SolidColorBrush(tip.Value.Border);
+            }
+        }
+        if (changed) FontsChanged?.Invoke();
+    }
+
+    /// <summary>A tab as high as before for the default font and higher for a larger one.</summary>
+    public static double TabHeight(double font) => Math.Max(34, Math.Ceiling(font * 4 / 3 + 16));
+
+    /// <summary>
+    /// The colours of a tooltip of the user's: null when both follow the theme. A ground of the user's with the text left
+    /// to the theme takes a text that stands out from it (dark on a light ground, white on a dark one); a text of the
+    /// user's alone goes on the ground of the theme.
+    /// </summary>
+    public static (Color Ground, Color Text, Color Border)? ToolTipColours(uint ground, uint text)
+    {
+        if (ground == 0 && text == 0) return null;
+        var g = ground != 0 ? Color.FromUInt32(ground | 0xFF000000) : Popup.Color;
+        var t = text != 0 ? Color.FromUInt32(text | 0xFF000000) : Luminance(g) > 0.55 ? Color.FromUInt32(0xFF1B1F24) : Color.FromUInt32(0xFFF2F4F6);
+        var border = ground != 0 ? Mix(g, Luminance(g) > 0.5 ? Colors.Black : Colors.White, 0.25) : PopupLine.Color;
+        return (g, t, border);
+    }
+
     public static double Luminance(Color c) => (0.2126 * c.R + 0.7152 * c.G + 0.0722 * c.B) / 255;
 
     private static Color Mix(Color a, Color b, double t) =>
@@ -189,6 +262,7 @@ public static class Look
         // Cog with teeth, not rays: the rayed version read as a sun (theme) rather than settings.
         ["gear"] = "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6",
         ["search"] = "M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14 M20 20l-4-4",
+        ["keyboard"] = "M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M19 10h-1 M7 14h.01 M17 14h.01 M10 14h4",
         ["lock"] = "M6 11h12v9H6z M8 11V8a4 4 0 0 1 8 0v3",
         ["unlock"] = "M6 11h12v9H6z M8 11V8a4 4 0 0 1 7.5-2",
         ["help"] = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14 M12 17v.5",

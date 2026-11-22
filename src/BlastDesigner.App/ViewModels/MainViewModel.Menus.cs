@@ -63,8 +63,7 @@ public sealed partial class MainViewModel
             Sub("Import",
                 Item("Text file…", Run(() => ImportText())),
                 Item("DXF / DWG…", Run(() => ImportCad())),
-                Item("String file (.str)…", Run(() => ImportStr(null, false))),
-                Item("String file, ignore diameters…", Run(() => ImportStr(null, true))),
+                Item("String file (.str)…", Run(() => ImportStr(null))),
                 Item("Drill plan (XML)…", Run(ImportDrillPlan)),
                 Item("Wavefront OBJ file…", Run(() => ImportObj()))),
             Sub("Export",
@@ -73,8 +72,7 @@ public sealed partial class MainViewModel
                 Item("String file (.str)…", Run(ExportStr), P),
                 Item("Quantities…", Run(ExportQuantities), P),
                 Item("Drill plan (XML)…", Run(ExportDrillPlan), P),
-                Item("Firing data…", Run(() => ExportFiring(false)), P),
-                Item("Firing data with cosines…", Run(() => ExportFiring(true)), P),
+                Item("Firing data…", Run(ExportFiringData), P),
                 Item("Deck table (csv)…", Run(ExportDeckTable), P),
                 Item("Load sheets (csv)…", Run(ExportLoadSheet), P),
                 Item("Surface to OBJ…", Run(ExportObj), P)),
@@ -101,15 +99,13 @@ public sealed partial class MainViewModel
                 Item("Like", SelectLike, S),
                 Item("Exact", SelectExact, S),
                 Item("Invert", InvertSelection, P)),
-            Item("Edit selected…", EditSelected, S, "Ctrl+E"),
+            Item("Edit selected…", EditSelected, S),
             Item("Delete", DeleteSelected, S, "Delete"),
             Separator,
             Item("Program settings…", Run(EditProgramSettings)),
             Item("Templates…", Run(ManageTemplates)),
             Separator,
             Item("Project properties…", Run(EditProjectProperties), P),
-            Item("Blast properties…", Run(EditBlastProperties), P),
-            Item("Design data…", Run(EditDesignData), P),
             Item("Hole and material types…", Run(EditHoleTypes), P),
             Item("Available resources…", Run(EditResources), P),
             Item("Blast outcomes…", Run(EditOutcomes), P),
@@ -119,17 +115,16 @@ public sealed partial class MainViewModel
             Separator,
             Item("Calculations…", Run(EditCalculations), P)),
         Sub("View",
-            Item("View everything", ViewEverything, P),
-            Check("Collars only", () => Project?.View.CollarsOnly == true, () => ToggleView(v => v.CollarsOnly = !v.CollarsOnly), P),
+            Item("Reset all view filters", ViewEverything, P),
             Item("Plan view", PlanView, P),
             Item("3D view", View3D, P),
             Item("Blast view", BlastView, P),
             Item("Set blast orientation", SetBlastOrientation, P),
-            Check("Reverse draw order", () => Project?.View.ReverseDrawOrder == true, () => ToggleView(v => v.ReverseDrawOrder = !v.ReverseDrawOrder), P),
             Separator,
             Check("Layer manager", () => Window.LayersVisible, Window.ToggleLayers),
             Check("Properties", () => Window.PropertiesVisible, Window.TogglePropertiesPanel),
             Check("Table view", () => Window.TableVisible, Window.ToggleTable),
+            Item("Restore default UI layout", Window.RestoreLayout),
             Item("Attachment manager…", () => AnalysisWindows.AttachmentManager(this), P),
             Separator,
             Item("Overview", () => AnalysisWindows.Overview(this), P),
@@ -141,23 +136,8 @@ public sealed partial class MainViewModel
             Item("Row check view", () => AnalysisWindows.RowCheck(this), P),
             Item("Section view", () => AnalysisWindows.SectionTool(this), P),
             Item("Markout", () => AnalysisWindows.Markout(this), P),
-            Check("Loading", () => Project?.View.ShowLoading == true, () => ToggleView(v => v.ShowLoading = !v.ShowLoading), P),
             Separator,
-            new MenuEntry { Header = "Hole types", Dynamic = () => HoleTypeMenu() },
-            new MenuEntry { Header = "Material types", Dynamic = () => MaterialMenu() },
-            new MenuEntry { Header = "Hole state", Dynamic = () => Enum.GetValues<HoleState>().Select(s => Check(Loc.Enum(s), () => Project?.View.HiddenStates.Contains(s) == false, () => ToggleState(s), P)) },
             new MenuEntry { Header = "Logging exceptions", Dynamic = () => Enum.GetValues<HoleException>().Select(e => Item(e == HoleException.None ? "All" : Loc.Enum(e), () => FilterException(e), P)) },
-            Check("Grid", () => Project?.View.ShowGrid == true, () => ToggleView(v => v.ShowGrid = !v.ShowGrid), P),
-            Check("Axes", () => Project?.View.ShowAxes == true, () => ToggleView(v => v.ShowAxes = !v.ShowAxes), P),
-            Check("Hole legend", () => Project?.View.ShowHoleLegend == true, () => ToggleView(v => v.ShowHoleLegend = !v.ShowHoleLegend), P),
-            Check("Tie legend", () => Project?.View.ShowTieLegend == true, () => ToggleView(v => v.ShowTieLegend = !v.ShowTieLegend), P),
-            new MenuEntry { Header = "Hole labels", Dynamic = () => Enum.GetValues<HoleLabelMode>().Where(m => m != HoleLabelMode.None).Select(m => Check(Loc.Enum(m), () => Project?.View.HoleLabels.HasFlag(m) == true, () => ToggleLabel(m), P)) },
-            new MenuEntry { Header = "Timing", Dynamic = () => Enum.GetValues<TimingLabelMode>().Where(m => m != TimingLabelMode.None).Select(m => Check(Loc.Enum(m), () => IsTimingLabelVisible(m), () => ToggleTimingLabel(m), P)) },
-            Sub("Show",
-                Check("Ties", () => Project?.View.ShowTies == true, () => ToggleView(v => v.ShowTies = !v.ShowTies), P),
-                Check("Rows", () => Project?.View.ShowRows == true, () => ToggleView(v => v.ShowRows = !v.ShowRows), P),
-                Check("Text", () => Project?.View.ShowText == true, () => ToggleView(v => v.ShowText = !v.ShowText), P),
-                Check("Surfaces", () => Project?.View.ShowSurfaces == true, () => ToggleView(v => v.ShowSurfaces = !v.ShowSurfaces), P)),
             Item("Clear analysis display", ClearAnalysis, P)),
         Sub("Calculations",
             Item("Visualize timing", VisualizeTiming, P),
@@ -169,7 +149,9 @@ public sealed partial class MainViewModel
             Sub("Vibration",
                 Item("Vibration", () => AnalysisWindows.VibrationPrediction(this), P),
                 Item("Vibration map", () => VibrationMap(false), P),
-                Item("Airblast map", () => VibrationMap(true), P))),
+                Item("Airblast map", () => VibrationMap(true), P),
+                Item("Scale law calculator", () => AnalisysWindows.SiteLaw(this), P),
+                Item("Vibration analysis…", () => AnalysisWindows.VibrationAnalysis(this), P))),
         Sub("Tools",
             Sub("Auto loading",
                 Item("Apply", Run(ApplyLoadingRules), W),
@@ -193,7 +175,6 @@ public sealed partial class MainViewModel
                 Item("Copy times between horizons…", Run(CopyTimesBetweenHorizons), P),
                 Item("Deprogram holes", Run(() => Deprogram(false)), P),
                 Item("Deprogram manually set holes", Run(() => Deprogram(true)), P),
-                Item("Find hole by detonator ID…", Run(() => FindHole("label")), P),
                 Item("Re-apply timing", ReapplyTiming, P),
                 Item("Convert pyrotechnic devices to electronic", Run(ConvertToElectronic), P),
                 Item("Clear exceptions", Run(ClearExceptions), P),
@@ -209,9 +190,7 @@ public sealed partial class MainViewModel
                 Item("Island from polygon", Run(AddIslandFromSelection), HasPattern),
                 Item("Dissolve pattern", Run(DissolveSelectedPattern), HasPattern),
                 Item("Move to selected points…", Run(MoveHolesToPoints), P),
-                Item("Create points at collar", () => CreatePointsAt("collar"), S),
-                Item("Create points at grade", () => CreatePointsAt("grade"), S),
-                Item("Create points at toe", () => CreatePointsAt("toe"), S),
+                Item("Create points at holes…", Run(() => CreatePointsAt()), S),
                 Item("Create polyline of bore track", CreateBoreTrackPolylines, S),
                 Item("Move collars onto surface…", Run(DrapeCollarsOnSurface), P),
                 Item("Set lengths to grade surface…", Run(LengthsToGrade), P),
@@ -219,9 +198,10 @@ public sealed partial class MainViewModel
                 Item("Empty", Run(EmptyHoles), P),
                 Item("Edit loading…", Run(() => EditHoleLoading()), P),
                 Item("Join like decks", Run(JoinLikeDecks), P),
-                Item("Release for loading", () => SetHoleState(HoleState.Released), S),
-                Item("Mark drilled", () => SetHoleState(HoleState.Drilled), S),
-                Item("Mark fired", () => SetHoleState(HoleState.Fired), S),
+                Sub("State",
+                    Item("Release for loading", () => SetHoleState(HoleState.Released), S),
+                    Item("Mark drilled", () => SetHoleState(HoleState.Drilled), S),
+                    Item("Mark fired", () => SetHoleState(HoleState.Fired), S)),
                 Item("Set loading factor…", Run(SetLoadingFactor), P),
                 Item("Reset design tracks", Run(ResetDesignTracks), P),
                 Item("Correct slice direction of selected…", Run(CorrectSliceDirection), S),
@@ -230,11 +210,10 @@ public sealed partial class MainViewModel
                 Item("Renumber…", Run(Renumber), P),
                 Item("Check for duplicates by coordinates…", Run(CheckDuplicates), P),
                 Item("Find hole…", Run(() => FindHole("label")), P),
-                Item("Find empty hole", Run(() => FindHole("empty")), P),
+                Item("Find empty hole", Run(() => FindHole("empty")), P, "Ctrl+E"),
                 Item("Find misfire hole", Run(() => FindHole("misfire")), P),
                 Item("Re-label duplicate holes", RelabelDuplicates, P),
-                Item("Lock holes", () => LockHoles(true), S),
-                Item("Unlock holes", () => LockHoles(false), S)),
+                Item("Lock / unlock holes", ToggleHoleLock, S)),
             Sub("Products",
                 Item("Edit available resources…", Run(EditResources), P),
                 Item("Import catalogue from project…", Run(ImportCatalogue), P),
@@ -254,21 +233,18 @@ public sealed partial class MainViewModel
                 Item("Mark clearance zone…", Run(MarkClearanceZone), P),
                 Item("3D polygon area", Run(PolygonArea3D), S)),
             Sub("Surfaces",
-                // lines are breaklines by default: a surface cutting across a crest or toe is never what a survey means
-                Item("Create surface", Run(() => CreateSurface(true)), S),
-                Item("Create surface without breaklines", Run(() => CreateSurface(false)), S),
+                // lines are breaklines by default (an option in the window): a surface cutting across a crest or toe is never what a survey means
+                Item("Create surface", Run(() => CreateSurface()), S),
                 Item("Create a point set from surface…", Run(SurfacePointSet), P),
                 Item("Create contours…", Run(SurfaceContours), P),
                 Item("Create segment points", Run(SurfaceSegmentPoints), S),
-                Item("Expand surface…", Run(SurfaceExpand), P),
-                Item("Simplify surface…", Run(() => SurfaceSimplify(false)), P),
-                Item("Simplify surface with smoothing…", Run(() => SurfaceSimplify(true)), P),
-                Item("Decimate surface…", Run(SurfaceDecimate), P),
+                Item("Expand surface…", Run(ExpandSurfaceAsk), P),
+                Item("Simplify surface…", Run(SimplifySurfaceAsk), P),
                 Item("Move objects onto surface", Run(MoveObjectsOntoSurface), S),
                 Item("Clip surface to polygon", Run(SurfaceClip), S),
                 Item("Create intersection line and surface", Run(IntersectLineSurface), S),
                 Item("Create intersection grade peg and surface", Run(IntersectGradePegs), S),
-                Item("Create intersection of two surfaces", Run(IntersectSurfaces), S),
+                Item("Create intersection of surfaces", Run(IntersectSurfaces), S),
                 Item("Create bench layout polyline…", Run(BenchLayoutPolyline), P),
                 Item("Project line to bench surface", Run(ProjectLineToSurface), S),
                 Item("Improve surface geometry", Run(SurfaceImprove), P),
@@ -284,7 +260,7 @@ public sealed partial class MainViewModel
             Item("Survey stations…", () => AnalysisWindows.SurveyStations(this), P),
             Item("Laser wizard…", Run(LaserWizard), P),
             Item("Report designer…", Run(EditReportDesign), P),
-            Item("Vibration analysis…", () => AnalysisWindows.VibrationAnalysis(this), P)),
+            Item("Find missing objects", FindMissingObjects, P)),
         Sub("Help",
             Item("Contents", () => AnalysisWindows.Help(), null, "F1"),
             Item("Keyboard and mouse", () => AnalysisWindows.KeyboardHelp()),
@@ -293,33 +269,8 @@ public sealed partial class MainViewModel
             Sub("Log file",
                 Check("Log extended debug information", () => IO.Log.Extended, () => IO.Log.Extended = !IO.Log.Extended),
                 Item("Open log file", () => OpenExternal(IO.Log.FilePath)),
-                Item("Find log file", () => OpenExternal(IO.ProgramSettings.LogFolder))),
-            Item("Find missing objects", FindMissingObjects, P),
-            Item("Restore default UI layout", Window.RestoreLayout))
+                Item("Find log file", () => OpenExternal(IO.ProgramSettings.LogFolder))))
     };
-
-    private IEnumerable<MenuEntry> HoleTypeMenu()
-    {
-        if (Project == null) yield break;
-        yield return Check("Dummy holes", () => !Project.View.HiddenHoleTypes.Contains(0), () => ToggleHoleType(0));
-        foreach (var t in Project.Design.HoleTypes)
-        {
-            var idx = t.Index;
-            yield return Check(t.Name, () => !Project.View.HiddenHoleTypes.Contains(idx), () => ToggleHoleType(idx));
-        }
-        yield return Item("All", () => ToggleView(v => v.HiddenHoleTypes.Clear()));
-    }
-
-    private IEnumerable<MenuEntry> MaterialMenu()
-    {
-        if (Project == null) yield break;
-        foreach (var t in Project.Design.MaterialTypes)
-        {
-            var idx = t.Index;
-            yield return Check(t.Name, () => !Project.View.HiddenMaterialTypes.Contains(idx), () => ToggleMaterialType(idx));
-        }
-        yield return Item("All", () => ToggleView(v => v.HiddenMaterialTypes.Clear()));
-    }
 
     /// <summary>Toolbar groups: (group name, buttons). Each button is (glyph, tooltip, action, isTool).</summary>
     public List<(string Group, List<(string Glyph, string Tip, Action Action, string? ToolName)> Buttons)> BuildToolbars() => new()
@@ -338,7 +289,7 @@ public sealed partial class MainViewModel
             ("⟳", "Rotate views", () => SetTool(new RotateTool(this, false)), "Rotate"), ("✋", "Pan", () => SetTool(new PanTool(this)), "Pan"),
             ("⛶", "Zoom all", ZoomAll, null), ("N", "North", () => SetTool(new RotateTool(this, true)), "North"),
             ("▦", "Plan view", PlanView, null), ("◩", "3D view", View3D, null),
-            ("☰", "Layer manager", Window.ToggleLayers, null), ("🔒", "Lock holes", () => LockHoles(true), null), ("🔓", "Unlock holes", () => LockHoles(false), null),
+            ("☰", "Layer manager", Window.ToggleLayers, null), ("🔒", "Lock / unlock holes", ToggleHoleLock, null),
             ("⌖", "Snap to objects", ToggleSnap, null)
         }),
         ("Survey tools", new()

@@ -1,8 +1,14 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:svc="using:BlastDesigner.App.Services"
+             xmlns:sys="using:System"
              x:Class="BlastDesigner.App.App"
              RequestedThemeVariant="Dark">
+  <!-- the font of the tab names (Program settings ▸ Appearance): Look.ApplyFonts replaces these -->
+  <Application.Resources>
+    <sys:Double x:Key="TabFontSize">13</sys:Double>
+    <sys:Double x:Key="TabMinHeight">34</sys:Double>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme DensityStyle="Compact">
       <FluentTheme.Palettes>
@@ -68,8 +74,8 @@
       <Setter Property="Margin" Value="4,6,4,2"/>
     </Style>
     <Style Selector="TabItem">
-      <Setter Property="FontSize" Value="13"/>
-      <Setter Property="MinHeight" Value="34"/>
+      <Setter Property="FontSize" Value="{DynamicResource TabFontSize}"/>
+      <Setter Property="MinHeight" Value="{DynamicResource TabMinHeight}"/>
       <Setter Property="Padding" Value="12,0"/>
     </Style>
   </Application.Styles>

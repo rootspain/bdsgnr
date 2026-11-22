@@ -25,7 +25,6 @@ public sealed partial class MainViewModel
         SubOf("File", "Import").AddRange(new[]
         {
             Separator,
-            Item("KML/KMZ files…", Run(ImportKml)),
             Item("LIDAR files (las)…", Run(ImportLas)),
             Item("IREDES Plan file…", Run(() => ImportIredes(false))),
             Item("IREDES Quality file update holes…", Run(() => ImportIredes(true)), P),
@@ -34,11 +33,8 @@ public sealed partial class MainViewModel
         SubOf("File", "Export").AddRange(new[]
         {
             Separator,
-            Item("KML file…", Run(() => ExportKml(false)), P),
-            Item("KMZ file…", Run(() => ExportKml(true)), P),
             Item("IREDES Plan file…", Run(ExportIredes), P),
             Item("Davey Tronic file (.BPD)…", Run(ExportBpd), P),
-            Item("Extended firing data with cosines…", Run(ExportExtendedFiring), P),
             Item("Strata intercepts…", Run(ExportStrataIntercepts), P),
             Item("Profile logs…", Run(ExportProfileLogs), P)
         });
@@ -67,7 +63,6 @@ public sealed partial class MainViewModel
             Sub("Environmental prediction",
                 Item("Flyrock prediction", () => AnalisysWindows.Flyrock(this), P),
                 Item("Fragmentation prediction", () => AnalisysWindows.Fragmentation(this), P),
-                Item("Scale law calculator", () => AnalisysWindows.SiteLaw(this), P),
                 Item("Exclusion zone calculator", () => AnalisysWindows.ExclusionZone(this), P)),
             Item("Design tolerance check", () => AnalisysWindows.Tolerances(this), P),
             Item("Strata intercepts", () => AnalisysWindows.StrataIntercepts(this), P)
@@ -96,10 +91,7 @@ public sealed partial class MainViewModel
         SubOf("Tools", "Surfaces").AddRange(new[]
         {
             Separator,
-            Item("Find minimum surface", Run(() => SurfaceEnvelope(true)), S),
-            Item("Find maximum surface", Run(() => SurfaceEnvelope(false)), S),
-            Item("Create intersection of multiple surfaces", Run(IntersectMultipleSurfaces), S),
-            Item("Expand surface to polygon", Run(ExpandSurfaceToPolygon), S)
+            Item("Minimum or maximum surface…", Run(() => SurfaceEnvelope()), S)
         });
         return menu;
     }
@@ -256,12 +248,19 @@ public sealed partial class MainViewModel
 
     // ---- surfaces -----------------------------------------------------------------------
 
-    public async Task SurfaceEnvelope(bool minimum)
+    /// <param name="minimum">The lower or the upper of the two surfaces; asked when null.</param>
+    public async Task SurfaceEnvelope(bool? minimum = null)
     {
         var s = Doc!.SelectedEntities.OfType<SurfaceEntity>().Take(2).ToList();
         if (s.Count < 2) { await Dialogs.Info(Loc.T("Select two surfaces.")); return; }
-        var result = CadOps.Envelope(s[0], s[1], minimum);
-        Change(minimum ? "Find minimum surface" : "Find maximum surface", p => p.Add(result, SurfLayer(p)));
+        if (minimum == null)
+        {
+            var which = await Dialogs.Choose("Minimum or maximum surface", Loc.T("Result"), new[] { Loc.T("Lower of the two (minimum)"), Loc.T("Upper of the two (maximum)") });
+            if (which == null) return;
+            minimum = which == 0;
+        }
+        var result = CadOps.Envelope(s[0], s[1], minimum.Value);
+        Change(minimum.Value ? "Find minimum surface" : "Find maximum surface", p => p.Add(result, SurfLayer(p)));
     }
 
     public async Task IntersectMultipleSurfaces()
@@ -291,22 +290,6 @@ public sealed partial class MainViewModel
     }
 
     // ---- import / export ----------------------------------------------------------------
-
-    public async Task ImportKml()
-    {
-        EnsureProject();
-        var path = await Dialogs.OpenFile("Import KML/KMZ", ("KML/KMZ", new[] { "*.kml", "*.kmz" }));
-        if (path == null) return;
-        var cs = ProjectJson.DeepClone(Project!.Coordinates);
-        var items = Interchange.ImportKml(path, cs);
-        Change("Import KML", p =>
-        {
-            p.Coordinates = cs;
-            var layer = p.GetOrCreateLayer(Path.GetFileNameWithoutExtension(path));
-            foreach (var e in items) p.Add(e, layer);
-        });
-        SetStatus(Loc.F("{0} objects imported (UTM zone {1})", items.Count, cs.UtmZone));
-    }
 
     public sealed class LasImportOptions
     {
@@ -374,18 +357,6 @@ public sealed partial class MainViewModel
         int n = 0;
         Change("Import MWD data", p => n = Interchange.ImportMwd(lines, p.Holes));
         SetStatus(Loc.F("{0} holes updated", n));
-    }
-
-    public async Task ExportKml(bool kmz)
-    {
-        if (Project!.Coordinates.UtmZone < 1) { await Dialogs.Info(Loc.T("Set the UTM zone in Edit ▸ Site coordinate system first.")); await EditCoordinates(); if (Project.Coordinates.UtmZone < 1) return; }
-        var entities = Doc!.SelectedEntities.Any() ? Doc.SelectedEntities.ToList() : Project.Entities;
-        var kml = Interchange.ExportKml(Project, entities);
-        if (!kmz) { await ExportText("Export KML", BaseName, ".kml", kml, "KML"); return; }
-        var path = await Dialogs.SaveFile("Export KMZ", BaseName + ".kmz", ".kmz", ("KMZ", new[] { "*.kmz" }));
-        if (path == null) return;
-        Interchange.WriteKmz(path, kml);
-        SetStatus(Loc.F("Exported to {0}", path));
     }
 
     public Task ExportIredes() => ExportText("Export IREDES plan", BaseName + "_iredes", ".xml", Interchange.ExportIredes(Project!, ExportHolesSet()), "XML");

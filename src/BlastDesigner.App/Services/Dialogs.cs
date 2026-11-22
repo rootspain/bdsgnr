@@ -154,6 +154,16 @@ public static class Dialogs
         return ok ? combo.SelectedIndex : null;
     }
 
+    /// <summary>A choice from a list with a yes/no option under it (both texts translated by the caller); null when cancelled.</summary>
+    public static async Task<(int Index, bool Option)?> ChooseWithOption(string title, string label, IReadOnlyList<string> items, int selected, string option, bool optionValue)
+    {
+        if (items.Count == 0) return null;
+        var combo = new ComboBox { ItemsSource = items, SelectedIndex = Math.Clamp(selected, 0, items.Count - 1), MinWidth = 320, MinHeight = 32, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var check = new CheckBox { Content = option, IsChecked = optionValue, Margin = new Thickness(0, 10, 0, 0), Foreground = Look.Text };
+        var ok = await Custom(title, new StackPanel { Children = { FormKit.Labeled(label, combo), check } }, () => combo.SelectedIndex >= 0, combo);
+        return ok ? (combo.SelectedIndex, check.IsChecked == true) : null;
+    }
+
     /// <summary>
     /// Shows arbitrary content between the title band and the bottom bar. Returns true on OK. A <paramref name="form"/> has fields
     /// that take Enter themselves and is applied with Ctrl+Enter; <paramref name="bare"/> content reaches the edges of the window.

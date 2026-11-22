@@ -7,6 +7,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using BlastDesigner.App.Services;
+using BlastDesigner.App.ViewModels;
 using BlastDesigner.Domain;
 using BlastDesigner.IO;
 
@@ -25,9 +26,9 @@ public static class SettingsWindow
     /// how far the window was scrolled, to open it again in that language at the same place (<paramref name="scroll"/>).
     /// </summary>
     public static async Task<ProgramSettings?> Show(ProgramSettings settings, Action<ProgramSettings>? apply = null, Action<ProgramSettings?>? preview = null,
-        double scroll = 0, Action<double>? newLanguage = null)
+        double scroll = 0, Action<double>? newLanguage = null, IReadOnlyList<HotKeyGroup>? hotKeys = null)
     {
-        var form = new SettingsForm(settings) { ApplyTo = apply, PreviewTo = preview, NewLanguage = newLanguage };
+        var form = new SettingsForm(settings, hotKeys) { ApplyTo = apply, PreviewTo = preview, NewLanguage = newLanguage };
         var w = new Window
         {
             Title = Loc.T("Program settings"),
@@ -44,7 +45,9 @@ public static class SettingsWindow
         w.Closed += (_, _) =>
         {
             preview?.Invoke(null);
-            if (!form.Applied) Look.ApplyTheme(settings.IsLight, settings.AccentColor);
+            if (form.Applied) return;
+            Look.ApplyTheme(settings.IsLight, settings.AccentColor);
+            Look.ApplyFonts(settings);
         };
         await Dialogs.ShowModal(w);
         return form.Applied ? form.Edited : null;
@@ -71,8 +74,12 @@ public sealed class SettingsForm : DockPanel
     private readonly StackPanel _nav = new() { Spacing = 2, Margin = new Thickness(10, 14) };
     private readonly Dictionary<string, Control> _sections = new();
 
-    public SettingsForm(ProgramSettings settings)
+    /// <summary>The assigned keys by the place they work in, shown on the Hot keys page (none: no page).</summary>
+    private readonly IReadOnlyList<HotKeyGroup>? _hotKeys;
+
+    public SettingsForm(ProgramSettings settings, IReadOnlyList<HotKeyGroup>? hotKeys = null)
     {
+        _hotKeys = hotKeys;
         Edited = ProjectJson.DeepClone(settings);
         var footer = Footer();
         SetDock(footer, Dock.Bottom);
@@ -132,6 +139,7 @@ public sealed class SettingsForm : DockPanel
     {
         PreviewTo?.Invoke(Edited);
         Look.ApplyTheme(Edited.IsLight, Edited.AccentColor);
+        Look.ApplyFonts(Edited);
     }
 
     // ---------- layout ----------
@@ -146,6 +154,7 @@ public sealed class SettingsForm : DockPanel
         Section("Files", "save", FileRows());
         Section("Units", "measure", UnitRows());
         Section("General", "gear", GeneralRows());
+        if (_hotKeys is { Count: > 0 }) Section("Hot keys", "keyboard", HotKeyRows());
         Section("Usage statistics", "chart", UsageRows());
         BuildNav();
     }
@@ -352,6 +361,87 @@ public sealed class SettingsForm : DockPanel
         accent.Children.Add(reset);
         accent.Children.Add(AccentPreview());
         yield return Row("Accent colour", accent, "Active tab, chips, main buttons, group captions");
+        foreach (var row in FontRows()) yield return row;
+    }
+
+    private static readonly uint[] ToolTipGrounds = { 0xFF2A2F36, 0xFF1E3A5F, 0xFF101215, 0xFFFFFFFF, 0xFFFFF7D6, 0xFFE8F1FF };
+    private static readonly uint[] ToolTipTexts = { 0xFFF2F4F6, 0xFF1B1F24, 0xFFF0A63A, 0xFF4C9BFF, 0xFFC9CFD6 };
+
+    /// <summary>The fonts of the ribbon, the tabs, the right panel and the tooltips, and the spacing of the ribbon buttons; seen at once.</summary>
+    private IEnumerable<Control> FontRows()
+    {
+        Control Size(string name, double value, Action<double> set, string unit, double min, double max) =>
+            Number(name, value, v => { set(v); Preview(); }, unit, min, max, "0.#");
+        yield return new TextBlock { Text = L("Fonts"), FontWeight = FontWeight.SemiBold, Foreground = Look.Text, Margin = new Thickness(0, 8, 0, 0) };
+        yield return Row("Ribbon buttons", Size("ribbonFont", Edited.RibbonFontSize, v => Edited.RibbonFontSize = v, "pt", ProgramSettings.MinFont, ProgramSettings.MaxFont),
+            "The names of the buttons and of the groups; the icons and the key marks keep their size");
+        yield return Row("Ribbon buttons: room above and below", Size("ribbonPadding", Edited.RibbonButtonPadding, v => Edited.RibbonButtonPadding = v, "px", 0, ProgramSettings.MaxRibbonSpacing),
+            "One value for the top and the bottom; a large button has 2 more");
+        yield return Row("Ribbon buttons: room between them", Size("ribbonGap", Edited.RibbonButtonGap, v => Edited.RibbonButtonGap = v, "px", 0, ProgramSettings.MaxRibbonSpacing),
+            "Between the rows of small buttons; between the large buttons 1 more");
+        yield return Row("Tab names", Size("tabFont", Edited.TabFontSize, v => Edited.TabFontSize = v, "pt", 10, ProgramSettings.MaxTabFont),
+            "The stages of the ribbon, the right panel and the windows");
+        yield return Row("Right panel", Size("panelFont", Edited.PanelFontSize, v => Edited.PanelFontSize = v, "pt", ProgramSettings.MinFont, ProgramSettings.MaxFont),
+            "Properties, Layers, Visibility: the fields grow with the text");
+
+        yield return new TextBlock { Text = L("Tooltip"), FontWeight = FontWeight.SemiBold, Foreground = Look.Text, Margin = new Thickness(0, 8, 0, 0) };
+        yield return Row("Font size", Size("toolTipFont", Edited.ToolTipFontSize, v => Edited.ToolTipFontSize = v, "pt", ProgramSettings.MinFont, ProgramSettings.MaxToolTipFont));
+        Control Colour(string name, uint value, uint[] presets, Action<uint> set, uint shown)
+        {
+            var box = new StackPanel { Spacing = 6 };
+            box.Children.Add(ColourPicker(name, value == 0 ? shown : value, presets, c => { set(c); Preview(); }));
+            var theme = Ui.Flat(Ui.Row(6, Look.Icon("prev", 14, Look.Muted), new TextBlock { Text = L("As the theme"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center }), L("The colour of the theme, dark or light"),
+                () => { set(0); Preview(); Build(); }, null, 30);
+            theme.Name = name + "Theme";
+            theme.HorizontalAlignment = HorizontalAlignment.Left;
+            theme.IsEnabled = value != 0;
+            box.Children.Add(theme);
+            return box;
+        }
+        var colours = Look.ToolTipColours(Edited.ToolTipBackground, Edited.ToolTipForeground);
+        yield return Row("Background", Colour("toolTipBackground", Edited.ToolTipBackground, ToolTipGrounds, c => Edited.ToolTipBackground = c, ToArgb(colours?.Ground ?? Look.Popup.Color)));
+        yield return Row("Text", Colour("toolTipForeground", Edited.ToolTipForeground, ToolTipTexts, c => Edited.ToolTipForeground = c, ToArgb(colours?.Text ?? Look.Text.Color)),
+            "As the theme: stands out from the background");
+        yield return Row("Sample", ToolTipSample());
+        var reset = Ui.Flat(Ui.Row(6, Look.Icon("prev", 14, Look.Muted), new TextBlock { Text = L("Reset the fonts"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center }), L("The sizes and the tooltip colours as they were at first"),
+            () =>
+            {
+                Edited.RibbonFontSize = ProgramSettings.DefaultRibbonFont;
+                Edited.RibbonButtonPadding = ProgramSettings.DefaultRibbonPadding;
+                Edited.RibbonButtonGap = ProgramSettings.DefaultRibbonGap;
+                Edited.TabFontSize = ProgramSettings.DefaultTabFont;
+                Edited.PanelFontSize = ProgramSettings.DefaultPanelFont;
+                Edited.ToolTipFontSize = ProgramSettings.DefaultToolTipFont;
+                Edited.ToolTipBackground = Edited.ToolTipForeground = 0;
+                Preview();
+                Build();
+            }, null, 30);
+        reset.Name = "resetFonts";
+        reset.HorizontalAlignment = HorizontalAlignment.Left;
+        yield return reset;
+    }
+
+    private static uint ToArgb(Color c) => (uint)c.A << 24 | (uint)c.R << 16 | (uint)c.G << 8 | c.B;
+
+    /// <summary>A tooltip as the program shows it: it takes the same resources, so it follows every change at once.</summary>
+    private static Control ToolTipSample()
+    {
+        var text = new TextBlock { Text = L("A tooltip looks like this"), TextWrapping = TextWrapping.Wrap };
+        text.Bind(TextBlock.FontSizeProperty, text.GetResourceObservable("ToolTipContentThemeFontSize"));
+        text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("ToolTipForeground"));
+        var sample = new Border
+        {
+            Name = "toolTipSample",
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(8, 5, 8, 7),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            MaxWidth = 320,
+            Child = text
+        };
+        sample.Bind(Border.BackgroundProperty, sample.GetResourceObservable("ToolTipBackground"));
+        sample.Bind(Border.BorderBrushProperty, sample.GetResourceObservable("ToolTipBorderBrush"));
+        return sample;
     }
 
     private void SetTheme(string theme)
@@ -546,6 +636,65 @@ public sealed class SettingsForm : DockPanel
         open.Name = "usageAnalysis";
         open.HorizontalAlignment = HorizontalAlignment.Left;
         yield return Row("Analysis", open, "Most used commands, flags switched back, long pauses");
+    }
+
+    // ---------- hot keys ----------
+
+    /// <summary>The assigned keys by the place they work in, with a filter by key, command or place; shown, not edited.</summary>
+    private IEnumerable<Control> HotKeyRows()
+    {
+        yield return new TextBlock { Text = L("Where they work: the main window first, then the tools, windows and the mouse"), FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap };
+        yield return new TextBlock { Text = L("Main window keys come first: a menu key that is also a window key does what the window key does."), FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap };
+        var filter = new TextBox
+        {
+            Name = "hotKeyFilter", Watermark = L("Filter by key or command"), Height = 32, MinHeight = 32, MaxWidth = 360,
+            HorizontalAlignment = HorizontalAlignment.Stretch, Background = Look.Field, BorderBrush = Look.LineStrong, Padding = new Thickness(8, 5)
+        };
+        yield return filter;
+        var list = new StackPanel { Spacing = 16, Name = "hotKeyList" };
+        var nothing = new TextBlock { Text = L("Nothing found"), Foreground = Look.Muted, IsVisible = false };
+        var blocks = new List<(Control Block, List<(Control Row, string Text)> Rows)>();
+        foreach (var g in _hotKeys!)
+        {
+            if (g.Keys.Count == 0) continue;
+            var block = new StackPanel { Spacing = 3 };
+            block.Children.Add(new TextBlock { Text = g.Place, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, Margin = new Thickness(0, 0, 0, 3) });
+            var rows = new List<(Control, string)>();
+            foreach (var k in g.Keys)
+            {
+                var keys = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
+                foreach (var part in k.Keys.Split(", ", StringSplitOptions.RemoveEmptyEntries))
+                    keys.Children.Add(new Border { Margin = new Thickness(0, 1, 4, 1), Child = Look.Kbd(part, 11) });
+                var action = new TextBlock { Text = k.Action, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
+                var row = new Grid { ColumnDefinitions = new ColumnDefinitions("210,*"), MinHeight = 24 };
+                Grid.SetColumn(action, 1);
+                row.Children.Add(keys);
+                row.Children.Add(action);
+                block.Children.Add(row);
+                rows.Add((row, $"{g.Place} {k.Keys} {k.Action}".ToLowerInvariant()));
+            }
+            blocks.Add((block, rows));
+            list.Children.Add(block);
+        }
+        list.Children.Add(nothing);
+        filter.TextChanged += (_, _) =>
+        {
+            var words = (filter.Text ?? "").ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var any = false;
+            foreach (var (block, rows) in blocks)
+            {
+                var shown = 0;
+                foreach (var (row, text) in rows)
+                {
+                    row.IsVisible = words.All(text.Contains);
+                    if (row.IsVisible) shown++;
+                }
+                block.IsVisible = shown > 0;
+                any |= shown > 0;
+            }
+            nothing.IsVisible = !any;
+        };
+        yield return list;
     }
 
     // ---------- footer ----------

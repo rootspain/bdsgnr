@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.IO.Compression;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
@@ -10,127 +9,13 @@ using BlastDesigner.Engine;
 
 namespace BlastDesigner.IO;
 
-/// <summary>Exchange formats: KML/KMZ, LAS point clouds, IREDES drill plans, MWD logs and CSV reports.</summary>
+/// <summary>Exchange formats: LAS point clouds, IREDES drill plans, MWD logs and CSV reports.</summary>
 public static class Interchange
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static string F(double v, string fmt = "0.###") => v.ToString(fmt, Inv);
     /// <summary>A kept value of a quantity as a CSV report writes it: in the units of the program.</summary>
     private static string F(Quantity q, double kept, string fmt = "0.###") => F(Measure.Show(q, kept), fmt);
-
-    // ---- KML / KMZ -----------------------------------------------------------------------
-
-    private static (double Lat, double Lon) ToGeo(SiteCoordinateSystem cs, Vec3 p) =>
-        Utm.ToLatLon(p.X + cs.OffsetEasting, p.Y + cs.OffsetNorthing, cs.UtmZone, cs.SouthernHemisphere);
-
-    private static string Coord(SiteCoordinateSystem cs, Vec3 p)
-    {
-        var (lat, lon) = ToGeo(cs, p);
-        return $"{F(lon, "0.00000000")},{F(lat, "0.00000000")},{F(p.Z + cs.OffsetElevation, "0.###")}";
-    }
-
-    private static string Hex(uint argb) => $"{(argb >> 24) & 0xFF:x2}{argb & 0xFF:x2}{(argb >> 8) & 0xFF:x2}{(argb >> 16) & 0xFF:x2}";
-
-    /// <summary>Writes holes as placemarks (collar points with a description) and polylines/polygons as line strings and polygons.</summary>
-    public static string ExportKml(BlastProject project, IEnumerable<Entity> entities)
-    {
-        var cs = project.Coordinates;
-        if (cs.UtmZone < 1 || cs.UtmZone > 60) throw new InvalidOperationException("Set the site coordinate system (UTM zone) first.");
-        XNamespace k = "http://www.opengis.net/kml/2.2";
-        var doc = new XElement(k + "Document", new XElement(k + "name", project.Header.Name));
-        doc.Add(new XElement(k + "Style", new XAttribute("id", "hole"),
-            new XElement(k + "IconStyle", new XElement(k + "scale", "0.6"), new XElement(k + "Icon", new XElement(k + "href", "http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png")))));
-        var holes = new XElement(k + "Folder", new XElement(k + "name", "Holes"));
-        var lines = new XElement(k + "Folder", new XElement(k + "name", "Lines"));
-        foreach (var e in entities)
-        {
-            switch (e)
-            {
-                case Hole h:
-                    holes.Add(new XElement(k + "Placemark",
-                        new XElement(k + "name", h.Label),
-                        new XElement(k + "styleUrl", "#hole"),
-                        new XElement(k + "description", MeasureText.InText($"Length {F(h.Length, "0.0")} m, diameter {F(h.Diameter, "0")} mm") + $", angle {F(Quantity.HoleAngle, h.Angle, "0")}°, bearing {F(h.Bearing, "0")}°"),
-                        new XElement(k + "Point", new XElement(k + "altitudeMode", "absolute"), new XElement(k + "coordinates", Coord(cs, h.Collar)))));
-                    break;
-                case PolylineEntity l when l.Points.Count >= 2:
-                    var colour = Hex(l.Color ?? project.FindLayer(l.LayerId)?.Color ?? 0xFF000000);
-                    var coords = string.Join(" ", (l.Closed ? l.Points.Append(l.Points[0]) : l.Points).Select(p => Coord(cs, p)));
-                    XElement geom = l.Closed
-                        ? new XElement(k + "Polygon", new XElement(k + "altitudeMode", "absolute"), new XElement(k + "outerBoundaryIs", new XElement(k + "LinearRing", new XElement(k + "coordinates", coords))))
-                        : new XElement(k + "LineString", new XElement(k + "altitudeMode", "absolute"), new XElement(k + "coordinates", coords));
-                    lines.Add(new XElement(k + "Placemark", new XElement(k + "name", l.Label.Length > 0 ? l.Label : l.KindName),
-                        new XElement(k + "Style", new XElement(k + "LineStyle", new XElement(k + "color", colour), new XElement(k + "width", "2")),
-                            new XElement(k + "PolyStyle", new XElement(k + "color", "33" + colour[2..]))), geom));
-                    break;
-                case PointEntity pt:
-                    lines.Add(new XElement(k + "Placemark", new XElement(k + "name", pt.Label),
-                        new XElement(k + "Point", new XElement(k + "altitudeMode", "absolute"), new XElement(k + "coordinates", Coord(cs, pt.Position)))));
-                    break;
-            }
-        }
-        doc.Add(holes, lines);
-        return new XDocument(new XDeclaration("1.0", "UTF-8", null), new XElement(k + "kml", doc)).ToString();
-    }
-
-    public static void WriteKmz(string path, string kml)
-    {
-        using var fs = File.Create(path);
-        using var zip = new ZipArchive(fs, ZipArchiveMode.Create);
-        using var w = new StreamWriter(zip.CreateEntry("doc.kml").Open(), new UTF8Encoding(false));
-        w.Write(kml);
-    }
-
-    /// <summary>Reads points, line strings and polygons from KML or KMZ. When the project has no UTM zone it is taken from the first coordinate.</summary>
-    public static List<Entity> ImportKml(string path, SiteCoordinateSystem cs)
-    {
-        string text;
-        if (path.EndsWith(".kmz", StringComparison.OrdinalIgnoreCase))
-        {
-            using var zip = ZipFile.OpenRead(path);
-            var entry = zip.Entries.FirstOrDefault(e => e.FullName.EndsWith(".kml", StringComparison.OrdinalIgnoreCase)) ?? throw new InvalidDataException("No KML document in the KMZ file.");
-            using var r = new StreamReader(entry.Open());
-            text = r.ReadToEnd();
-        }
-        else text = File.ReadAllText(path);
-        var x = XDocument.Parse(text);
-        var result = new List<Entity>();
-        foreach (var pm in x.Descendants().Where(e => e.Name.LocalName == "Placemark"))
-        {
-            var name = pm.Elements().FirstOrDefault(e => e.Name.LocalName == "name")?.Value ?? string.Empty;
-            foreach (var g in pm.Descendants().Where(e => e.Name.LocalName is "Point" or "LineString" or "LinearRing"))
-            {
-                var coordText = g.Descendants().FirstOrDefault(e => e.Name.LocalName == "coordinates")?.Value;
-                if (coordText == null) continue;
-                var pts = ParseKmlCoordinates(coordText, cs);
-                if (pts.Count == 0) continue;
-                if (g.Name.LocalName == "Point") result.Add(new PointEntity { Position = pts[0], Label = name });
-                else
-                {
-                    var closed = g.Name.LocalName == "LinearRing";
-                    if (closed && pts.Count > 1 && Vec3.Distance(pts[0], pts[^1]) < 1e-6) pts.RemoveAt(pts.Count - 1);
-                    result.Add(new PolylineEntity { Points = pts, Closed = closed, Label = name });
-                }
-            }
-        }
-        return result;
-    }
-
-    private static List<Vec3> ParseKmlCoordinates(string text, SiteCoordinateSystem cs)
-    {
-        var pts = new List<Vec3>();
-        foreach (var tuple in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var a = tuple.Split(',');
-            if (a.Length < 2 || !double.TryParse(a[0], NumberStyles.Float, Inv, out var lon) || !double.TryParse(a[1], NumberStyles.Float, Inv, out var lat)) continue;
-            var z = a.Length > 2 && double.TryParse(a[2], NumberStyles.Float, Inv, out var zz) ? zz : 0;
-            if (cs.UtmZone < 1) { cs.UtmZone = Utm.ZoneOf(lon); cs.SouthernHemisphere = lat < 0; }
-            var (e, n) = Utm.FromLatLon(lat, lon, cs.UtmZone);
-            if (cs.SouthernHemisphere && lat >= 0) n += 10000000;
-            pts.Add(new Vec3(e - cs.OffsetEasting, n - cs.OffsetNorthing, z - cs.OffsetElevation));
-        }
-        return pts;
-    }
 
     // ---- LAS point clouds ----------------------------------------------------------------------
 

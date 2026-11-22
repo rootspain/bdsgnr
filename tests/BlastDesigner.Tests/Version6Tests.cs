@@ -242,25 +242,6 @@ public class InterchangeTests
     }
 
     [Fact]
-    public void Kml_RoundTripsHoleCollars()
-    {
-        var p = BlastProject.CreateNew();
-        p.Coordinates = new SiteCoordinateSystem { UtmZone = 50, SouthernHemisphere = true, OffsetEasting = 390000, OffsetNorthing = 6460000 };
-        p.Add(new Hole { Label = "A1", Collar = new Vec3(123.4, 567.8, 30) });
-        var kml = Interchange.ExportKml(p, p.Entities);
-        var path = Path.Combine(Path.GetTempPath(), $"bd6_{Guid.NewGuid():N}.kml");
-        File.WriteAllText(path, kml);
-        try
-        {
-            var pt = Interchange.ImportKml(path, p.Coordinates).OfType<PointEntity>().Single();
-            Assert.Equal(123.4, pt.Position.X, 2);
-            Assert.Equal(567.8, pt.Position.Y, 2);
-            Assert.Equal("A1", pt.Label);
-        }
-        finally { File.Delete(path); }
-    }
-
-    [Fact]
     public void Iredes_RoundTripsHoles()
     {
         var p = BlastProject.CreateNew();

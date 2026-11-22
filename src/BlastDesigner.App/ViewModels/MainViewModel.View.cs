@@ -174,9 +174,6 @@ public sealed partial class MainViewModel
         yield return MenuEntry.Item("Zoom in", ZoomIn);
         yield return MenuEntry.Item("Zoom out", ZoomOut);
         yield return MenuEntry.Item("Undo zoom", UndoZoom);
-        yield return MenuEntry.Item("Plan view", PlanView);
-        yield return MenuEntry.Item("3D view", View3D);
-        yield return MenuEntry.Item("Reset orientation", ResetOrientation);
         yield return MenuEntry.Item("View selection", ZoomSelection);
         yield return MenuEntry.Check("Coordinates box", () => Settings.ShowCoordinatesBox, () => { Settings.ShowCoordinatesBox = !Settings.ShowCoordinatesBox; RefreshAll(); });
     }

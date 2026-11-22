@@ -22,6 +22,11 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Import and export in feet:** text file import — Units of the file and Angles of the file (a dip column counts from
   horizontal); DXF/DWG import — Drawing in feet; CSV export in the imperial system — in feet, inches and pounds, the
   unit in the name of a column, an angle from horizontal as a Dip column.
+- **Interface fonts and the tooltip look:** Program settings ▸ Appearance ▸ Fonts and Tooltip. The font of the ribbon
+  buttons (the icons and key marks as they were), the room above and below the ribbon buttons and between them, the
+  font of the names of all tabs (ribbon stages, right panel, windows), the size of the right panel (the fields grow with
+  the text), the font, background and text of the tooltips with a sample. Seen at once; Cancel brings the old back,
+  Reset the fonts the first.
 
 ### Changed
 - **The font size of the labels goes to the ties too:** the delays on the ties are written in the size of Visibility ▸
@@ -47,6 +52,17 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The shock tube in m/s:** on a downhole detonator in Available resources an m/s field stands beside the ms/m one, the
   speed as the data sheet of the product gives it. Typing in one fills the other at once (ms/m = 1000 / m/s); empty or 0
   is not counted.
+- **The view filters on the Visibility tab, a shorter View menu:** the menu no longer has the hole types, material types,
+  hole states, grid, axes, legends, hole and timing labels, Show, Collars only, Loading and Reverse draw order. The
+  Visibility tab adds to them Tie legend, Reverse draw order, Dummy holes, Material types and Hole state. View everything
+  of the View menu is Reset all view filters; the Only selected and Show all chips stay on Visibility, gone from the
+  Properties tab.
+- **A ribbon without repeats:** File has no From template and no Print group (they are on Output), Layout no Result
+  group (Quantities is on Analysis). On Output the large buttons are Reports (Ctrl+P) and Print plan. Charge in 3D on
+  Analysis and the L key switch the charges on and off.
+- **Keys and menu items:** Ctrl+E is Find empty hole (before, Edit selected and the Empty quick filter, which now has no
+  key). Reset orientation (plan context menu and view menu) and the repeated Find hole by detonator ID of the electronic
+  menu are gone. Blast view is called View along the blast direction in Russian.
 
 ## 0.3.10 — 2026-11-21
 

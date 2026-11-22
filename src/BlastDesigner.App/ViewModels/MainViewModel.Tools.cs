@@ -339,8 +339,15 @@ public sealed partial class MainViewModel
         SetStatus(Loc.F("{0} holes moved", moved));
     }
 
-    public void CreatePointsAt(string where)
+    /// <param name="where">collar, grade or toe; asked when null.</param>
+    public async Task CreatePointsAt(string? where = null)
     {
+        if (where == null)
+        {
+            var level = await Dialogs.Choose("Create points at holes", Loc.T("Level"), new[] { Loc.T("At the collar"), Loc.T("At grade"), Loc.T("At the toe") });
+            if (level is not int l) return;
+            where = l switch { 1 => "grade", 2 => "toe", _ => "collar" };
+        }
         var ids = SelectedHoleIds();
         Change("Create points", p =>
         {
@@ -397,7 +404,11 @@ public sealed partial class MainViewModel
     {
         var ids = SelectedHoleIds();
         Change(locked ? "Lock holes" : "Unlock holes", p => { foreach (var h in HolesById(p, ids)) h.Locked = locked; });
+        SetStatus(Loc.F(locked ? "{0} holes locked" : "{0} holes unlocked", ids.Count));
     }
+
+    /// <summary>One switch for the lock: locks the selected holes if any of them is unlocked, otherwise unlocks them all.</summary>
+    public void ToggleHoleLock() => LockHoles(Doc!.SelectedHoles.Any(h => !h.Locked));
 
     public void ConvertDummy(bool toDummy)
     {
@@ -1261,14 +1272,18 @@ public sealed partial class MainViewModel
 
     // ---- surfaces -------------------------------------------------------------------------
 
-    public async Task CreateSurface(bool breaklines)
+    /// <param name="breaklines">How the option in the window starts: lines are breaklines by default, since a surface cutting across a crest or toe is never what a survey means.</param>
+    public async Task CreateSurface(bool breaklines = true)
     {
         // holes and surfaces are not built from: the surface is bound to its objects and follows them
         var sel = Doc!.SelectedEntities.Where(SurfaceSources.CanBeSource).ToList();
         if (sel.Count == 0) { await Dialogs.Info(Loc.T("Select points, lines or polygons to build the surface from.")); return; }
         if (SurfaceSources.Build(sel, breaklines) == null) { await Dialogs.Info(Loc.T("The selected objects have fewer than three points apart in plan.")); return; }
-        var kind = await Dialogs.Choose("Create surface", Loc.T("Surface kind"), Enum.GetValues<SurfaceKind>().Select(k => Loc.Enum(k)).ToList(), 1);
-        if (kind is not int k) return;
+        var choice = await Dialogs.ChooseWithOption("Create surface", Loc.T("Surface kind"), Enum.GetValues<SurfaceKind>().Select(k => Loc.Enum(k)).ToList(), 1,
+            Loc.T("Lines are breaklines"), breaklines);
+        if (choice is not (int k, bool withBreaklines)) return;
+        if (withBreaklines != breaklines && SurfaceSources.Build(sel, withBreaklines) == null) { await Dialogs.Info(Loc.T("The selected objects have fewer than three points apart in plan.")); return; }
+        breaklines = withBreaklines;
         var ids = sel.Select(e => e.Id).ToHashSet();
         Change("Create surface", p =>
         {
@@ -1339,22 +1354,30 @@ public sealed partial class MainViewModel
         return p => { foreach (var pt in Surfaces.SegmentPoints(s, line.Points)) p.Add(new PointEntity { Position = pt }, SurfLayer(p)); };
     });
 
+    /// <summary>Expand surface…: by a distance, or to the selected polygon (offered first when one is selected with the surface).</summary>
+    public async Task ExpandSurfaceAsk()
+    {
+        var withPolygon = Doc!.SelectedEntities.OfType<SurfaceEntity>().Any() && Doc.SelectedEntities.OfType<PolylineEntity>().Any(l => l.Closed);
+        var how = await Dialogs.Choose("Expand surface", Loc.T("How to expand"), new[] { Loc.T("By a distance"), Loc.T("To the selected polygon") }, withPolygon ? 1 : 0);
+        if (how == null) return;
+        await (how == 1 ? ExpandSurfaceToPolygon() : SurfaceExpand());
+    }
+
     public Task SurfaceExpand() => SurfaceOp("Expand surface", async s =>
     {
         var d = await Dialogs.PromptNumber("Expand surface", Loc.T("Distance (m)"), 10);
         return d is double v ? p => p.Add(Surfaces.Expand(s, v), SurfLayer(p)) : null;
     });
 
-    public Task SurfaceSimplify(bool smooth) => SurfaceOp(smooth ? "Simplify surface with smoothing" : "Simplify surface", async s =>
+    /// <summary>Simplify surface…: by a vertical tolerance, with smoothing, or decimated to a grid, chosen in the window.</summary>
+    public Task SimplifySurfaceAsk() => SurfaceOp("Simplify surface", async s =>
     {
-        var d = await Dialogs.PromptNumber("Simplify surface", Loc.T("Vertical tolerance (m)"), 0.2);
-        return d is double v ? p => p.Add(Surfaces.Simplify(s, v, smooth), SurfLayer(p)) : null;
-    });
-
-    public Task SurfaceDecimate() => SurfaceOp("Decimate surface", async s =>
-    {
-        var d = await Dialogs.PromptNumber("Decimate surface", Loc.T("Cell size (m)"), 2);
-        return d is double v ? p => p.Add(Surfaces.Decimate(s, v), SurfLayer(p)) : null;
+        var how = await Dialogs.Choose("Simplify surface", Loc.T("Method"), new[] { Loc.T("By vertical tolerance"), Loc.T("By vertical tolerance with smoothing"), Loc.T("Decimate to a grid") });
+        if (how is not int m) return null;
+        var d = m == 2
+            ? await Dialogs.PromptNumber("Simplify surface", Loc.T("Cell size (m)"), 2)
+            : await Dialogs.PromptNumber("Simplify surface", Loc.T("Vertical tolerance (m)"), 0.2);
+        return d is double v ? p => p.Add(m == 2 ? Surfaces.Decimate(s, v) : Surfaces.Simplify(s, v, m == 1), SurfLayer(p)) : null;
     });
 
     public Task SurfaceImprove() => SurfaceOp("Improve surface geometry", s => Task.FromResult<Action<BlastProject>?>(p => p.Add(Surfaces.ImproveGeometry(s), SurfLayer(p))));
@@ -1387,10 +1410,13 @@ public sealed partial class MainViewModel
         return p => { foreach (var g in pegs) if (s.ElevationAt(g.Position.X, g.Position.Y) is double z) p.Add(new PointEntity { Position = g.Position.WithZ(z), Kind = PointKind.GradePeg, Label = g.Label }, SurfLayer(p)); };
     });
 
+    /// <summary>Create intersection of surfaces: of the two selected, or of all of them when more are selected.</summary>
     public async Task IntersectSurfaces()
     {
-        var surfaces = Doc!.SelectedEntities.OfType<SurfaceEntity>().Take(2).ToList();
-        if (surfaces.Count < 2) { await Dialogs.Info(Loc.T("Select two surfaces.")); return; }
+        var all = Doc!.SelectedEntities.OfType<SurfaceEntity>().ToList();
+        if (all.Count > 2) { await IntersectMultipleSurfaces(); return; }
+        var surfaces = all;
+        if (surfaces.Count < 2) { await Dialogs.Info(Loc.T("Select two or more surfaces.")); return; }
         Change("Create intersection of two surfaces", p => { foreach (var l in Surfaces.Intersect(surfaces[0], surfaces[1])) p.Add(l, SurfLayer(p)); });
     }
 

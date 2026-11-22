@@ -414,7 +414,7 @@ public sealed partial class MainViewModel
     private async Task EditProgramSettings(double scroll)
     {
         double? reopenAt = null;
-        await SettingsWindow.Show(Settings, ApplyProgramSettings, s => PreviewBackground = s?.BackgroundColor, scroll, y => reopenAt = y);
+        await SettingsWindow.Show(Settings, ApplyProgramSettings, s => PreviewBackground = s?.BackgroundColor, scroll, y => reopenAt = y, HotKeyGroups());
         // every label is taken when its control is made: a new language needs the window built again, once the settings
         // are closed; on Apply they open again over the new window, where they were
         if (Settings.Language == Loc.Language) return;
@@ -462,9 +462,19 @@ public sealed partial class MainViewModel
         s.Author = edited.Author;
         s.UnitSystem = edited.UnitSystem;
         s.HoleAngleReference = edited.HoleAngleReference;
+        s.RibbonFontSize = edited.RibbonFontSize;
+        s.RibbonButtonPadding = edited.RibbonButtonPadding;
+        s.RibbonButtonGap = edited.RibbonButtonGap;
+        s.TabFontSize = edited.TabFontSize;
+        s.PanelFontSize = edited.PanelFontSize;
+        s.ToolTipFontSize = edited.ToolTipFontSize;
+        s.ToolTipBackground = edited.ToolTipBackground;
+        s.ToolTipForeground = edited.ToolTipForeground;
+        s.ClampFonts();
         s.ApplyUnits();
         s.Save();
         Look.ApplyTheme(s.IsLight, s.AccentColor);
+        Look.ApplyFonts(s);
         View.SnapEnabled = s.SnapToObjects;
         View.TargetRadius = s.TargetRadiusPixels;
         View.ShowFps = s.ShowFps;

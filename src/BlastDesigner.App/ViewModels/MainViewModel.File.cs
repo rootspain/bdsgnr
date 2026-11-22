@@ -298,12 +298,19 @@ public sealed partial class MainViewModel
         SetStatus(status);
     }
 
-    public async Task ImportStr(string? path, bool ignoreDiameters)
+    /// <param name="ignoreDiameters">Asked after the file is chosen when null.</param>
+    public async Task ImportStr(string? path, bool? ignoreDiameters = null)
     {
         EnsureProject();
         path ??= await Dialogs.OpenFile("Import string file", ("String files", new[] { "*.str" }));
         if (path == null) return;
-        var items = CadFiles.ImportStr(path, ignoreDiameters);
+        if (ignoreDiameters == null)
+        {
+            var d = await Dialogs.Choose("Import string file", Loc.T("Hole diameters"), new[] { Loc.T("Read from the file"), Loc.T("Do not import") });
+            if (d == null) return;
+            ignoreDiameters = d == 1;
+        }
+        var items = CadFiles.ImportStr(path, ignoreDiameters.Value);
         AddImported(Loc.T("Import string file"), items.Select(e => (Path.GetFileNameWithoutExtension(path), e)), false);
     }
 
@@ -405,6 +412,14 @@ public sealed partial class MainViewModel
     public Task ExportStr() => ExportText("Export string file", BaseName, ".str", CadFiles.ExportStr(ExportSet(), Project!.Header.Name), "String file");
     public Task ExportQuantities() => ExportText("Export quantities", BaseName + "_quantities", ".csv", TextFiles.ExportQuantities(Quantities.Compute(Project!)), "CSV");
     public Task ExportDrillPlan() => ExportText("Export drill plan", BaseName + "_drillplan", ".xml", CadFiles.ExportDrillPlan(Project!, ExportHolesSet()), "XML");
+    /// <summary>File ▸ Export ▸ Firing data: plain, with cosines or extended, chosen in one window.</summary>
+    public async Task ExportFiringData()
+    {
+        var kind = await Dialogs.Choose("Export firing data", Loc.T("Format"), new[] { Loc.T("Firing data"), Loc.T("Firing data with cosines"), Loc.T("Extended firing data with cosines") });
+        if (kind == null) return;
+        await (kind == 2 ? ExportExtendedFiring() : ExportFiring(kind == 1));
+    }
+
     public Task ExportFiring(bool cosines) => ExportText("Export firing data", BaseName + "_firing", ".csv", TextFiles.ExportFiringData(Project!, ExportHolesSet(), cosines), "CSV");
     public Task ExportDeckTable() => ExportText("Export deck table", BaseName + "_decks", ".csv", TextFiles.ExportDeckTable(Project!, ExportHolesSet()), "CSV");
     public Task ExportLoadSheet() => ExportText("Export load sheet", BaseName + "_loadsheet", ".csv", TextFiles.ExportLoadSheet(Project!, ExportHolesSet()), "CSV");
