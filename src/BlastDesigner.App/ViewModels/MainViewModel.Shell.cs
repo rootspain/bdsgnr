@@ -275,8 +275,9 @@ public sealed partial class MainViewModel
         var parts = text.Split(new[] { ' ', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(s => double.TryParse(s.Replace(',', '.'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : double.NaN).ToList();
         if (parts.Count < 2 || parts.Take(Math.Min(3, parts.Count)).Any(double.IsNaN)) { await Dialogs.Info(Loc.T("Enter two or three numbers.")); return; }
-        var z = parts.Count > 2 ? parts[2] : (Project!.Holes.Any() ? Project.Holes.Average(h => h.Collar.Z) : View.Camera.Target.Z);
-        var w = new Domain.Geometry.Vec3(parts[0], parts[1], z);
+        // typed in the unit of lengths shown
+        var z = parts.Count > 2 ? Qty.Store(BlastDesigner.Domain.Quantity.Length, parts[2]) : (Project!.Holes.Any() ? Project.Holes.Average(h => h.Collar.Z) : View.Camera.Target.Z);
+        var w = new Domain.Geometry.Vec3(Qty.Store(BlastDesigner.Domain.Quantity.Length, parts[0]), Qty.Store(BlastDesigner.Domain.Quantity.Length, parts[1]), z);
         var (sx, sy) = View.Camera.ToScreen(w);
         ActiveTool.PointerPressed(new Controls.ToolPointer { X = sx, Y = sy, World = w, Snapped = w, Left = true, ClickCount = 1 });
         View.Redraw();

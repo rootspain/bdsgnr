@@ -321,7 +321,7 @@ public sealed partial class MainViewModel
     public async Task AddHolesAlongPolyline()
     {
         if (!await RequireSelection<PolylineEntity>("a polyline")) return;
-        var spacing = await Dialogs.PromptNumber("Add along selected polyline", Loc.T("Spacing (m)"), Project!.Design.Spacing);
+        var spacing = await Dialogs.PromptNumber("Add along selected polyline", Loc.T("Spacing (m)"), BlastDesigner.Domain.Quantity.Length, Project!.Design.Spacing);
         if (spacing is not double s || s <= 0) return;
         foreach (var pl in Doc!.SelectedEntities.OfType<PolylineEntity>().ToList())
             AddRow(pl.Closed ? pl.Points.Append(pl.Points[0]).ToList() : pl.Points, s);
@@ -332,7 +332,7 @@ public sealed partial class MainViewModel
         var holes = Doc!.SelectedHoles.Select(h => h.Id).ToHashSet();
         var pts = Doc.SelectedEntities.OfType<PointEntity>().Select(p => p.Position).ToList();
         if (holes.Count == 0 || pts.Count == 0) { await Dialogs.Info(Loc.T("Select holes and the points to move them to.")); return; }
-        var max = await Dialogs.PromptNumber("Move to selected points", Loc.T("Maximum move distance (m)"), Project!.Design.Spacing);
+        var max = await Dialogs.PromptNumber("Move to selected points", Loc.T("Maximum move distance (m)"), BlastDesigner.Domain.Quantity.Length, Project!.Design.Spacing);
         if (max is not double m) return;
         int moved = 0;
         Change("Move holes to points", p => moved = HoleDesign.MoveToPoints(HolesById(p, holes), pts, m));
@@ -409,7 +409,7 @@ public sealed partial class MainViewModel
     {
         var lines = Doc?.SelectedEntities.OfType<PolylineEntity>().Take(2).ToList();
         if (lines is not { Count: 2 }) { await Dialogs.Info(Loc.T("Select two polylines.")); return; }
-        var spacing = await Dialogs.PromptNumber("Drill holes between lines", Loc.T("Spacing (m)"), Project!.Design.Spacing);
+        var spacing = await Dialogs.PromptNumber("Drill holes between lines", Loc.T("Spacing (m)"), BlastDesigner.Domain.Quantity.Length, Project!.Design.Spacing);
         if (spacing is not double s) return;
         var rowsGuess = Math.Max(2, (int)Math.Round(GeoMath.DistanceToPolyline2D(lines[0].Points, lines[1].Points[0], false) / Project.Design.Burden) + 1);
         var rows = await Dialogs.PromptNumber("Drill holes between lines", Loc.T("Number of rows"), rowsGuess);
@@ -426,7 +426,7 @@ public sealed partial class MainViewModel
 
     public async Task CheckDuplicates()
     {
-        var tol = await Dialogs.PromptNumber("Check for duplicates", Loc.T("Distance tolerance (m)"), Project!.Design.DuplicateTolerance);
+        var tol = await Dialogs.PromptNumber("Check for duplicates", Loc.T("Distance tolerance (m)"), BlastDesigner.Domain.Quantity.Length, Project!.Design.DuplicateTolerance);
         if (tol is not double t) return;
         var pairs = HoleDesign.FindDuplicates(Project.Holes.ToList(), t);
         SetHighlight(pairs.SelectMany(x => new[] { x.A.Id, x.B.Id }));

@@ -14,13 +14,16 @@ namespace BlastDesigner.App.Views;
 public static class CadImportWindow
 {
     private static CadImportOptions _last = new();
+    private static bool _chosen;
 
     public static async Task<CadImportOptions?> Show(string path)
     {
         var options = new CadImportOptions
         {
             MinPointDistance = _last.MinPointDistance, FacesToSurfaces = _last.FacesToSurfaces, ImportText = _last.ImportText,
-            HiddenLayers = _last.HiddenLayers, SeparateFlatLines = _last.SeparateFlatLines
+            HiddenLayers = _last.HiddenLayers, SeparateFlatLines = _last.SeparateFlatLines,
+            // a drawing of a user of feet is in feet: the first time by the units of the program, then as last chosen
+            InFeet = _chosen ? _last.InFeet : BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Imperial
         };
         var form = new CadImportForm(path, options);
         var w = new Window
@@ -38,6 +41,7 @@ public static class CadImportWindow
         await Dialogs.ShowModal(w);
         if (!form.Applied) return null;
         _last = options;
+        _chosen = true;
         return options;
     }
 }
@@ -113,9 +117,13 @@ public sealed class CadImportForm : DockPanel
         body.Children.Add(Card("Objects",
             Setting("faces", "Faces to surfaces", "3D faces of a layer become one surface", _options.FacesToSurfaces, v => _options.FacesToSurfaces = v),
             Setting("text", "Import text", "Labels and multi-line text, without the formatting codes", _options.ImportText, v => _options.ImportText = v)));
+        var unitText = new TextBlock { Text = Loc.Ui(_options.InFeet ? "ft" : "m"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
+        body.Children.Add(Card("Units",
+            Setting("inFeet", "Drawing in feet", "The coordinates of the drawing are in feet: they are taken to metres, as the blast keeps them",
+                _options.InFeet, v => { _options.InFeet = v; unitText.Text = Loc.Ui(v ? "ft" : "m"); })));
         body.Children.Add(Card("Lines",
             Row(Describe("Min point distance", "Line vertices closer than this are dropped; 0 keeps them all"),
-                Ui.Row(6, distance, new TextBlock { Text = Loc.T("m"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center }))));
+                Ui.Row(6, distance, unitText))));
         Children.Add(new ScrollViewer { Content = body });
 
         AddHandler(KeyDownEvent, (_, e) =>

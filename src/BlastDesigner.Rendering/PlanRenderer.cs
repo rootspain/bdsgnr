@@ -123,7 +123,19 @@ public static class PlanRenderer
     public static Func<string, string> Translate { get; set; } = s => s;
 
     private static string T(string s) => Translate(s);
-    private static string F(string format, params object[] args) => string.Format(Translate(format), args);
+    /// <summary>A format translated and filled; a number followed by a metric unit in the units of the program.</summary>
+    private static string F(string format, params object[] args)
+    {
+        var (translated, values) = BlastDesigner.Domain.MeasureText.Formatted(Translate(format), args);
+        return string.Format(translated, values);
+    }
+
+    /// <summary>A text with numbers written with a metric unit in the units of the program.</summary>
+    private static string U(string text) => BlastDesigner.Domain.MeasureText.InText(text);
+
+    /// <summary>A round step of lengths, m, about <paramref name="rawMetres"/>: round in the unit of lengths shown (10 ft, not 3.048 m).</summary>
+    public static double LengthStep(double rawMetres) =>
+        BlastDesigner.Domain.Measure.Store(BlastDesigner.Domain.Quantity.Length, NiceStep(BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, rawMetres)));
 
     [ThreadStatic] private static bool _dark;
     /// <summary>Collars coloured by a calculated property this frame: the property and the range of its values over the drawn holes.</summary>
@@ -1057,7 +1069,7 @@ public static class PlanRenderer
         {
             DrawArrow(c, cam, a.From, a.To, line, head, 11);
             if (a.BothEnds) DrawArrow(c, cam, a.To, a.From, line, head, 11);
-            var label = $"{a.Length:0} {Translate("m")}";
+            var label = F("{0:0} m", a.Length);
             var at = Vec3.Lerp(a.From, a.To, 0.5);
             if (a.Kind == ZoneArrowKind.Width)
             {
@@ -1135,7 +1147,7 @@ public static class PlanRenderer
         DrawPolyline(c, cam, new[] { d.End, b }, false, stroke);
         DrawPolyline(c, cam, new[] { a, b }, false, stroke);
         var (x, y) = cam.ToScreen(Vec3.Lerp(a, b, 0.5));
-        c.DrawText($"{d.Distance:0.00} m", x + 3, y - 3, text);
+        c.DrawText(U($"{d.Distance:0.00} m"), x + 3, y - 3, text);
     }
 
     /// <summary>Own colour of a timing line, as drawn when not selected: its colour override, else the colour of its style.</summary>
@@ -1164,7 +1176,7 @@ public static class PlanRenderer
             var end = op.Position + dir * length;
             DrawArrow(c, cam, op.Position, end, line, head, 7);
             var (ex, ey) = cam.ToScreen(end);
-            c.DrawText(FormattableString.Invariant($"{delay:0.#}ms / {length:0.##} m"), ex + 5, ey - 4, text);
+            c.DrawText(U(FormattableString.Invariant($"{delay:0.#}ms / {length:0.##} m")), ex + 5, ey - 4, text);
         }
         text.Color = label;
     }
@@ -1268,7 +1280,7 @@ public static class PlanRenderer
             c.DrawLine(px - PointFrontRadius - 4, py, px + PointFrontRadius + 4, py, thin);
             c.DrawLine(px, py - PointFrontRadius - 4, px, py + PointFrontRadius + 4, thin);
             var relief = tl.Segments.Count > 0 ? tl.Segments[0].ReliefMsPerM : 0;
-            c.DrawText($"{relief:0.0} {T("ms/m")}", px + PointFrontRadius + 6, py - PointFrontRadius - 2, text);
+            c.DrawText(F("{0:0.0} ms/m", relief), px + PointFrontRadius + 6, py - PointFrontRadius - 2, text);
         }
         else if (tl.Style == TimingLineStyle.AdvancedBurn)
         {
@@ -1999,18 +2011,18 @@ public static class PlanRenderer
         switch (l)
         {
             case HoleLabel.Number: yield return h.Label; break;
-            case HoleLabel.Length: yield return $"L {h.EffectiveLength:0.0}"; break;
-            case HoleLabel.Diameter: yield return $"Ø {h.Diameter:0}"; break;
-            case HoleLabel.Angle: yield return $"α {h.Angle:0}°"; break;
+            case HoleLabel.Length: yield return $"L {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.EffectiveLength):0.0}"; break;
+            case HoleLabel.Diameter: yield return BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? $"Ø {h.Diameter:0}" : $"Ø {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Diameter, h.Diameter):0.##}"; break;
+            case HoleLabel.Angle: yield return $"α {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.HoleAngle, h.Angle):0}°"; break;
             case HoleLabel.Bearing: yield return $"Az {h.Bearing:0}°"; break;
-            case HoleLabel.Elevation: yield return $"Z {h.Collar.Z:0.0}"; break;
-            case HoleLabel.ExplosiveMass: yield return $"{Charging.ExplosiveMass(project, h):0.0} kg"; break;
+            case HoleLabel.Elevation: yield return $"Z {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.Z):0.0}"; break;
+            case HoleLabel.ExplosiveMass: yield return U($"{Charging.ExplosiveMass(project, h):0.0} kg"); break;
             case HoleLabel.DeckMasses:
                 foreach (var d in h.Decks.OrderBy(d => d.Top))
-                    if (project.FindProduct(d.ProductId) is { IsExplosive: true }) yield return $"▪ {Charging.DeckMass(project, h, d):0.0} kg";
+                    if (project.FindProduct(d.ProductId) is { IsExplosive: true }) yield return U($"▪ {Charging.DeckMass(project, h, d):0.0} kg");
                 break;
             case HoleLabel.DeckSequence: if (DeckSequence(project, h) is string seq) yield return F("Decks: {0}", seq); break;
-            case HoleLabel.Temperature: if (h.Temperature is double temp) yield return $"{temp:0} °C"; break;
+            case HoleLabel.Temperature: if (h.Temperature is double temp) yield return U($"{temp:0} °C"); break;
             case HoleLabel.DetonatorId: if (!string.IsNullOrWhiteSpace(h.DetonatorId)) yield return h.DetonatorId; break;
             case HoleLabel.RouteNumber: if (h.RouteNumber is int route) yield return h.RouteLine is string line ? $"{line} {route}" : route.ToString(); break;
             case HoleLabel.Type: yield return $"T{h.HoleType}"; break;
@@ -2164,7 +2176,7 @@ public static class PlanRenderer
     private static void DrawGrid(SKCanvas c, Camera cam, SKPaint stroke, SKPaint text)
     {
         if (!cam.IsPlan) return;
-        var step = NiceStep(100 / cam.Scale);
+        var step = LengthStep(100 / cam.Scale);
         var a = cam.ToWorld(0, cam.Height);
         var b = cam.ToWorld(cam.Width, 0);
         var corners = new[] { a, b, cam.ToWorld(0, 0), cam.ToWorld(cam.Width, cam.Height) };
@@ -2180,14 +2192,14 @@ public static class PlanRenderer
             var (sx1, sy1) = cam.ToScreen(new Vec3(x, minY, cam.Target.Z));
             var (sx2, sy2) = cam.ToScreen(new Vec3(x, maxY, cam.Target.Z));
             c.DrawLine(sx1, sy1, sx2, sy2, stroke);
-            if (Math.Abs(cam.Yaw) < 1e-6) c.DrawText(x.ToString("0"), sx1 + 2, (float)cam.Height - 4, text);
+            if (Math.Abs(cam.Yaw) < 1e-6) c.DrawText(BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, x).ToString("0"), sx1 + 2, (float)cam.Height - 4, text);
         }
         for (var y = Math.Floor(minY / step) * step; y <= maxY; y += step)
         {
             var (sx1, sy1) = cam.ToScreen(new Vec3(minX, y, cam.Target.Z));
             var (sx2, sy2) = cam.ToScreen(new Vec3(maxX, y, cam.Target.Z));
             c.DrawLine(sx1, sy1, sx2, sy2, stroke);
-            if (Math.Abs(cam.Yaw) < 1e-6) c.DrawText(y.ToString("0"), 2, sy1 - 2, text);
+            if (Math.Abs(cam.Yaw) < 1e-6) c.DrawText(BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, y).ToString("0"), 2, sy1 - 2, text);
         }
         text.TextSize = 11;
     }
@@ -2195,7 +2207,7 @@ public static class PlanRenderer
     /// <summary>The grid of a section: a line at each elevation, with its figure, and lines across at the same step along the section.</summary>
     private static void DrawSectionGrid(SKCanvas c, Camera cam, SKPaint stroke, SKPaint text)
     {
-        var step = NiceStep(100 / cam.Scale);
+        var step = LengthStep(100 / cam.Scale);
         double halfWidth = cam.Width / 2 / cam.Scale, halfHeight = cam.Height / 2 / cam.Scale;
         float w = (float)cam.Width, h = (float)cam.Height;
         var target = cam.Target;
@@ -2207,7 +2219,7 @@ public static class PlanRenderer
         {
             var y = cam.ToScreen(target.WithZ(z)).Y;
             c.DrawLine(0, y, w, y, stroke);
-            c.DrawText(z.ToString("0"), 2, y - 2, text);
+            c.DrawText(BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, z).ToString("0"), 2, y - 2, text);
         }
         for (var d = Math.Floor(-halfWidth / step) * step; d <= halfWidth; d += step)
         {
@@ -2286,13 +2298,13 @@ public static class PlanRenderer
             c.DrawRoundRect(new SKRect(barL, top, barL + barW, bottom), 3, 3, bar);
         text.TextSize = 11;
         text.Color = Ink;
-        c.DrawText($"{max:0.0} m", barL - 4, top - 6, text);
-        c.DrawText($"{min:0.0} m", barL - 4, bottom + 15, text);
+        c.DrawText(U($"{max:0.0} m"), barL - 4, top - 6, text);
+        c.DrawText(U($"{min:0.0} m"), barL - 4, bottom + 15, text);
     }
 
     private static void DrawScaleBar(SKCanvas c, Camera cam, SKPaint stroke, SKPaint text)
     {
-        var metres = NiceStep(120 / cam.Scale);
+        var metres = LengthStep(120 / cam.Scale);
         var px = (float)(metres * cam.Scale);
         var x = (float)cam.Width - px - 20;
         var y = (float)cam.Height - 20;
@@ -2302,7 +2314,9 @@ public static class PlanRenderer
         c.DrawLine(x, y - 4, x, y + 4, stroke);
         c.DrawLine(x + px, y - 4, x + px, y + 4, stroke);
         text.Color = Ink;
-        c.DrawText($"{metres:0.##} m", x, y - 6, text);
+        // the round step as shown: 50 ft, not 50.00 ft
+        c.DrawText(BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? $"{metres:0.##} m"
+            : $"{BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, metres):0.##} ft", x, y - 6, text);
     }
 
     private static void DrawHoleLegend(SKCanvas c, BlastProject project, List<Hole> holes, SKPaint fill, SKPaint text)

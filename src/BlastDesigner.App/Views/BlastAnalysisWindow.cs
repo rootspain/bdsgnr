@@ -185,15 +185,15 @@ public static partial class AnalysisWindows
         // ---- burden relief: the upper limit of the scale, and the relief under the cursor
         var limit = new TextBox
         {
-            Text = _burdenReliefLimit is double u ? u.ToString("0.##", CultureInfo.CurrentCulture) : "",
+            Text = _burdenReliefLimit is double u ? Qty.Text(BlastDesigner.Domain.Quantity.DelayPerLength, u, "0.##") : "",
             Width = 110, Height = 32, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong, Name = "reliefLimit",
-            InnerRightContent = new TextBlock { Text = Loc.Ui("ms/m"), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }
+            InnerRightContent = new TextBlock { Text = Qty.Sym(BlastDesigner.Domain.Quantity.DelayPerLength), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }
         };
         ToolTip.SetTip(limit, Loc.T("Empty: the most relief of the blast. More than the limit is drawn in red."));
         limit.TextChanged += (_, _) =>
         {
             var text = (limit.Text ?? "").Trim().Replace(',', '.');
-            double? value = text.Length == 0 ? null : double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v > 0 ? v : relief.UpperLimit;
+            double? value = text.Length == 0 ? null : double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) && v > 0 ? Qty.Store(BlastDesigner.Domain.Quantity.DelayPerLength, v) : relief.UpperLimit;
             relief.UpperLimit = planRelief.UpperLimit = _burdenReliefLimit = value;
             view.Redraw();
             vm.View.Redraw();

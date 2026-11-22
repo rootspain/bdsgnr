@@ -310,6 +310,15 @@ public sealed class HoleEditForm : DockPanel
         return box;
     }
 
+    /// <summary>A number field of a quantity: shown and typed in the units of the program, kept as the hole keeps it.</summary>
+    private TextBox Number(string key, Quantity q, Func<Hole, double?> get, Action<Hole, double?> set, string format = "0.0##", string? empty = null, Func<double?, string?>? check = null)
+    {
+        var box = Number(key, h => Qty.Show(q, get(h)), (h, v) => set(h, Qty.Store(q, v)), Qty.Sym(q), format, empty, check == null ? null : v => check(Qty.Store(q, v)));
+        var shown = _reshow[key];
+        _reshow[key] = values => shown(values.Select(v => Qty.Show(q, v)));
+        return box;
+    }
+
     private TextBox TextField(string key, Func<Hole, string> get, Action<Hole, string> set, bool multiline = false)
     {
         var mixed = Mixed(get);
@@ -464,7 +473,7 @@ public sealed class HoleEditForm : DockPanel
             first = false;
             column.Inlines!.Add(new Run("■ ") { Foreground = new SolidColorBrush(Color.FromUInt32(prod?.Color ?? 0xFF808080)) });
             column.Inlines.Add(new Run((prod?.Name ?? "?") + " "));
-            column.Inlines.Add(new Run(N(d.Length, "0.0") + " " + L("m")) { FontFamily = Look.Mono, Foreground = Look.Text });
+            column.Inlines.Add(new Run(Qty.WithUnit(Quantity.Length, d.Length, "0.0")) { FontFamily = Look.Mono, Foreground = Look.Text });
         }
         _charge.Children.Add(column);
         var primers = h.Decks.Sum(d => d.Primers.Count);
@@ -474,9 +483,9 @@ public sealed class HoleEditForm : DockPanel
             Foreground = Look.Muted,
             Inlines = new InlineCollection
             {
-                new Run(L("Explosive") + " "), new Run(N(Charging.ExplosiveMass(_p, h), "0.0") + " " + L("kg")) { FontFamily = Look.Mono, Foreground = Look.Text },
+                new Run(L("Explosive") + " "), new Run(Qty.WithUnit(Quantity.Mass, Charging.ExplosiveMass(_p, h), "0.0")) { FontFamily = Look.Mono, Foreground = Look.Text },
                 new Run("   " + L("Primers") + " "), new Run(primers.ToString(CultureInfo.CurrentCulture)) { FontFamily = Look.Mono, Foreground = Look.Text },
-                new Run("   " + L("Top stemming") + " "), new Run(N(Charging.TopStemming(_p, h), "0.0") + " " + L("m")) { FontFamily = Look.Mono, Foreground = Look.Text }
+                new Run("   " + L("Top stemming") + " "), new Run(Qty.WithUnit(Quantity.Length, Charging.TopStemming(_p, h), "0.0")) { FontFamily = Look.Mono, Foreground = Look.Text }
             }
         });
         if (Charging.HasLoadingWarning(_p, h))
@@ -489,7 +498,7 @@ public sealed class HoleEditForm : DockPanel
     {
         // Moving the collar moves the surveyed bore track with it.
         TextBox Axis(string key, Func<Vec3, double> get, Func<double, Vec3> offset) =>
-            Number(key, h => get(h.Collar), (h, v) => { if (v is double d) h.Translate(offset(d - get(h.Collar))); }, "m", "0.000");
+            Number(key, Quantity.Length, h => get(h.Collar), (h, v) => { if (v is double d) h.Translate(offset(d - get(h.Collar))); }, "0.000");
         return new StackPanel
         {
             Spacing = 8,
@@ -513,9 +522,9 @@ public sealed class HoleEditForm : DockPanel
     /// </summary>
     private Control ToLevel()
     {
-        var box = Number(nameof(Hole.ToLevel), h => h.ToLevel, (h, v) => h.ToLevel = v, "m", "0.0##", L("not set"), v =>
+        var box = Number(nameof(Hole.ToLevel), Quantity.Length, h => h.ToLevel, (h, v) => h.ToLevel = v, "0.0##", L("not set"), v =>
             v is double z && _holes.FirstOrDefault(h => !HoleLevel.Reaches(h, z)) is { } low
-                ? Loc.F("The collar of hole {0} ({1:0.###} m) is not above the level {2:0.###} m.", low.Label, low.Collar.Z, z)
+                ? Loc.F("The collar of hole {0} ({1}) is not above the level {2}.", low.Label, Qty.WithUnit(Quantity.Length, low.Collar.Z, "0.###"), Qty.WithUnit(Quantity.Length, z, "0.###"))
                 : null);
         ToolTip.SetTip(box, PropertiesPanel.LengthTip());
         var toSurface = Ui.Flat(Look.Icon("surface", 14, Look.TextSoft), L("To the surface: the holes take as their level the elevation where their line from the collar meets the grade surface, or the first surface when they meet no grade"), () => _ = ToSurface(), 32, 32);
@@ -553,15 +562,15 @@ public sealed class HoleEditForm : DockPanel
     }
 
     private Control GeometryFields() => Fields(2,
-        Labeled("Length", LengthTipped(Number(nameof(Hole.Length), h => h.Length, (h, v) => h.Length = Math.Max(0, v ?? 0), "m"))),
+        Labeled("Length", LengthTipped(Number(nameof(Hole.Length), Quantity.Length, h => h.Length, (h, v) => h.Length = Math.Max(0, v ?? 0)))),
         Labeled("To level", ToLevel()),
-        Labeled("Diameter", Number(nameof(Hole.Diameter), h => h.Diameter, (h, v) => h.Diameter = Math.Max(0, v ?? 0), "mm", "0.#")),
-        Labeled("Subdrill", Number(nameof(Hole.Subdrill), h => h.Subdrill, (h, v) => h.Subdrill = v ?? 0, "m")),
-        Labeled("Actual length", Number(nameof(Hole.ActualLength), h => h.ActualLength, (h, v) => h.ActualLength = v, "m", empty: L("not measured"))),
-        Labeled("Angle", Number(nameof(Hole.Angle), h => h.Angle, (h, v) => h.Angle = Math.Clamp(v ?? 0, 0, 180), "°", "0.#")),
+        Labeled("Diameter", Number(nameof(Hole.Diameter), Quantity.Diameter, h => h.Diameter, (h, v) => h.Diameter = Math.Max(0, v ?? 0), BlastDesigner.Domain.Measure.Format(Quantity.Diameter))),
+        Labeled("Subdrill", Number(nameof(Hole.Subdrill), Quantity.Length, h => h.Subdrill, (h, v) => h.Subdrill = v ?? 0)),
+        Labeled("Actual length", Number(nameof(Hole.ActualLength), Quantity.Length, h => h.ActualLength, (h, v) => h.ActualLength = v, empty: L("not measured"))),
+        Labeled("Angle", Number(nameof(Hole.Angle), h => BlastDesigner.Domain.Measure.Show(Quantity.HoleAngle, h.Angle), (h, v) => h.Angle = Math.Clamp(BlastDesigner.Domain.Measure.Store(Quantity.HoleAngle, v ?? BlastDesigner.Domain.Measure.Show(Quantity.HoleAngle, 0)), 0, 180), "°", "0.#")),
         Labeled("Bearing", Number(nameof(Hole.Bearing), h => h.Bearing, (h, v) => h.Bearing = GeoMath.NormalizeBearing(v ?? 0), "°", "0.#")),
-        Labeled("Water depth", Number(nameof(Hole.WaterDepth), h => h.WaterDepth, (h, v) => h.WaterDepth = Math.Max(0, v ?? 0), "m")),
-        Labeled("Temperature", Number(nameof(Hole.Temperature), h => h.Temperature, (h, v) => h.Temperature = v, "°C", "0.#", L("not measured"))));
+        Labeled("Water depth", Number(nameof(Hole.WaterDepth), Quantity.Length, h => h.WaterDepth, (h, v) => h.WaterDepth = Math.Max(0, v ?? 0))),
+        Labeled("Temperature", Number(nameof(Hole.Temperature), Quantity.Temperature, h => h.Temperature, (h, v) => h.Temperature = v, "0.#", L("not measured"))));
 
     private Control ClassFields() => new StackPanel
     {
@@ -667,7 +676,7 @@ public sealed class HoleEditForm : DockPanel
         FillExceptions();
         var t = _draft.Toe;
         _toe.Text = _holes.Count == 1 || !Edit.Fields.Keys.Any(k => k.StartsWith("Collar", StringComparison.Ordinal))
-            ? L("Toe") + ":  X " + N(t.X, "0.000") + "   Y " + N(t.Y, "0.000") + "   Z " + N(t.Z, "0.000") + (_holes.Count > 1 ? "  (" + L("first hole") + ")" : "")
+            ? L("Toe") + ":  X " + Qty.Text(Quantity.Length, t.X, "0.000") + "   Y " + Qty.Text(Quantity.Length, t.Y, "0.000") + "   Z " + Qty.Text(Quantity.Length, t.Z, "0.000") + (_holes.Count > 1 ? "  (" + L("first hole") + ")" : "")
             : "";
     }
 }

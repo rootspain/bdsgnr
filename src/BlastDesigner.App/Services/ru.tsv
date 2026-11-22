@@ -2673,7 +2673,7 @@ ui:Plan, 3D and printed plans: the hole number, in blue. Tells the holes apart i
 ui:Plan and 3D: "L" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length.	План и 3D: «L» у устья — замеренная длина, если есть замер, иначе проектная. Используется в расчёте колонки заряда и забойки, в метрах бурения и стоимости бурения, при подборе правил заряжания по длине.
 ui:Plan and 3D: "Ø" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter.	План и 3D: «Ø» в мм у устья. Определяет погонную массу и массу ВВ, минимальную забойку (в диаметрах), прогноз дробления и подбор правил заряжания по диаметру.
 ui:Plan and 3D: "Z", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast.	План и 3D: «Z» — отметка устья. Используется при расчёте длины до подошвы уступа в проекте, на разрезах и в объёме блока.
-ui:Plan and 3D: "α", the angle from vertical. Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check.	План и 3D: «α» — угол от вертикали. Определяет положение забоя; используется для высоты уступа в прогнозе дробления, разлёте и проверке допусков бурения.
+ui:Plan and 3D: "α", the angle of the hole as Program settings ▸ Units count it (from vertical or from horizontal). Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check.	План и 3D: «α» — угол скважины, как его отсчитывают Настройки программы ▸ Единицы (от вертикали или от горизонтали). Определяет положение забоя; используется для высоты уступа в прогнозе дробления, разлёте и проверке допусков бурения.
 ui:Plan and 3D: "Az", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check.	План и 3D: «Az» — азимут наклона по часовой от севера. Определяет положение забоя наклонной скважины; используется в проверке допусков бурения.
 ui:Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations.	План и 3D: замеренная температура в °C, только у скважин с замером. Нужна, чтобы видеть горячие или реакционные породы перед заряжанием; в расчётах не участвует.
 ui:Plan and 3D: the line from collar to toe with a dot at the toe. Shows the direction and inclination of the holes; display only, the calculations use the hole data whether it is on or off.	План и 3D: линия от устья до забоя с точкой в забое. Показывает направление и наклон скважин; только отображение, расчёты используют данные скважин независимо от галочки.
@@ -3606,3 +3606,24 @@ ui:does not fit	не подходит
 {0} ties created; holes with electronic detonators only left out: {1}	Создано связей: {0}; скважины только с электронными детонаторами пропущены: {1}
 Hole {0} has no electronic detonator: an ESI tie does not go to it. Choose a product of another type in the Initiation catalogue	В скважине {0} нет электронного детонатора: связь ЭСИ к ней не проводится. Выберите в «Каталоге СИ» изделие другого типа
 Hole {0} has electronic detonators only: a tie goes to it with an ESI product. Choose ESI in the Initiation catalogue	В скважине {0} только электронные детонаторы: к ней проводится только связь ЭСИ. Выберите ЭСИ в «Каталоге СИ»
+ui:Units	Единицы
+ui:Hole angle	Угол скважины
+ui:From vertical (0° vertical)	От вертикали (0° — вертикальная)
+ui:From horizontal (90° vertical)	От горизонтали (90° — вертикальная)
+ui:How the angle of a hole is shown and typed: fields, labels, tables, reports. The blast keeps it the same either way.	Как угол скважины показывается и вводится: поля, подписи, таблицы, отчёты. В проекте он хранится одинаково при любом выборе.
+The collar of hole {0} ({1}) is not above the level {2}.	Устье скважины {0} ({1}) не выше отметки {2}.
+at {0}	на {0}
+ui:ms/10 ft	мс/10 ft
+Short tons	Короткие тонны
+ui:Metric (m, mm, kg)	Метрическая (м, мм, кг)
+ui:Imperial (ft, in, lb)	Имперская (ft, in, lb)
+ui:What values are shown and typed in: fields, labels, tables, reports, exports. The blast keeps metres and kilograms either way.	В каких единицах значения показываются и вводятся: поля, подписи, таблицы, отчёты, экспорт. В проекте хранятся метры и килограммы при любом выборе.
+{0:0.0} ms/m	{0:0.0} мс/м
+ui:Metres, millimetres	Метры, миллиметры
+ui:Feet, inches	Футы, дюймы
+ui:Units of the file	Единицы файла
+ui:Angles of the file	Углы в файле
+ui:An angle from horizontal is read as 90 less it; a dip of −75° is 15° from vertical	Угол от горизонтали читается как 90 минус он; наклон −75° — это 15° от вертикали
+Units	Единицы
+Drawing in feet	Чертёж в футах
+The coordinates of the drawing are in feet: they are taken to metres, as the blast keeps them	Координаты чертежа в футах: при импорте они переводятся в метры, как их хранит проект

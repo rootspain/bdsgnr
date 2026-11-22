@@ -144,6 +144,7 @@ public sealed class SettingsForm : DockPanel
         Section("Viewport", "orbit", ViewportRows());
         Section("Snapping and picking", "snap", SnapRows());
         Section("Files", "save", FileRows());
+        Section("Units", "measure", UnitRows());
         Section("General", "gear", GeneralRows());
         Section("Usage statistics", "chart", UsageRows());
         BuildNav();
@@ -493,6 +494,31 @@ public sealed class SettingsForm : DockPanel
         yield return Row("Backup copies", Number("backups", Edited.BackupCopies, v => Edited.BackupCopies = (int)Math.Round(v), null, 0, 50, "0"));
         yield return Row("Recent files", Number("recent", Edited.MaxRecentFiles, v => Edited.MaxRecentFiles = (int)Math.Round(v), null, 1, 50, "0"));
         yield return Row("Startup assistant", Toggle(Edited.ShowStartupAssistant, v => Edited.ShowStartupAssistant = v), "Shown when the program starts");
+    }
+
+    private IEnumerable<Control> UnitRows()
+    {
+        var system = new WrapPanel();
+        foreach (var (units, label) in new[] { (UnitSystem.Metric, "Metric (m, mm, kg)"), (UnitSystem.Imperial, "Imperial (ft, in, lb)") })
+        {
+            var u = units;
+            var chip = Ui.Chip(L(label), () => { Edited.UnitSystem = u; Build(); }, Edited.UnitSystem == u);
+            chip.Margin = new Thickness(0, 0, 6, 6);
+            chip.Tag = "units:" + u;
+            system.Children.Add(chip);
+        }
+        yield return Row("Units", system, "What values are shown and typed in: fields, labels, tables, reports, exports. The blast keeps metres and kilograms either way.");
+
+        var angle = new WrapPanel();
+        foreach (var (reference, label) in new[] { (AngleReference.FromVertical, "From vertical (0° vertical)"), (AngleReference.FromHorizontal, "From horizontal (90° vertical)") })
+        {
+            var r = reference;
+            var chip = Ui.Chip(L(label), () => { Edited.HoleAngleReference = r; Build(); }, Edited.HoleAngleReference == r);
+            chip.Margin = new Thickness(0, 0, 6, 6);
+            chip.Tag = "angle:" + r;
+            angle.Children.Add(chip);
+        }
+        yield return Row("Hole angle", angle, "How the angle of a hole is shown and typed: fields, labels, tables, reports. The blast keeps it the same either way.");
     }
 
     private IEnumerable<Control> GeneralRows()

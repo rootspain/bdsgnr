@@ -421,8 +421,8 @@ public static partial class AnalysisWindows
             }.Where(s => s != null))
         };
         var products = Table(new[] { "Product", "Amount", "Unit", "Cost" }, q.Products.Select(x => new[] { x.Product.Name, x.Amount.ToString("0.0"), x.Unit, x.Cost.ToString("0.00") }));
-        var perHole = Table(new[] { "Hole", "Area m²", "Volume m³", "Tonnes", "kg", "Stemming m", "kg/m³" },
-            q.PerHole.Select(x => new[] { x.Hole.Label, x.Area.ToString("0.0"), x.Volume.ToString("0"), x.Tonnes.ToString("0"), x.ExplosiveKg.ToString("0.0"), x.StemmingM.ToString("0.0"), x.Volume > 0 ? (x.ExplosiveKg / x.Volume).ToString("0.000") : "" }));
+        var perHole = Table(new[] { "Hole", "Area m²", "Volume m³", BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? "Tonnes" : "Short tons", Qty.Sym(BlastDesigner.Domain.Quantity.Mass), "Stemming m", Qty.Sym(BlastDesigner.Domain.Quantity.PowderFactor) },
+            q.PerHole.Select(x => new[] { x.Hole.Label, Qty.Show(BlastDesigner.Domain.Quantity.Area, x.Area).ToString("0.0"), Qty.Show(BlastDesigner.Domain.Quantity.Volume, x.Volume).ToString("0"), Qty.Show(BlastDesigner.Domain.Quantity.Tonnage, x.Tonnes).ToString("0"), Qty.Show(BlastDesigner.Domain.Quantity.Mass, x.ExplosiveKg).ToString("0.0"), Qty.Show(BlastDesigner.Domain.Quantity.Length, x.StemmingM).ToString("0.0"), x.Volume > 0 ? Qty.Show(BlastDesigner.Domain.Quantity.PowderFactor, x.ExplosiveKg / x.Volume).ToString("0.000") : "" }));
         var tabs = new TabControl
         {
             ItemsSource = new[]
@@ -587,7 +587,7 @@ public static partial class AnalysisWindows
         {
             var d = crest == null ? double.NaN : GeoMath.DistanceToPolyline2D(crest.Points, h.Collar, crest.Closed);
             var toe = crest == null ? double.NaN : GeoMath.DistanceToPolyline2D(crest.Points, h.Toe, crest.Closed);
-            return new[] { h.Label, double.IsNaN(d) ? "" : d.ToString("0.00"), double.IsNaN(toe) ? "" : toe.ToString("0.00"), h.Angle.ToString("0"), h.Bearing.ToString("0"), h.EffectiveLength.ToString("0.0"), (!double.IsNaN(d) && d < p.Design.Burden * 0.7) ? "⚠ " + Loc.T("Low burden") : "" };
+            return new[] { h.Label, double.IsNaN(d) ? "" : Qty.Show(BlastDesigner.Domain.Quantity.Length, d).ToString("0.00"), double.IsNaN(toe) ? "" : Qty.Show(BlastDesigner.Domain.Quantity.Length, toe).ToString("0.00"), BlastDesigner.Domain.Measure.Show(Quantity.HoleAngle, h.Angle).ToString("0"), h.Bearing.ToString("0"), Qty.Show(BlastDesigner.Domain.Quantity.Length, h.EffectiveLength).ToString("0.0"), (!double.IsNaN(d) && d < p.Design.Burden * 0.7) ? "⚠ " + Loc.T("Low burden") : "" };
         });
         var note = new TextBlock { Text = crest == null ? Loc.T("Draw or select a crest polyline (kind Crest) to measure front-row burden.") : Loc.F("Crest: {0}", crest.Label), Margin = new Thickness(0, 0, 0, 6) };
         var dock = new DockPanel();
@@ -604,9 +604,9 @@ public static partial class AnalysisWindows
         {
             var holes = r.HoleIds.Select(p.FindEntity).OfType<Hole>().ToList();
             var (min, max, mean) = HoleDesign.RowSpacing(p, r);
-            return new[] { r.Name, holes.Count.ToString(), mean.ToString("0.00"), min.ToString("0.00"), max.ToString("0.00"), holes.Count > 0 ? holes.Average(h => h.EffectiveLength).ToString("0.0") : "", holes.Count > 0 ? holes.Sum(h => Charging.ExplosiveMass(p, h)).ToString("0") : "" };
+            return new[] { r.Name, holes.Count.ToString(), Qty.Show(BlastDesigner.Domain.Quantity.Length, mean).ToString("0.00"), Qty.Show(BlastDesigner.Domain.Quantity.Length, min).ToString("0.00"), Qty.Show(BlastDesigner.Domain.Quantity.Length, max).ToString("0.00"), holes.Count > 0 ? Qty.Show(BlastDesigner.Domain.Quantity.Length, holes.Average(h => h.EffectiveLength)).ToString("0.0") : "", holes.Count > 0 ? Qty.Show(BlastDesigner.Domain.Quantity.Mass, holes.Sum(h => Charging.ExplosiveMass(p, h))).ToString("0") : "" };
         });
-        Dialogs.ShowWindow("Row check view", WithButtons(Table(new[] { "Row", "Holes", "Mean spacing", "Min", "Max", "Mean length", "kg" }, rows), ("Create rows automatically", vm.AutoRows), ("Optimize row spacing", vm.OptimizeRows)), 720, 420);
+        Dialogs.ShowWindow("Row check view", WithButtons(Table(new[] { "Row", "Holes", "Mean spacing", "Min", "Max", "Mean length", Qty.Sym(BlastDesigner.Domain.Quantity.Mass) }, rows), ("Create rows automatically", vm.AutoRows), ("Optimize row spacing", vm.OptimizeRows)), 720, 420);
     }
 
     public static void Markout(MainViewModel vm)
@@ -616,10 +616,10 @@ public static partial class AnalysisWindows
         var station = vm.Doc!.SelectedEntities.OfType<PointEntity>().FirstOrDefault(x => x.Kind == PointKind.SurveyStation) ?? stations.FirstOrDefault();
         var rows = SelectedOrAll(vm).OrderBy(h => h.Label).Select(h => new[]
         {
-            h.Label, h.Collar.X.ToString("0.000"), h.Collar.Y.ToString("0.000"), h.Collar.Z.ToString("0.000"),
-            station == null ? "" : Vec3.Distance2D(station.Position, h.Collar).ToString("0.000"),
+            h.Label, Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.X).ToString("0.000"), Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.Y).ToString("0.000"), Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.Z).ToString("0.000"),
+            station == null ? "" : Qty.Show(BlastDesigner.Domain.Quantity.Length, Vec3.Distance2D(station.Position, h.Collar)).ToString("0.000"),
             station == null ? "" : GeoMath.Bearing(station.Position, h.Collar).ToString("0.000"),
-            h.Angle.ToString("0"), h.Bearing.ToString("0"), h.Length.ToString("0.0")
+            BlastDesigner.Domain.Measure.Show(Quantity.HoleAngle, h.Angle).ToString("0"), h.Bearing.ToString("0"), Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Length).ToString("0.0")
         });
         var note = new TextBlock { Text = station == null ? Loc.T("Add a survey station to see distances and bearings for set-out.") : Loc.F("From station {0} ({1})", station.Label, station.Position), Margin = new Thickness(0, 0, 0, 6) };
         var dock = new DockPanel();

@@ -8,6 +8,21 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 
 ## 0.3.11 — 2026-11-22
 
+### New
+- **The angle of a hole from vertical or from horizontal:** Program settings ▸ Units ▸ Hole angle. From horizontal a
+  vertical hole is 90°, one 15° off vertical 75°, one up from the horizontal negative. So the angle is shown and typed
+  in the properties and the table of holes, the hole window, a pattern and its segments, Design data, the panel of the
+  pattern tool, the α label on the plan and in 3D, the tables of analysis and of the report. The blast keeps it the same
+  either way.
+- **Imperial units:** Program settings ▸ Units ▸ Imperial (ft, in, lb). Lengths and coordinates in feet, diameters in
+  inches, masses in pounds, volumes in cubic yards, powder factor in lb/yd³, vibration in in/s, delays per length in
+  ms/ft, block sizes in inches. So the fields, windows, labels of the plan and the section, the grid and the scale bar,
+  messages, reports and calculated properties show and take them. The blast keeps metres and kilograms; files stay as
+  they were.
+- **Import and export in feet:** text file import — Units of the file and Angles of the file (a dip column counts from
+  horizontal); DXF/DWG import — Drawing in feet; CSV export in the imperial system — in feet, inches and pounds, the
+  unit in the name of a column, an angle from horizontal as a Dip column.
+
 ### Changed
 - **The font size of the labels goes to the ties too:** the delays on the ties are written in the size of Visibility ▸
   Hole labels ▸ Font size (before, always 9 px).

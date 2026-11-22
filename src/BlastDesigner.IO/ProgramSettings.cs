@@ -122,6 +122,17 @@ public sealed class ProgramSettings
     public double MinStemmingDiameters { get; set; } = 25;
     /// <summary>Unit of the block sizes of fragmentation for projects and presets that have none of their own.</summary>
     public SizeUnit FragmentSizeUnit { get; set; } = SizeUnit.Mm;
+    /// <summary>The units values are shown and typed in (<see cref="Measure.System"/>); the program keeps SI.</summary>
+    public UnitSystem UnitSystem { get; set; } = UnitSystem.Metric;
+    /// <summary>What the angle of a hole is counted from on the screen (<see cref="Measure.Angle"/>); it is kept from vertical.</summary>
+    public AngleReference HoleAngleReference { get; set; } = AngleReference.FromVertical;
+
+    /// <summary>Gives the units of these settings to <see cref="Measure"/>, which the whole program shows values by.</summary>
+    public void ApplyUnits()
+    {
+        Measure.System = UnitSystem;
+        Measure.Angle = HoleAngleReference;
+    }
     public bool SnapToObjects { get; set; } = true;
     public double TargetRadiusPixels { get; set; } = 8;
     public bool ShowStartupAssistant { get; set; } = true;

@@ -59,6 +59,18 @@ public sealed class PropertyGrid : Grid
     public string FieldColumns { get; set; } = "*,8,*";
     /// <summary>Unit shown in the field of a property, by property name.</summary>
     public Dictionary<string, string> Units { get; } = new();
+    /// <summary>
+    /// The kind of value of a number property, by name: its field shows and takes the value in the units of the program
+    /// (<see cref="BlastDesigner.Domain.Measure"/>), the unit beside it; the object keeps it as before.
+    /// </summary>
+    public Dictionary<string, BlastDesigner.Domain.Quantity> Quantities { get; } = new();
+
+    /// <summary>A number property shown in the units of the program: its <see cref="Quantities"/> and its <see cref="Units"/>.</summary>
+    public void Measure(string name, BlastDesigner.Domain.Quantity quantity)
+    {
+        Quantities[name] = quantity;
+        Units[name] = Loc.Ui(BlastDesigner.Domain.Measure.Symbol(quantity));
+    }
     /// <summary>Tool tip of the field of a property (the text as it is shown).</summary>
     public Dictionary<string, string> Tips { get; } = new();
     /// <summary>A small control of the caller's right of the field of a property, on its line (in a grid of sections).</summary>
@@ -266,13 +278,20 @@ public sealed class PropertyGrid : Grid
     private (Control Cell, bool Wide)? SectionCell(PropertyInfo p, object target)
     {
         var caption = Loc.Property(p.Name);
+        // a point is a place: in the unit of lengths unless the caller gives another
+        if (p.PropertyType == typeof(Vec3) && !Quantities.ContainsKey(p.Name) && !Units.ContainsKey(p.Name)) Measure(p.Name, BlastDesigner.Domain.Quantity.Length);
         Units.TryGetValue(p.Name, out var unit);
+        // a caption that names the unit itself ("Ppv limit, mm/s") leaves it to the field
+        if (unit != null) caption = WithoutUnit(caption, unit);
         if (p.GetCustomAttribute<JsonIgnoreAttribute>() != null && p.SetMethod == null)
         {
             var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
             if (!(t.IsPrimitive || t == typeof(string) || t == typeof(Vec3) || t.IsEnum)) return null;
             var v = p.GetValue(target);
-            return (Captioned(caption, new TextBlock { Text = v is double d ? d.ToString("0.###") : v?.ToString() ?? "", Foreground = Look.Muted }), false);
+            if (v is double kept && Quantities.TryGetValue(p.Name, out var shownAs)) v = BlastDesigner.Domain.Measure.Show(shownAs, kept);
+            var shownText = v is double d ? d.ToString("0.###") : v?.ToString() ?? "";
+            if (unit != null && v is double) shownText += " " + unit;
+            return (Captioned(caption, new TextBlock { Text = shownText, Foreground = Look.Muted }), false);
         }
         var editor = CreateEditor(p, target);
         if (editor == null) return null;
@@ -344,6 +363,7 @@ public sealed class PropertyGrid : Grid
         var t = Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
         if (!(t.IsPrimitive || t == typeof(string) || t == typeof(Vec3) || t.IsEnum)) return;
         var v = p.GetValue(target);
+        if (v is double kept && Quantities.TryGetValue(p.Name, out var shownAs)) v = BlastDesigner.Domain.Measure.Show(shownAs, kept);
         RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         var label = new TextBlock { Text = Loc.Property(p.Name), Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 8, 2) };
         var value = new TextBlock { Text = v is double d ? d.ToString("0.###") : v?.ToString() ?? "", Foreground = Look.Muted, Margin = new Thickness(0, 2) };
@@ -391,7 +411,10 @@ public sealed class PropertyGrid : Grid
         if ((type == typeof(double) || under == typeof(double) || type == typeof(int) || under == typeof(int)) && !(under == typeof(int) && Choices.ContainsKey(p.Name)))
         {
             var isInt = (under ?? type) == typeof(int);
-            var tb = new TextBox { Text = mixed ? "" : Format(value), Watermark = mixed ? MixedText : under != null ? "—" : null };
+            // a value of a quantity is shown in the units of the program and taken back from them
+            var measured = !isInt && Quantities.TryGetValue(p.Name, out var quantity) ? quantity : (BlastDesigner.Domain.Quantity?)null;
+            string Shown(object? v) => measured is { } q && v is double kept ? Format(BlastDesigner.Domain.Measure.Show(q, kept)) : Format(v);
+            var tb = new TextBox { Text = mixed ? "" : Shown(value), Watermark = mixed ? MixedText : under != null ? "—" : null };
             // the text taken, at first the one shown: a box left unchanged takes nothing (its number may be rounded), and an
             // edit can take the box away, which also takes its focus, and that is not a second edit
             string? taken = tb.Text;
@@ -402,7 +425,8 @@ public sealed class PropertyGrid : Grid
                 if (mixed && text.Length == 0 && !Changed.Contains(p.Name)) return false;
                 taken = tb.Text;
                 if (text.Length == 0 && under != null) { Set(p, null); return true; }
-                if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) { taken = null; tb.Text = Format(p.GetValue(target)); return false; }
+                if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) { taken = null; tb.Text = Shown(p.GetValue(target)); return false; }
+                if (measured is { } mq) d = BlastDesigner.Domain.Measure.Store(mq, d);
                 // boxed apart: one ?: of int and double is a double, and an int property does not take it
                 object v = isInt ? (int)Math.Round(d) : (object)d;
                 if (Equals(p.GetValue(target), v) && !mixed) return false;
@@ -552,10 +576,13 @@ public sealed class PropertyGrid : Grid
         if (type == typeof(Vec3))
         {
             var v = (Vec3)value!;
+            // the axes in the unit of the point (lengths)
+            var pointQuantity = Quantities.TryGetValue(p.Name, out var pq) ? pq : BlastDesigner.Domain.Quantity.Length;
+            double ShowAxis(double c) => BlastDesigner.Domain.Measure.Show(pointQuantity, c);
             // with several objects each axis is mixed on its own: an empty one keeps every object's value, a typed one is applied
             var axisMixed = mixed ? MixedAxes.GetValueOrDefault(p.Name) ?? new[] { true, true, true } : new bool[3];
             // named by the axis, so the panel built anew after an edit puts the focus back in the same box
-            var boxes = new[] { v.X, v.Y, v.Z }.Select((c, i) => new TextBox { Text = axisMixed[i] ? "" : c.ToString("0.###", CultureInfo.InvariantCulture), Watermark = axisMixed[i] ? MixedText : null, MinWidth = 60, Name = $"prop{p.Name}{"XYZ"[i]}" }).ToArray();
+            var boxes = new[] { v.X, v.Y, v.Z }.Select((c, i) => new TextBox { Text = axisMixed[i] ? "" : ShowAxis(c).ToString("0.###", CultureInfo.InvariantCulture), Watermark = axisMixed[i] ? MixedText : null, MinWidth = 60, Name = $"prop{p.Name}{"XYZ"[i]}" }).ToArray();
             // the texts shown (or last taken): an axis whose text was not changed keeps its exact value, not the rounded one
             // shown, and with no axis changed nothing is taken (a box taken away with the panel built anew loses its focus,
             // which is not an edit)
@@ -572,6 +599,7 @@ public sealed class PropertyGrid : Grid
                     var text = (boxes[i].Text ?? "").Trim();
                     if ((boxes[i].Text ?? "") == shownTexts[i] || (axisMixed[i] && text.Length == 0)) { parsed[i] = old[i]; continue; }
                     if (!double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out parsed[i])) return false;
+                    parsed[i] = BlastDesigner.Domain.Measure.Store(pointQuantity, parsed[i]);
                     typed[i] = axisMixed[i];
                 }
                 var nv = new Vec3(parsed[0], parsed[1], parsed[2]);
@@ -613,6 +641,14 @@ public sealed class PropertyGrid : Grid
             return combo;
         }
         return null;
+    }
+
+    /// <summary>The caption without the unit at its end (", m" or " (m)") when that is the unit the field shows.</summary>
+    private static string WithoutUnit(string caption, string unit)
+    {
+        foreach (var end in new[] { ", " + unit, " (" + unit + ")" })
+            if (caption.EndsWith(end, StringComparison.Ordinal)) return caption[..^end.Length];
+        return caption;
     }
 
     private static string Format(object? v) => v switch

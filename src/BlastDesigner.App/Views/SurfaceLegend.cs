@@ -24,7 +24,7 @@ public static class SurfaceLegend
         var panel = new StackPanel { Spacing = 4 };
         // Both modes stretch over one range, as on the plan: from the lowest point of any surface to the highest.
         var z = surfaces.SelectMany(s => s.Vertices).Select(v => v.Z).DefaultIfEmpty(0).ToList();
-        string Metres(double v) => v.ToString("0.0", System.Globalization.CultureInfo.CurrentCulture) + " " + Loc.Ui("m");
+        string Metres(double v) => Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, v, "0.0");
         if (settings.SurfacesByType)
         {
             panel.Children.Add(Note(Loc.Ui("Colour: kind of surface; one height scale for all, darker at the lowest point, lighter at the highest")));

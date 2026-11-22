@@ -12,11 +12,11 @@ public static partial class Loc
 
     public static IReadOnlyList<(string Code, string Name)> Languages { get; } = new[] { ("en", "English"), ("ru", "Русский") };
 
-    public static string T(string english)
-    {
-        if (Language == "ru" && Ru.TryGetValue(english, out var ru)) return ru;
-        return english;
-    }
+    /// <summary>The text in the language of the program; a unit at its end ("Burden, m") in the units of the program (<see cref="Qty.Caption"/>).</summary>
+    public static string T(string english) => Qty.Caption(Raw(english));
+
+    /// <summary>The text in the language of the program, as it is.</summary>
+    private static string Raw(string english) => Language == "ru" && Ru.TryGetValue(english, out var ru) ? ru : english;
 
     /// <summary>Display name of user data that may be a standard name (layers, groups): translated only when listed as "name:…".</summary>
     public static string Name(string name)
@@ -25,7 +25,15 @@ public static partial class Loc
         return t.StartsWith("name:", StringComparison.Ordinal) ? name : t;
     }
 
-    public static string F(string englishFormat, params object?[] args) => string.Format(T(englishFormat), args);
+    /// <summary>
+    /// A format in the language of the program, filled; a number followed by a metric unit ("{0:0.0} m") is shown in the
+    /// units of the program (<see cref="Qty.Formatted"/>).
+    /// </summary>
+    public static string F(string englishFormat, params object?[] args)
+    {
+        var (format, values) = Qty.Formatted(Raw(englishFormat), args);
+        return string.Format(format, values);
+    }
 
     /// <summary>A short name of a catalogue type: translated as "short:…", else as a name (the full one it falls back to).</summary>
     public static string Short(string english)
@@ -38,7 +46,7 @@ public static partial class Loc
     public static string Ui(string english)
     {
         var t = T("ui:" + english);
-        return t.StartsWith("ui:", StringComparison.Ordinal) ? english : t;
+        return t.StartsWith("ui:", StringComparison.Ordinal) ? Qty.Caption(english) : t;
     }
 
     /// <summary>Display name of a model property: translated, or the property name split into words.</summary>

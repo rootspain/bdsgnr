@@ -23,6 +23,8 @@ public sealed class CadImportOptions
     /// they go to a layer of their own ("name (2D)") so they stay out of surfaces and recognition.
     /// </summary>
     public bool SeparateFlatLines { get; set; } = true;
+    /// <summary>The drawing is in feet: its coordinates, radii and text heights are taken to metres (the thinning distance stays in its units).</summary>
+    public bool InFeet { get; set; }
 }
 
 public enum CadHiddenLayers { ImportHidden, Skip, ImportVisible }
@@ -129,8 +131,20 @@ public static class CadFiles
             if (TypeName(lt) is { } name && lt.Segments.Any())
                 result.LineTypes.Add(new LineTypeDef { Name = name, Description = lt.Description ?? "", Pattern = lt.Segments.Select(x => x.Length).ToList() });
         if (doc.Header.LineTypeScale > 0) result.LineTypeScale = doc.Header.LineTypeScale;
+        if (options.InFeet) ToMetres(result.Items, 0.3048);
         if (options.SeparateFlatLines) SeparateFlat(result);
         return result;
+    }
+
+    /// <summary>Objects of a drawing in feet to metres: every point, the radius of a circle, the height of a text.</summary>
+    public static void ToMetres(IEnumerable<(string Layer, Entity Entity)> items, double metresPerUnit)
+    {
+        foreach (var (_, e) in items)
+        {
+            e.Transform(v => v * metresPerUnit);
+            if (e is CircleEntity c) c.Radius *= metresPerUnit;
+            if (e is TextEntity t) t.Height *= metresPerUnit;
+        }
     }
 
     /// <summary>

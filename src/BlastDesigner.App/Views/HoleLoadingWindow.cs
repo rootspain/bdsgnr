@@ -325,18 +325,19 @@ public sealed class ChargeColumn : Control
         ctx.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
         var len = Len;
 
-        // Ruler: a tick each metre (5 m on long holes), labels every 2, 5 or 10 m and at the toe.
-        var tick = len > 40 ? 5 : 1;
-        var label = len <= 16 ? 2 : len <= 40 ? 5 : 10;
+        // Ruler, in the unit of lengths shown: a tick each unit (5 on long holes), labels every 2, 5 or 10 and at the toe.
+        var shownLen = Qty.Show(BlastDesigner.Domain.Quantity.Length, len);
+        var tick = shownLen > 40 ? 5 : 1;
+        var label = shownLen <= 16 ? 2 : shownLen <= 40 ? 5 : 10;
         var tickPen = new Pen(Look.LineStrong, 1);
-        for (double m = 0; m <= len + 1e-6; m += tick)
+        for (double m = 0; m <= shownLen + 1e-6; m += tick)
         {
-            var y = Y(m);
+            var y = Y(Qty.Store(BlastDesigner.Domain.Quantity.Length, m));
             ctx.DrawLine(tickPen, new Point(RulerWidth - 6, y), new Point(RulerWidth - 2, y));
-            if (Math.Abs(m % label) < 1e-6 && len - m > label * 0.4)
+            if (Math.Abs(m % label) < 1e-6 && shownLen - m > label * 0.4)
                 DrawRight(ctx, m.ToString("0.0", CultureInfo.CurrentCulture), RulerWidth - 9, y);
         }
-        DrawRight(ctx, len.ToString("0.0", CultureInfo.CurrentCulture), RulerWidth - 9, Y(len));
+        DrawRight(ctx, shownLen.ToString("0.0", CultureInfo.CurrentCulture), RulerWidth - 9, Y(len));
 
         var tube = new Rect(TubeLeft, Y(0), TubeWidth, Y(len) - Y(0));
         ctx.DrawRectangle(Air, null, tube, 4, 4);
@@ -386,7 +387,7 @@ public sealed class ChargeColumn : Control
             if (Y(d.Bottom) - Y(d.Top) < 28) continue;
             var cy = (Y(d.Top) + Y(d.Bottom)) / 2;
             var name = Text(_project.FindProduct(d.ProductId)?.Name ?? "?", SansBold, 11.5, Look.Text, Math.Max(10, w - lx - 2));
-            var size = Text(d.Length.ToString("0.0", CultureInfo.CurrentCulture) + " " + Loc.Ui("m"), Mono, 11, Look.TextSoft);
+            var size = Text(Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, d.Length, "0.0"), Mono, 11, Look.TextSoft);
             ctx.DrawText(name, new Point(lx, cy - name.Height));
             ctx.DrawText(size, new Point(lx, cy));
         }
@@ -557,9 +558,9 @@ public sealed class HoleLoadingEditor : DockPanel
         var row = Ui.Row(10,
             new TextBlock { Text = Loc.F("Loading · hole {0}", _hole.Label), FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, VerticalAlignment = VerticalAlignment.Center },
             Ui.Row(6,
-                Chip(L("Depth"), N(_hole.EffectiveLength) + " " + L("m")),
-                Chip("Ø", N(_hole.Diameter, "0") + " " + L("mm")),
-                Chip(L("Water"), N(_hole.WaterDepth) + " " + L("m"))));
+                Chip(L("Depth"), Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, _hole.EffectiveLength, "0.0#")),
+                Chip("Ø", Qty.WithUnit(BlastDesigner.Domain.Quantity.Diameter, _hole.Diameter)),
+                Chip(L("Water"), Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, _hole.WaterDepth, "0.0#"))));
         return new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(14, 10), Child = row };
     }
 
@@ -838,10 +839,10 @@ public sealed class HoleLoadingEditor : DockPanel
                 VerticalAlignment = VerticalAlignment.Center,
                 Children = { Swatch(prod?.Color ?? 0xFFCCCCCC), new TextBlock { Text = prod?.Name ?? "?", Foreground = Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center } }
             });
-            g.Children.Add(NumCell(N(d.Top), 1));
-            g.Children.Add(NumCell(N(d.Bottom), 2));
-            g.Children.Add(NumCell(N(d.Length), 3));
-            g.Children.Add(expl ? NumCell(N(Charging.DeckMass(_p, hole, d)), 4) : NumCell("—", 4, Look.Faint));
+            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Top)), 1));
+            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Bottom)), 2));
+            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Length)), 3));
+            g.Children.Add(expl ? NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Mass, Charging.DeckMass(_p, hole, d))), 4) : NumCell("—", 4, Look.Faint));
             Control primers = !expl
                 ? new TextBlock { Text = "—", Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center }
                 : d.Primers.Count > 0
@@ -1025,14 +1026,14 @@ public sealed class HoleLoadingEditor : DockPanel
                 ? prod.UnitMass / prod.UnitLength
                 : Charging.DeckMass(_p, hole, new Deck { Top = 0, Bottom = 1, ProductId = d.ProductId });
             var column = Decks.Where(x => _p.FindProduct(x.ProductId)?.IsExplosive == true).Sum(x => Charging.DeckMass(_p, hole, x));
-            Line(L("Linear charge"), N(perMetre) + " " + L("kg/m"));
-            Line(L("Deck mass"), N(mass) + " " + L("kg"));
+            Line(L("Linear charge"), N(Qty.Show(BlastDesigner.Domain.Quantity.LinearCharge, perMetre)) + " " + Qty.Sym(BlastDesigner.Domain.Quantity.LinearCharge));
+            Line(L("Deck mass"), N(Qty.Show(BlastDesigner.Domain.Quantity.Mass, mass)) + " " + Qty.Sym(BlastDesigner.Domain.Quantity.Mass));
             Line(L("Share of the explosive column"), N(column > 0 ? mass / column * 100 : 0, "0") + " %");
         }
         else
         {
             Line(L("Material volume"), N(_hole.VolumeBetween(d.Top, d.Bottom) * 1000, "0") + " " + L("l"));
-            if (mass > 0) Line(L("Deck mass"), N(mass) + " " + L("kg"));
+            if (mass > 0) Line(L("Deck mass"), N(Qty.Show(BlastDesigner.Domain.Quantity.Mass, mass)) + " " + Qty.Sym(BlastDesigner.Domain.Quantity.Mass));
             if (prod != null) Line(L("Role"), Loc.Enum(prod.Kind));
         }
         _props.Children.Add(new Border { Padding = new Thickness(10), CornerRadius = new CornerRadius(8), Background = Look.Field, BorderBrush = Look.Line, BorderThickness = new Thickness(1), Child = calc });
@@ -1121,26 +1122,27 @@ public sealed class HoleLoadingEditor : DockPanel
     private string? _refocus;
 
     /// <summary>Metre field: commits on Enter or when it loses focus; the linked fields and the neighbour deck follow.</summary>
-    private TextBox NumberBox(string name, double value, Action<double> commit, string unit = "m")
+    private TextBox NumberBox(string name, double value, Action<double> commit)
     {
+        // a depth: shown and typed in the unit of lengths of the program
         var box = new TextBox
         {
             Name = name,
-            Text = N(value, "0.0##"),
+            Text = N(Qty.Show(BlastDesigner.Domain.Quantity.Length, value), "0.0##"),
             Height = 32,
             MinHeight = 32,
             Padding = new Thickness(8, 5),
             FontFamily = Look.Mono,
             Background = Look.Field,
             BorderBrush = Look.LineStrong,
-            InnerRightContent = new TextBlock { Text = L(unit), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }
+            InnerRightContent = new TextBlock { Text = Qty.Sym(BlastDesigner.Domain.Quantity.Length), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }
         };
         var text = box.Text;
         void Commit(bool keepFocus)
         {
             if (box.Text == text) { if (keepFocus) box.SelectAll(); return; }
             text = box.Text;
-            if (Parse(box.Text) is double v) commit(v);
+            if (Parse(box.Text) is double v) commit(Qty.Store(BlastDesigner.Domain.Quantity.Length, v));
             if (keepFocus) _refocus = name;
             Refresh();
         }
@@ -1185,7 +1187,7 @@ public sealed class HoleLoadingEditor : DockPanel
                     FontSize = 11.5,
                     Foreground = Look.Muted,
                     TextTrimming = TextTrimming.CharacterEllipsis,
-                    Inlines = new InlineCollection { new Run(Loc.F("at {0} m", N(pr.Depth))) { FontFamily = Look.Mono }, new Run(det != null && booster != null ? " · " + det.Name : "") }
+                    Inlines = new InlineCollection { new Run(Loc.F("at {0}", Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, pr.Depth, "0.0##"))) { FontFamily = Look.Mono }, new Run(det != null && booster != null ? " · " + det.Name : "") }
                 }
             }
         };
@@ -1291,9 +1293,9 @@ public sealed class HoleLoadingEditor : DockPanel
                 new TextBlock { Text = value, FontFamily = Look.Mono, FontSize = 15, FontWeight = FontWeight.SemiBold, Foreground = Look.Text }
             }
         });
-        Total(L("Explosive in hole"), N(Charging.ExplosiveMass(_p, hole)) + " " + L("kg"));
-        Total(L("Explosive column"), N(expl.Sum(d => d.Length)) + " " + L("m"));
-        Total(L("Top stemming"), N(Decks.Count > 0 ? stem : 0) + " " + L("m"));
+        Total(L("Explosive in hole"), N(Qty.Show(BlastDesigner.Domain.Quantity.Mass, Charging.ExplosiveMass(_p, hole))) + " " + Qty.Sym(BlastDesigner.Domain.Quantity.Mass));
+        Total(L("Explosive column"), N(Qty.Show(BlastDesigner.Domain.Quantity.Length, expl.Sum(d => d.Length))) + " " + Qty.Sym(BlastDesigner.Domain.Quantity.Length));
+        Total(L("Top stemming"), N(Qty.Show(BlastDesigner.Domain.Quantity.Length, Decks.Count > 0 ? stem : 0)) + " " + Qty.Sym(BlastDesigner.Domain.Quantity.Length));
         Total(L("Primers"), Decks.Sum(d => d.Primers.Count).ToString(CultureInfo.CurrentCulture));
 
         _checks.Children.Clear();
@@ -1301,6 +1303,8 @@ public sealed class HoleLoadingEditor : DockPanel
         TextBlock CheckText(string text) => new() { Text = text, FontSize = 12.5, Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
         void Check(bool ok, string text, params Control[] content)
         {
+            // the depths written in metres in the units of the program
+            text = Qty.InText(text);
             Checks.Add((ok, text));
             var row = Ui.Row(8, Look.Icon(ok ? "okc" : "warn", 15, ok ? Ok : Warn));
             if (content.Length == 0) row.Children.Add(CheckText(text));
@@ -1325,7 +1329,7 @@ public sealed class HoleLoadingEditor : DockPanel
         var parts = Loc.T(stemFormat).Split("{1}");
         object[] args = { N(stemLen), diameters, N(minStem, "0.0#") };
         Check(stemOk, string.Format(Loc.T(stemFormat), args),
-            CheckText(string.Format(parts[0], args).TrimEnd()), MinStemmingBox(), CheckText(parts.Length > 1 ? string.Format(parts[1], args).TrimStart() : ""));
+            CheckText(Qty.InText(string.Format(parts[0], args).TrimEnd())), MinStemmingBox(), CheckText(Qty.InText(parts.Length > 1 ? string.Format(parts[1], args).TrimStart() : "")));
         foreach (var issue in Charging.Validate(_p, hole).Where(s => !s.Contains("no primer", StringComparison.Ordinal)))
             Check(false, issue);
     }

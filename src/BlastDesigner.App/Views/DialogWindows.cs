@@ -68,7 +68,7 @@ public static class LoadingRulesWindow
             if (r == null) { deckHost.Content = null; return; }
             var dg = new PropertyGrid { Exclude = new() };
             vm.AddProductChoices(dg);
-            var de = new ListEditor<DeckTemplate>(r.Decks, d => $"{vm.Project!.FindProduct(d.ProductId)?.Name ?? "?"} {(d.Length > 0 ? d.Length.ToString("0.0") + " m" : Loc.T("fill"))}",
+            var de = new ListEditor<DeckTemplate>(r.Decks, d => $"{vm.Project!.FindProduct(d.ProductId)?.Name ?? "?"} {(d.Length > 0 ? Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, d.Length, "0.0") : Loc.T("fill"))}",
                 () => new DeckTemplate { ProductId = vm.Project!.Products.FirstOrDefault(p => p.IsExplosive)?.Id },
                 d => ProjectJson.DeepClone(d), dg);
             de.Reload(r.Decks.Count > 0 ? 0 : -1);
@@ -95,6 +95,10 @@ public static class TextImportWindow
         var dupes = new CheckBox { Content = Loc.T("Skip duplicate holes"), IsChecked = fmt.SkipDuplicates };
         var swap = new CheckBox { Content = Loc.T("Swap X and Y"), IsChecked = fmt.SwapXY };
         var comma = new CheckBox { Content = Loc.T("Decimal comma"), IsChecked = fmt.DecimalSeparator == "," };
+        // the units of the file and what its angles count from, the program's by default (a "dip" column: from horizontal)
+        var units = new ComboBox { ItemsSource = new[] { Loc.Ui("Metres, millimetres"), Loc.Ui("Feet, inches") }, SelectedIndex = fmt.Units == BlastDesigner.Domain.UnitSystem.Imperial ? 1 : 0, Name = "importUnits" };
+        var angles = new ComboBox { ItemsSource = new[] { Loc.Ui("From vertical (0° vertical)"), Loc.Ui("From horizontal (90° vertical)") }, SelectedIndex = fmt.Angles == BlastDesigner.Domain.AngleReference.FromHorizontal ? 1 : 0, Name = "importAngles" };
+        ToolTip.SetTip(angles, Loc.Ui("An angle from horizontal is read as 90 less it; a dip of −75° is 15° from vertical"));
         var columns = new WrapPanel();
         var combos = new List<ComboBox>();
         var fields = Enum.GetValues<ImportField>().ToList();
@@ -135,7 +139,9 @@ public static class TextImportWindow
             Columns = combos.Select(c => fields[Math.Max(0, c.SelectedIndex)]).ToList(),
             SkipDuplicates = dupes.IsChecked == true,
             SwapXY = swap.IsChecked == true,
-            DecimalSeparator = comma.IsChecked == true ? "," : "."
+            DecimalSeparator = comma.IsChecked == true ? "," : ".",
+            Units = units.SelectedIndex == 1 ? BlastDesigner.Domain.UnitSystem.Imperial : BlastDesigner.Domain.UnitSystem.Metric,
+            Angles = angles.SelectedIndex == 1 ? BlastDesigner.Domain.AngleReference.FromHorizontal : BlastDesigner.Domain.AngleReference.FromVertical
         };
         async void SaveTemplate()
         {
@@ -152,10 +158,12 @@ public static class TextImportWindow
             skip.Value = fmt.SkipLines;
             kind.SelectedIndex = (int)fmt.Kind;
             dupes.IsChecked = fmt.SkipDuplicates;
+            units.SelectedIndex = fmt.Units == BlastDesigner.Domain.UnitSystem.Imperial ? 1 : 0;
+            angles.SelectedIndex = fmt.Angles == BlastDesigner.Domain.AngleReference.FromHorizontal ? 1 : 0;
             BuildColumns();
         }
 
-        foreach (var c in new Control[] { delim, kind, skip })
+        foreach (var c in new Control[] { delim, kind, skip, units, angles })
         {
             c.Width = double.NaN;
             c.MinHeight = 32;
@@ -174,7 +182,8 @@ public static class TextImportWindow
                     Children =
                     {
                         FormKit.Fields(3, FormKit.Labeled(Loc.T("Delimiter"), delim), FormKit.Labeled(Loc.T("Header lines"), skip), FormKit.Labeled(Loc.T("Data"), kind)),
-                        FormKit.Fields(3, dupes, swap, comma)
+                        FormKit.Fields(3, dupes, swap, comma),
+                        FormKit.Fields(3, FormKit.Labeled(Loc.Ui("Units of the file"), units), FormKit.Labeled(Loc.Ui("Angles of the file"), angles), new Border())
                     }
                 }),
                 FormKit.Section(Loc.T("Assign a field to each column"), new ScrollViewer { Content = columns, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto })
@@ -275,7 +284,7 @@ public static class TiePaletteWindow
 
     private static string VariantText(Product p) => p.Kind switch
     {
-        ProductKind.DetonatingCord => $"{p.Vod:0} {Loc.T("m/s")}",
+        ProductKind.DetonatingCord => Qty.WithUnit(BlastDesigner.Domain.Quantity.Velocity, p.Vod, "0"),
         ProductKind.HarnessWire or ProductKind.ElectronicDetonator => p.Name,
         _ => Loc.F("{0} ms", p.DelayMs.ToString("0.#"))
     };

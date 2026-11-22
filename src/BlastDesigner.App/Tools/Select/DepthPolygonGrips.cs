@@ -262,7 +262,7 @@ public sealed class DepthPolygonGrips : ISelectGesture
     {
         var title = Loc.T(hit.Collar ? "Collar polygon" : "Depth polygon");
         var keys = IsSelected(hit) ? Selected().Select(g => g.Key).ToList() : new List<string> { hit.Key };
-        if (await Dialogs.PromptNumber(title, Loc.T("Elevation, m"), Math.Round(hit.Z, 3)) is double z && (keys.Count > 1 || Math.Abs(z - hit.Z) > 1e-9))
+        if (await Dialogs.PromptNumber(title, Loc.T("Elevation, m"), Math.Round(Qty.Show(BlastDesigner.Domain.Quantity.Length, hit.Z), 3)) is double typed && Qty.Store(BlastDesigner.Domain.Quantity.Length, typed) is var z && (keys.Count > 1 || Math.Abs(z - hit.Z) > 1e-9))
             await Run(_vm.SetPolygonVertices(hit.Root, hit.Collar, keys.ToDictionary(k => k, _ => z)));
     }
 

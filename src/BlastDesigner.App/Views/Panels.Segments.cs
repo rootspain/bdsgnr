@@ -142,8 +142,8 @@ public sealed partial class PropertiesPanel
                 });
                 return Row(label, Inherit(box, own == null, () => Done(_vm.SetSegmentOverride(sid, label, x => set(x, null))), name));
             }
-            yield return Own("Burden, m", "segmentBurden", o.Burden, seg.Burden, (x, v) => x.Burden = v);
-            yield return Own("Spacing, m", "segmentSpacing", o.Spacing, seg.Spacing, (x, v) => x.Spacing = v);
+            yield return Own("Burden, m", "segmentBurden", o.Burden, Qty.Show(Quantity.Length, seg.Burden), (x, v) => x.Burden = Qty.Store(Quantity.Length, v));
+            yield return Own("Spacing, m", "segmentSpacing", o.Spacing, Qty.Show(Quantity.Length, seg.Spacing), (x, v) => x.Spacing = Qty.Store(Quantity.Length, v));
             var type = new ComboBox
             {
                 ItemsSource = new[] { Loc.T("Rectangular"), Loc.T("Staggered") }, SelectedIndex = seg.Type == PatternType.Staggered ? 1 : 0, Width = 120, Height = 26, MinHeight = 26,
@@ -155,9 +155,9 @@ public sealed partial class PropertiesPanel
                 if (t != seg.Type) Done(_vm.SetSegmentOverride(sid, "Pattern", x => x.Type = t));
             };
             yield return Row("Pattern", Inherit(type, o.Type == null, () => Done(_vm.SetSegmentOverride(sid, "Pattern", x => x.Type = null)), "segmentType"));
-            yield return Own("Diameter, mm", "segmentDiameter", o.Diameter, seg.HoleDefaults.Diameter, (x, v) => x.Diameter = v, "0.#");
-            yield return Own("Subdrill, m", "segmentSubdrill", o.Subdrill, seg.HoleDefaults.Subdrill, (x, v) => x.Subdrill = v);
-            yield return Own("Angle, °", "segmentAngle", o.Angle, seg.HoleDefaults.Angle, (x, v) => x.Angle = v, "0.#");
+            yield return Own("Diameter, mm", "segmentDiameter", o.Diameter, Qty.Show(Quantity.Diameter, seg.HoleDefaults.Diameter), (x, v) => x.Diameter = Qty.Store(Quantity.Diameter, v), BlastDesigner.Domain.Measure.Format(Quantity.Diameter));
+            yield return Own("Subdrill, m", "segmentSubdrill", o.Subdrill, Qty.Show(Quantity.Length, seg.HoleDefaults.Subdrill), (x, v) => x.Subdrill = Qty.Store(Quantity.Length, v));
+            yield return Own("Angle, °", "segmentAngle", o.Angle, BlastDesigner.Domain.Measure.Show(Quantity.HoleAngle, seg.HoleDefaults.Angle), (x, v) => x.Angle = v is double a ? BlastDesigner.Domain.Measure.Store(Quantity.HoleAngle, a) : null, "0.#");
             // its own direction of the rows: typed in, it turns the segment about its centre
             var azimuth = Box(N(seg.Azimuth, "0.#"), "segmentAzimuth", v =>
             {
@@ -191,12 +191,15 @@ public sealed partial class PropertiesPanel
                 if (Metres(v) is double m && Math.Abs(m - value) > 1e-9) Done(_vm.SetPatternDefaults(rid, label, x => set(x, m)));
                 else Refresh();
             }, 120));
-            yield return Value("Diameter, mm", "patternDiameter", root.HoleDefaults.Diameter, (x, v) => x.HoleDefaults.Diameter = v, "0.#");
-            yield return Value("Subdrill, m", "patternSubdrill", root.HoleDefaults.Subdrill, (x, v) => x.HoleDefaults.Subdrill = v);
-            yield return Value("Angle, °", "patternAngle", root.HoleDefaults.Angle, (x, v) => x.HoleDefaults.Angle = v, "0.#");
+            yield return Value("Diameter, mm", "patternDiameter", Qty.Show(Quantity.Diameter, root.HoleDefaults.Diameter), (x, v) => x.HoleDefaults.Diameter = Qty.Store(Quantity.Diameter, v), BlastDesigner.Domain.Measure.Format(Quantity.Diameter));
+            yield return Value("Subdrill, m", "patternSubdrill", Qty.Show(Quantity.Length, root.HoleDefaults.Subdrill), (x, v) => x.HoleDefaults.Subdrill = Qty.Store(Quantity.Length, v));
+            yield return Value("Angle, °", "patternAngle", BlastDesigner.Domain.Measure.Show(Quantity.HoleAngle, root.HoleDefaults.Angle), (x, v) => x.HoleDefaults.Angle = BlastDesigner.Domain.Measure.Store(Quantity.HoleAngle, v), "0.#");
         }
 
-        foreach (var control in DepthControls(doc, segment ?? root, Row, Box, Small, Faint, Done, Metres, N)) yield return control;
+        // the depths, levels and elevations are lengths: shown and typed in the units of the program
+        double? Lengths(string v) => Metres(v) is double m ? Qty.Store(Quantity.Length, m) : null;
+        string LengthText(double v, string f) => N(Qty.Show(Quantity.Length, v), f);
+        foreach (var control in DepthControls(doc, segment ?? root, Row, Box, Small, Faint, Done, Lengths, LengthText)) yield return control;
     }
 
     /// <summary>A field of a segment with the chain of a value taken from the parent, or ↺ that takes the parent's again.</summary>
@@ -222,7 +225,7 @@ public sealed partial class PropertiesPanel
     private static string DepthText(HolePattern s, CultureInfo c)
     {
         var d = s.HoleDefaults.Depth;
-        string N(double v) => v.ToString("0.#", c);
+        string N(double v) => Qty.Show(Quantity.Length, v).ToString("0.#", c);
         return PatternTree.EffectiveDepthMode(s) switch
         {
             DepthMode.RectToLevel or DepthMode.SurfaceToRect =>
@@ -231,7 +234,7 @@ public sealed partial class PropertiesPanel
             DepthMode.ToSurface => "→" + Loc.Ui("surface"),
             DepthMode.Polygon => "→" + Loc.Ui("polygon"),
             DepthMode.Range => $"{N(Math.Min(d.Front.From, d.Front.To))}…{N(Math.Max(d.Front.From, d.Front.To))}",
-            _ => N(s.HoleDefaults.BenchHeight) + " " + Loc.Ui("m")
+            _ => N(s.HoleDefaults.BenchHeight) + " " + Qty.Sym(Quantity.Length)
         };
     }
 
@@ -368,7 +371,7 @@ public sealed partial class PropertiesPanel
 
         async void Ask(string title, double value, Action<double> apply)
         {
-            if (await Dialogs.PromptNumber(Loc.T(title), Loc.T("Value, m"), value) is double x) apply(x);
+            if (await Dialogs.PromptNumber(Loc.T(title), Loc.T("Value, m"), Qty.Show(Quantity.Length, value)) is double x) apply(Qty.Store(Quantity.Length, x));
         }
         Dictionary<string, double> All(Func<SurfaceVertex, double> f) => vertices.ToDictionary(v => v.Key!, f);
         var buttons = new WrapPanel { Name = "polygonButtons" };

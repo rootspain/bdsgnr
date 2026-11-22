@@ -46,7 +46,7 @@ public static class OpeningPointWindow
 
         void Recompute()
         {
-            relief.Text = N(op.TotalReliefMsPerM, "0.0") + " " + L("ms/m");
+            relief.Text = Qty.WithUnit(BlastDesigner.Domain.Quantity.DelayPerLength, op.TotalReliefMsPerM, "0.0");
             var (times, r) = EbsOpening.Plan(p, holes, op, keepManual);
             result.Children.Clear();
             result.Children.Add(times.Count == 0 ? Line(Warn, L("No hole gets a time from this point"))
@@ -55,6 +55,9 @@ public static class OpeningPointWindow
             if (r.NotElectronic > 0) result.Children.Add(Line(Look.Muted, Loc.F("{0} holes without an electronic detonator fire by their tie-up", r.NotElectronic)));
             if (r.MaxTimeExceeded.Count > 0) result.Children.Add(Line(Warn, Loc.F("{0} holes would pass the maximum delay {1} ms and stay as they are", r.MaxTimeExceeded.Count, N(p.Electronic.MaxTimeMs, "0"))));
         }
+
+        // a length: shown and typed in the units of the program
+        TextBox Length(string name, double kept, Action<double> set, double min) => Number(name, Qty.Show(BlastDesigner.Domain.Quantity.Length, kept), Qty.Sym(BlastDesigner.Domain.Quantity.Length), v => set(Qty.Store(BlastDesigner.Domain.Quantity.Length, v)), min);
 
         TextBox Number(string name, double value, string unit, Action<double> set, double min = 0)
         {
@@ -75,8 +78,8 @@ public static class OpeningPointWindow
         open.IsCheckedChanged += (_, _) => { op.OpenHere = open.IsChecked == true; Recompute(); };
         var body = new StackPanel { Spacing = 14 };
         body.Children.Add(FormKit.Fields(2,
-            FormKit.Labeled(L("Burden"), Number("burden", op.BurdenM, "m", v => op.BurdenM = v, 0.01)),
-            FormKit.Labeled(L("Spacing"), Number("spacing", op.SpacingM, "m", v => op.SpacingM = v, 0.01)),
+            FormKit.Labeled(L("Burden"), Length("burden", op.BurdenM, v => op.BurdenM = v, 0.01)),
+            FormKit.Labeled(L("Spacing"), Length("spacing", op.SpacingM, v => op.SpacingM = v, 0.01)),
             FormKit.Labeled(L("Delay along the burden"), Number("burdenDelay", op.BurdenDelayMs, "ms", v => op.BurdenDelayMs = v)),
             FormKit.Labeled(L("Delay along the spacing"), Number("spacingDelay", op.SpacingDelayMs, "ms", v => op.SpacingDelayMs = v)),
             FormKit.Labeled(L("Burden bearing"), Number("bearing", op.BurdenBearingDeg, "°", v => op.BurdenBearingDeg = v, -360)),

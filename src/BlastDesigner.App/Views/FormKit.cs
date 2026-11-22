@@ -5,6 +5,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.ViewModels;
+using BlastDesigner.Domain;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
 
@@ -162,33 +163,33 @@ public static class FormLayouts
     {
         [typeof(ProjectHeader)] = Of("°: BlastOrientation",
             S("Blast", "Name BlastNumber ShotDate BlastOrientation"), S("Place", "Mine Bench Location Client"), S("Author and notes", "Author Created Description Comment")),
-        [typeof(DesignData)] = Of("m: Burden, Spacing, DuplicateTolerance, BenchHeight, Subdrill, StemmingLength; mm: Diameter; °: Angle, Bearing; t/m³: RockDensity",
+        [typeof(DesignData)] = Of("Length: Burden, Spacing, DuplicateTolerance, BenchHeight, Subdrill, StemmingLength; Diameter: Diameter; HoleAngle: Angle; °: Bearing; RockDensity: RockDensity",
             S("Pattern", "Burden Spacing Pattern DuplicateTolerance"), S("Hole", "BenchHeight Subdrill Diameter Angle Bearing StemmingLength"), S("Rock", "RockDensity")),
-        [typeof(BlastOutcomes)] = Of("",
+        [typeof(BlastOutcomes)] = Of("Length: MaxFlyrock, MuckpileHeight; Ppv: MeasuredPpv",
             S("Results", "FragmentationP50 FragmentationP80 MaxFlyrock MeasuredPpv MeasuredAirblast"), S("Digging", "MuckpileHeight DiggingRate"), S("Rating", "Rating Comments")),
-        [typeof(CostSchema)] = Of("", S("Costs", "Currency DrillingPerMetre LoadingPerHole LabourPerBlast OtherFixed")),
+        [typeof(CostSchema)] = Of("CostPerLength: DrillingPerMetre", S("Costs", "Currency DrillingPerMetre LoadingPerHole LabourPerBlast OtherFixed")),
         [typeof(ElectronicSettings)] = Of("", S("Intervals", "HoleIntervalMs RowIntervalMs"), S("Limits", "MaxTimeMs BaseTimeMs AllowSubMs"), S("Decks and primers", "InterDeckDelayMs IntraDeckDelayMs DeckOrder PrimerOrder UseOffsets")),
-        [typeof(VibrationModel)] = Of("m: ExclusionMergeDistance", S("Vibration", "SiteK SiteB PpvLimit WindowMs"), S("Airblast", "AirK AirB AirblastLimitDb"),
+        [typeof(VibrationModel)] = Of("Length: ExclusionMergeDistance; Ppv: PpvLimit", S("Vibration", "SiteK SiteB PpvLimit WindowMs"), S("Airblast", "AirK AirB AirblastLimitDb"),
             S("Exclusion zone", "ExclusionMergeDistance")),
         [typeof(SummaryBlock)] = Of("", S("Summary block", "Corner Visible ShowHeader ShowQuantities ShowPattern")),
-        [typeof(DesignTolerances)] = Of("m: CollarXY, ToeXY, Depth", S("Position", "CollarXY ToeXY Depth"), S("Direction", "AngleDeg BearingDeg"), S("Redrilling", "RedrillFraction")),
-        [typeof(FlyrockModel)] = Of("m: MinimumClearance", S("Flyrock", "SiteK SafetyFactor MinimumClearance")),
-        [typeof(SiteCoordinateSystem)] = Of("m: OffsetEasting, OffsetNorthing, OffsetElevation", S("UTM", "UtmZone SouthernHemisphere"), S("Shift", "OffsetEasting OffsetNorthing OffsetElevation")),
-        [typeof(MoveCopyParameters)] = Of("m: DeltaX, DeltaY, DeltaZ", S("Shift", "DeltaX DeltaY DeltaZ Copies")),
-        [typeof(BatterParameters)] = Of("m: Height; °: FaceAngle", S("Batter", "Height FaceAngle Outwards")),
-        [typeof(LaserParameters)] = Of("m: StationX, StationY, StationZ, InstrumentHeight, TargetHeight", S("Station", "StationX StationY StationZ"), S("Heights", "InstrumentHeight TargetHeight")),
-        [typeof(MainViewModel.CurvedLayoutParameters)] = Of("m: Burden, Spacing", S("Pattern", "Rows Burden Spacing Staggered RowsToTheLeft")),
-        [typeof(MainViewModel.LasImportOptions)] = Of("m: CellSize, MaxEdge", S("Points", "CellSize KeepLowest"), S("Surface", "MaxEdge CreateSurface")),
-        [typeof(PatternParameters)] = Of("m: Burden, Spacing, EdgeOffset; °: Orientation", S("Pattern", "Burden Spacing Pattern Orientation RotateOrientation EdgeOffset"), S("Numbering", "LabelPrefix StartNumber")),
+        [typeof(DesignTolerances)] = Of("Length: CollarXY, ToeXY, Depth", S("Position", "CollarXY ToeXY Depth"), S("Direction", "AngleDeg BearingDeg"), S("Redrilling", "RedrillFraction")),
+        [typeof(FlyrockModel)] = Of("Length: MinimumClearance", S("Flyrock", "SiteK SafetyFactor MinimumClearance")),
+        [typeof(SiteCoordinateSystem)] = Of("Length: OffsetEasting, OffsetNorthing, OffsetElevation", S("UTM", "UtmZone SouthernHemisphere"), S("Shift", "OffsetEasting OffsetNorthing OffsetElevation")),
+        [typeof(MoveCopyParameters)] = Of("Length: DeltaX, DeltaY, DeltaZ", S("Shift", "DeltaX DeltaY DeltaZ Copies")),
+        [typeof(BatterParameters)] = Of("Length: Height; °: FaceAngle", S("Batter", "Height FaceAngle Outwards")),
+        [typeof(LaserParameters)] = Of("Length: StationX, StationY, StationZ, InstrumentHeight, TargetHeight", S("Station", "StationX StationY StationZ"), S("Heights", "InstrumentHeight TargetHeight")),
+        [typeof(MainViewModel.CurvedLayoutParameters)] = Of("Length: Burden, Spacing", S("Pattern", "Rows Burden Spacing Staggered RowsToTheLeft")),
+        [typeof(MainViewModel.LasImportOptions)] = Of("Length: CellSize, MaxEdge", S("Points", "CellSize KeepLowest"), S("Surface", "MaxEdge CreateSurface")),
+        [typeof(PatternParameters)] = Of("Length: Burden, Spacing, EdgeOffset; °: Orientation", S("Pattern", "Burden Spacing Pattern Orientation RotateOrientation EdgeOffset"), S("Numbering", "LabelPrefix StartNumber")),
         [typeof(Layer)] = Of("", S("Layer", "Name Group Color LineWidth LineWeight LineType"), S("Display", "Visible Locked Frozen ShowText")),
         [typeof(ReportFrame)] = Of("", S("", "MarginMm LineWidthMm")),
         [typeof(ReportStamp)] = Of("", S("Stamp", "Name Place Attach Pages")),
-        [typeof(TypeDefinition)] = Of("mm: Diameter", S("Type", "Name Color Diameter Density")),
-        [typeof(LoadingRule)] = Of("m: MinLength, MaxLength, StemmingLength, SoftCollarExtraStemming; mm: MinDiameter, MaxDiameter",
+        [typeof(TypeDefinition)] = Of("Diameter: Diameter", S("Type", "Name Color Diameter Density")),
+        [typeof(LoadingRule)] = Of("Length: MinLength, MaxLength, StemmingLength, SoftCollarExtraStemming; Diameter: MinDiameter, MaxDiameter",
             S("Rule", "Name Priority"), S("Applies to", "HoleType MinLength MaxLength MinDiameter MaxDiameter Wet"), S("Stemming", "StemmingLength StemmingProductId MinStemmingDiameters SoftCollarExtraStemming"),
             S("Alternates", "WetAlternateProductId HardAlternateProductId HardnessThreshold SoftAlternateProductId SoftnessThreshold")),
-        [typeof(DeckTemplate)] = Of("m: Length, PrimerOffset", S("Deck", "ProductId Length PrimerCount PrimerOffset BoosterId DetonatorId")),
-        [typeof(InitiationRule)] = Of("m: MinLength, MaxLength, PrimerOffset",
+        [typeof(DeckTemplate)] = Of("Length: Length, PrimerOffset", S("Deck", "ProductId Length PrimerCount PrimerOffset BoosterId DetonatorId")),
+        [typeof(InitiationRule)] = Of("Length: MinLength, MaxLength, PrimerOffset",
             S("Rule", "Name Priority"), S("Applies to", "HoleType RowFilter Horizon MinLength MaxLength"), S("Primers", "DetonatorId BoosterId PrimersPerDeck DelayMs PrimerOffset"))
     };
 
@@ -199,7 +200,10 @@ public static class FormLayouts
         grid.TextInColumns = true;
         grid.Sections = All.TryGetValue(type, out var layout) ? layout.Sections : new[] { new PropertySection("Properties") };
         if (layout == null) return;
-        foreach (var (name, unit) in layout.Units) grid.Units[name] = Loc.Ui(unit);
+        // a unit of the layout naming a quantity (HoleAngle) shows the property in the units of the program
+        foreach (var (name, unit) in layout.Units)
+            if (Enum.TryParse<Quantity>(unit, out var quantity)) grid.Measure(name, quantity);
+            else grid.Units[name] = Loc.Ui(unit);
         // set in the window of the exclusion zone, not here
         if (type == typeof(VibrationModel)) grid.Exclude.UnionWith(new[] { nameof(VibrationModel.ExclusionSize), nameof(VibrationModel.ExclusionSources) });
         if (Tips.TryGetValue(type, out var tips))

@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using BlastDesigner.Domain;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
@@ -14,6 +15,8 @@ public static class Interchange
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
     private static string F(double v, string fmt = "0.###") => v.ToString(fmt, Inv);
+    /// <summary>A kept value of a quantity as a CSV report writes it: in the units of the program.</summary>
+    private static string F(Quantity q, double kept, string fmt = "0.###") => F(Measure.Show(q, kept), fmt);
 
     // ---- KML / KMZ -----------------------------------------------------------------------
 
@@ -47,7 +50,7 @@ public static class Interchange
                     holes.Add(new XElement(k + "Placemark",
                         new XElement(k + "name", h.Label),
                         new XElement(k + "styleUrl", "#hole"),
-                        new XElement(k + "description", $"Length {F(h.Length, "0.0")} m, diameter {F(h.Diameter, "0")} mm, angle {F(h.Angle, "0")}°, bearing {F(h.Bearing, "0")}°"),
+                        new XElement(k + "description", MeasureText.InText($"Length {F(h.Length, "0.0")} m, diameter {F(h.Diameter, "0")} mm") + $", angle {F(Quantity.HoleAngle, h.Angle, "0")}°, bearing {F(h.Bearing, "0")}°"),
                         new XElement(k + "Point", new XElement(k + "altitudeMode", "absolute"), new XElement(k + "coordinates", Coord(cs, h.Collar)))));
                     break;
                 case PolylineEntity l when l.Points.Count >= 2:
@@ -307,22 +310,24 @@ public static class Interchange
     private static string Csv(IEnumerable<string> header, IEnumerable<IEnumerable<string>> rows)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(string.Join(",", header));
+        // a column named with a metric unit ("Burden m", "kg/m") named in the units of the program
+        sb.AppendLine(string.Join(",", header.Select(h => Measure.System == UnitSystem.Metric ? h
+            : h switch { "kg" => "lb", "kg/m" => "lb/ft", _ => MeasureText.Caption(h) })));
         foreach (var r in rows) sb.AppendLine(string.Join(",", r.Select(v => v.Contains(',') || v.Contains('"') ? "\"" + v.Replace("\"", "\"\"") + "\"" : v)));
         return sb.ToString();
     }
 
     public static string ExportStrataIntercepts(IEnumerable<StrataIntercept> list) =>
         Csv(new[] { "Hole", "Surface", "Depth", "X", "Y", "Z" },
-            list.Select(i => new[] { i.Hole.Label, i.Surface.Name, F(i.Depth, "0.00"), F(i.Point.X), F(i.Point.Y), F(i.Point.Z) }));
+            list.Select(i => new[] { i.Hole.Label, i.Surface.Name, F(Quantity.Length, i.Depth, "0.00"), F(Quantity.Length, i.Point.X), F(Quantity.Length, i.Point.Y), F(Quantity.Length, i.Point.Z) }));
 
     public static string ExportTolerances(IEnumerable<ToleranceResult> list) =>
         Csv(new[] { "Hole", "Collar dev m", "Depth dev m", "Toe dev m", "Angle dev deg", "Bearing dev deg", "Result" },
-            list.Select(t => new[] { t.Hole.Label, F(t.CollarDev, "0.00"), F(t.DepthDev, "0.00"), F(t.ToeDev, "0.00"), F(t.AngleDev, "0.0"), F(t.BearingDev, "0.0"), t.Pass ? "Pass" : string.Join("; ", t.Failures) }));
+            list.Select(t => new[] { t.Hole.Label, F(Quantity.Length, t.CollarDev, "0.00"), F(Quantity.Length, t.DepthDev, "0.00"), F(Quantity.Length, t.ToeDev, "0.00"), F(t.AngleDev, "0.0"), F(t.BearingDev, "0.0"), t.Pass ? "Pass" : string.Join("; ", t.Failures) }));
 
     public static string ExportFlyrock(Flyrock.Report r) =>
         Csv(new[] { "Hole", "kg/m", "Burden m", "Stemming m", "Face burst m", "Cratering m", "Rifling m", "Max m" },
-            r.Holes.Select(h => new[] { h.Hole.Label, F(h.ChargePerMetre, "0.0"), F(h.Burden, "0.00"), F(h.Stemming, "0.00"), F(h.FaceBurst, "0"), F(h.Cratering, "0"), F(h.Rifling, "0"), F(h.Max, "0") }));
+            r.Holes.Select(h => new[] { h.Hole.Label, F(Quantity.LinearCharge, h.ChargePerMetre, "0.0"), F(Quantity.Length, h.Burden, "0.00"), F(Quantity.Length, h.Stemming, "0.00"), F(Quantity.Length, h.FaceBurst, "0"), F(Quantity.Length, h.Cratering, "0"), F(Quantity.Length, h.Rifling, "0"), F(Quantity.Length, h.Max, "0") }));
 
     /// <summary>The size distribution curves, the sizes in <paramref name="unit"/>.</summary>
     public static string ExportFragmentation(Fragmentation.Result r, SizeUnit unit = SizeUnit.Cm) =>
@@ -343,8 +348,8 @@ public static class Interchange
                 {
                     h.Label, rowOf.TryGetValue(h.Id, out var r) ? r : "", h.Horizon.ToString(Inv), h.DetonatorId,
                     h.FiringTimeMs is double ft ? F(ft, "0.#") : "", h.SurfaceTimeMs is double st ? F(st, "0.#") : "", F(h.InholeDelayMs, "0.#"),
-                    h.FiringSequence?.ToString(Inv) ?? "", F(Charging.ExplosiveMass(project, h), "0.0"),
-                    F(h.Collar.X), F(h.Collar.Y), F(h.Collar.Z), F(toe.X), F(toe.Y), F(toe.Z), F(d.X, "0.00000"), F(d.Y, "0.00000"), F(d.Z, "0.00000")
+                    h.FiringSequence?.ToString(Inv) ?? "", F(Quantity.Mass, Charging.ExplosiveMass(project, h), "0.0"),
+                    F(Quantity.Length, h.Collar.X), F(Quantity.Length, h.Collar.Y), F(Quantity.Length, h.Collar.Z), F(Quantity.Length, toe.X), F(Quantity.Length, toe.Y), F(Quantity.Length, toe.Z), F(d.X, "0.00000"), F(d.Y, "0.00000"), F(d.Z, "0.00000")
                 };
             }));
     }

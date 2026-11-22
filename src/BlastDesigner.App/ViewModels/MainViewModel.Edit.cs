@@ -460,6 +460,9 @@ public sealed partial class MainViewModel
         s.MaxRecentFiles = edited.MaxRecentFiles;
         s.ShowStartupAssistant = edited.ShowStartupAssistant;
         s.Author = edited.Author;
+        s.UnitSystem = edited.UnitSystem;
+        s.HoleAngleReference = edited.HoleAngleReference;
+        s.ApplyUnits();
         s.Save();
         Look.ApplyTheme(s.IsLight, s.AccentColor);
         View.SnapEnabled = s.SnapToObjects;

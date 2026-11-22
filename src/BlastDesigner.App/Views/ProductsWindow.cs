@@ -318,10 +318,10 @@ public sealed class ProductsEditor : DockPanel
     private static string KeyValue(Product p) => p.Kind switch
     {
         ProductKind.BulkExplosive or ProductKind.Stemming => N(p.Density, "0.00") + " " + L("g/cm³"),
-        ProductKind.PackagedExplosive => N(p.UnitMass, "0.0#") + " " + L("kg"),
-        ProductKind.Booster => N(p.UnitMass * 1000, "0") + " " + L("g"),
+        ProductKind.PackagedExplosive => Qty.WithUnit(BlastDesigner.Domain.Quantity.Mass, p.UnitMass, "0.0#"),
+        ProductKind.Booster => Qty.WithUnit(BlastDesigner.Domain.Quantity.SmallMass, p.UnitMass),
         ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => N(p.DelayMs, "0") + " " + L("ms"),
-        ProductKind.DetonatingCord => N(p.Vod, "0") + " " + L("m/s"),
+        ProductKind.DetonatingCord => Qty.WithUnit(BlastDesigner.Domain.Quantity.Velocity, p.Vod, "0"),
         _ => ""
     };
 
@@ -461,10 +461,10 @@ public sealed class ProductsEditor : DockPanel
     /// </summary>
     private Control Propagation(Product p)
     {
-        var speed = Box("m/s", mono: true);
+        var speed = Box(Qty.Sym(BlastDesigner.Domain.Quantity.Velocity), mono: true);
         speed.Name = "tubeSpeed";
         speed.Watermark = L("not counted");
-        var perM = Box("ms/m", mono: true);
+        var perM = Box(Qty.Sym(BlastDesigner.Domain.Quantity.DelayPerLength), mono: true);
         perM.Name = "propagation";
         var tip = L("Speed of the signal down the tube from the data sheet of the product, m/s, or its time per metre, ms/m: 2000 m/s = 0.5 ms/m; with the primer 15 m down the hole, 7.5 ms. Empty or 0: not counted.");
         ToolTip.SetTip(speed, tip);
@@ -474,10 +474,12 @@ public sealed class ProductsEditor : DockPanel
         TextBox? typed = null;
         string shownSpeed = "", shownPerM = "";
         static string SpeedOf(double msPerM) => msPerM > 0 ? N(1000 / msPerM, "0") : "";
+        // the fields in the units of the program (ft/s and ms/ft go together as m/s and ms/m do), kept in ms/m
         void Show()
         {
-            speed.Text = wroteSpeed = shownSpeed = SpeedOf(p.PropagationMsPerM);
-            perM.Text = wrotePerM = shownPerM = N(p.PropagationMsPerM, "0.###");
+            var shown = Qty.Show(BlastDesigner.Domain.Quantity.DelayPerLength, p.PropagationMsPerM);
+            speed.Text = wroteSpeed = shownSpeed = SpeedOf(shown);
+            perM.Text = wrotePerM = shownPerM = N(shown, "0.###");
             typed = null;
         }
         // ms per metre from what the field says: empty is 0, a bad number null
@@ -503,8 +505,8 @@ public sealed class ProductsEditor : DockPanel
         {
             // the field typed in last; its text changed before the other followed it otherwise
             var from = typed ?? (speed.Text != shownSpeed ? speed : perM.Text != shownPerM ? perM : null);
-            double? m = from == speed ? FromSpeed() : from == perM ? FromPerM() : p.PropagationMsPerM;
-            if (m is double v) p.PropagationMsPerM = Math.Max(0, v);
+            double? m = from == speed ? FromSpeed() : from == perM ? FromPerM() : null;
+            if (m is double v) p.PropagationMsPerM = Math.Max(0, Qty.Store(BlastDesigner.Domain.Quantity.DelayPerLength, v));
             Show();
             UpdateStatus();
         }
@@ -521,6 +523,10 @@ public sealed class ProductsEditor : DockPanel
     }
 
     /// <summary>Number field: commits on Enter or when focus leaves it; bad input goes back to the last value.</summary>
+    /// <summary>A number field of a quantity: shown and typed in the units of the program, <paramref name="set"/> given the kept value.</summary>
+    private TextBox Number(string name, BlastDesigner.Domain.Quantity q, double kept, Action<double> set, string? format = null, bool refreshList = false) =>
+        Number(name, Qty.Show(q, kept), v => set(Qty.Store(q, v)), Qty.Sym(q), format ?? BlastDesigner.Domain.Measure.Format(q), refreshList);
+
     private TextBox Number(string name, double value, Action<double> set, string? unit, string format = "0.###", bool refreshList = false)
     {
         var box = Box(unit, mono: true);
@@ -600,7 +606,7 @@ public sealed class ProductsEditor : DockPanel
 
         var perKg = p.Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive or ProductKind.Stemming;
         _props.Children.Add(Section("Cost and colour",
-            Fields(Labeled("Cost", Number("cost", p.Cost, v => p.Cost = Math.Max(0, v), perKg ? "per kg" : "per unit", "0.##")), new Border()),
+            Fields(Labeled("Cost", perKg ? Number("cost", BlastDesigner.Domain.Quantity.CostPerMass, p.Cost, v => p.Cost = Math.Max(0, v), "0.##") : Number("cost", p.Cost, v => p.Cost = Math.Max(0, v), "per unit", "0.##")), new Border()),
             ColourPicker(p)));
     }
 
@@ -610,10 +616,11 @@ public sealed class ProductsEditor : DockPanel
         Control Density() => Labeled("Density", Number("density", p.Density, v => p.Density = Math.Max(0, v), "g/cm³", "0.00#", refreshList: true));
         Control Strength() => Labeled("Relative weight strength", Number("rws", p.RelativeWeightStrength, v => p.RelativeWeightStrength = Math.Max(0, v), "%", "0.#"));
         Control Energy() => Labeled("Energy", Number("energy", p.Energy, v => p.Energy = Math.Max(0, v), "MJ/kg", "0.0#"));
-        Control Vod() => Labeled("Velocity of detonation", Number("vod", p.Vod, v => p.Vod = Math.Max(0, v), "m/s", "0"));
+        Control Vod() => Labeled("Velocity of detonation", Number("vod", BlastDesigner.Domain.Quantity.Velocity, p.Vod, v => p.Vod = Math.Max(0, v), "0"));
         Control Delay() => Labeled("Delay", Number("delay", p.DelayMs, v => p.DelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true));
-        Control UnitMass(string label, string unit, double scale) => Labeled(label, Number("unitMass", p.UnitMass * scale, v => p.UnitMass = Math.Max(0, v) / scale, unit, "0.###", refreshList: true));
-        Control UnitLength() => Labeled("Cartridge length", Number("unitLength", p.UnitLength, v => p.UnitLength = Math.Max(0, v), "m", "0.###"));
+        // the mass of one: of a cartridge in kg (lb), of a booster in g (oz), the core load of a cord in g/m (gr/ft)
+        Control UnitMass(string label, BlastDesigner.Domain.Quantity q) => Labeled(label, Number("unitMass", q, p.UnitMass, v => p.UnitMass = Math.Max(0, v), "0.###", refreshList: true));
+        Control UnitLength() => Labeled("Cartridge length", Number("unitLength", BlastDesigner.Domain.Quantity.Length, p.UnitLength, v => p.UnitLength = Math.Max(0, v), "0.###"));
         Control Water()
         {
             var sw = new ToggleSwitch { IsChecked = p.WaterResistant, OnContent = "", OffContent = "", VerticalAlignment = VerticalAlignment.Center };
@@ -627,16 +634,16 @@ public sealed class ProductsEditor : DockPanel
         return p.Kind switch
         {
             ProductKind.BulkExplosive => new() { Fields(Density(), Strength(), Energy(), Vod()), Water() },
-            ProductKind.PackagedExplosive => new() { Fields(Density(), Strength(), Energy(), Vod(), UnitMass("Cartridge mass", "kg", 1), UnitLength()), Water() },
+            ProductKind.PackagedExplosive => new() { Fields(Density(), Strength(), Energy(), Vod(), UnitMass("Cartridge mass", BlastDesigner.Domain.Quantity.Mass), UnitLength()), Water() },
             ProductKind.Stemming => new() { Fields(Density(), new Border()) },
-            ProductKind.Booster => new() { Fields(UnitMass("Mass", "g", 1000), Density(), Energy(), Vod()) },
+            ProductKind.Booster => new() { Fields(UnitMass("Mass", BlastDesigner.Domain.Quantity.SmallMass), Density(), Energy(), Vod()) },
             ProductKind.DownholeDetonator => new() { Fields(Delay(), Labeled("Signal down the tube", Propagation(p))) },
             ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => new() { Fields(Delay(), new Border()) },
             ProductKind.HarnessWire => new(),
             ProductKind.ElectronicDetonator => new() { Fields(Labeled("Default delay", Number("delay", p.DelayMs, v => p.DelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true)), new Border()) },
-            ProductKind.DetonatingCord => new() { Fields(UnitMass("Core load", "g/m", 1000), Vod()) },
+            ProductKind.DetonatingCord => new() { Fields(UnitMass("Core load", BlastDesigner.Domain.Quantity.CordLoad), Vod()) },
             ProductKind.GasBag => new(),
-            _ => new() { Fields(Density(), Strength(), Energy(), Vod(), UnitMass("Unit mass", "kg", 1), UnitLength(), Delay(), new Border()), Water() }
+            _ => new() { Fields(Density(), Strength(), Energy(), Vod(), UnitMass("Unit mass", BlastDesigner.Domain.Quantity.Mass), UnitLength(), Delay(), new Border()), Water() }
         };
     }
 

@@ -44,6 +44,7 @@ public partial class App : Application
         });
         Engine.Charging.MinStemmingDiameters = settings.MinStemmingDiameters;
         SizeUnits.Default = settings.FragmentSizeUnit;
+        settings.ApplyUnits();
         Log.Info("Application started");
         if (settings.UsageLogging) UsageLog.Start(Changelog.Current.ToString());
         // what is still in memory reaches the file also when the program fails

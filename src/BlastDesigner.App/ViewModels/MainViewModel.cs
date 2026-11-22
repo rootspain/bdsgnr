@@ -38,7 +38,7 @@ public sealed partial class MainViewModel : ObservableObject
         View.TargetRadius = settings.TargetRadiusPixels;
         View.ShowFps = settings.ShowFps;
         View.SurfaceWireframe = settings.SurfaceWireframe;
-        View.PointerWorldMoved += p => Coordinates = $"X {p.X:0.00}  Y {p.Y:0.00}  Z {p.Z:0.00}";
+        View.PointerWorldMoved += p => Coordinates = $"X {Qty.Text(BlastDesigner.Domain.Quantity.Length, p.X, "0.00")}  Y {Qty.Text(BlastDesigner.Domain.Quantity.Length, p.Y, "0.00")}  Z {Qty.Text(BlastDesigner.Domain.Quantity.Length, p.Z, "0.00")}";
         _autosave = new DispatcherTimer { Interval = TimeSpan.FromMinutes(Math.Max(1, settings.AutosaveMinutes)) };
         _autosave.Tick += (_, _) => _ = WriteRecovery();
         _autosave.Start();
@@ -100,6 +100,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public void SetStatus(string text)
     {
+        // the numbers written with a metric unit in the units of the program
+        text = Qty.InText(text);
         Status = text;
         Log.Debug(text);
     }

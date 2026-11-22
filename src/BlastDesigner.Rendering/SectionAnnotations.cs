@@ -38,7 +38,7 @@ public sealed class SectionAnnotations : IOverlay
     }
 
     /// <summary>A length as the section writes it: one decimal, a point, no unit.</summary>
-    public static string Metres(double v) => v.ToString("0.0", CultureInfo.InvariantCulture);
+    public static string Metres(double v) => BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, v).ToString("0.0", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// The frame of the section on the screen: from the top of the frame to the lowest toe, a little out of the outer holes

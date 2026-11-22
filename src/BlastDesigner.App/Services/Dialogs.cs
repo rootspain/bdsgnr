@@ -142,6 +142,10 @@ public static class Dialogs
         return ok ? (double?)box.Value : null;
     }
 
+    /// <summary>A number of a quantity: asked in the units of the program, given back as kept.</summary>
+    public static async Task<double?> PromptNumber(string title, string label, BlastDesigner.Domain.Quantity q, double kept) =>
+        Qty.Store(q, await PromptNumber(title, label, Math.Round(Qty.Show(q, kept), 3)));
+
     public static async Task<int?> Choose(string title, string label, IReadOnlyList<string> items, int selected = 0)
     {
         if (items.Count == 0) return null;

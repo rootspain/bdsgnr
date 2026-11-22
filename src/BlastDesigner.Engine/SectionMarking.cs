@@ -114,7 +114,7 @@ public static class SectionMarking
     public static double SlopeDegrees(SectionSpot a, SectionSpot b) =>
         Math.Atan2(Math.Abs(b.Z - a.Z), Math.Abs(b.S - a.S)) * 180 / Math.PI;
 
-    /// <summary>The value a mark measures: a length or a height, m; an angle or a slope, degrees; null for a line or a text.</summary>
+    /// <summary>The value a mark measures: a length or a height, m (kept); an angle or a slope, degrees; null for a line or a text.</summary>
     public static double? Value(SectionMark m, IReadOnlyList<SectionSpot> p) => m.Kind switch
     {
         SectionMarkKind.Horizontal when p.Count >= 2 => Math.Abs(p[1].S - p[0].S),
@@ -153,7 +153,8 @@ public static class SectionMarking
         if (p.Any(x => x.Lost)) value = "?";
         else if (m.Kind == SectionMarkKind.Slope && p.Count >= 2) value = Slope(p[0], p[1], m.Style);
         else if (Value(m, p) is not double v) value = "?";
-        else value = m.Kind == SectionMarkKind.Angle ? Number(v, m.Style.AngleDecimals) + "°" : Number(v, m.Style.Decimals);
+        // a length or a level in the unit of lengths shown
+        else value = m.Kind == SectionMarkKind.Angle ? Number(v, m.Style.AngleDecimals) + "°" : Number(Measure.Show(Quantity.Length, v), m.Style.Decimals);
         return string.IsNullOrEmpty(m.Style.Text) ? value : m.Style.Text.Replace("<>", value);
     }
 

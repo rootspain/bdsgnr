@@ -602,10 +602,10 @@ public sealed class ToolPanel : Border
         var polygonPattern = tool is PolygonPatternTool;
         if (tool.Name is "Pattern" or "Row" or "Hole" or "Dummy hole" || polygonPattern)
         {
-            if (tool.Name is "Pattern" or "Row" || polygonPattern) _fields.Children.Add(Field("Burden, m", d.Burden, v => _vm.Change("Design data", p => p.Design.Burden = v), "patternBurdenField"));
-            if (tool.Name is "Pattern" or "Row" || polygonPattern) _fields.Children.Add(Field("Spacing, m", d.Spacing, v => _vm.Change("Design data", p => p.Design.Spacing = v), "patternSpacingField"));
-            _fields.Children.Add(Field("Diameter, mm", d.Diameter, v => _vm.Change("Design data", p => p.Design.Diameter = v)));
-            _fields.Children.Add(Field("Angle, °", d.Angle, v => _vm.Change("Design data", p => p.Design.Angle = v)));
+            if (tool.Name is "Pattern" or "Row" || polygonPattern) _fields.Children.Add(Field("Burden, m", BlastDesigner.Domain.Quantity.Length, d.Burden, v => _vm.Change("Design data", p => p.Design.Burden = v), "patternBurdenField"));
+            if (tool.Name is "Pattern" or "Row" || polygonPattern) _fields.Children.Add(Field("Spacing, m", BlastDesigner.Domain.Quantity.Length, d.Spacing, v => _vm.Change("Design data", p => p.Design.Spacing = v), "patternSpacingField"));
+            _fields.Children.Add(Field("Diameter, mm", BlastDesigner.Domain.Quantity.Diameter, d.Diameter, v => _vm.Change("Design data", p => p.Design.Diameter = v)));
+            _fields.Children.Add(Field("Angle, °", BlastDesigner.Domain.Quantity.HoleAngle, d.Angle, v => _vm.Change("Design data", p => p.Design.Angle = v), "designAngleField"));
             if (tool.Name == "Pattern" || polygonPattern)
             {
                 var combo = new ComboBox { ItemsSource = Enum.GetValues<PatternType>().Select(x => Loc.Enum(x)).ToList(), SelectedIndex = (int)d.Pattern, Width = 120, Height = 26 };
@@ -628,7 +628,7 @@ public sealed class ToolPanel : Border
             }
             if (tool.Name == "Pattern" || polygonPattern)
             {
-                _fields.Children.Add(Field("Edge offset, m", _vm.PatternEdgeOffset, v => _vm.PatternEdgeOffset = v, "patternOffset"));
+                _fields.Children.Add(Field("Edge offset, m", BlastDesigner.Domain.Quantity.Length, _vm.PatternEdgeOffset, v => _vm.PatternEdgeOffset = v, "patternOffset"));
                 _fields.Children.Add(TextField("Number prefix", _vm.PatternLabelPrefix, v => _vm.PatternLabelPrefix = v, "patternPrefix"));
                 _fields.Children.Add(Field("Start number", _vm.NextPatternNumber, v => _vm.PatternStartNumber = Math.Max(0, (int)Math.Round(v)), "patternStart"));
                 _fields.Children.Add(PatternLevel());
@@ -720,7 +720,7 @@ public sealed class ToolPanel : Border
         {
             var a = axis;
             var value = axis switch { 0 => t.Move.X, 1 => t.Move.Y, _ => t.Move.Z };
-            _fields.Children.Add(Field(label, value, v => tool.SetMove(a, v), "transformMove" + "XYZ"[axis]));
+            _fields.Children.Add(Field(label, BlastDesigner.Domain.Quantity.Length, value, v => tool.SetMove(a, v), "transformMove" + "XYZ"[axis]));
         }
         var axes = new ComboBox { ItemsSource = new[] { "Of the world", "Of the object" }.Select(Loc.Ui).ToList(), SelectedIndex = tool.ObjectAxes ? 1 : 0, Width = 120, Height = 26, Name = "transformAxes", IsEnabled = tool.ObjectAxesAvailable };
         ToolTip.SetTip(axes, Loc.Ui("Of the world: X east, Y north. Of the object: along a block, a line, a text or a dimension (the first selected)"));
@@ -736,7 +736,7 @@ public sealed class ToolPanel : Border
             {
                 var a = axis;
                 var value = axis switch { 0 => t.Pivot.X, 1 => t.Pivot.Y, _ => t.Pivot.Z };
-                _fields.Children.Add(Field(label, value, v => tool.SetPivotCoordinate(a, v), "transformPivot" + "XYZ"[axis]));
+                _fields.Children.Add(Field(label, BlastDesigner.Domain.Quantity.Length, value, v => tool.SetPivotCoordinate(a, v), "transformPivot" + "XYZ"[axis]));
             }
         var reset = Ui.Chip(Loc.Ui("Reset"), tool.Reset, false, Loc.Ui("Back to no change: scale 1, no tilt, no mirror, no move"));
         reset.Name = "transformReset";
@@ -801,7 +801,7 @@ public sealed class ToolPanel : Border
         AutomationProperties.SetName(surface, Loc.Ui("To the surface"));
         void Show()
         {
-            box.Text = _vm.PatternToSurface || _vm.PatternToLevel is not double z ? "" : z.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture);
+            box.Text = _vm.PatternToSurface || _vm.PatternToLevel is not double z ? "" : Qty.Text(BlastDesigner.Domain.Quantity.Length, z, "0.###");
             box.Watermark = Loc.Ui(_vm.PatternToSurface ? "by the surface" : "not set");
         }
         Show();
@@ -812,7 +812,7 @@ public sealed class ToolPanel : Border
             if (text.Length > 0)
             {
                 if (!double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.CurrentCulture, out var v)) { Show(); return; }
-                level = v;
+                level = Qty.Store(BlastDesigner.Domain.Quantity.Length, v);
             }
             // a level typed in takes over from the surface; an empty field leaves the surface on
             if (level != null) { _vm.PatternToSurface = false; surface.IsChecked = false; }
@@ -838,6 +838,10 @@ public sealed class ToolPanel : Border
         "The first row goes on the face side, half a burden from the edge of the outline. The next rows step back, against the direction, a burden apart. The spacing is laid along the row; in a staggered pattern every second row is shifted by half a spacing.",
         "The program numbers the rows by this direction (Row 1 is at the face), and the holes by it too."
     };
+
+    /// <summary>A field of a quantity: shown and typed in the units of the program, <paramref name="set"/> given the kept value.</summary>
+    private static Control Field(string label, BlastDesigner.Domain.Quantity q, double kept, Action<double> set, string? name = null, string? tip = null) =>
+        Field(label, Qty.Show(q, kept), v => set(Qty.Store(q, v)), name, tip);
 
     private static Control Field(string label, double value, Action<double> set, string? name = null, string? tip = null)
     {
@@ -1028,7 +1032,7 @@ public sealed class Inspector : DockPanel
         [HoleLabel.Length] = ("Length", "Plan and 3D: \"L\" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length."),
         [HoleLabel.Diameter] = ("Diameter", "Plan and 3D: \"Ø\" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter."),
         [HoleLabel.Elevation] = ("Elevation", "Plan and 3D: \"Z\", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast."),
-        [HoleLabel.Angle] = ("Angle", "Plan and 3D: \"α\", the angle from vertical. Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check."),
+        [HoleLabel.Angle] = ("Angle", "Plan and 3D: \"α\", the angle of the hole as Program settings ▸ Units count it (from vertical or from horizontal). Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check."),
         [HoleLabel.Bearing] = ("Bearing", "Plan and 3D: \"Az\", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check."),
         [HoleLabel.Temperature] = ("Temperature", "Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations."),
         [HoleLabel.ExplosiveMass] = ("Explosive mass", "Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration."),

@@ -208,7 +208,7 @@ public sealed class FragmentationForm : DockPanel
         _fSlider = RockSlider("protodyakonovFSlider", FStops, SetFStep);
         _jf = Number("jointFactor", null, v => { Draft.JointFactor = Math.Max(0, v); Refresh(); });
         _e = Number("youngsModulus", "GPa", v => { Draft.YoungsModulus = Math.Max(0, v); Refresh(); });
-        _drill = Number("drillDeviation", "m", v => { Draft.DrillDeviation = Math.Max(0, v); Refresh(); });
+        _drill = Number("drillDeviation", Qty.Sym(BlastDesigner.Domain.Quantity.Length), v => { Draft.DrillDeviation = Math.Max(0, Qty.Store(BlastDesigner.Domain.Quantity.Length, v)); Refresh(); });
         // the sizes are entered in the unit chosen and kept in cm
         _max = Number("maxBlock", "cm", v => { Draft.MaxBlockCm = Math.Max(1, SizeUnits.ToCm(v, Unit)); Refresh(); });
         _over = Number("oversize", "cm", v => { Draft.OversizeCm = Math.Max(0.1, SizeUnits.ToCm(v, Unit)); Refresh(); });
@@ -523,7 +523,7 @@ public sealed class FragmentationForm : DockPanel
         Show(_f, ProtodyakonovF, "0.##");
         Show(_jf, Draft.JointFactor, "0.#");
         Show(_e, Draft.YoungsModulus, "0.#");
-        Show(_drill, Draft.DrillDeviation, "0.0#");
+        Show(_drill, Qty.Show(BlastDesigner.Domain.Quantity.Length, Draft.DrillDeviation), "0.0#");
         Show(_max, SizeUnits.FromCm(Draft.MaxBlockCm, Unit), "0.#");
         Show(_over, SizeUnits.FromCm(Draft.OversizeCm, Unit), "0.#");
         Show(_fines, SizeUnits.FromCm(Draft.FinesCm, Unit), "0.##");

@@ -114,12 +114,14 @@ public static class SizeUnits
     /// <summary>The unit of the program settings, for inputs that have none of their own.</summary>
     public static SizeUnit Default { get; set; } = SizeUnit.Mm;
     public static SizeUnit Of(FragmentationModel m) => m.SizeUnit ?? Default;
-    public static double FromCm(double cm, SizeUnit unit) => unit == SizeUnit.Mm ? cm * 10 : cm;
-    public static double ToCm(double value, SizeUnit unit) => unit == SizeUnit.Mm ? value / 10 : value;
-    /// <summary>"mm" or "cm", to be translated.</summary>
-    public static string Symbol(SizeUnit unit) => unit == SizeUnit.Mm ? "mm" : "cm";
+    // in the imperial system the sizes are in inches, whichever metric unit is chosen
+    private static bool Imperial => Measure.System == UnitSystem.Imperial;
+    public static double FromCm(double cm, SizeUnit unit) => Imperial ? cm / 2.54 : unit == SizeUnit.Mm ? cm * 10 : cm;
+    public static double ToCm(double value, SizeUnit unit) => Imperial ? value * 2.54 : unit == SizeUnit.Mm ? value / 10 : value;
+    /// <summary>"mm", "cm" or "in", to be translated.</summary>
+    public static string Symbol(SizeUnit unit) => Imperial ? "in" : unit == SizeUnit.Mm ? "mm" : "cm";
     /// <summary>Number format of a size: a mm value has ten times as many units, so one decimal less.</summary>
-    public static string Format(SizeUnit unit) => unit == SizeUnit.Mm ? "0" : "0.0";
+    public static string Format(SizeUnit unit) => Imperial ? "0.0" : unit == SizeUnit.Mm ? "0" : "0.0";
 }
 
 /// <summary>Measured vibration event used to fit the site law.</summary>

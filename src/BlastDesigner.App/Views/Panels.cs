@@ -299,9 +299,9 @@ public sealed partial class PropertiesPanel : DockPanel
             grid.Exclude.Add(nameof(Hole.RouteLine));
             grid.Sections = HoleSections;
             grid.Collapsed = _collapsed;
-            string m = Loc.Ui("m"), degrees = "°";
-            foreach (var (name, unit) in new[] { (nameof(Hole.Collar), m), (nameof(Hole.Angle), degrees), (nameof(Hole.Bearing), degrees), (nameof(Hole.Length), m), (nameof(Hole.ToLevel), m), (nameof(Hole.Diameter), Loc.Ui("mm")), (nameof(Hole.Subdrill), m), (nameof(Hole.ActualLength), m), (nameof(Hole.WaterDepth), m), (nameof(Hole.Temperature), "°C") })
-                grid.Units[name] = unit;
+            grid.Units[nameof(Hole.Bearing)] = "°";
+            foreach (var (name, q) in new[] { (nameof(Hole.Collar), Quantity.Length), (nameof(Hole.Angle), Quantity.HoleAngle), (nameof(Hole.Length), Quantity.Length), (nameof(Hole.ToLevel), Quantity.Length), (nameof(Hole.Diameter), Quantity.Diameter), (nameof(Hole.Subdrill), Quantity.Length), (nameof(Hole.ActualLength), Quantity.Length), (nameof(Hole.WaterDepth), Quantity.Length), (nameof(Hole.Temperature), Quantity.Temperature) })
+                grid.Measure(name, q);
             grid.Tips[nameof(Hole.Length)] = grid.Tips[nameof(Hole.ToLevel)] = LengthTip();
             if (!doc.IsReadOnly)
             {
@@ -319,13 +319,21 @@ public sealed partial class PropertiesPanel : DockPanel
         if (sel.All(e => e is ILineStyled)) LineStyleFields.Apply(grid, doc.Project);
         if (first is BlockEntity)
         {
-            string m = Loc.Ui("m");
             foreach (var name in new[] { nameof(BlockEntity.Origin), nameof(BlockEntity.Length), nameof(BlockEntity.Width), nameof(BlockEntity.Height), nameof(BlockEntity.Bottom), nameof(BlockEntity.Top) })
-                grid.Units[name] = m;
+                grid.Measure(name, Quantity.Length);
             grid.Units[nameof(BlockEntity.Azimuth)] = "°";
             grid.Tips[nameof(BlockEntity.Origin)] = Loc.Ui("The corner of the base the length, width and height go from");
             // the volume is worked out: the grid shows it as a value, not a field
         }
+        // the lengths and times per length of the other objects in the units of the program: the reliefs of a timing front,
+        // the burden and spacing of an opening point, the radius of a circle, the height of a text, the offset of a dimension
+        foreach (var prop in first.GetType().GetProperties())
+        {
+            if ((Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType) != typeof(double) || grid.Quantities.ContainsKey(prop.Name) || first is Hole) continue;
+            if (prop.Name.EndsWith("MsPerM", StringComparison.Ordinal)) grid.Measure(prop.Name, Quantity.DelayPerLength);
+            else if (prop.Name is "BurdenM" or "SpacingM" or "Radius" or "Offset" || (prop.Name == "Height" && first is TextEntity)) grid.Measure(prop.Name, Quantity.Length);
+        }
+        if (first is BlockEntity) grid.Measure(nameof(BlockEntity.Volume), Quantity.Volume);
         grid.SetTargets(template, sel);
         var ids = sel.Select(e => e.Id).ToHashSet();
         grid.PropertyEdited += name =>
@@ -650,13 +658,14 @@ public sealed partial class PropertiesPanel : DockPanel
         {
             if (!await _vm.ResizePattern(id, burden, spacing)) Refresh();
         }
-        var burdenBox = Box(pat.Burden.ToString("0.###", c), "patternBurden", v => { if (Metres(v) is double b) Resize(b, pat.Spacing); else Refresh(); });
-        var spacingBox = Box(pat.Spacing.ToString("0.###", c), "patternSpacing", v => { if (Metres(v) is double s) Resize(pat.Burden, s); else Refresh(); });
+        // in the unit of lengths shown
+        var burdenBox = Box(Qty.Text(BlastDesigner.Domain.Quantity.Length, pat.Burden, "0.###"), "patternBurden", v => { if (Metres(v) is double b) Resize(Qty.Store(BlastDesigner.Domain.Quantity.Length, b), pat.Spacing); else Refresh(); });
+        var spacingBox = Box(Qty.Text(BlastDesigner.Domain.Quantity.Length, pat.Spacing, "0.###"), "patternSpacing", v => { if (Metres(v) is double s) Resize(pat.Burden, Qty.Store(BlastDesigner.Domain.Quantity.Length, s)); else Refresh(); });
         burdenBox.Width = spacingBox.Width = 52;
         ToolTip.SetTip(burdenBox, Loc.Ui("Burden, m: the distance between the rows; a new value lays the grid out again"));
         ToolTip.SetTip(spacingBox, Loc.Ui("Spacing, m: the distance between the holes of a row; a new value lays the grid out again"));
         TextBlock Faint(string text) => new() { Text = text, FontSize = 12, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
-        body.Children.Add(Row("Burden × spacing", Ui.Row(4, burdenBox, Faint("×"), spacingBox, Faint(Loc.Ui("m")))));
+        body.Children.Add(Row("Burden × spacing", Ui.Row(4, burdenBox, Faint("×"), spacingBox, Faint(Qty.Sym(BlastDesigner.Domain.Quantity.Length)))));
         var azimuth = Box(pat.Azimuth.ToString("0.#", c), "patternAzimuth", v =>
         {
             if (double.TryParse(v, NumberStyles.Float, c, out var a)) _ = _vm.RotatePattern(id, MainViewModel.Turn(pat.Azimuth, a));
@@ -665,7 +674,7 @@ public sealed partial class PropertiesPanel : DockPanel
         body.Children.Add(Row("Burden azimuth, °", azimuth));
         body.Children.Add(Row("Turned since made", Value(MainViewModel.Turn(pat.InitialAzimuth, pat.Azimuth).ToString("+0.#;−0.#;0", c) + "°")));
         if (holes.Count == 1 && holes[0].GridOffset is Vec3 o)
-            body.Children.Add(Row("Off its node", Value($"{o.X.ToString("0.##", c)} / {o.Y.ToString("0.##", c)} {Loc.Ui("m")}")));
+            body.Children.Add(Row("Off its node", Value($"{Qty.Text(BlastDesigner.Domain.Quantity.Length, o.X, "0.##")} / {Qty.Text(BlastDesigner.Domain.Quantity.Length, o.Y, "0.##")} {Qty.Sym(BlastDesigner.Domain.Quantity.Length)}")));
         var turns = new CheckBox { Content = Loc.Ui("Orientation turns with the pattern"), IsChecked = pat.RotateOrientation, Name = "patternRotateOrientationProp", IsEnabled = !doc.IsReadOnly };
         turns.IsCheckedChanged += (_, _) => { var on = turns.IsChecked == true; if (on != pat.RotateOrientation) _vm.SetPatternFlag(id, "Pattern settings", x => x.RotateOrientation = on); };
         body.Children.Add(turns);
@@ -788,8 +797,8 @@ public sealed partial class PropertiesPanel : DockPanel
         Spacing = 4,
         Children =
         {
-            new TextBlock { Text = kg.ToString("0.0", CultureInfo.CurrentCulture), FontFamily = Look.Mono, FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Look.Text },
-            new TextBlock { Text = Loc.Ui("kg"), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 2) }
+            new TextBlock { Text = Qty.Text(BlastDesigner.Domain.Quantity.Mass, kg, "0.0"), FontFamily = Look.Mono, FontSize = 16, FontWeight = FontWeight.SemiBold, Foreground = Look.Text },
+            new TextBlock { Text = Qty.Sym(BlastDesigner.Domain.Quantity.Mass), FontSize = 11, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 2) }
         }
     };
 
@@ -835,8 +844,8 @@ public sealed partial class PropertiesPanel : DockPanel
             Part(d.Top - depth, null);
             Part(d.Bottom - d.Top, colour);
             depth = Math.Max(depth, d.Bottom);
-            var text = $"{d.Top:0.0}–{d.Bottom:0.0} {Loc.Ui("m")}  {product?.Name}" + (d.Primers.Count > 0 ? $"  ({d.Primers.Count} pr.)" : "");
-            var kg = new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = $"{Charging.DeckMass(p, h, d):0.0} {Loc.Ui("kg")}", FontFamily = Look.Mono, FontSize = 11, Foreground = Look.Muted, Margin = new Thickness(8, 0, 0, 0) };
+            var text = $"{Qty.Text(BlastDesigner.Domain.Quantity.Length, d.Top, "0.0")}–{Qty.Text(BlastDesigner.Domain.Quantity.Length, d.Bottom, "0.0")} {Qty.Sym(BlastDesigner.Domain.Quantity.Length)}  {product?.Name}" + (d.Primers.Count > 0 ? $"  ({d.Primers.Count} pr.)" : "");
+            var kg = new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = Qty.WithUnit(BlastDesigner.Domain.Quantity.Mass, Charging.DeckMass(p, h, d), "0.0"), FontFamily = Look.Mono, FontSize = 11, Foreground = Look.Muted, Margin = new Thickness(8, 0, 0, 0) };
             var name = new TextBlock { Text = text, FontSize = 11, Foreground = Look.Muted, TextTrimming = TextTrimming.CharacterEllipsis };
             ToolTip.SetTip(name, text);
             rows.Children.Add(new DockPanel
@@ -906,7 +915,7 @@ public sealed partial class HoleRowVm : ObservableObject
     public double X { get => Math.Round(Hole.Collar.X, 3); set => Set("Collar", h => h.Translate(new Vec3(value - h.Collar.X, 0, 0))); }
     public double Y { get => Math.Round(Hole.Collar.Y, 3); set => Set("Collar", h => h.Translate(new Vec3(0, value - h.Collar.Y, 0))); }
     public double Z { get => Math.Round(Hole.Collar.Z, 3); set => Set("Collar", h => h.Collar = h.Collar.WithZ(value)); }
-    public double Angle { get => Hole.Angle; set => Set(nameof(Angle), h => h.Angle = value); }
+    public double Angle { get => BlastDesigner.Domain.Measure.Show(Quantity.HoleAngle, Hole.Angle); set => Set(nameof(Angle), h => h.Angle = BlastDesigner.Domain.Measure.Store(Quantity.HoleAngle, value)); }
     public double Bearing { get => Hole.Bearing; set => Set(nameof(Bearing), h => h.Bearing = value); }
     public double Length { get => Math.Round(Hole.Length, 2); set => Set(nameof(Length), h => h.Length = value); }
     public double? Dipped { get => Hole.ActualLength; set => Set("Actual length", h => h.ActualLength = value); }

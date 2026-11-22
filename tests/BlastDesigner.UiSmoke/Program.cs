@@ -671,6 +671,80 @@ Step("properties of holes: loading on top, fields in folding groups inside the p
     if (vm.Project!.Holes.First(h => h.Id == holes[0]).Length != was || vm.Project.Entities.OfType<SurfaceEntity>().Any(s => s.Name == "Smoke floor")) throw new Exception("undo did not take the lengths and the floor back");
     vm.Doc!.Select(selected); Pump();
 });
+Step("hole angle from horizontal (Program settings ▸ Units): the field shows 90 less it, 75 typed is 15 from vertical, the project keeps it", () =>
+{
+    var selected = vm.Doc!.Selection.ToList();
+    var steps = vm.Doc.UndoNames.Count;
+    var was = vm.Settings.HoleAngleReference;
+    try
+    {
+        // the settings window: the chip of the angle
+        var form = new SettingsForm(vm.Settings);
+        var chip = form.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Tag as string == "angle:" + BlastDesigner.Domain.AngleReference.FromHorizontal) ?? throw new Exception("no hole angle in the settings");
+        chip.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (form.Edited.HoleAngleReference != BlastDesigner.Domain.AngleReference.FromHorizontal) throw new Exception("the chip did not choose the angle from horizontal");
+        vm.ApplyProgramSettings(form.Edited); Pump();
+        if (BlastDesigner.Domain.Measure.Angle != BlastDesigner.Domain.AngleReference.FromHorizontal) throw new Exception("the settings did not reach the units of the program");
+        var hole = vm.Project!.Holes.First();
+        var id = hole.Id;
+        vm.Doc.Select(new[] { id }); Pump();
+        var box = window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "propAngle" && t.IsEffectivelyVisible) ?? throw new Exception("no angle field of the hole");
+        var shown = (90 - hole.Angle).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        if (box.Text != shown) throw new Exception($"the angle field shows {box.Text}, from horizontal {shown}");
+        box.Text = "75"; box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+        if (Math.Abs(((Hole)vm.Project.FindEntity(id)!).Angle - 15) > 1e-9) throw new Exception("75 from horizontal should keep 15 from vertical: " + ((Hole)vm.Project.FindEntity(id)!).Angle);
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "03h_hole_angle_from_horizontal.png"));
+    }
+    finally
+    {
+        vm.Settings.HoleAngleReference = was;
+        vm.Settings.ApplyUnits();
+        vm.Settings.Save();
+        while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+        vm.Doc.Select(selected); Pump();
+    }
+});
+Step("imperial units (Program settings ▸ Units): the fields of a hole in feet and inches, a length typed in feet kept in metres, captions and messages in feet", () =>
+{
+    var selected = vm.Doc!.Selection.ToList();
+    var steps = vm.Doc.UndoNames.Count;
+    var was = vm.Settings.UnitSystem;
+    try
+    {
+        var form = new SettingsForm(vm.Settings);
+        var chip = form.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Tag as string == "units:" + BlastDesigner.Domain.UnitSystem.Imperial) ?? throw new Exception("no units in the settings");
+        chip.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        vm.ApplyProgramSettings(form.Edited); Pump();
+        if (BlastDesigner.Domain.Measure.System != BlastDesigner.Domain.UnitSystem.Imperial) throw new Exception("the settings did not reach the units of the program");
+        var hole = vm.Project!.Holes.First();
+        var id = hole.Id;
+        vm.Doc.Select(new[] { id }); Pump();
+        TextBox Field(string name) => window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == name && t.IsEffectivelyVisible) ?? throw new Exception("no field " + name);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var length = Field("propLength");
+        if (length.Text != (hole.Length / 0.3048).ToString("0.####", inv)) throw new Exception($"the length shows {length.Text}, in feet {hole.Length / 0.3048:0.####}");
+        if ((length.InnerRightContent as TextBlock)?.Text != "ft") throw new Exception("the unit of the length: " + (length.InnerRightContent as TextBlock)?.Text);
+        if (Field("propDiameter").Text != (hole.Diameter / 25.4).ToString("0.####", inv)) throw new Exception("the diameter should be in inches: " + Field("propDiameter").Text);
+        length.Text = "40"; length.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+        if (Math.Abs(((Hole)vm.Project.FindEntity(id)!).Length - 12.192) > 1e-9) throw new Exception("40 ft should keep 12.192 m: " + ((Hole)vm.Project.FindEntity(id)!).Length);
+        // captions and messages written with metres
+        if (!BlastDesigner.App.Services.Loc.Ui("Burden, m").EndsWith(", ft")) throw new Exception("a caption in metres: " + BlastDesigner.App.Services.Loc.Ui("Burden, m"));
+        if (!BlastDesigner.App.Services.Loc.F("{0:0} m", 10.0).Contains("33")) throw new Exception("a message in metres: " + BlastDesigner.App.Services.Loc.F("{0:0} m", 10.0));
+        vm.SetStatus("Moved 3.0 m"); Pump();
+        if (vm.Status != "Moved 9.8 ft") throw new Exception("the status in metres: " + vm.Status);
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "03i_imperial_units.png"));
+    }
+    finally
+    {
+        vm.Settings.UnitSystem = was;
+        vm.Settings.ApplyUnits();
+        vm.Settings.Save();
+        while (vm.Doc.UndoNames.Count > steps) vm.Undo();
+        vm.Doc.Select(selected); Pump();
+    }
+});
 Step("properties of ties: the delay is taken by Enter and when the focus leaves, and the times follow", () =>
 {
     var selected = vm.Doc!.Selection.ToList();

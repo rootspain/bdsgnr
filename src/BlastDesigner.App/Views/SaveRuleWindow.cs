@@ -67,10 +67,11 @@ public sealed class SaveRuleForm : DockPanel
 
         NameBox = Box(Loc.F("{0}, stemming {1} m", mainName, N(stem)), mono: false);
         _priority = Box(N(project.LoadingRules.Count == 0 ? 0 : project.LoadingRules.Max(r => r.Priority) + 1, "0"));
-        _dMin = Box(N(hole.Diameter, "0"));
-        _dMax = Box(N(hole.Diameter, "0"));
+        // the diameters and lengths in the units of the program, the rule keeps mm and m
+        _dMin = Box(Qty.Text(BlastDesigner.Domain.Quantity.Diameter, hole.Diameter));
+        _dMax = Box(Qty.Text(BlastDesigner.Domain.Quantity.Diameter, hole.Diameter));
         _lMin = Box("0");
-        _lMax = Box("1000");
+        _lMax = Box(Qty.Text(BlastDesigner.Domain.Quantity.Length, 1000, "0"));
         _type = new CheckBox { Content = Loc.F("Only hole type {0}", hole.HoleType), Foreground = Look.TextSoft };
         _wet = new ComboBox { ItemsSource = new[] { L("Any"), L("Dry only"), L("Wet only") }, SelectedIndex = 0, Height = 32, HorizontalAlignment = HorizontalAlignment.Stretch };
         _replaceNote = new Border
@@ -205,10 +206,10 @@ public sealed class SaveRuleForm : DockPanel
     {
         var rule = Charging.RuleFromColumn(_p, _decks, (NameBox.Text ?? "").Trim());
         rule.Priority = (int)Num(_priority, 0);
-        rule.MinDiameter = Num(_dMin, 0);
-        rule.MaxDiameter = Num(_dMax, 1000);
-        rule.MinLength = Num(_lMin, 0);
-        rule.MaxLength = Num(_lMax, 1000);
+        rule.MinDiameter = Qty.Store(BlastDesigner.Domain.Quantity.Diameter, Num(_dMin, 0));
+        rule.MaxDiameter = Qty.Store(BlastDesigner.Domain.Quantity.Diameter, Num(_dMax, Qty.Show(BlastDesigner.Domain.Quantity.Diameter, 1000)));
+        rule.MinLength = Qty.Store(BlastDesigner.Domain.Quantity.Length, Num(_lMin, 0));
+        rule.MaxLength = Qty.Store(BlastDesigner.Domain.Quantity.Length, Num(_lMax, Qty.Show(BlastDesigner.Domain.Quantity.Length, 1000)));
         rule.HoleType = _type.IsChecked == true ? _hole.HoleType : 0;
         rule.Wet = _wet.SelectedIndex switch { 1 => false, 2 => true, _ => null };
         if (Existing is { } old)

@@ -253,9 +253,40 @@ public static class CalcService
         return name.Length > 0 ? name : d.Name;
     }
 
-    /// <summary>Единица свойства для вывода: пусто для безразмерных и неизвестных.</summary>
+    /// <summary>Единица свойства для вывода (в единицах программы, <see cref="Measure"/>): пусто для безразмерных и неизвестных.</summary>
     public static string UnitText(BlastProject project, string propertyId) =>
-        ModelFor(project).FindProperty(propertyId)?.Unit is { } u && u is not ("?" or "1" or "" or "-") ? u.Replace("m3", "m³").Replace("m2", "m²") : "";
+        ModelFor(project).FindProperty(propertyId)?.Unit is { } u && u is not ("?" or "1" or "" or "-") ? InUnits(1, u).Unit.Replace("m3", "m³").Replace("m2", "m²") : "";
+
+    /// <summary>Единица свойства, как её пишет формула ("kg/m3"); пусто без свойства.</summary>
+    public static string UnitOf(BlastProject project, string propertyId) => ModelFor(project).FindProperty(propertyId)?.Unit ?? "";
+
+    /// <summary>Величины программы и их хранимые единицы в записи формул: по ним значение формулы показывается в единицах программы.</summary>
+    private static readonly (string Kept, Quantity Q)[] Shown =
+    {
+        ("m", Quantity.Length), ("mm", Quantity.Diameter), ("kg", Quantity.Mass), ("t", Quantity.Tonnage), ("m3", Quantity.Volume),
+        ("m2", Quantity.Area), ("kg/m3", Quantity.PowderFactor), ("kg/m", Quantity.LinearCharge), ("m/s", Quantity.Velocity),
+        ("mm/s", Quantity.Ppv), ("t/m3", Quantity.RockDensity), ("ms/m", Quantity.DelayPerLength),
+    };
+
+    /// <summary>
+    /// Значение формулы в единице <paramref name="unit"/> — в единицах программы: в имперской системе величина той же
+    /// размерности с ближайшей по масштабу хранимой единицей (см → дюймы через мм, т → короткие тонны), её символ. В
+    /// метрической, у безразмерных и неизвестных — как есть.
+    /// </summary>
+    public static (double Value, string Unit) InUnits(double value, string unit)
+    {
+        if (Measure.System == UnitSystem.Metric || !Unit.TryParse(unit, out var from) || from.IsUnknown || from.IsDimensionless) return (value, unit);
+        (Quantity Q, Unit Kept)? best = null;
+        var gap = double.PositiveInfinity;
+        foreach (var (kept, q) in Shown)
+        {
+            if (!Unit.TryParse(kept, out var k) || !k.SameDimension(from)) continue;
+            var g = Math.Abs(Math.Log(from.Scale / k.Scale));
+            if (g < gap) { gap = g; best = (q, k); }
+        }
+        if (best is not { } b) return (value, unit);
+        return (Measure.Show(b.Q, value * from.FactorTo(b.Kept)), Measure.Symbol(b.Q));
+    }
 
     /// <summary>Значение свойства текстом по его формату (с единицей); ошибка — «#».</summary>
     public static string Format(BlastProject project, string propertyId, object entity, bool withUnit = true)
@@ -275,7 +306,7 @@ public static class CalcService
         {
             bool b => b ? "✓" : "—",
             string s => s,
-            _ => v.Number.ToString(d?.Format is { Length: > 0 } f ? f : "0.##", CultureInfo.CurrentCulture)
+            _ => InUnits(v.Number, d?.Unit ?? "").Value.ToString(d?.Format is { Length: > 0 } f ? f : "0.##", CultureInfo.CurrentCulture)
         };
         var unit = withUnit && v.Object == null ? UnitText(project, propertyId) : "";
         return unit.Length > 0 ? text + " " + unit : text;
@@ -298,7 +329,7 @@ public static class CalcService
         var d = ModelFor(project).FindProperty(propertyId);
         var sum = d != null && (d.Unit is "kg" or "MJ" or "m3" or "t" || d.Group == "Стоимость");
         var total = good.Sum(v => v.Number);
-        var number = (sum ? total : total / good.Count).ToString(d?.Format is { Length: > 0 } f ? f : "0.##", CultureInfo.CurrentCulture);
+        var number = InUnits(sum ? total : total / good.Count, d?.Unit ?? "").Value.ToString(d?.Format is { Length: > 0 } f ? f : "0.##", CultureInfo.CurrentCulture);
         var unit = UnitText(project, propertyId);
         return new HoleValueSummary("", true, unit.Length > 0 ? number + " " + unit : number, sum, range);
     }

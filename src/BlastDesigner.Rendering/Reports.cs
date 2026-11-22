@@ -41,6 +41,8 @@ public sealed class CrossSectionSheet
 public static class Reports
 {
     private static string T(string s) => PlanRenderer.Translate(s);
+    /// <summary>A text with numbers written with a metric unit in the units of the program.</summary>
+    private static string U(string text) => BlastDesigner.Domain.MeasureText.InText(text);
 
     private const float A4W = 595, A4H = 842;
 
@@ -107,11 +109,11 @@ public static class Reports
             {
                 [T("Holes")] = $"{q.HoleCount} (+{q.DummyCount} dummy)",
                 [T("Drilled")] = $"{q.DrilledMetres:0.0} m",
-                [T("Average burden × spacing")] = $"{q.AverageBurden:0.00} × {q.AverageSpacing:0.00} m",
+                [T("Average burden × spacing")] = $"{BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, q.AverageBurden):0.00} × {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, q.AverageSpacing):0.00} {T(BlastDesigner.Domain.Measure.Symbol(BlastDesigner.Domain.Quantity.Length))}",
                 [T("Volume")] = $"{q.Volume:0} m³",
-                [T("Tonnes")] = $"{q.Tonnes:0} t",
+                [T("Tonnes")] = BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? $"{q.Tonnes:0} t" : $"{BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Tonnage, q.Tonnes):0} st",
                 [T("Explosive")] = $"{q.ExplosiveKg:0.0} kg",
-                [T("Powder factor")] = $"{q.PowderFactorKgM3:0.000} kg/m³  ({q.PowderFactorKgT:0.000} kg/t)",
+                [T("Powder factor")] = BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? $"{q.PowderFactorKgM3:0.000} kg/m³  ({q.PowderFactorKgT:0.000} kg/t)" : $"{BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.PowderFactor, q.PowderFactorKgM3):0.000} lb/yd³  ({q.PowderFactorKgT * 2:0.000} lb/st)",
                 [T("Energy factor")] = $"{q.EnergyFactorMJt:0.00} MJ/t",
                 [T("Max charge per window") + $" ({project.Vibration.WindowMs} ms)"] = $"{q.MaxInstantaneousCharge:0.0} kg",
                 [T("Total cost")] = $"{q.TotalCost:0.00} {project.Costs.Currency} ({q.CostPerTonne:0.000}/t)",
@@ -120,18 +122,18 @@ public static class Reports
             // the totals of each segment of the patterns cut into segments
             if (q.Segments.Count > 0)
                 writer.Table(new[] { T("Pattern grid"), T("Pattern segment"), T("Holes"), T("Drilled"), T("Volume"), T("Explosive") },
-                    q.Segments.Select(s => new[] { s.Pattern.Name, s.Segment.Name, s.Holes.ToString(), $"{s.DrilledMetres:0.0} m", $"{s.Volume:0} m³", $"{s.ExplosiveKg:0.0} kg" }),
+                    q.Segments.Select(s => new[] { s.Pattern.Name, s.Segment.Name, s.Holes.ToString(), U($"{s.DrilledMetres:0.0} m"), U($"{s.Volume:0} m³"), U($"{s.ExplosiveKg:0.0} kg") }),
                     new[] { 0.25f, 0.15f, 0.12f, 0.16f, 0.16f, 0.16f });
         }
         if (opt.Sections.HasFlag(ReportSections.HoleTable))
         {
             Begin(ReportSections.HoleTable);
             writer.Heading(T("Holes"));
-            writer.Table(new[] { T("Hole"), T("X"), T("Y"), T("Z"), T("Ang"), T("Brg"), T("Len"), T("Ø"), T("Type"), T("State"), T("kg"), T("Time") },
+            writer.Table(new[] { T("Hole"), T("X"), T("Y"), T("Z"), T("Ang"), T("Brg"), T("Len"), T("Ø"), T("Type"), T("State"), T(BlastDesigner.Domain.Measure.Symbol(BlastDesigner.Domain.Quantity.Mass)), T("Time") },
                 project.Holes.OrderBy(h => h.FiringSequence ?? int.MaxValue).ThenBy(h => h.Label).Select(h => new[]
                 {
-                    h.Label, h.Collar.X.ToString("0.00"), h.Collar.Y.ToString("0.00"), h.Collar.Z.ToString("0.00"), h.Angle.ToString("0"), h.Bearing.ToString("0"),
-                    h.EffectiveLength.ToString("0.0"), h.Diameter.ToString("0"), h.HoleType.ToString(), h.State.ToString(), Charging.ExplosiveMass(project, h).ToString("0.0"),
+                    h.Label, BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.X).ToString("0.00"), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.Y).ToString("0.00"), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.Z).ToString("0.00"), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.HoleAngle, h.Angle).ToString("0"), h.Bearing.ToString("0"),
+                    BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.EffectiveLength).ToString("0.0"), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Diameter, h.Diameter).ToString(BlastDesigner.Domain.Measure.Format(BlastDesigner.Domain.Quantity.Diameter)), h.HoleType.ToString(), h.State.ToString(), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Mass, Charging.ExplosiveMass(project, h)).ToString("0.0"),
                     h.FiringTimeMs?.ToString("0") ?? ""
                 }), new[] { 0.08f, 0.11f, 0.11f, 0.08f, 0.06f, 0.06f, 0.07f, 0.06f, 0.06f, 0.1f, 0.1f, 0.11f });
         }
@@ -139,12 +141,12 @@ public static class Reports
         {
             Begin(ReportSections.Loading);
             writer.Heading(T("Charging"));
-            writer.Table(new[] { T("Hole"), T("Stemming"), T("Column (bottom → top)"), T("Primers"), T("kg") },
+            writer.Table(new[] { T("Hole"), T("Stemming"), T("Column (bottom → top)"), T("Primers"), T(BlastDesigner.Domain.Measure.Symbol(BlastDesigner.Domain.Quantity.Mass)) },
                 project.Holes.Where(h => h.Decks.Count > 0).OrderBy(h => h.Label).Select(h => new[]
                 {
-                    h.Label, Charging.TopStemming(project, h).ToString("0.0"),
-                    string.Join(" / ", h.Decks.OrderByDescending(d => d.Bottom).Select(d => $"{project.FindProduct(d.ProductId)?.Name} {d.Length:0.0}")),
-                    Charging.Primers(h).Count().ToString(), Charging.ExplosiveMass(project, h).ToString("0.0")
+                    h.Label, BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, Charging.TopStemming(project, h)).ToString("0.0"),
+                    string.Join(" / ", h.Decks.OrderByDescending(d => d.Bottom).Select(d => $"{project.FindProduct(d.ProductId)?.Name} {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, d.Length):0.0}")),
+                    Charging.Primers(h).Count().ToString(), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Mass, Charging.ExplosiveMass(project, h)).ToString("0.0")
                 }), new[] { 0.1f, 0.12f, 0.56f, 0.1f, 0.12f });
         }
         if (opt.Sections.HasFlag(ReportSections.Timing))
@@ -171,7 +173,7 @@ public static class Reports
                 Begin(ReportSections.Vibration);
                 writer.Heading(T("Vibration prediction"));
                 writer.Table(new[] { T("Monitor"), T("Distance m"), T("Charge kg"), T("PPV mm/s"), T("Airblast dB") },
-                    monitors.Select(m => { var p = Vibration.Predict(project, m.Position); return new[] { m.Label, p.DistanceM.ToString("0"), p.ChargeKg.ToString("0.0"), p.Ppv.ToString("0.00"), p.AirblastDb.ToString("0.0") }; }),
+                    monitors.Select(m => { var p = Vibration.Predict(project, m.Position); return new[] { m.Label, BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, p.DistanceM).ToString("0"), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Mass, p.ChargeKg).ToString("0.0"), BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Ppv, p.Ppv).ToString(BlastDesigner.Domain.Measure.Format(BlastDesigner.Domain.Quantity.Ppv)), p.AirblastDb.ToString("0.0") }; }),
                     new[] { 0.3f, 0.15f, 0.15f, 0.2f, 0.2f });
             }
         }
@@ -202,10 +204,10 @@ public static class Reports
             writer.Heading(T("Blast outcomes"));
             writer.KeyValues(new()
             {
-                [T("Fragmentation P50 / P80")] = $"{o.FragmentationP50?.ToString("0") ?? "-"} / {o.FragmentationP80?.ToString("0") ?? "-"} mm",
-                [T("Measured PPV")] = o.MeasuredPpv?.ToString("0.00") ?? "-",
+                [T("Fragmentation P50 / P80")] = $"{(o.FragmentationP50 is double p50 ? BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Diameter, p50).ToString(BlastDesigner.Domain.Measure.Format(BlastDesigner.Domain.Quantity.Diameter)) : "-")} / {(o.FragmentationP80 is double p80 ? BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Diameter, p80).ToString(BlastDesigner.Domain.Measure.Format(BlastDesigner.Domain.Quantity.Diameter)) : "-")} {T(BlastDesigner.Domain.Measure.Symbol(BlastDesigner.Domain.Quantity.Diameter))}",
+                [T("Measured PPV")] = o.MeasuredPpv is double ppv ? U($"{ppv:0.00} mm/s") : "-",
                 [T("Measured airblast")] = o.MeasuredAirblast?.ToString("0.0") ?? "-",
-                [T("Max flyrock")] = o.MaxFlyrock?.ToString("0") ?? "-",
+                [T("Max flyrock")] = o.MaxFlyrock is double flyrock ? U($"{flyrock:0} m") : "-",
                 [T("Rating")] = o.Rating > 0 ? o.Rating + "/5" : "-",
                 [T("Comments")] = o.Comments,
             });
@@ -456,7 +458,7 @@ public static class Reports
         c.DrawText($"{t1:0} ms", left + plotW - 30, bottom + 12, text);
         c.DrawText($"{maxH} {T("holes")}", rect.Left, rect.Top + 8, text);
         text.Color = line.Color;
-        c.DrawText($"{maxQ:0} kg", left + plotW + 3, rect.Top + 8, text);
+        c.DrawText(U($"{maxQ:0} kg"), left + plotW + 3, rect.Top + 8, text);
     }
 
     /// <summary>Lays out flowing content over A4 pages.</summary>
@@ -547,7 +549,8 @@ public static class Reports
                 Ensure(14);
                 _y += 12;
                 _c!.DrawText(k, _area.Left, _y, _bold);
-                _c.DrawText(v, _area.Left + 170, _y, _text);
+                // a value written with a metric unit in the units of the program
+                _c.DrawText(BlastDesigner.Domain.MeasureText.InText(v), _area.Left + 170, _y, _text);
             }
             _y += 6;
         }

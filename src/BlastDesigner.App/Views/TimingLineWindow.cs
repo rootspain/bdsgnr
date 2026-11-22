@@ -216,7 +216,7 @@ public sealed class TimingLineForm : DockPanel
             _points[end] = new Vec3(_points[1].X + to.X, _points[1].Y + to.Y, _points[end].Z);
         }
         for (int i = 0; i < _lengths.Count; i++)
-            _lengths[i].Text = N(SameForAll ? Enumerable.Range(0, SegmentCount).Sum(j => Vec3.Distance2D(_points[j], _points[j + 1])) : Vec3.Distance2D(_points[i], _points[i + 1]), "0.#") + " " + L("m");
+            _lengths[i].Text = Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, SameForAll ? Enumerable.Range(0, SegmentCount).Sum(j => Vec3.Distance2D(_points[j], _points[j + 1])) : Vec3.Distance2D(_points[i], _points[i + 1]), "0.#");
     }
 
     // ---------- frame ----------
@@ -311,6 +311,14 @@ public sealed class TimingLineForm : DockPanel
     /// Number field with its unit inside; the value is taken on every valid keystroke (the preview follows), and the mouse
     /// wheel or ↑/↓ step it.
     /// </summary>
+    /// <summary>A number field of a quantity: shown, stepped and typed in the units of the program; the limits and <paramref name="set"/> in the kept ones.</summary>
+    private TextBox Number(string name, BlastDesigner.Domain.Quantity q, double kept, double step, double min, double max, Action<double> set) =>
+        Number(name, Qty.Show(q, kept), Qty.Sym(q), step, Qty.Show(q, min), Qty.Show(q, max), v => set(Qty.Store(q, v)));
+
+    /// <summary>The progress of the relief, ms per 10 m (10 ft in the imperial system), kept per 10 m.</summary>
+    private TextBox Progress(string name, double kept, Action<double> set) =>
+        Number(name, Qty.Show(BlastDesigner.Domain.Quantity.DelayPerLength, kept), BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? "ms/10 m" : "ms/10 ft", 1, 0, Qty.Show(BlastDesigner.Domain.Quantity.DelayPerLength, 10000), v => set(Qty.Store(BlastDesigner.Domain.Quantity.DelayPerLength, v)));
+
     private TextBox Number(string name, double value, string unit, double step, double min, double max, Action<double> set)
     {
         var box = new TextBox
@@ -535,16 +543,16 @@ public sealed class TimingLineForm : DockPanel
                 : Vec3.Distance2D(_points[k], _points[k + 1]);
             var stripe = new Border { Width = 4, Height = 22, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(Color.FromUInt32(SameForAll ? 0xFF8A929D : SegmentColours[k % SegmentColours.Length])), VerticalAlignment = VerticalAlignment.Center };
             Put(Ui.Row(8, stripe, new TextBlock { Text = SameForAll && SegmentCount > 1 ? L("All") : $"{k + 1}", Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center }), k + 1, 0);
-            var lengthText = new TextBlock { Text = N(length, "0.#") + " " + L("m"), FontFamily = Look.Mono, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, Name = $"length{k}" };
+            var lengthText = new TextBlock { Text = Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, length, "0.#"), FontFamily = Look.Mono, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, Name = $"length{k}" };
             if (k == 0) _lengths.Clear();
             _lengths.Add(lengthText);
             Put(lengthText, k + 1, 1);
             var s = _segments[k];
             col = 2;
-            if (burn) Put(Number($"burn{k}", s.BurnRateMsPerM, "ms/m", 0.5, 0, 1000, v => _segments[k] = _segments[k] with { BurnRateMsPerM = v }), k + 1, col++);
+            if (burn) Put(Number($"burn{k}", BlastDesigner.Domain.Quantity.DelayPerLength, s.BurnRateMsPerM, 0.5, 0, 1000, v => _segments[k] = _segments[k] with { BurnRateMsPerM = v }), k + 1, col++);
             // a chevron's end goes where its delay puts it
-            Put(Number($"relief{k}", s.ReliefMsPerM, "ms/m", 0.5, 0, 1000, v => { _segments[k] = _segments[k] with { ReliefMsPerM = v }; FitChevronEnds(); }), k + 1, col++);
-            if (progress) Put(Number($"progress{k}", s.ProgressMs, "ms/10 m", 1, 0, 10000, v => _segments[k] = _segments[k] with { ProgressMs = v }), k + 1, col);
+            Put(Number($"relief{k}", BlastDesigner.Domain.Quantity.DelayPerLength, s.ReliefMsPerM, 0.5, 0, 1000, v => { _segments[k] = _segments[k] with { ReliefMsPerM = v }; FitChevronEnds(); }), k + 1, col++);
+            if (progress) Put(Progress($"progress{k}", s.ProgressMs, v => _segments[k] = _segments[k] with { ProgressMs = v }), k + 1, col);
         }
         stack.Children.Add(grid);
         return stack;
@@ -556,8 +564,8 @@ public sealed class TimingLineForm : DockPanel
         var wrap = new WrapPanel();
         void Add(string label, Control field) => wrap.Children.Add(new Border { Margin = new Thickness(0, 0, 24, 8), Child = Labeled(label, field) });
         var s = _segments[0];
-        Add("Relief", Number("relief0", s.ReliefMsPerM, "ms/m", 0.5, 0, 1000, v => _segments[0] = _segments[0] with { ReliefMsPerM = v }));
-        if (Options.UseProgressive) Add("Progress", Number("progress0", s.ProgressMs, "ms/10 m", 1, 0, 10000, v => _segments[0] = _segments[0] with { ProgressMs = v }));
+        Add("Relief", Number("relief0", BlastDesigner.Domain.Quantity.DelayPerLength, s.ReliefMsPerM, 0.5, 0, 1000, v => _segments[0] = _segments[0] with { ReliefMsPerM = v }));
+        if (Options.UseProgressive) Add("Progress", Progress("progress0", s.ProgressMs, v => _segments[0] = _segments[0] with { ProgressMs = v }));
         return wrap;
     }
 
@@ -584,7 +592,7 @@ public sealed class TimingLineForm : DockPanel
     {
         var wrap = new WrapPanel();
         void Add(string label, Control field) => wrap.Children.Add(new Border { Margin = new Thickness(0, 0, 24, 8), Child = Labeled(label, field) });
-        Add("Relief along the line", Number("advRelief", Options.BurdenReliefMsPerM, "ms/m", 0.5, 0, 1000, v => Options.BurdenReliefMsPerM = v));
+        Add("Relief along the line", Number("advRelief", BlastDesigner.Domain.Quantity.DelayPerLength, Options.BurdenReliefMsPerM, 0.5, 0, 1000, v => Options.BurdenReliefMsPerM = v));
         Add("Left front angle", Number("angle1", Options.Angle1Deg, "°", 1, 0, 89, v => Options.Angle1Deg = v));
         Add("Right front angle", Number("angle2", Options.Angle2Deg, "°", 1, 0, 89, v => Options.Angle2Deg = v));
         return new StackPanel

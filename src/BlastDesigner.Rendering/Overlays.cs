@@ -106,9 +106,11 @@ public sealed class PreviewOverlay : IOverlay
             using var edge = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1, Color = PlanRenderer.DarkMode ? new SKColor(0xFF101215) : SKColors.White };
             c.DrawRect(x - 4.5f, y - 4.5f, 9, 9, edge);
         }
-        foreach (var (p, t) in Labels)
+        foreach (var (p, written) in Labels)
         {
-            if (string.IsNullOrEmpty(t)) continue;
+            if (string.IsNullOrEmpty(written)) continue;
+            // the lengths of the tools ("12.50 m") in the units of the program
+            var t = BlastDesigner.Domain.MeasureText.InText(written);
             var (x, y) = cam.ToScreen(p);
             using var bg = new SKPaint { Color = PlanRenderer.DarkMode ? new SKColor(0xEE20242A) : new SKColor(0xDDFFFFFF) };
             var w = text.MeasureText(t);
@@ -611,6 +613,9 @@ public sealed class BurdenReliefOverlay : IMovePreviewOverlay
     public static void DrawLegend(SKCanvas c, string title, double min, double max, bool limited, float left = 12, float top = 12)
     {
         using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = SKColors.White };
+        // the relief, ms/m kept, in the unit of the program (ms/ft)
+        min = BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.DelayPerLength, min);
+        max = BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.DelayPerLength, max);
         string Row(int i)
         {
             var step = (max - min) / BurdenRelief.Classes;

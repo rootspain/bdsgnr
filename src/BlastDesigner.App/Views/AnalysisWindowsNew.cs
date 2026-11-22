@@ -138,6 +138,9 @@ public static class AnalisysWindows
 
     private static void Highlight(MainViewModel vm, IEnumerable<Guid> ids) => vm.SetHighlight(ids);
 
+    /// <summary>The header of a column of tonnes: short tons in the imperial system.</summary>
+    private static string Tons => BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? "Tonnes" : "Short tons";
+
     private static string F(double v, string fmt = "0.00") => double.IsNaN(v) || double.IsInfinity(v) ? "" : v.ToString(fmt, CultureInfo.CurrentCulture);
 
     // ---- dashboard ----------------------------------------------------------------------
@@ -157,6 +160,8 @@ public static class AnalisysWindows
     /// <summary>Translates the unit words in values formatted by the engine.</summary>
     private static string Units(string value)
     {
+        // the numbers with a metric unit in the units of the program first
+        value = Qty.InText(value);
         if (Loc.Language == "en") return value;
         foreach (var (en, tr) in new[] { (" dummy", " dummy"), (" mm/s at ", " mm/s at "), ("MJ/t", "MJ/t"), ("kg/m³", "kg/m³"), (" ms", " ms"), (" kg", " kg"), (" cm", " cm"), (" mm", " mm"), (" dB", " dB"), (" m³", " m³"), (" m", " m"), (" t", " t") })
             value = value.Replace(en, Loc.T(tr));
@@ -317,8 +322,8 @@ public static class AnalisysWindows
         {
             if (vm.Project is not { } p) return;
             var groups = Analysis.VolumeOverview(p, modes[Math.Max(0, by.SelectedIndex)]);
-            host.Content = Table(new[] { "Group", "Holes", "Volume m³", "Tonnes", "Explosive kg", "Drilled m", "kg/m³" },
-                groups.Select(g => new[] { g.Group, g.Holes.ToString(), F(g.Volume, "0"), F(g.Tonnes, "0"), F(g.ExplosiveKg, "0.0"), F(g.DrilledM, "0.0"), F(g.PowderFactor, "0.000") }));
+            host.Content = Table(new[] { "Group", "Holes", "Volume m³", Tons, "Explosive kg", "Drilled m", Qty.Sym(BlastDesigner.Domain.Quantity.PowderFactor) },
+                groups.Select(g => new[] { g.Group, g.Holes.ToString(), F(Qty.Show(BlastDesigner.Domain.Quantity.Volume, g.Volume), "0"), F(Qty.Show(BlastDesigner.Domain.Quantity.Tonnage, g.Tonnes), "0"), F(Qty.Show(BlastDesigner.Domain.Quantity.Mass, g.ExplosiveKg), "0.0"), F(Qty.Show(BlastDesigner.Domain.Quantity.Length, g.DrilledM), "0.0"), F(Qty.Show(BlastDesigner.Domain.Quantity.PowderFactor, g.PowderFactor), "0.000") }));
         }
         by.SelectionChanged += (_, _) => Update();
         Update();
@@ -336,8 +341,8 @@ public static class AnalisysWindows
         {
             if (vm.Project is not { } p) return;
             r = Engine.Flyrock.Compute(p);
-            host.Content = Table(new[] { "Hole", "kg/m", "Burden m", "Stemming m", "Face burst m", "Cratering m", "Rifling m", "Max m" },
-                r.Holes.OrderByDescending(h => h.Max).Select(h => new[] { h.Hole.Label, F(h.ChargePerMetre, "0.0"), F(h.Burden), F(h.Stemming), F(h.FaceBurst, "0"), F(h.Cratering, "0"), F(h.Rifling, "0"), F(h.Max, "0") }));
+            host.Content = Table(new[] { "Hole", Qty.Sym(BlastDesigner.Domain.Quantity.LinearCharge), "Burden m", "Stemming m", "Face burst m", "Cratering m", "Rifling m", "Max m" },
+                r.Holes.OrderByDescending(h => h.Max).Select(h => new[] { h.Hole.Label, F(Qty.Show(BlastDesigner.Domain.Quantity.LinearCharge, h.ChargePerMetre), "0.0"), F(Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Burden)), F(Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Stemming)), F(Qty.Show(BlastDesigner.Domain.Quantity.Length, h.FaceBurst), "0"), F(Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Cratering), "0"), F(Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Rifling), "0"), F(Qty.Show(BlastDesigner.Domain.Quantity.Length, h.Max), "0") }));
             info.Text = r.Holes.Count == 0 ? Loc.T("Load the holes first: flyrock is calculated from the charge columns.") :
                 Loc.F("Maximum throw {0:0} m (hole {1}); clearance with safety factor {2}: {3:0} m. k = {4}. Face burst uses the crest line (kind Crest) when there is one.", r.MaxThrow, r.Critical?.Label, p.Flyrock.SafetyFactor, r.Clearance, p.Flyrock.SiteK);
         }
@@ -510,7 +515,7 @@ public static class AnalisysWindows
             size.IsVisible = sources.Count > 0;
             var auto = Engine.ExclusionZone.AutoMergeDistance(Engine.ExclusionZone.SourceHoles(p));
             merge.Watermark = Loc.F("auto {0:0} m", auto);
-            merge.Text = p.Vibration.ExclusionMergeDistance > 0 ? p.Vibration.ExclusionMergeDistance.ToString("0.##", CultureInfo.CurrentCulture) : "";
+            merge.Text = p.Vibration.ExclusionMergeDistance > 0 ? Qty.Show(BlastDesigner.Domain.Quantity.Length, p.Vibration.ExclusionMergeDistance).ToString("0.##", CultureInfo.CurrentCulture) : "";
         }
         Update();
         // the distance that joins holes into one source: empty or 0 is worked out from the spacing
@@ -520,7 +525,7 @@ public static class AnalisysWindows
             var text = merge.Text?.Trim() ?? "";
             double d = 0;
             if (text.Length > 0 && !double.TryParse(text.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out d)) { Update(); return; }
-            d = Math.Max(0, d);
+            d = Math.Max(0, Qty.Store(BlastDesigner.Domain.Quantity.Length, d));
             if (Math.Abs(d - p.Vibration.ExclusionMergeDistance) < 1e-9) return;
             ChangeZone(vm, "Exclusion zone sources", pr => pr.Vibration.ExclusionMergeDistance = d);
             Update();
@@ -659,12 +664,13 @@ public static class AnalisysWindows
             table.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
             Cell(Text(Loc.F("Source {0}", s.Number), Look.Text, FontWeight.SemiBold), row, 0);
 
-            var calculated = s.Result.Radius;
+            // the radii in the unit of lengths shown: the one typed in kept in metres
+            var calculated = Qty.Show(BlastDesigner.Domain.Quantity.Length, s.Result.Radius);
             var radius = new TextBox { Width = 80, Name = $"exclusionRadius{s.Number}", Watermark = calculated.ToString("0", CultureInfo.CurrentCulture), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 12, 2) };
             var azimuth = new TextBox { Width = 64, Name = $"exclusionAzimuth{s.Number}", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 2, 22, 2) };
-            ToolTip.SetTip(radius, Loc.F("Calculated {0:0} m. Type another to draw the zone of this source with it; empty — the calculated one", calculated));
+            ToolTip.SetTip(radius, Loc.F("Calculated {0:0} m. Type another to draw the zone of this source with it; empty — the calculated one", s.Result.Radius));
             ToolTip.SetTip(azimuth, Loc.T("Where the radius arrow of this source points, degrees clockwise from north"));
-            double? set = s.SetRadius;
+            double? set = Qty.Show(BlastDesigner.Domain.Quantity.Length, s.SetRadius);
             double side = s.Azimuth;
             void Show()
             {
@@ -687,7 +693,7 @@ public static class AnalisysWindows
                 {
                     set = r;
                     side = a;
-                    SetSource(vm, s, set, side);
+                    SetSource(vm, s, Qty.Store(BlastDesigner.Domain.Quantity.Length, set), side);
                 }
                 Show();
             }
