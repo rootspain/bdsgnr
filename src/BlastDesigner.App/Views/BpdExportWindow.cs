@@ -122,7 +122,7 @@ public static class BpdExportWindow
         // as the programming unit shows it: padded with '_' to 8
         var shown = new TextBlock { FontFamily = Look.Mono, Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center, Name = "bpdDisplayedShown" };
         var shownBox = new Border { Height = 34, Padding = new Thickness(10, 0), Background = Look.Ground, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), Child = shown };
-        ToolTip.SetTip(shownBox, Loc.T("As the programming unit shows it"));
+        ToolTip.SetTip(shownBox, Loc.T("As the PU shows it"));
         var opened = DateTime.Now;
         var date = Box(opened.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture), "bpdDate", 10);
         date.Watermark = "YYYY/MM/DD";
@@ -169,7 +169,7 @@ public static class BpdExportWindow
         Grid.SetColumn(shownBox, 1);
         displayedRow.Children.Add(shownBox);
         Put(Stack(Caption("Full name", "FULL_NAME"), fullName, Hint(Loc.F("Latin letters, digits and _, up to {0}; Cyrillic in Latin letters", DeviTronic.FullNameLength))), 0, 0);
-        Put(Stack(Caption("Displayed name", "DISPLAYED_NAME"), displayedRow, Hint(Loc.T("8 characters on the programming unit, a shorter name is padded with _"))), 0, 1);
+        Put(Stack(Caption("Displayed name", "DISPLAYED_NAME"), displayedRow, Hint(Loc.T("8 characters on the PU, a shorter name is padded with _"))), 0, 1);
         Put(Stack(Caption("Date and time", "DATE · TIME"), Ui.Row(8, date, time, nowButton),
             Ui.Row(8, new TextBlock { Text = Loc.T("Date") + ": YYYY/MM/DD", Width = 150, FontSize = 11.5, Foreground = Look.Faint }, new TextBlock { Text = Loc.T("Time") + ": HH24:MI:SS", FontSize = 11.5, Foreground = Look.Faint })), 1, 0);
         Put(Stack(Caption("Source", "SOURCE_FILE"), source), 1, 1);

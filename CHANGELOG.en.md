@@ -25,6 +25,7 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **EBS → ESI, Harness → Bus line:** the ESI type of the catalogue is Electronic Initiation System, the type, kind and
   product Harness wire are Bus line (BusLine on the chip); EBS is ESI all over the English interface. Old projects take
   the new names when opened; names the user gave stay.
+- **The Davey Tronic export window (.BPD): programming unit → PU** in the hints of the displayed name.
 - **The In-hole delay label takes the shock tube in:** the run of the signal down the tube (the depth of the primer ×
   ms/m of Available resources) is added to the delay of a shock tube detonator, to 0.1 ms. The same in the exports of
   the firing times (CSV and interchange).

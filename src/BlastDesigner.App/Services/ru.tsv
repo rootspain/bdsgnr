@@ -3434,11 +3434,11 @@ Chain of ties	Цепочка связей
 Now	Сейчас
 N · northern	N · северное
 S · southern	S · южное
-As the programming unit shows it	Так имя покажет пульт
+As the PU shows it	Так имя покажет PU
 Full name	Полное имя
 Displayed name	Отображаемое имя
 Latin letters, digits and _, up to {0}; Cyrillic in Latin letters	Латиница, цифры и _, до {0} знаков; кириллица — транслитом
-8 characters on the programming unit, a shorter name is padded with _	8 знаков на экране пульта, короче — дополняется _
+8 characters on the PU, a shorter name is padded with _	8 знаков на экране PU, короче — дополняется _
 Date and time	Дата и время
 UTM zone of the lines	Зона UTM линий
 For this file only: the coordinate system of the site does not change	Только для этого файла: система координат площадки не меняется
@@ -3449,7 +3449,7 @@ Order of the detonators in a hole	Порядок детонаторов в ск�
 Which of them is LEVEL 1	Какой из них LEVEL 1
 Detonators	Детонаторов
 The frame of the line (DETZONE)	Рамка линии (DETZONE)
-PU number	Номер пульта
+PU number	Номер PU
 Only the chains of ESI ties make lines; the letter of a line is that of its route numbers. Holes are numbered along the ties in the order they were drawn.	Линии строятся только из цепочек связей ЭСИ; литера линии — литера её маршрутных номеров. Нумерация идёт по связям в порядке их построения.
 Enter the full name (FULL_NAME).	Введите полное имя (FULL_NAME).
 Enter the displayed name (DISPLAYED_NAME).	Введите отображаемое имя (DISPLAYED_NAME).
