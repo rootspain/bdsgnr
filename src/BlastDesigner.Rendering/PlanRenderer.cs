@@ -1779,6 +1779,8 @@ public static class PlanRenderer
         foreach (var p in project.Products) products.TryAdd(p.Id, p);
         var arrows = new LineMesh(opt.UnitsPerMm != null ? c : null);
         var labels = new TextBatch();
+        // the delays of the ties in the font size of the hole labels (Visibility ▸ Hole labels)
+        var size = Math.Clamp(project.View.HoleLabelFontSize, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize);
         float w = (float)cam.Width, h = (float)cam.Height;
         // the head of the arrow, px: large enough to tell the way of a tie at a glance
         const float head = TieArrowHead;
@@ -1809,7 +1811,7 @@ public static class PlanRenderer
                 if (cam.Scale > 4 && product?.Kind != ProductKind.ElectronicDetonator)
                 {
                     var (x, y) = cam.ToScreen(Vec3.Lerp(a, b, 0.5));
-                    labels.Add(Timing.TieDelay(project, t, a, b).ToString("0"), x + 2, y - 2, col, 9);
+                    labels.Add(Timing.TieDelay(project, t, a, b).ToString("0"), x + 2, y - 2, col, size);
                 }
             }
             arrows.Flush(c);
@@ -2014,7 +2016,7 @@ public static class PlanRenderer
             case HoleLabel.Type: yield return $"T{h.HoleType}"; break;
             case HoleLabel.HoleOrder: if (h.FiringSequence is int sequence) yield return sequence.ToString(); break;
             case HoleLabel.SurfaceTime: if (h.SurfaceTimeMs is double s) yield return $"{s:0}"; break;
-            case HoleLabel.InholeDelay: if (h.InholeDelayMs > 0) yield return $"{h.InholeDelayMs:0}"; break;
+            case HoleLabel.InholeDelay: if (h.InholeDelayMs > 0) yield return h.InholeDelayMs.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture); break;
             case HoleLabel.HoleTime: if (h.FiringTimeMs is double f) yield return $"{f:0}"; break;
         }
     }

@@ -6,6 +6,32 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.11 — 2026-11-22
+
+### Changed
+- **The font size of the labels goes to the ties too:** the delays on the ties are written in the size of Visibility ▸
+  Hole labels ▸ Font size (before, always 9 px).
+- **A tie fits the holes by their detonators:** an ESI tie goes only to holes with an electronic primer, any other
+  (shock tube, cord, relay, bus line, 0 ms, a delay of its own) only to holes with a primer that is not electronic. A
+  hole with both takes either, one not charged any; an initiation point at an end asks nothing. A tie that does not fit
+  is not made, the status bar names the hole. So in the Tie tool, Connect selected in order and Automatic tie-up (it
+  leaves out the holes with electronic detonators only).
+- **The Initiation catalogue opens on ESI** when the blast has holes with electronic detonators and nothing is chosen
+  in the catalogue yet; a choice of the user stays.
+- **The Product list of a tie by the types of the Initiation catalogue:** the products of the kinds the types list
+  (Davey Tronic too) that fit the holes of the tie, in the order of the types, by family and delay, each with the short
+  name of its type (Shock tube · Surface connector 17 ms). A product a tie has that does not fit stays, marked does not
+  fit.
+- **EBS → ESI, Harness → Bus line:** the ESI type of the catalogue is Electronic Initiation System, the type, kind and
+  product Harness wire are Bus line (BusLine on the chip); EBS is ESI all over the English interface. Old projects take
+  the new names when opened; names the user gave stay.
+- **The In-hole delay label takes the shock tube in:** the run of the signal down the tube (the depth of the primer ×
+  ms/m of Available resources) is added to the delay of a shock tube detonator, to 0.1 ms. The same in the exports of
+  the firing times (CSV and interchange).
+- **The shock tube in m/s:** on a downhole detonator in Available resources an m/s field stands beside the ms/m one, the
+  speed as the data sheet of the product gives it. Typing in one fills the other at once (ms/m = 1000 / m/s); empty or 0
+  is not counted.
+
 ## 0.3.10 — 2026-11-21
 
 ### New

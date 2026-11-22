@@ -155,7 +155,8 @@ public sealed class DrawingView
     /// <summary>The check boxes of the visibility leave the frame as it is: the drawing stays fitted to <see cref="LockedHiddenKinds"/>.</summary>
     public bool Locked { get; set; }
     /// <summary>The kinds that were left out when the frame was locked.</summary>
-    public List<string> LockedHiddenKinds { get; set; } = new();
+    public List<string> LockedHiddenKinds { get => _locked; set => _locked = HiddenKindNames.Current(value); }
+    private List<string> _locked = new();
     /// <summary>Times the scale of the fit.</summary>
     public double Zoom { get; set; } = 1;
     /// <summary>How far the view has gone to the right, in widths of the drawing.</summary>
@@ -173,11 +174,23 @@ public sealed class DrawingView
     }
 }
 
+/// <summary>The names of kinds as lists of hidden kinds keep them: one renamed since is read as its name now.</summary>
+public static class HiddenKindNames
+{
+    public static List<string> Current(List<string> names)
+    {
+        for (int i = 0; i < names.Count; i++)
+            if (names[i] == EbsOpeningPoint.OldKind) names[i] = EbsOpeningPoint.Kind;
+        return names;
+    }
+}
+
 /// <summary>What the drawing of a section shows and how it is framed.</summary>
 public sealed class SectionVisibility
 {
     /// <summary>Kinds of object left out, by <see cref="Entity.KindName"/>.</summary>
-    public List<string> HiddenKinds { get; set; } = new();
+    public List<string> HiddenKinds { get => _hidden; set => _hidden = HiddenKindNames.Current(value); }
+    private List<string> _hidden = new();
     public bool ShowGrid { get; set; }
     public DrawingView View { get; set; } = new();
     /// <summary>The numbers of the holes over them.</summary>
@@ -202,7 +215,8 @@ public sealed class ReportDesign
     public List<ReportStamp> Stamps { get; set; } = new();
     public ReportFooter Footer { get; set; } = new();
     /// <summary>Kinds of object left out of the drawings of a report, by <see cref="Entity.KindName"/>.</summary>
-    public List<string> HiddenKinds { get; set; } = new();
+    public List<string> HiddenKinds { get => _hidden; set => _hidden = HiddenKindNames.Current(value); }
+    private List<string> _hidden = new();
     /// <summary>The kinds are the design's own from the first preview on; that one takes them from the main window.</summary>
     public bool KindsChosen { get; set; }
     /// <summary>The coordinate grid on the drawings of a report, whatever the main window shows.</summary>

@@ -265,7 +265,7 @@ public static class DeviTronic
             if (header.UtmZone is < 1 or > 60) errors.Add(new BpdMessage("The UTM zone number is 1 to 60."));
         }
         else if (project.Coordinates.UtmZone < 1) warnings.Add(new BpdMessage("The UTM zone is not set (Edit ▸ Site coordinate system): zone 0 is written."));
-        if (paths.Count == 0) errors.Add(new BpdMessage("There are no EBS ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators."));
+        if (paths.Count == 0) errors.Add(new BpdMessage("There are no ESI ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators."));
         if (paths.Count > 26) errors.Add(new BpdMessage("No more than 26 lines (A–Z) can be written."));
         foreach (var dup in paths.GroupBy(p => p.ChainKey).Where(g => g.Count() > 1))
             errors.Add(new BpdMessage("The chain is chosen for more than one line: {0}", byKey.TryGetValue(dup.Key, out var dc) ? ChainName(dc) : dup.Key));
@@ -274,7 +274,7 @@ public static class DeviTronic
         var chosen = holes.Where(h => !h.IsDummy).ToList();
         var keys = paths.Select(p => p.ChainKey).ToHashSet();
         var notTied = chosen.Where(h => !chainOf.ContainsKey(h.Id) && HasElectronic(project, h)).Select(h => h.Id).ToList();
-        if (notTied.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) with electronic detonators are on no chain of EBS ties and are not written.", notTied.Count) { Holes = notTied });
+        if (notTied.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) with electronic detonators are on no chain of ESI ties and are not written.", notTied.Count) { Holes = notTied });
         var other = chosen.Where(h => chainOf.TryGetValue(h.Id, out var k) && !keys.Contains(k) && HasElectronic(project, h)).Select(h => h.Id).ToList();
         if (other.Count > 0) warnings.Add(new BpdMessage("{0} hole(s) are on a chain not chosen for any line and are not written.", other.Count) { Holes = other });
 

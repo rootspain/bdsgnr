@@ -112,7 +112,7 @@ public sealed class Hole : Entity
     [JsonIgnore] public double? FiringTimeMs { get; set; }
     /// <summary>Time the surface signal reaches the collar (ms), computed by the timing engine.</summary>
     [JsonIgnore] public double? SurfaceTimeMs { get; set; }
-    /// <summary>In-hole delay used by the timing engine (ms).</summary>
+    /// <summary>In-hole delay used by the timing engine (ms): of the detonator and the run of the signal down its tube.</summary>
     [JsonIgnore] public double InholeDelayMs { get; set; }
     /// <summary>Firing order (1-based) computed by the timing engine.</summary>
     [JsonIgnore] public int? FiringSequence { get; set; }

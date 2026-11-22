@@ -454,6 +454,72 @@ public sealed class ProductsEditor : DockPanel
         InnerRightContent = unit == null ? null : new TextBlock { Text = L(unit), FontSize = 11.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) }
     };
 
+    /// <summary>
+    /// The run of the signal down the tube in two fields side by side: the speed, m/s, as the data sheet of the product
+    /// gives it, and ms per metre, as the timing takes it (1000 / speed). Typing one shows the other at once; Enter or
+    /// leaving the field keeps it. Empty or 0 leaves it out.
+    /// </summary>
+    private Control Propagation(Product p)
+    {
+        var speed = Box("m/s", mono: true);
+        speed.Name = "tubeSpeed";
+        speed.Watermark = L("not counted");
+        var perM = Box("ms/m", mono: true);
+        perM.Name = "propagation";
+        var tip = L("Speed of the signal down the tube from the data sheet of the product, m/s, or its time per metre, ms/m: 2000 m/s = 0.5 ms/m; with the primer 15 m down the hole, 7.5 ms. Empty or 0: not counted.");
+        ToolTip.SetTip(speed, tip);
+        ToolTip.SetTip(perM, tip);
+        // what the code last wrote in each field: the change of text it raises (later, not at once) is not typing
+        string? wroteSpeed = null, wrotePerM = null;
+        TextBox? typed = null;
+        string shownSpeed = "", shownPerM = "";
+        static string SpeedOf(double msPerM) => msPerM > 0 ? N(1000 / msPerM, "0") : "";
+        void Show()
+        {
+            speed.Text = wroteSpeed = shownSpeed = SpeedOf(p.PropagationMsPerM);
+            perM.Text = wrotePerM = shownPerM = N(p.PropagationMsPerM, "0.###");
+            typed = null;
+        }
+        // ms per metre from what the field says: empty is 0, a bad number null
+        double? FromSpeed() => string.IsNullOrWhiteSpace(speed.Text) ? 0 : Parse(speed.Text) is double v && v >= 0 ? (v > 0 ? 1000 / v : 0) : null;
+        double? FromPerM() => string.IsNullOrWhiteSpace(perM.Text) ? 0 : Parse(perM.Text) is double v && v >= 0 ? v : null;
+        Show();
+        speed.TextChanged += (_, _) =>
+        {
+            if ((speed.Text ?? "") == wroteSpeed) return;
+            wroteSpeed = null;
+            typed = speed;
+            if (FromSpeed() is double m) perM.Text = wrotePerM = N(m, "0.###");
+        };
+        perM.TextChanged += (_, _) =>
+        {
+            if ((perM.Text ?? "") == wrotePerM) return;
+            wrotePerM = null;
+            typed = perM;
+            if (FromPerM() is double m) speed.Text = wroteSpeed = SpeedOf(m);
+        };
+        // the field typed in is kept as typed: the speed of the sheet goes in whole, not through the rounded ms/m
+        void Commit()
+        {
+            // the field typed in last; its text changed before the other followed it otherwise
+            var from = typed ?? (speed.Text != shownSpeed ? speed : perM.Text != shownPerM ? perM : null);
+            double? m = from == speed ? FromSpeed() : from == perM ? FromPerM() : p.PropagationMsPerM;
+            if (m is double v) p.PropagationMsPerM = Math.Max(0, v);
+            Show();
+            UpdateStatus();
+        }
+        foreach (var box in new[] { speed, perM })
+        {
+            box.KeyDown += (_, e) => { if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None) { Commit(); box.SelectAll(); e.Handled = true; } };
+            box.LostFocus += (_, _) => Commit();
+        }
+        var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,8,*") };
+        Grid.SetColumn(perM, 2);
+        g.Children.Add(speed);
+        g.Children.Add(perM);
+        return g;
+    }
+
     /// <summary>Number field: commits on Enter or when focus leaves it; bad input goes back to the last value.</summary>
     private TextBox Number(string name, double value, Action<double> set, string? unit, string format = "0.###", bool refreshList = false)
     {
@@ -564,7 +630,7 @@ public sealed class ProductsEditor : DockPanel
             ProductKind.PackagedExplosive => new() { Fields(Density(), Strength(), Energy(), Vod(), UnitMass("Cartridge mass", "kg", 1), UnitLength()), Water() },
             ProductKind.Stemming => new() { Fields(Density(), new Border()) },
             ProductKind.Booster => new() { Fields(UnitMass("Mass", "g", 1000), Density(), Energy(), Vod()) },
-            ProductKind.DownholeDetonator => new() { Fields(Delay(), Labeled("Signal down the tube", Number("propagation", p.PropagationMsPerM, v => p.PropagationMsPerM = Math.Max(0, v), "ms/m", "0.###"))) },
+            ProductKind.DownholeDetonator => new() { Fields(Delay(), Labeled("Signal down the tube", Propagation(p))) },
             ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => new() { Fields(Delay(), new Border()) },
             ProductKind.HarnessWire => new(),
             ProductKind.ElectronicDetonator => new() { Fields(Labeled("Default delay", Number("delay", p.DelayMs, v => p.DelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true)), new Border()) },

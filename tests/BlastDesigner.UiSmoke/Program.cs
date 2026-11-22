@@ -707,13 +707,20 @@ Step("properties of ties: the delay is taken by Enter and when the focus leaves,
     Leave(box); Pump();
     if (vm.Doc.UndoNames.Count != mixedSteps + 1) throw new Exception("mixed delays by Enter should be one undo step");
     if (ids.Any(id => ((TieEntity)vm.Project!.FindEntity(id)!).DelayMs != 77)) throw new Exception("the delay was not set on all the ties");
-    // the product of a tie goes on a tie (connector, cord, relay, wire): no explosives, boosters or detonators (what a tie has stays)
+    // the product of a tie: those of the types of the Initiation catalogue that fit the holes, with the short name of the
+    // type; no explosives, boosters or downhole detonators (what a tie has stays)
     var tieProducts = window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propProductId" && c.IsEffectivelyVisible).ItemsSource!.Cast<string>().ToList();
     var now = ids.Select(id => ((TieEntity)vm.Project!.FindEntity(id)!).ProductId).ToHashSet();
-    var strangers = vm.Project!.Products.Where(pr => !pr.IsTieProduct && !now.Contains(pr.Id) && tieProducts.Contains(pr.Name)).Select(pr => pr.Name).ToList();
+    bool Offered(Product pr) => tieProducts.Any(t => t.EndsWith(" · " + pr.Name) || t == pr.Name);
+    var strangers = vm.Project!.Products.Where(pr => (pr.IsExplosive || pr.Kind is ProductKind.Booster or ProductKind.DownholeDetonator or ProductKind.Stemming) && !now.Contains(pr.Id) && Offered(pr)).Select(pr => pr.Name).ToList();
     if (strangers.Count > 0) throw new Exception("the product list of a tie offers products that do not go on a tie: " + string.Join(", ", strangers));
-    if (!vm.Project.ActiveProducts.Where(pr => pr.IsTieProduct).All(pr => tieProducts.Contains(pr.Name))) throw new Exception("the product list of a tie lacks products of ties");
-    if (!vm.Project.ActiveProducts.Any(pr => pr.Kind == ProductKind.DetonatingCord)) throw new Exception("the smoke blast has no detonating cord to offer on a tie");
+    var shockTube = BlastDesigner.App.Services.Loc.Short("Shock tube");
+    var cord = vm.Project.ActiveProducts.FirstOrDefault(pr => pr.Kind == ProductKind.DetonatingCord) ?? throw new Exception("the smoke blast has no detonating cord to offer on a tie");
+    if (!Offered(cord) || !tieProducts.Any(t => t.StartsWith(shockTube + " · "))) throw new Exception("the product list of a tie lacks the cord or the shock tube with its type: " + string.Join(" | ", tieProducts));
+    // the holes of these ties have no electronic detonator: no ESI product
+    var esiName = vm.Project.ActiveProducts.First(pr => pr.Kind == ProductKind.ElectronicDetonator).Name;
+    if (tieProducts.Any(t => t.StartsWith(BlastDesigner.App.Services.Loc.Short("ESI") + " · ")) && !ids.Any(id => vm.Project.FindEntity(((TieEntity)vm.Project.FindEntity(id)!).ToId) is Hole hh && TieFit.Detonators(vm.Project, hh).Electronic))
+        throw new Exception("ESI products offered on ties of holes without electronic detonators: " + esiName);
     while (vm.Doc.UndoNames.Count > steps) vm.Undo();
     Pump();
     if (Time() != was) throw new Exception("undo should bring the time back");
@@ -3130,6 +3137,37 @@ Step("resources: filter by kind, search, kind fields, delete asks when used", ()
     if (ed.Selected?.Kind != ProductKind.Booster || ed.ChangedCount != 1) throw new Exception($"add: {ed.Selected?.Kind}, changed {ed.ChangedCount}");
     dlg.Close();
 });
+Step("resources: the signal down the tube in m/s and in ms/m, each from the other", () =>
+{
+    _ = ProductsWindow.Show(vm.Project!); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var ed = dlg.GetLogicalDescendants().OfType<ProductsEditor>().First();
+    var det = ed.Products.First(p => p.Kind == ProductKind.DownholeDetonator && !p.Deleted);
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag == det).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    TextBox Field(string name) => dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == name);
+    var speed = Field("tubeSpeed");
+    var perM = Field("propagation");
+    void Leave(TextBox b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
+    string Num(double v) => v.ToString(System.Globalization.CultureInfo.CurrentCulture);
+    // the speed of the data sheet: ms/m shows at once, kept as 1000 / speed
+    speed.Text = "2000"; Pump();
+    if (perM.Text != Num(0.5)) throw new Exception($"2000 m/s showed {perM.Text} ms/m");
+    Leave(speed);
+    if (Math.Abs(det.PropagationMsPerM - 0.5) > 1e-12) throw new Exception($"2000 m/s kept {det.PropagationMsPerM} ms/m");
+    // a speed the ms/m rounds: kept whole
+    speed.Text = "3000"; Leave(speed);
+    if (Math.Abs(det.PropagationMsPerM - 1.0 / 3) > 1e-12 || speed.Text != "3000") throw new Exception($"3000 m/s kept {det.PropagationMsPerM} ms/m, shows {speed.Text}");
+    // ms/m typed: the speed follows
+    perM.Text = Num(0.625); Pump();
+    if (speed.Text != "1600") throw new Exception($"0.625 ms/m showed {speed.Text} m/s");
+    Leave(perM);
+    if (Math.Abs(det.PropagationMsPerM - 0.625) > 1e-12) throw new Exception($"0.625 ms/m kept {det.PropagationMsPerM}");
+    Pump(); dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39d_resources_tube_speed.png"));
+    // empty: not counted
+    speed.Text = ""; Leave(speed);
+    if (det.PropagationMsPerM != 0 || perM.Text != "0") throw new Exception($"empty speed kept {det.PropagationMsPerM}, ms/m {perM.Text}");
+    dlg.Close(); Pump();
+});
 Step("resources: the tables add, edit, delete with their children and restore the parent only; applied they reach the project and the user's file", () =>
 {
     var steps = vm.Doc!.UndoNames.Count;
@@ -3184,15 +3222,15 @@ Step("resources: the tables add, edit, delete with their children and restore th
     if (ed.Tables.Kinds[0].Name != "Bulk explosive") throw new Exception("leaving the field unchanged should keep the stored name");
     // a type has its short name, the one on the chip of the initiation catalogue: built-in in the language of the program
     Click(ByTag("section:Types"));
-    var ebsType = ed.Tables.Types.First(t => t.Name == "EBS detonators");
+    var ebsType = ed.Tables.Types.First(t => t.Name == "Electronic Initiation System");
     Click(ByTag("row:" + ebsType.Id));
     TextBox ShortBox() => dlg.GetLogicalDescendants().OfType<TextBox>().First(t => t.Name == "tableShortName" && t.IsEffectivelyVisible);
-    if (ShortBox().Text != BlastDesigner.App.Services.Loc.Short("EBS")) throw new Exception("the short name field should show the translated short name: " + ShortBox().Text);
+    if (ShortBox().Text != BlastDesigner.App.Services.Loc.Short("ESI")) throw new Exception("the short name field should show the translated short name: " + ShortBox().Text);
     ShortBox().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
-    if (ebsType.ShortName != "EBS") throw new Exception("leaving the short name unchanged should keep the stored one: " + ebsType.ShortName);
-    var sb = ShortBox(); sb.Text = "ЭСИ"; sb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
-    if (ebsType.ShortName != "ЭСИ") throw new Exception("the short name was not taken: " + ebsType.ShortName);
-    sb = ShortBox(); sb.Text = "EBS"; sb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    if (ebsType.ShortName != "ESI") throw new Exception("leaving the short name unchanged should keep the stored one: " + ebsType.ShortName);
+    var sb = ShortBox(); sb.Text = "ЭСИ-2"; sb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
+    if (ebsType.ShortName != "ЭСИ-2") throw new Exception("the short name was not taken: " + ebsType.ShortName);
+    sb = ShortBox(); sb.Text = "ESI"; sb.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
     Click(ByTag("section:Kinds"));
     Click(ByTag("row:" + kind.Id));
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
@@ -4939,8 +4977,23 @@ Step("tie tool: holes with an electronic detonator take route numbers in the ord
         Pump();
     }
     int? N(int i) => ((Hole)vm.Project!.FindEntity(ids[i])!).RouteNumber;
+    var (wasConnector, wasSystem, wasDelay) = (vm.ActiveConnector, vm.TieSystem, vm.ActiveTieDelayMs);
+    string TieSystemOf(ProductKind ofKind) => vm.Project!.Catalogue.Types.First(t => t.KindIds.Contains(ProductCatalogue.KindId(ofKind))).Id;
     try
     {
+        // a shock tube connector does not go between holes with electronic detonators only: refused, named in the status
+        vm.ActiveConnector = vm.Project!.ActiveProducts.First(d => d.Kind == ProductKind.SurfaceConnector);
+        vm.ActiveTieDelayMs = null;
+        vm.TieSystem = TieSystemOf(ProductKind.SurfaceConnector);
+        var none = vm.Project.Ties.Count();
+        Click(ids[0]); Click(ids[1]);
+        if (vm.Project.Ties.Count() != none || vm.Status != BlastDesigner.App.Services.Loc.F(TieFit.OnlyElectronic, "E1"))
+            throw new Exception("a shock tube tie between electronic holes should be refused: " + vm.Status);
+        Pump(); window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "62a_tie_refused_not_esi.png"));
+        // with an ESI product they tie
+        vm.ActiveConnector = vm.Project.ActiveProducts.First(d => d.Kind == ProductKind.ElectronicDetonator);
+        vm.TieSystem = TieSystemOf(ProductKind.ElectronicDetonator);
+        vm.SetTool(new TieTool(vm)); Pump();
         // E1 → E2 → E3, one entry with Shift: 1, 2, 3
         Click(ids[0]); Click(ids[1], shift: true); Click(ids[2]);
         if (N(0) != 1 || N(1) != 2 || N(2) != 3) throw new Exception($"route numbers {N(0)}, {N(1)}, {N(2)} instead of 1, 2, 3");
@@ -5040,6 +5093,7 @@ Step("tie tool: holes with an electronic detonator take route numbers in the ord
     }
     finally
     {
+        (vm.ActiveConnector, vm.TieSystem, vm.ActiveTieDelayMs) = (wasConnector, wasSystem, wasDelay);
         window.ShowInspectorTab(0);
         vm.SelectTool(); Pump();
     }
@@ -5393,6 +5447,27 @@ Step("an initiation point on a hole is picked by its star's rays, the hole by it
     if (next.FiringTimeMs == null) throw new Exception("the hole tied from the point's hole is not initiated");
     catalogue.Close(); vm.SelectTool(); vm.Undo(); vm.Undo();
 });
+Step("the initiation catalogue opens on ESI when the blast has holes with electronic detonators and nothing is chosen in it", () =>
+{
+    if (!vm.Project!.Holes.Any(h => TieFit.Detonators(vm.Project, h).Electronic)) throw new Exception("the smoke blast should have electronic holes by now");
+    vm.TieSystem = null; vm.ActiveTieDelayMs = null;
+    vm.ActiveConnector = vm.Project.ActiveProducts.First(p => p.Kind == ProductKind.SurfaceConnector);
+    vm.TieToolWithPalette(); Pump();
+    var win = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("no initiation catalogue");
+    var esiType = vm.Project.Catalogue.Types.First(t => t.KindIds.Contains(ProductCatalogue.KindId(ProductKind.ElectronicDetonator)));
+    if (vm.ActiveConnector?.Kind != ProductKind.ElectronicDetonator || vm.TieSystem != esiType.Id) throw new Exception($"the catalogue should open on ESI: {vm.ActiveConnector?.Name}, {vm.TieSystem}");
+    var chip = win.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "type:" + esiType.Id);
+    if (chip.Content as string != BlastDesigner.App.Services.Loc.Short("ESI")) throw new Exception("the ESI chip: " + chip.Content);
+    Pump(); win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "62b_catalogue_on_esi.png"));
+    // a choice made stays: the shock tube chosen, the catalogue opened again keeps it
+    var tubeType = vm.Project.Catalogue.Types.First(t => t.KindIds.Contains(ProductCatalogue.KindId(ProductKind.SurfaceConnector)));
+    win.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "type:" + tubeType.Id).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    win.Close(); vm.SelectTool(); Pump();
+    vm.ShowTiePalette(); Pump();
+    if (vm.TieSystem != tubeType.Id) throw new Exception("a type chosen in the catalogue should stay: " + vm.TieSystem);
+    BlastDesigner.App.Services.Dialogs.LastShown?.Close(); vm.SelectTool(); Pump();
+    vm.ActiveConnector = vm.Project.ActiveProducts.First(p => p.Kind == ProductKind.SurfaceConnector);
+});
 Step("the Ties button opens the initiation catalogue, whose position goes to the settings", () =>
 {
     vm.TieToolWithPalette(); Pump();
@@ -5426,10 +5501,10 @@ Step("initiation catalogue: Type → Family → Variant, user-defined delay, the
     if (types != 7) throw new Exception($"{types} types instead of 7");
     // narrow: the types by their short names, the full one in the tooltip
     if (win.Width > 260) throw new Exception("the catalogue should be 260 wide at most: " + win.Width);
-    var ebs = vm.Project!.Catalogue.Types.First(t => t.Name == "EBS detonators");
+    var ebs = vm.Project!.Catalogue.Types.First(t => t.Name == "Electronic Initiation System");
     var ebsChip = Chip("type:" + ebs.Id);
-    if (ebsChip.Content as string != BlastDesigner.App.Services.Loc.Short("EBS") || ToolTip.GetTip(ebsChip) as string != BlastDesigner.App.Services.Loc.T("EBS detonators") || ebsChip.Height > 24)
-        throw new Exception($"the EBS chip: '{ebsChip.Content}', tip '{ToolTip.GetTip(ebsChip)}', height {ebsChip.Height}");
+    if (ebsChip.Content as string != BlastDesigner.App.Services.Loc.Short("ESI") || ToolTip.GetTip(ebsChip) as string != BlastDesigner.App.Services.Loc.T("Electronic Initiation System") || ebsChip.Height > 24)
+        throw new Exception($"the ESI chip: '{ebsChip.Content}', tip '{ToolTip.GetTip(ebsChip)}', height {ebsChip.Height}");
     // Cord delay: the family of the cord relays and its variants by delay
     string TypeTag(string name) => "type:" + vm.Project!.Catalogue.Types.First(t => t.Name == name).Id;
     Press(TypeTag("Cord delay"));

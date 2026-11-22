@@ -127,7 +127,7 @@ public sealed class Product
         new() { Id = "0ec2651e-4945-4554-915e-f8c4378e6058", Name = "Cord relay 17 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 17, Cost = 3, Color = 0xFFFFB300 },
         new() { Id = "2eaae6f2-75f8-45b1-ae7b-10d76024d14b", Name = "Cord relay 25 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 25, Cost = 3, Color = 0xFFE53935 },
         new() { Id = "9bc120bb-4f12-4f79-9421-a3878a714183", Name = "Cord relay 42 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 42, Cost = 3, Color = 0xFF8D6E63 },
-        new() { Id = "f7407010-0e86-4dae-8a4f-2b03856e388a", Name = "Harness wire", Family = "Harness wire", Kind = ProductKind.HarnessWire, Cost = 0.2, Color = 0xFF78909C },
+        new() { Id = "f7407010-0e86-4dae-8a4f-2b03856e388a", Name = "Bus line", Family = "Bus line", Kind = ProductKind.HarnessWire, Cost = 0.2, Color = 0xFF78909C },
     };
 }
 

@@ -188,6 +188,7 @@ public sealed class ProductCatalogue
         project.Catalogue = Layered(BuiltIn(), user, project.Catalogue);
         DropRetired(project);
         RenameDaveyTronic(project);
+        RenameBusLineAndEsi(project);
         foreach (var p in Product.DefaultCatalogue())
             if (!project.Products.Any(x => x.Id == p.Id || (x.Kind == p.Kind && x.Name == p.Name))) project.Products.Add(p);
         foreach (var p in userProducts)
@@ -216,6 +217,36 @@ public sealed class ProductCatalogue
         }
         foreach (var f in project.Catalogue.Families)
             if (f.Id == DaveyTronicFamily && f.Name == old) f.Name = now;
+    }
+
+    private const string EsiType = "4fc83e10-6074-4dac-a664-e708cc5e8319", BusLineType = "20fdd1af-dc46-4f59-8002-7e6329cc360d",
+        BusLineGroup = "5c9ea84e-bbbf-47c2-a6eb-9c6472173411", BusLineFamily = "7685543d-be13-4b47-97b2-dd52d770dd35",
+        BusLineProduct = "f7407010-0e86-4dae-8a4f-2b03856e388a";
+
+    /// <summary>
+    /// Before 0.3.11 the electronic system was EBS (EBS detonators) and the bus line Harness (Harness wire): the built-in
+    /// records of a project or of the user's file saved then get the new names, ESI (Electronic Initiation System) and
+    /// BusLine (Bus line), the type, the kind, the group, the family and the product. A name the user gave them stays.
+    /// </summary>
+    private static void RenameBusLineAndEsi(BlastProject project)
+    {
+        const string harness = "Harness wire", bus = "Bus line";
+        var tables = project.Catalogue;
+        foreach (var t in tables.Types)
+        {
+            if (t.Id == EsiType && t.Name == "EBS detonators") t.Name = "Electronic Initiation System";
+            if (t.Id == EsiType && t.ShortName == "EBS") t.ShortName = "ESI";
+            if (t.Id == BusLineType && t.Name == harness) t.Name = bus;
+            if (t.Id == BusLineType && t.ShortName == "Harness") t.ShortName = "BusLine";
+        }
+        foreach (var k in tables.Kinds) if (k.Id == KindId(ProductKind.HarnessWire) && k.Name == harness) k.Name = bus;
+        foreach (var g in tables.Groups) if (g.Id == BusLineGroup && g.Name == harness) g.Name = bus;
+        foreach (var f in tables.Families) if (f.Id == BusLineFamily && f.Name == harness) f.Name = bus;
+        foreach (var p in project.Products)
+        {
+            if (p.Id == BusLineProduct && p.Name == harness) p.Name = bus;
+            if (p.Kind == ProductKind.HarnessWire && p.Family == harness) p.Family = bus;
+        }
     }
 
     /// <summary>Ids of the products the built-in catalogue had once, and of their family.</summary>
@@ -339,8 +370,8 @@ public sealed class ProductCatalogue
         ["3d8f503e-e82f-414c-993b-f022fd8159a2"] = "Cord delay",
         ["e323b18e-f698-45f6-b9d3-f6807e006efc"] = "Det. cord",
         ["f85e4a61-ee14-434e-aa5d-4c8f4cf26f5e"] = "Electric",
-        ["20fdd1af-dc46-4f59-8002-7e6329cc360d"] = "Harness",
-        ["4fc83e10-6074-4dac-a664-e708cc5e8319"] = "EBS",
+        ["20fdd1af-dc46-4f59-8002-7e6329cc360d"] = "BusLine",
+        ["4fc83e10-6074-4dac-a664-e708cc5e8319"] = "ESI",
         ["63354b1d-e3ff-4bd7-893a-063e1ecaa568"] = "Own delay",
     };
 
@@ -373,15 +404,15 @@ public sealed class ProductCatalogue
         Kind("Detonating cord", ProductKind.DetonatingCord);
         Kind("Cord relay", ProductKind.CordRelay);
         Kind("Electric detonator", ProductKind.ElectricDetonator);
-        Kind("Harness wire", ProductKind.HarnessWire);
+        Kind("Bus line", ProductKind.HarnessWire);
         Kind("Other", ProductKind.Other);
 
         Type("cff81fcf-0398-4a18-a4d9-b6214389f566", "Shock tube", SurfaceConnector, DownholeDetonator, Other);
         Type("3d8f503e-e82f-414c-993b-f022fd8159a2", "Cord delay", CordRelay);
         Type("e323b18e-f698-45f6-b9d3-f6807e006efc", "Detonating cord system", DetonatingCord);
         Type("f85e4a61-ee14-434e-aa5d-4c8f4cf26f5e", "Electric", ElectricDetonator);
-        Type("20fdd1af-dc46-4f59-8002-7e6329cc360d", "Harness wire", HarnessWire);
-        Type("4fc83e10-6074-4dac-a664-e708cc5e8319", "EBS detonators", ElectronicDetonator);
+        Type(BusLineType, "Bus line", HarnessWire);
+        Type(EsiType, "Electronic Initiation System", ElectronicDetonator);
         Type("63354b1d-e3ff-4bd7-893a-063e1ecaa568", "User defined");
 
         Group("51c697ac-7edf-4a09-9993-a18efdfdec8d", "Explosives", BulkExplosive, PackagedExplosive);
@@ -391,7 +422,7 @@ public sealed class ProductCatalogue
         Group("1223d610-578d-4ee8-b2f4-9872ee3bb696", "Detonators", DownholeDetonator, ElectronicDetonator, ElectricDetonator);
         Group("f27bcbde-6c2e-44f9-9d1f-33a012735b3f", "Surface connectors", SurfaceConnector);
         Group("cbbb681a-0578-4f1c-932d-d4e3dc25cb37", "Detonating cord", DetonatingCord, CordRelay);
-        Group("5c9ea84e-bbbf-47c2-a6eb-9c6472173411", "Harness wire", HarnessWire);
+        Group(BusLineGroup, "Bus line", HarnessWire);
         Group("76e980a0-2d51-4867-9095-acbc95b1f044", "Other", Other);
 
         Family("ddc6ed48-5bc2-4902-be8f-64cdbfd8e90d", "Downhole detonator", DownholeDetonator);
@@ -400,7 +431,7 @@ public sealed class ProductCatalogue
         Family("1b2212dd-fc1d-4409-916c-4313f4b912ae", "Surface connector", SurfaceConnector);
         Family("a70df506-c21a-4e74-8f5a-22bd5f22a86f", "Detonating cord", DetonatingCord);
         Family("f5d36999-3c77-4a86-be52-14c75c75dd7b", "Cord relay", CordRelay);
-        Family("7685543d-be13-4b47-97b2-dd52d770dd35", "Harness wire", HarnessWire);
+        Family(BusLineFamily, "Bus line", HarnessWire);
         return c;
     }
 }

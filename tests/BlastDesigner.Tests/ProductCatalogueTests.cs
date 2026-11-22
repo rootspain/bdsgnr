@@ -35,7 +35,8 @@ public class ProductCatalogueTests
     {
         var c = ProductCatalogue.BuiltIn();
         Assert.All(c.Types, t => Assert.False(string.IsNullOrWhiteSpace(t.ShortName)));
-        Assert.Equal("EBS", ProductCatalogue.ShortNameOf(Type(c, "EBS detonators")));
+        Assert.Equal("ESI", ProductCatalogue.ShortNameOf(Type(c, "Electronic Initiation System")));
+        Assert.Equal("BusLine", ProductCatalogue.ShortNameOf(Type(c, "Bus line")));
         Assert.Equal("Own delay", ProductCatalogue.ShortNameOf(Type(c, "User defined")));
         // a built-in type from a file before the field: its short name by its id
         var old = Type(c, "Shock tube");

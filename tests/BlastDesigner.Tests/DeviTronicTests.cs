@@ -253,7 +253,7 @@ public class DeviTronicTests
         var chains = DeviTronic.Chains(p);
         var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t");
         Assert.Empty(r.Errors);
-        var untied = Assert.Single(r.Warnings, w => w.Format.Contains("no chain of EBS ties"));
+        var untied = Assert.Single(r.Warnings, w => w.Format.Contains("no chain of ESI ties"));
         Assert.Equal(new[] { h5.Id }, untied.Holes);
         var other = Assert.Single(r.Warnings, w => w.Format.Contains("not chosen for any line"));
         Assert.Equal(new[] { h3.Id, h4.Id }, other.Holes);
@@ -324,7 +324,7 @@ public class DeviTronicTests
         Assert.Empty(r.Errors);
         Assert.Equal(new[] { "h0", "h5" }, r.Plan.Paths[0].Holes.Select(h => h.Source!.Label));
         // the holes on the shock tube and the bare ties are left out, and named
-        var left = Assert.Single(r.Warnings, w => w.Format.Contains("no chain of EBS ties"));
+        var left = Assert.Single(r.Warnings, w => w.Format.Contains("no chain of ESI ties"));
         Assert.Equal(new[] { c.Id, d.Id, e.Id, f.Id }.OrderBy(x => x), left.Holes.OrderBy(x => x));
     }
 

@@ -78,7 +78,9 @@ public sealed class EbsOpeningPoint : Entity, IHoleTimer
     [JsonIgnore] public double TotalReliefMsPerM =>
         Math.Sqrt(Math.Pow(SpacingM > 0 ? SpacingDelayMs / SpacingM : 0, 2) + Math.Pow(BurdenM > 0 ? BurdenDelayMs / BurdenM : 0, 2));
 
-    public override string KindName => "EBS opening point";
+    public override string KindName => Kind;
+    /// <summary>The kind name; before 0.3.11 <see cref="OldKind"/>, which the lists of hidden kinds read as this.</summary>
+    public const string Kind = "ESI opening point", OldKind = "EBS opening point";
     public override IEnumerable<Vec3> GetVertices() { yield return Position; }
     public override void Translate(Vec3 d) => Position += d;
     public override void Transform(Func<Vec3, Vec3> f)

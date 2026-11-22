@@ -95,7 +95,7 @@ public static class OpeningPointWindow
             Child = new StackPanel { Spacing = 8, Children = { new TextBlock { Text = L("Result").ToUpper(CultureInfo.CurrentCulture), FontSize = 11, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint }, result } }
         });
         Recompute();
-        var title = existing != null ? "Edit EBS opening point" : "EBS opening point";
+        var title = existing != null ? "Edit ESI opening point" : "ESI opening point";
         if (!await Dialogs.Custom(title, body, width: 560, subtitle: Loc.F("Holes: {0}", holes.Count), form: true)) return null;
         return new OpeningPointSetup(op, keepManual);
     }

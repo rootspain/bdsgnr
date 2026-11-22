@@ -394,16 +394,17 @@ public sealed class TieTool : Tool
         var chain = new List<Guid> { from.Id };
         if (Vm.TieChain) chain.AddRange(HolesOnTheWay(from, to).Select(h => h.Id));
         chain.Add(to.Id);
-        // a chain of holes with an electronic detonator: a tie only to its start, never branching, never a ring
+        // a user-defined delay goes on the tie itself, without a product
+        var delay = Vm.ActiveTieDelayMs;
+        var connector = delay == null ? Vm.ActiveConnector : null;
+        // the product fits the detonators of the holes (ESI to electronic ones, the others to the rest), and a chain of
+        // holes with an electronic detonator: a tie only to its start, never branching, never a ring
         for (int i = 1; i < chain.Count; i++)
-            if (RouteNumbers.Refusal(Vm.Project!, chain[i - 1], chain[i]) is { } why)
+            if ((TieFit.Refusal(Vm.Project!, chain[i - 1], chain[i], connector) ?? RouteNumbers.Refusal(Vm.Project!, chain[i - 1], chain[i])) is { } why)
             {
                 Vm.SetStatus(Loc.F(why.Format, why.Hole));
                 return false;
             }
-        // a user-defined delay goes on the tie itself, without a product
-        var delay = Vm.ActiveTieDelayMs;
-        var connector = delay == null ? Vm.ActiveConnector : null;
         Vm.Change(chain.Count > 2 ? "Add ties" : "Add tie", pr =>
         {
             var reached = Timing.ReachedTies(pr);

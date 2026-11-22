@@ -1076,7 +1076,7 @@ public sealed class Inspector : DockPanel
             ParsingNumberStyle = System.Globalization.NumberStyles.Integer,
             Width = 100, Height = 24, MinHeight = 24, FontSize = 11.5
         };
-        ToolTip.SetTip(size, Loc.Ui("Font size of the hole labels on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen."));
+        ToolTip.SetTip(size, Loc.Ui("Font size of the hole labels and of the delays of the ties on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen."));
         size.ValueChanged += (_, _) => { if (size.Value is { } v) _vm.SetHoleLabelFontSize((int)Math.Round(v)); };
         var sizeRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         DockPanel.SetDock(size, Dock.Right);

@@ -178,7 +178,7 @@ public sealed partial class MainViewModel
         new Stage("Output", new()
         {
             G("Reports", M("Reports", "report", "File/Print/Reports…", big: true), M("Print plan", "print", "File/Print/Plan…", "Ctrl P", true),
-                M("Report designer", "edit", "Tools/Report designer…"), M("Logging report", "ebs", "Calculations/Electronic logging report"), Locked("EBS field report", "ebs")),
+                M("Report designer", "edit", "Tools/Report designer…"), M("Logging report", "ebs", "Calculations/Electronic logging report"), Locked("ESI field report", "ebs")),
             G("To the drill rig", M("IREDES", "send", "File/Export/IREDES Plan file…", "Ctrl⇧X", true), M("Drill plan (XML)", "send", "File/Export/Drill plan (XML)…"),
                 M("Surpac STR", "export", "File/Export/String file (.str)…"), Locked("Leica", "send"), Locked("MineSight 3D", "export")),
             G("To loading", M("Load sheets (CSV)", "table", "File/Export/Load sheets (csv)…"), M("Deck table (CSV)", "table", "File/Export/Deck table (csv)…"), Locked("ELS for MMU", "table")),

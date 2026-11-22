@@ -1846,7 +1846,7 @@ ui:Horizontal slice	Горизонт. срез
 ui:Charge in 3D	Заряд в 3D
 ui:Tolerances	Допуски
 ui:Fly through	Пролёт 3D
-ui:EBS field report	Полевой отчёт ЭСИ
+ui:ESI field report	Полевой отчёт ЭСИ
 ui:To the drill rig	На буровой станок
 ui:IREDES	IREDES
 ui:Drill plan (XML)	Буровая карта (XML)
@@ -2596,8 +2596,6 @@ Initiation system	Система инициации
 Shock tube	НСИ
 Cord delay	Замедление шнура
 Electric	Электрич.
-Harness wire	Harness wire
-EBS detonators	Детонаторы EBS
 User defined	Определённое пользователем
 Time, ms	Время, мс
 Product family	Семейство продуктов
@@ -2607,7 +2605,6 @@ No products of this type in Available resources	В «Доступных ресу
 m/s	м/с
 Cord relay	Реле ДШ
 Electric detonator	Электродетонатор
-ui:Harness wire	Harness wire
 Detonating cord system	Детонирующий шнур
 Click a hole, then the hole to tie it to (or drag from one to the other); holes on the way get a tie each. The tie finishes the entry; with Shift held the entry goes on from that hole. Tied holes take more ties; each tie points away from the initiation point, whichever way it was drawn. The connector is chosen in the tie palette.	Щёлкните скважину, затем скважину, с которой её связать (или протяните линию от одной к другой); скважины на пути линии связываются по очереди. Связь завершает ввод; с зажатым Shift ввод продолжается от этой скважины. К уже связанным скважинам можно добавлять связи; каждая связь направляется от точки инициирования, в какую бы сторону её ни провели. Замедлитель выбирается в палитре СИ.
 Tie entry finished	Ввод связей завершён
@@ -2938,7 +2935,7 @@ Write the file?	Записать файл?
 The UTM zone is not set (Edit ▸ Site coordinate system): zone 0 is written.	Не задана зона UTM (Правка ▸ Система координат участка): будет записана зона 0.
 No more than 26 lines (A–Z) can be written.	Можно записать не более 26 линий (A–Z).
 The tie type is chosen for more than one line: {0}	Тип связи выбран для нескольких линий: {0}
-{0} hole(s) with electronic detonators are on no chain of EBS ties and are not written.	Скважин с электронными детонаторами вне цепочек связей ЭСИ: {0}, они не записаны.
+{0} hole(s) with electronic detonators are on no chain of ESI ties and are not written.	Скважин с электронными детонаторами вне цепочек связей ЭСИ: {0}, они не записаны.
 Select the holes not written	Выделить эти скважины
 {0} hole(s) are tied with a type not chosen for any line and are not written.	Скважин с типом связи, не выбранным ни для одной линии: {0}, они не записаны.
 Line {0}: {1} hole(s) without electronic detonators are not written.	Линия {0}: скважин без электронных детонаторов: {1}, они не записаны.
@@ -2951,7 +2948,7 @@ Line {0} ({1}): {2} ties, more than {3}.	Линия {0} ({1}): связей {2},
 {0} ties in the chain: more than {1}.	Связей в цепочке: {0}, больше {1}.
 Each line takes the holes of its chain of ties. Holes are numbered along the ties in the order they were drawn.	В линию попадают скважины её цепочки связей. Нумерация идёт по связям в порядке их построения.
 Each chain can be chosen for one line only.	Каждую цепочку можно выбрать только для одной линии.
-There are no EBS ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators.	В плане нет связей ЭСИ: линии (PATH) строятся по цепочкам связей электронных детонаторов.
+There are no ESI ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators.	В плане нет связей ЭСИ: линии (PATH) строятся по цепочкам связей электронных детонаторов.
 The chain is chosen for more than one line: {0}	Цепочка выбрана для нескольких линий: {0}
 {0} hole(s) are on a chain not chosen for any line and are not written.	Скважин на цепочках, не выбранных ни для одной линии: {0}, они не записаны.
 Line {0}: the chain of ties is not in the plan.	Линия {0}: цепочки связей нет в плане.
@@ -2988,8 +2985,8 @@ ui:Offset from the hole time, ms	Смещение от времени скваж
 {0} (primer offset {1} ms)	{0} (смещение боевика {1} мс)
 ui:Signal down the tube	Прохождение сигнала по волноводу
 Propagation ms per m	Прохождение сигнала по волноводу, мс/м
-EBS opening point	Точка открытия ЭСИ
-Edit EBS opening point	Изменение точки открытия ЭСИ
+ESI opening point	Точка открытия ЭСИ
+Edit ESI opening point	Изменение точки открытия ЭСИ
 Click where the electronic blast opens; the holes take their times from there.	Щёлкните там, где открывается взрыв ЭСИ; скважины получат время от этой точки.
 ui:Burden	ЛНС
 ui:Spacing	РМС
@@ -3016,7 +3013,7 @@ Upper limit	Верхний предел
 Least relief	Наименьшая разгрузка
 Most relief	Наибольшая разгрузка
 ui:Font size	Размер шрифта
-ui:Font size of the hole labels on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen.	Размер шрифта подписей скважин на плане и в 3D, пикс. Хранится в проекте; новый взрыв начинается с последнего выбранного размера.
+ui:Font size of the hole labels and of the delays of the ties on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen.	Размер шрифта подписей скважин и замедлений связей на плане и в 3D, пикс. Хранится в проекте; новый взрыв начинается с последнего выбранного размера.
 To level	До уровня
 ui:To level	До уровня
 The collar of hole {0} ({1:0.###} m) is not above the level {2:0.###} m.	Устье скважины {0} ({1:0.###} м) не выше уровня {2:0.###} м.
@@ -3453,7 +3450,7 @@ Which of them is LEVEL 1	Какой из них LEVEL 1
 Detonators	Детонаторов
 The frame of the line (DETZONE)	Рамка линии (DETZONE)
 PU number	Номер пульта
-Only the chains of EBS ties make lines; the letter of a line is that of its route numbers. Holes are numbered along the ties in the order they were drawn.	Линии строятся только из цепочек связей ЭСИ; литера линии — литера её маршрутных номеров. Нумерация идёт по связям в порядке их построения.
+Only the chains of ESI ties make lines; the letter of a line is that of its route numbers. Holes are numbered along the ties in the order they were drawn.	Линии строятся только из цепочек связей ЭСИ; литера линии — литера её маршрутных номеров. Нумерация идёт по связям в порядке их построения.
 Enter the full name (FULL_NAME).	Введите полное имя (FULL_NAME).
 Enter the displayed name (DISPLAYED_NAME).	Введите отображаемое имя (DISPLAYED_NAME).
 The date is YYYY/MM/DD.	Дата — в виде YYYY/MM/DD.
@@ -3475,8 +3472,6 @@ short:Shock tube	НСИ
 short:Cord delay	Замедл. шнура
 short:Det. cord	ДШ
 short:Electric	Электрич.
-short:Harness	Harness
-short:EBS	EBS
 short:Own delay	Свой
 Section name	Название разреза
 Section {0}	Разрез {0}
@@ -3600,3 +3595,14 @@ Section dimensions	Размеры разреза
 Apply style	Применить стиль
 Apply style: click the marks to give it to · Esc ends	Применить стиль: щёлкайте объекты, которым его передать · Esc — конец
 ui:Other colour…	Другой цвет…
+ui:not counted	не учитывать
+ui:Speed of the signal down the tube from the data sheet of the product, m/s, or its time per metre, ms/m: 2000 m/s = 0.5 ms/m; with the primer 15 m down the hole, 7.5 ms. Empty or 0: not counted.	Скорость сигнала по волноводу из паспорта изделия, м/с, или время на метр, мс/м: 2000 м/с = 0,5 мс/м; при боевике на 15 м — 7,5 мс. Пусто или 0 — не учитывать.
+Bus line	Магистральная линия
+ui:Bus line	Магистральная линия
+short:BusLine	BusLine
+short:ESI	ЭСИ
+Electronic Initiation System	Электронные системы инициирования
+ui:does not fit	не подходит
+{0} ties created; holes with electronic detonators only left out: {1}	Создано связей: {0}; скважины только с электронными детонаторами пропущены: {1}
+Hole {0} has no electronic detonator: an ESI tie does not go to it. Choose a product of another type in the Initiation catalogue	В скважине {0} нет электронного детонатора: связь ЭСИ к ней не проводится. Выберите в «Каталоге СИ» изделие другого типа
+Hole {0} has electronic detonators only: a tie goes to it with an ESI product. Choose ESI in the Initiation catalogue	В скважине {0} только электронные детонаторы: к ней проводится только связь ЭСИ. Выберите ЭСИ в «Каталоге СИ»

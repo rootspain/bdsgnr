@@ -126,6 +126,10 @@ public sealed partial class MainViewModel : ObservableObject
         var mine = UserCatalogue.Load();
         ProductCatalogue.Attach(doc.Project, mine.Tables, mine.Products);
         ActiveConnector = doc.Project.ActiveProducts.FirstOrDefault(p => p.Kind == ProductKind.SurfaceConnector);
+        // nothing chosen in the Initiation catalogue of this blast yet: ESI when it has holes with electronic detonators
+        ActiveTieDelayMs = null;
+        TieSystem = null;
+        PreferEsiTies();
         UseMinStemming();
         Timing.Solve(doc.Project);
         if (doc.Project.View.Scale > 0 && doc.FilePath != null) View.Camera.LoadFrom(doc.Project.View);

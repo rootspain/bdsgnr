@@ -306,12 +306,15 @@ public class PrimerTimingTests
         var ip = p.Add(new InitiationPoint { Position = h.Collar, HoleId = h.Id, StartTimeMs = 0 });
         Timing.Solve(p);
         Assert.Equal(det.DelayMs + 5, h.FiringTimeMs!.Value, 9);
+        // the in-hole delay of the labels and the exports takes it too
+        Assert.Equal(det.DelayMs + 5, h.InholeDelayMs, 9);
         // an electronic primer does not take it
         Assert.Equal(0, Charging.PropagationDelay(p, new Primer { Depth = 10, DetonatorId = DeviTronicId }));
         // a file before it reads 0
         det.PropagationMsPerM = 0;
         Timing.Solve(p);
         Assert.Equal(det.DelayMs, h.FiringTimeMs!.Value, 9);
+        Assert.Equal(det.DelayMs, h.InholeDelayMs, 9);
     }
 
     [Fact]

@@ -717,7 +717,10 @@ public sealed partial class MainViewModel
         if (hi is not int h) return;
         var ri = await Dialogs.Choose("Automatic tie-up", Loc.T("Connector between rows"), names, Math.Min(names.Count - 1, 2));
         if (ri is not int r) return;
-        var ids = SelectedOrAllHoles().Where(x => !x.IsDummy).Select(x => x.Id).ToHashSet();
+        // its ties are surface connectors: the holes with electronic detonators only are left to ESI ties
+        var holes = SelectedOrAllHoles().Where(x => !x.IsDummy).ToList();
+        var ids = holes.Where(x => TieFit.Fits(Project, x.Id, esi: false)).Select(x => x.Id).ToHashSet();
+        var left = holes.Count - ids.Count;
         var ipId = ip.Id;
         int n = 0;
         Change("Automatic tie-up", p =>
@@ -727,7 +730,7 @@ public sealed partial class MainViewModel
             // the route numbers of the holes along the ties made, in the order they were made
             RouteNumbers.Number(p, p.Ties.Where(t => !had.Contains(t.Id)).Select(t => (t.FromId, t.ToId)).ToList());
         });
-        SetStatus(Loc.F("{0} ties created", n));
+        SetStatus(left > 0 ? Loc.F("{0} ties created; holes with electronic detonators only left out: {1}", n, left) : Loc.F("{0} ties created", n));
     }
 
     public void ConnectSelectedInOrder()
@@ -736,9 +739,10 @@ public sealed partial class MainViewModel
         if (holes.Count < 2) return;
         var chain = GeneralOps.ChainPoints(holes.Select(h => h.Collar).ToList()).Select(c => holes.First(h => h.Collar == c)).ToList();
         var connector = ActiveConnector;
-        // a chain of holes with an electronic detonator: a tie only to its start, never branching, never a ring
+        // the product fits the detonators of the holes, and a chain of holes with an electronic detonator: a tie only to
+        // its start, never branching, never a ring
         for (int i = 1; i < chain.Count; i++)
-            if (RouteNumbers.Refusal(Project!, chain[i - 1].Id, chain[i].Id) is { } why)
+            if ((TieFit.Refusal(Project!, chain[i - 1].Id, chain[i].Id, connector) ?? RouteNumbers.Refusal(Project!, chain[i - 1].Id, chain[i].Id)) is { } why)
             {
                 SetStatus(Loc.F(why.Format, why.Hole));
                 return;
@@ -773,7 +777,25 @@ public sealed partial class MainViewModel
         Change("Delete tie up", p => Timing.DeleteTieUp(p, all ? null : ids));
     }
 
-    public void ShowTiePalette() => TiePaletteWindow.Show(this);
+    public void ShowTiePalette()
+    {
+        PreferEsiTies();
+        TiePaletteWindow.Show(this);
+    }
+
+    /// <summary>
+    /// While nothing is chosen in the Initiation catalogue (<see cref="TieSystem"/>) and the blast has holes with an
+    /// electronic detonator, new ties are ESI: the type that lists the electronic detonators, its first product. A choice
+    /// made in the catalogue stays.
+    /// </summary>
+    public void PreferEsiTies()
+    {
+        if (Project == null || TieSystem != null || ActiveTieDelayMs != null) return;
+        if (!Project.Holes.Any(h => TieFit.Detonators(Project, h).Electronic)) return;
+        if (Project.ActiveProducts.FirstOrDefault(p => p.Kind == ProductKind.ElectronicDetonator) is not { } esi) return;
+        ActiveConnector = esi;
+        TieSystem = Project.Catalogue.Types.Where(t => !t.Deleted).OrderBy(t => t.Order).FirstOrDefault(t => t.KindIds.Contains(esi.KindId))?.Id;
+    }
 
     /// <summary>The Ties button: the tie tool together with its palette (what the ties are made with).</summary>
     public void TieToolWithPalette() => TieToolWithPalette(null);
@@ -781,6 +803,7 @@ public sealed partial class MainViewModel
     /// <summary>The tie tool with its palette, with a chain already started at <paramref name="start"/> when given.</summary>
     public void TieToolWithPalette(Entity? start)
     {
+        PreferEsiTies();
         SetTool(new TieTool(this, start));
         ShowTiePalette();
     }
@@ -852,7 +875,7 @@ public sealed partial class MainViewModel
     public void OpeningPointTool()
     {
         PreferHoleOrderLabel();
-        SetTool(new PickPointsTool(this, "EBS opening point", "Click where the electronic blast opens; the holes take their times from there.", 1, 1, false, pts => CreateOpeningPoint(pts[0])));
+        SetTool(new PickPointsTool(this, "ESI opening point", "Click where the electronic blast opens; the holes take their times from there.", 1, 1, false, pts => CreateOpeningPoint(pts[0])));
     }
 
     private async void CreateOpeningPoint(Vec3 at)
@@ -865,7 +888,7 @@ public sealed partial class MainViewModel
             TimingLineResult? r = null;
             var point = setup.Point;
             point.HoleIds = ids.ToList();
-            Change("EBS opening point", p =>
+            Change("ESI opening point", p =>
             {
                 TakeHoles(p, point.Id, ids);
                 p.Add(point, p.GetOrCreateLayer(StandardLayers.TimingLines, 0xFF008000, "Design"));
@@ -889,7 +912,7 @@ public sealed partial class MainViewModel
         var id = point.Id;
         var v = setup.Point;
         TimingLineResult? r = null;
-        Change("Edit EBS opening point", p =>
+        Change("Edit ESI opening point", p =>
         {
             if (p.FindEntity(id) is not EbsOpeningPoint op) return;
             op.BurdenM = v.BurdenM; op.SpacingM = v.SpacingM; op.BurdenBearingDeg = v.BurdenBearingDeg; op.BurdenDelayMs = v.BurdenDelayMs;

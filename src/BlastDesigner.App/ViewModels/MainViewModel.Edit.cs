@@ -345,9 +345,9 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// Products offered by the lists of a property grid. With <paramref name="ties"/> (the grid of ties) the product is one
-    /// that goes on a tie (<see cref="Product.IsTieProduct"/>); what a tie has now stays in the list whatever it is, so it
-    /// shows and can be kept.
+    /// Products offered by the lists of a property grid. With <paramref name="ties"/> (the grid of ties) the products of the
+    /// types of the Initiation catalogue that fit the holes of the ties (<see cref="TieFit.Offered"/>), each with the short
+    /// name of its type ("Shock tube · Surface connector 17 ms"); what a tie has now stays, marked when it does not fit.
     /// </summary>
     public void AddProductChoices(PropertyGrid grid, IEnumerable<TieEntity>? ties = null)
     {
@@ -358,8 +358,13 @@ public sealed partial class MainViewModel
             .Select(p => (p.Id, p.Deleted ? $"{p.Name} ({Loc.Ui("deleted")})" : p.Name)).ToList();
         if (ties != null)
         {
-            var now = ties.Select(t => t.ProductId).OfType<string>().ToHashSet();
-            grid.Choices["ProductId"] = Of(p => p.IsTieProduct || now.Contains(p.Id));
+            grid.Choices["ProductId"] = TieFit.Offered(Project, ties.ToList(), used).Select(o =>
+            {
+                var name = o.Type is { } type ? $"{Loc.Short(ProductCatalogue.ShortNameOf(type))} · {o.Product.Name}" : o.Product.Name;
+                if (o.Product.Deleted) name += $" ({Loc.Ui("deleted")})";
+                if (!o.Fits) name += $" ({Loc.Ui("does not fit")})";
+                return (o.Product.Id, name);
+            }).ToList();
         }
         else grid.Choices["ProductId"] = Of(_ => true);
         grid.Choices["StemmingProductId"] = Of(p => p.Kind == ProductKind.Stemming);

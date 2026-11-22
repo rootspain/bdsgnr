@@ -28,6 +28,27 @@ public class RenderTests
         return p;
     }
 
+    [Fact]
+    public void TheDelayOfATie_TakesTheFontSizeOfTheHoleLabels()
+    {
+        var p = BlastProject.CreateNew("ties");
+        var connector = p.Products.First(x => x.Kind == ProductKind.SurfaceConnector && x.DelayMs >= 100);
+        var a = p.Add(new InitiationPoint { Position = new Vec3(0, 0, 0) });
+        var b = p.Add(new InitiationPoint { Position = new Vec3(20, 0, 0) });
+        p.Add(new TieEntity { FromId = a.Id, ToId = b.Id, ProductId = connector.Id });
+        int Ink(int size)
+        {
+            p.View.HoleLabelFontSize = size;
+            var cam = new Camera { Width = 400, Height = 300, Scale = 15, Target = new Vec3(10, 0, 0) };
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.White);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions());
+            return bitmap.Pixels.Count(c => c.Red < 200 || c.Green < 200 || c.Blue < 200);
+        }
+        Assert.True(Ink(24) > Ink(8) + 100, $"{Ink(24)} {Ink(8)}");
+    }
+
     private static double FirstFrameMs(BlastProject p)
     {
         var cam = new Camera { Width = 800, Height = 600 };

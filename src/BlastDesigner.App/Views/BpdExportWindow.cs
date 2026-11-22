@@ -97,7 +97,7 @@ public static class BpdExportWindow
         var all = DeviTronic.Chains(project);
         if (all.Count == 0)
         {
-            await Dialogs.Info(Loc.T("There are no EBS ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators."), Loc.T("DaveyTronic (.BPD)"));
+            await Dialogs.Info(Loc.T("There are no ESI ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators."), Loc.T("DaveyTronic (.BPD)"));
             return null;
         }
         var holeChains = DeviTronic.HoleChains(project, all);
@@ -302,7 +302,7 @@ public static class BpdExportWindow
                 headerCard,
                 levels,
                 FormKit.Section(Loc.T("Lines (PATH)"), new ScrollViewer { MaxHeight = 320, Content = grid }),
-                Hint(Loc.T("Only the chains of EBS ties make lines; the letter of a line is that of its route numbers. Holes are numbered along the ties in the order they were drawn.")),
+                Hint(Loc.T("Only the chains of ESI ties make lines; the letter of a line is that of its route numbers. Holes are numbered along the ties in the order they were drawn.")),
                 totals,
                 error
             }

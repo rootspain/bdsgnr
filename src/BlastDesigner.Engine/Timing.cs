@@ -93,8 +93,9 @@ public static class Timing
         {
             h.SurfaceTimeMs = arrival.TryGetValue(h.Id, out var s) ? s : null;
             var primers = Charging.Primers(h).ToList();
-            // the in-hole delay stays for the labels; the hole fires with its first charge
-            h.InholeDelayMs = primers.Count == 0 ? 0 : primers.Min(p => Charging.PrimerDelay(project, p.Primer));
+            // the in-hole delay stays for the labels and the exports: the delay of the detonator and the run of the signal
+            // down its tube, the least of the primers; the hole fires with its first charge
+            h.InholeDelayMs = primers.Count == 0 ? 0 : primers.Min(p => Charging.PrimerDelay(project, p.Primer) + Charging.PropagationDelay(project, p.Primer));
             h.Charges = Charges(project, h);
             if (h.Charges.Where(c => c.TimeMs.HasValue).Select(c => c.TimeMs!.Value).DefaultIfEmpty(double.NaN).Min() is var first && !double.IsNaN(first))
                 h.FiringTimeMs = first;
