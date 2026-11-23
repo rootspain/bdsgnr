@@ -3775,3 +3775,138 @@ ui:Left and right only: between the large buttons and the columns of small ones	
 ui:Less by 1	Меньше на 1
 ui:More by 1	Больше на 1
 ui:The stages of the ribbon, the search, the right panel and the windows	Этапы ленты, строка поиска, правая панель и окна
+# Fragmentation target (Analysis ▸ Fragmentation target)
+Fragmentation target	Подбор под фрагментацию
+Fragmentation target…	Подбор под фрагментацию…
+The project does not change until «Apply»	Проект не изменится до «Применить»
+Applying is one undo step (Ctrl+Z). Kuz-Ram prediction, ±30–50 % without a calibrated A.	Применение — один шаг отмены (Ctrl+Z). Прогноз по Кузнецову–Рамлеру, точность ± 30–50 % без калибровки A.
+Rock	Порода
+Calibrate A…	Калибровка A…
+Calibrate A	Калибровка фактора породы A
+Prediction at the present grid {0} × {1} m	Прогноз при текущей сетке {0} × {1} м
+Target	Цель
+Mean size X50	Средний кусок X50
+Tolerance ±, %	Допуск ±, %
+change	изменить
+Also:	Ещё:
+No other targets	Других целей нет
+X80 at most {0} {1}	X80 не более {0} {1}
+oversize at most {0} %	негабарит не более {0} %
+fines at most {0} %	мелочь не более {0} %
+Reachable: {0}–{1} {2}	Достижимо: {0}–{1} {2}
+Hole and charge	Скважина и заряд
+One explosive	Одно ВВ
+Two explosives	Два ВВ
+Column	Колонковое
+From rule	Из правила
+Fit	Подбирать
+Fixed	Фиксированная
+As in the project	Как в проекте
+Own	Свой
+the rest	остаток
+bench top	верх уступа
+floor	подошва
+Choose…	Выбрать…
+{0}, +{1}	{0}, +{1} ВВ
+No explosive in the products	В справочнике нет ВВ
+no RWS	нет RWS
+no density	нет плотности
+not water resistant	не водостойкое
+no cost	нет цены
+What may change	Что можно менять
+«{0}», {1} holes	«{0}», {1} скв.
+Grid B × S	Сетка B × S
+S/B {0}–{1}	S/B {0}–{1}
+S/B as now	S/B как сейчас
+Diameter: {0} mm	Диаметр: {0} мм
+Azimuth ±{0}°: fewer holes	Азимут ±{0}°: меньше скважин
+Azimuth not changed	Азимут не менять
+Find	Подобрать
+Limits…	Ограничения…
+Limits	Ограничения
+The hard limits reject a variant, the warnings only mark it.	Жёсткие ограничения отбрасывают вариант, предупреждения только помечают его.
+By the formulas: {0} × {1} m, X50 ≈ {2} {3}. «Find» checks it on the project.	По формуле: {0} × {1} м, X50 ≈ {2} {3}. «Подобрать» проверит на проекте.
+{0} explosives in the products	{0} ВВ в справочнике
+Searching… {0} %	Подбор… {0} %
+Stopped.	Остановлено.
+Found {0} variants in {1} s	Найдено вариантов: {0} за {1} с
+the profile has formulas of its own	формулы профиля изменены
+X50 does not grow with the grid on this profile: searched on points	X50 не растёт с сеткой в этом профиле: подбор по точкам
+Within the limits {0}–{1} {2} can be reached. Nearest to {3} is a variant of {4} {2}, stopped by {5}; try a smaller diameter or a stronger explosive.	При текущих ограничениях достижимо {0}–{1} {2}. Ближе всего к {3} вариант на {4} {2}, мешает {5}; попробуйте меньший диаметр или более сильное ВВ.
+a limit	ограничение
+Grid B × S, m	Сетка B × S, м
+d, mm	d, мм
+q, kg/m³	q, кг/м³
+Note	Примечание
+Press «Find» to find the variants.	Нажмите «Подобрать», чтобы найти варианты.
+Current	Текущий
+Recommended	Рекомендовано
+estimate	оценка
+- - current   —— variant   ▒ A band	- - текущий   —— вариант   ▒ полоса A
+Size distribution	Гранулометрический состав
+What will change	Что изменится
+What will change: variant {0}	Что изменится: вариант {0}
+Choose a variant in the table.	Выберите вариант в таблице.
+Cannot be applied	Нельзя применить
+Grid azimuth	Азимут сетки
+Keep the rule in the project	Сохранить правило в проекте
+X50 target: {0}	Подбор X50: {0}
+Target {0} {1}, got {2} {1}; {3} moved, {4} deleted, {5} added	Цель {0} {1}, получено {2} {1}; сдвинуто {3}, удалено {4}, добавлено {5}
+The rock inputs were changed. The project will not take them; save them to a preset?	Параметры породы изменены. В проект они не попадут; сохранить их в пресет?
+Other targets	Дополнительные цели
+X80 at most, {0}	X80 не более, {0}
+Oversize at most, %	Негабарит не более, %
+Fines at most, %	Мелочь не более, %
+Empty: no limit.	Пусто — без ограничения.
+B/d at least	B/d не менее
+B/d at most	B/d не более
+S/B at least	S/B не менее
+S/B at most	S/B не более
+Stemming at least, hole diameters	Забойка не менее, диаметров скважины
+Stemming at least, share of B	Забойка не менее, доля B
+Powder factor at least, kg/m³	Удельный расход не менее, кг/м³
+Powder factor at most, kg/m³	Удельный расход не более, кг/м³
+Flyrock clearance at most, m (0: not checked)	Опасная зона по разлёту не более, м (0 — не проверять)
+PPV at the monitoring points at most, mm/s (0: not checked)	Скорость колебаний в точках контроля не более, мм/с (0 — не проверять)
+Uniformity n at least (warning)	Однородность n не менее (предупреждение)
+Bench stiffness H/B at least (warning)	Жёсткость уступа H/B не менее (предупреждение)
+Azimuth window, ± degrees	Окно азимута, ± градусов
+B/d ≥ {0}	B/d ≥ {0}
+B/d ≤ {0}	B/d ≤ {0}
+S/B ≥ {0}	S/B ≥ {0}
+S/B ≤ {0}	S/B ≤ {0}
+Stemming ≥ {0}·d	забойка ≥ {0}·d
+Stemming ≥ {0}·B	забойка ≥ {0}·B
+Powder factor ≥ {0} kg/m³	удельный расход ≥ {0} кг/м³
+Powder factor ≤ {0} kg/m³	удельный расход ≤ {0} кг/м³
+The pattern cannot be laid out again	сетку нельзя перестроить
+Flyrock clearance ≤ {0} m	опасная зона по разлёту ≤ {0} м
+PPV ≤ {0} mm/s	скорость колебаний ≤ {0} мм/с
+X50 within ±{0} %	X50 в допуске ±{0} %
+X80 ≤ {0} cm	X80 ≤ {0} см
+Oversize ≤ {0} %	негабарит ≤ {0} %
+Fines ≤ {0} %	мелочь ≤ {0} %
+n < {0}	n < {0}
+H/B < {0}	H/B < {0}
+A = X50·q^0.8 / (Q^(1/6)·(115/RWS)^(19/30)) from each measured blast	A = X50·q^0,8 / (Q^(1/6)·(115/RWS)^(19/30)) по каждому измеренному взрыву
+A of the blasts: {0}. Mean A = {1}, spread ±{2} ({3} %).	A по взрывам: {0}. Среднее A = {1}, разброс ±{2} ({3} %).
+Enter the measured X50 of past blasts with what they were loaded with.	Введите измеренный X50 прошлых взрывов и их заряжание.
+X50 measured, cm	X50 факт., см
+Charge, kg	Заряд, кг
+Add a blast	Добавить взрыв
+Blast {0}	Взрыв {0}
+Take the mean A	Принять среднее A
+Bottom charge	Донное
+Search area	Область
+Holes to move	Сдвинуть скважин
+Holes to add	Добавить скважин
+Holes to delete	Удалить скважин
+Charging of the variant	Заряжание
+ui:Fragmentation target	Подбор под фрагментацию
+target {0}	цель {0}
+- - current   —— variant   ▒ A ±{0} %	- - текущий   —— вариант   ▒ A ±{0} %
+{0} {1} m + {2}	{0} {1} м + {2}
+Something went wrong in the program. The details are in the log.	В программе произошла ошибка. Подробности записаны в журнал.
+Size of the piece, {0}; the scale is logarithmic	Размер куска, {0}; шкала логарифмическая
+Passing, % of the mass: the share of pieces smaller than the size below	Проход, % по массе: доля кусков мельче размера на нижней оси
+Evens out the spacing in the rows: the first and the last hole of a row stay, the holes between them are moved to equal steps on the line between those two; the collar heights stay. The rows of the selected holes, or every row when nothing is selected. One undo step.	Выравнивает шаг в рядах: первая и последняя скважины ряда остаются на месте, промежуточные переносятся на равные шаги по прямой между ними; отметки устьев не меняются. Действует на ряды выделенных скважин, а если ничего не выделено — на все ряды. Отменяется одним шагом.

@@ -376,6 +376,14 @@ public static class CalcService
         });
         r.AddBuiltin(new BuiltinDef
         {
+            Name = "bottomChargeLength", NameRu = "Длина донного заряда", Contexts = new[] { "hole" }, Unit = "m",
+            Description = "Длина интервалов ВВ того же продукта, что и самый глубокий интервал ВВ скважины (донный заряд по Каннингему); с одним ВВ — вся длина заряда.",
+            Inputs = new[] { "deck.top", "deck.bottom", "deck.length", "deck.product", "product.isExplosive" },
+            Outputs = new[] { "hole.bottomChargeLength" },
+            Value = (s, _, o, _) => Fragmentation.BottomChargeLength(s.Scope.DecksOf((Hole)o).Cast<Deck>().ToList(), id => s.Scope.FindProduct(id))
+        });
+        r.AddBuiltin(new BuiltinDef
+        {
             Name = "mic", NameRu = "Максимальный взрываемый заряд", Contexts = new[] { "blast" }, Unit = "kg",
             Description = "Наибольшая масса ВВ скважин, сработавших в окне МВЗ (огибающая по времени); по всем скважинам проекта, у источника опасной зоны — по его скважинам.",
             Inputs = new[] { "hole.firingTimeMs", "hole.isDummy", "hole.chargeMass", "param:site.vib.window" },

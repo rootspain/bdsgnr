@@ -142,6 +142,10 @@ internal static class Legacy
         var explosiveDecks = loaded.SelectMany(h => h.Decks.Select(d => (h, d, p: project.FindProduct(d.ProductId)))).Where(x => x.p?.IsExplosive == true).ToList();
         var rws = explosiveDecks.Count > 0 ? explosiveDecks.Sum(x => x.p!.RelativeWeightStrength * x.d.Length) / Math.Max(1e-9, explosiveDecks.Sum(x => x.d.Length)) : 100;
         var chargeLength = loaded.Count > 0 ? loaded.Average(h => h.Decks.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).Sum(d => d.Length)) : 0;
+        // Cunningham's bottom charge term (|BCL - CCL| / L + 0.1)^0.1: the explosive of the deepest explosive deck is the bottom charge
+        double Bottom(Hole h) => Engine.Fragmentation.BottomChargeLength(h.Decks.OrderBy(d => d.Top).ToList(), project.FindProduct);
+        var bottomLength = loaded.Count > 0 ? loaded.Average(Bottom) : 0;
+        var columnLength = loaded.Count > 0 ? loaded.Average(h => h.Decks.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).Sum(d => d.Length) - Bottom(h)) : 0;
         var bench = list.Count > 0 ? list.Average(h => Math.Max(0.1, h.Length - h.Subdrill) * Math.Cos(h.Angle * GeoMath.Deg)) : project.Design.BenchHeight;
         var diameter = list.Count > 0 ? list.Average(h => h.Diameter) : project.Design.Diameter;
         var burden = q.Burden > 0 ? q.Burden : project.Design.Burden;
@@ -151,7 +155,7 @@ internal static class Legacy
         var pf = q.Pf;
         if (pf <= 0 || charge <= 0) return new Frag(a, pf, charge, rws, 0, 0, 0, 0, 0, 0);
         var x50 = Engine.Fragmentation.X50(a, pf, charge, rws);
-        var n = Engine.Fragmentation.Uniformity(burden, spacing, diameter, m.DrillDeviation, chargeLength, bench);
+        var n = Engine.Fragmentation.Uniformity(burden, spacing, diameter, m.DrillDeviation, chargeLength, bench, bottomLength, columnLength);
         return new Frag(a, pf, charge, rws, x50, n, Engine.Fragmentation.SizeAt(0.2, x50, n), Engine.Fragmentation.SizeAt(0.8, x50, n),
             100 * (1 - Engine.Fragmentation.RosinRammler(m.OversizeCm, x50, n)), 100 * Engine.Fragmentation.RosinRammler(m.FinesCm, x50, n));
     }
@@ -390,6 +394,62 @@ public class CalcParityTests
         Same(Vibration.Ppv(p.Vibration, distance, mic), s.Number("monitor.ppv", monitor), "monitor ppv");
         Same(Vibration.KPaToDb(Vibration.AirblastKPa(p.Vibration, distance, mic)), s.Number("monitor.airblastDb", monitor), "monitor airblast");
         Same(Vibration.Predict(p, monitor.Position).Ppv, s.Number("monitor.ppvPredicted", monitor), "predicted ppv");
+    }
+
+    /// <summary>
+    /// Holes with one explosive in the column: n of the profile is the old one (1.1^0.1 for the bottom charge term), to the
+    /// last bit of the tolerance; the bottom charge is then the whole charge and the column charge nothing.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Seeds))]
+    public void Uniformity_OneExplosive_AsBefore(int seed)
+    {
+        var p = Generate(seed, crest: seed % 4 != 0, timing: false);
+        // every column of one explosive: the second explosive and the deck without a product made ANFO
+        var anfo = p.Products.First(x => x.Name == "ANFO");
+        foreach (var d in p.Holes.SelectMany(h => h.Decks))
+            if (p.FindProduct(d.ProductId)?.IsExplosive == true || d.ProductId == "missing-product") d.ProductId = anfo.Id;
+        var s = CalcService.Session(p);
+        var loaded = p.Holes.Where(h => !h.IsDummy && h.Decks.Count > 0).ToList();
+        var q = Legacy.Quantities(p);
+        var chargeLength = loaded.Average(h => h.Decks.Where(d => d.ProductId == anfo.Id).Sum(d => d.Length));
+        var real = p.Holes.Where(h => !h.IsDummy).ToList();
+        var bench = real.Average(h => Math.Max(0.1, h.Length - h.Subdrill) * Math.Cos(h.Angle * GeoMath.Deg));
+        var old = Engine.Fragmentation.Uniformity(q.Burden > 0 ? q.Burden : p.Design.Burden, q.Spacing > 0 ? q.Spacing : p.Design.Spacing,
+            real.Average(h => h.Diameter), p.Fragmentation.DrillDeviation, chargeLength, bench);
+        Same(chargeLength, s.Number("blast.avgBottomChargeLength", p), "BCL is the charge length");
+        Same(0, s.Number("blast.avgColumnChargeLength", p), "CCL is nothing");
+        Same(old, s.Number("blast.uniformity", p), "n as before");
+    }
+
+    /// <summary>Two explosives, emulsion 2 m at the bottom and ANFO above it: n by hand with BCL 2 m and CCL the rest.</summary>
+    [Fact]
+    public void Uniformity_TwoExplosives_ByHand()
+    {
+        var p = BlastProject.CreateNew();
+        var anfo = p.Products.First(x => x.Name == "ANFO");
+        var emulsion = p.Products.First(x => x.Name == "Bulk emulsion");
+        var stem = p.Products.First(x => x.Name == "Crushed aggregate");
+        p.Fragmentation.DrillDeviation = 0.2;
+        var row = new HoleRow { Name = "Row 1" };
+        for (int r = 0; r < 3; r++)
+            for (int i = 0; i < 4; i++)
+            {
+                var h = p.Add(new Hole { Label = $"{r}-{i}", Collar = new Vec3(i * 5, r * 4, 100), Length = 11, Subdrill = 1, Diameter = 165 });
+                h.Decks.Add(new Deck { Top = 0, Bottom = 3.5, ProductId = stem.Id });
+                h.Decks.Add(new Deck { Top = 3.5, Bottom = 9, ProductId = anfo.Id });
+                h.Decks.Add(new Deck { Top = 9, Bottom = 11, ProductId = emulsion.Id, Primers = { new Primer { Depth = 10.5 } } });
+                row.HoleIds.Add(h.Id);
+            }
+        p.Rows.Add(row);
+        var s = CalcService.Session(p);
+        Same(2, s.Number("blast.avgBottomChargeLength", p), "BCL");
+        Same(5.5, s.Number("blast.avgColumnChargeLength", p), "CCL");
+        var b = s.Number("blast.fragBurden", p);
+        var sp = s.Number("blast.fragSpacing", p);
+        var byHand = Math.Clamp((2.2 - 14 * b / 165) * Math.Sqrt((1 + sp / b) / 2) * (1 - 0.2 / b) * Math.Pow(Math.Abs(2 - 5.5) / 7.5 + 0.1, 0.1) * (7.5 / 10), 0.5, 3);
+        Same(byHand, s.Number("blast.uniformity", p), "n");
+        Assert.NotEqual(Math.Round(byHand, 9), Math.Round(Engine.Fragmentation.Uniformity(b, sp, 165, 0.2, 7.5, 10), 9));
     }
 
     [Fact]

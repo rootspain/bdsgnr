@@ -15,6 +15,9 @@ public sealed record RibbonItem(string Label, string Icon, Action? Run, Func<boo
 {
     /// <summary>A big button whose name goes on two lines, broken at the space nearest its middle.</summary>
     public bool TwoLines { get; init; }
+
+    /// <summary>What the button does, under its name in the tooltip (the key of ru.tsv: plain text, Loc.T).</summary>
+    public string? Hint { get; init; }
 }
 
 public sealed record RibbonGroup(string Name, List<RibbonItem> Items);
@@ -120,7 +123,7 @@ public sealed partial class MainViewModel
             G("From objects", M("At points", "point", "Tools/Holes/Add at points"), M("Along line", "polyline", "Tools/Holes/Add along selected polyline…"),
                 M("Between lines", "row", "Tools/Holes/Drill holes between lines…"), M("From polylines", "polyline", "Tools/Holes/Create holes from selected polylines"),
                 M("To survey points", "point", "Tools/Holes/Move to selected points…"), M("Delete outside polygon", "polygon", "Tools/Holes/Delete holes outside polygon")),
-            G("Rows", M("Optimize", "optimize", "Tools/Rows/Optimize row spacing", big: true), M("Rows automatically", "pack", "Tools/Rows/Create rows automatically"),
+            G("Rows", M("Optimize", "optimize", "Tools/Rows/Optimize row spacing", big: true) with { Hint = "Evens out the spacing in the rows: the first and the last hole of a row stay, the holes between them are moved to equal steps on the line between those two; the collar heights stay. The rows of the selected holes, or every row when nothing is selected. One undo step." }, M("Rows automatically", "pack", "Tools/Rows/Create rows automatically"),
                 M("Row from holes", "row", "Tools/Rows/Create row from holes"), M("Detach from row", "row", "Tools/Rows/Detach holes from rows")),
             G("Face", M("Front row profile", "profile", "View/Front row burden profile"), M("Batter", "batter", "Tools/Surfaces/Batter (toe from crest)…"), Tb("Section", "section", "Cross-section", "X")),
             G("Numbering", M("Renumber", "label", "Tools/Holes/Renumber…", big: true), M("Duplicate labels", "label", "Tools/Holes/Re-label duplicate holes"),
@@ -166,7 +169,8 @@ public sealed partial class MainViewModel
                 M("Fly through", "send", "View/Fly through")),
             G("Volumes", M("Quantities", "chart", "Calculations/Quantities", "Ctrl⇧Q", true), M("Dashboard", "dash", "View/Dashboard", big: true),
                 M("Volume between surfaces", "cube", "Tools/Surfaces/Volume…"), M("Volume overview", "polygon", "Calculations/Volume overview"), M("Costs", "money", "Calculations/Project costs")),
-            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…")),
+            G("Fragmentation", M("Prediction", "frag", "Calculations/Environmental prediction/Fragmentation prediction", big: true), M("Inputs", "edit", "Edit/Fragmentation inputs…"),
+                M("Fragmentation target", "optimize", "Calculations/Environmental prediction/Fragmentation target…")),
             G("Environment", M("Exclusion zone", "exclusion", "Calculations/Environmental prediction/Exclusion zone calculator", big: true),
                 M("Vibration", "wave", "Calculations/Vibration/Vibration"), M("Vibration map", "wave", "Calculations/Vibration/Vibration map"), M("Airblast map", "air", "Calculations/Vibration/Airblast map"),
                 M("Flyrock", "frag", "Calculations/Environmental prediction/Flyrock prediction"), M("Scale law", "wave", "Calculations/Vibration/Scale law calculator"),
@@ -322,7 +326,8 @@ public sealed partial class MainViewModel
                 Sub("Pattern grid", Item("Rotate pattern with the mouse", PatternRotateTool, W),
                     Item("Rotate pattern…", Run(RotatePatternDialog), () => W() && SelectedPattern != null), Item("Rebuild pattern", Run(RebuildSelectedPattern), () => W() && SelectedPattern != null),
                     Item("Detach from pattern", Run(DetachSelectedFromPattern), () => W() && SelectedPattern != null),
-                    Item("Island from polygon", Run(AddIslandFromSelection), () => W() && SelectedPattern != null)),
+                    Item("Island from polygon", Run(AddIslandFromSelection), () => W() && SelectedPattern != null),
+                    Item("Fragmentation target…", Run(FragmentationTarget), () => W() && SelectedPattern != null)),
                 Separator, Item("Show only selected", ShowOnlySelected)
             }.Concat(edit),
             "polyline" => new[]

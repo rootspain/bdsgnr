@@ -1485,6 +1485,12 @@ Step("ribbon commands resolve", () =>
     var resourcesWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
     if (resourcesWindow.Title != BlastDesigner.App.Services.Loc.T("Available resources")) throw new Exception("the button opened " + resourcesWindow.Title);
     resourcesWindow.Close(); Pump();
+    // a button with a description: the name on the first line of the tooltip, what it does below, in the language
+    var optimize = stages.SelectMany(s => s.Groups).First(g => g.Name == "Rows").Items.Single(i => i.Label == "Optimize");
+    var tip = BlastDesigner.App.Views.Ui.Tip(optimize).Split('\n');
+    if (tip.Length != 2 || tip[0] != BlastDesigner.App.Services.Loc.Ui("Optimize") || tip[1] != BlastDesigner.App.Services.Loc.T(optimize.Hint!))
+        throw new Exception("the tooltip of Optimize: " + string.Join(" | ", tip));
+    if (settings.Language == "ru" && tip[1] == optimize.Hint) throw new Exception("the description of Optimize is not translated");
 });
 Step("shell translations", () =>
 {
@@ -7593,6 +7599,124 @@ Step("a new language builds the window again on Apply and on OK, and the blast g
         if (now.SequenceEqual(before)) throw new Exception("the stage names do not change with the language");
         if (now.Any(n => !shown.Contains(n)) || before.Except(now).Any(shown.Contains)) throw new Exception($"the stages are not in {lang}: " + string.Join(", ", stages.Select((s, i) => shown.Contains(now[i]) ? now[i] : before[i])));
     }
+});
+Step("fragmentation target: the rock editor of the properties page, variants found on the project, applied as one undo step", () =>
+{
+    void Wait(Task t) { for (int i = 0; i < 3000 && !t.IsCompleted; i++) { Pump(); Thread.Sleep(10); } Pump(); if (t.IsFaulted) throw t.Exception!; }
+    vm.NewSilent(); Pump();
+    var outline = new[] { new Vec3(1000, 2000, 300), new Vec3(1080, 2000, 300), new Vec3(1080, 2050, 300), new Vec3(1000, 2050, 300) };
+    HolePattern? made = null;
+    vm.Change("Pattern", p =>
+    {
+        var holes = HoleDesign.FillPolygon(outline, new PatternParameters { Burden = 4.8, Spacing = 5.8, Pattern = PatternType.Staggered, StartNumber = 1 },
+            new HoleParameters { Diameter = 165, BenchHeight = 10, Subdrill = 1 }, out var rows, out var pat);
+        foreach (var h in holes) p.Add(h, p.GetOrCreateLayer(StandardLayers.Holes));
+        p.Rows.AddRange(rows);
+        p.Patterns.Add(pat);
+        made = pat;
+        p.LoadingRules[0].StemmingLength = 3.5;
+        p.Fragmentation.RockFactor = 8;
+        p.Fragmentation.RockFactorSet = true;
+        Charging.ApplyRules(p, p.Holes);
+    });
+    vm.View.ZoomAll();
+    var patId = made!.Id;
+    vm.Doc!.Select(vm.Project!.Holes.Where(h => h.PatternId == patId).Select(h => h.Id).ToList()); Pump();
+    var before = BlastDesigner.Domain.ProjectJson.Serialize(vm.Project!);
+    var steps = vm.Doc.UndoNames.Count;
+    // the entries: the analysis ribbon and the menu of the pattern
+    if (!vm.BuildStages().First(s => s.Name == "Analysis").Groups.First(g => g.Name == "Fragmentation").Items.Any(i => i.Label == "Fragmentation target")) throw new Exception("no Fragmentation target on the Analysis ribbon");
+    IEnumerable<BlastDesigner.App.Tools.MenuEntry> All(IEnumerable<BlastDesigner.App.Tools.MenuEntry> list) => list.SelectMany(e => e.Children == null ? new[] { e } : new[] { e }.Concat(All(e.Children)));
+    if (!All(vm.ObjectContextMenu()).Any(e => e.Header == "Fragmentation target…")) throw new Exception("no Fragmentation target in the menu of the holes");
+
+    FragmentationTargetWindow Open()
+    {
+        var w = new FragmentationTargetWindow(vm, patId) { SkipPresetQuestion = true };
+        w.Show(); Pump();
+        return w;
+    }
+    TextBox Box(Control c, string name) => c.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(b => b.Name == name) ?? throw new Exception("no field " + name);
+    void Type(Control c, string name, string text) { var b = Box(c, name); b.Text = text; b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
+
+    var win = Open();
+    foreach (var name in new[] { "rockFactorA", "protodyakonovF", "drillDeviation", "oversize", "targetX50", "targetTolerance" }) Box(win, name);
+    if (!win.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "loadPreset")) throw new Exception("no presets in the window");
+    if (!win.GetLogicalDescendants().OfType<HoleColumnView>().Any()) throw new Exception("no hole and charge view");
+    // the same component as the properties page: the same A gives the same f, rock type and warnings
+    var editor = win.GetLogicalDescendants().OfType<FragmentationInputsEditor>().Single();
+    var page = new FragmentationForm(vm.Project!);
+    var pageWindow = new Window { Width = 640, Height = 760, Content = page }; pageWindow.Show(); Pump();
+    foreach (var a in new[] { "4", "20", "0,5" })
+    {
+        Type(win, "rockFactorA", a);
+        Type(page, "rockFactorA", a);
+        if (editor.Described != page.Inputs.Described || editor.Draft.Ucs != page.Draft.Ucs) throw new Exception($"A {a}: the window says {editor.Described}, the page {page.Inputs.Described}");
+    }
+    pageWindow.Close();
+    Type(win, "rockFactorA", "8");
+    // the target in the unit of the sizes (mm here): 300 mm, a second diameter to try
+    var unit = SizeUnits.Of(editor.Draft);
+    Type(win, "targetX50", SizeUnits.FromCm(30, unit).ToString(System.Globalization.CultureInfo.CurrentCulture));
+    win.AddDiameter(140);
+    // own diameters by the flyout, twice: the list is built anew and the box moves to the new row
+    {
+        var chip = win.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "targetDiameters");
+        var flyList = (Panel)((Flyout)chip.Flyout!).Content!;
+        foreach (var d in new[] { "152", "165" })
+        {
+            var own = flyList.GetLogicalDescendants().OfType<TextBox>().First(b => b.Name == "ownDiameter");
+            own.Text = d;
+            flyList.GetLogicalDescendants().OfType<Button>().Last().RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+            if (!flyList.GetLogicalDescendants().OfType<CheckBox>().Any(c => c.Tag is double v && v == double.Parse(d))) throw new Exception("own diameter " + d + " not in the list");
+        }
+        foreach (var c in flyList.GetLogicalDescendants().OfType<CheckBox>().Where(c => c.Tag is double v && (v == 152 || v == 165)).ToList()) c.IsChecked = false;
+        Pump();
+    }
+    Wait(win.Solve());
+    if (win.Result is not { Candidates.Count: > 0 } found) throw new Exception("no variant found: " + win.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "targetStatus").Text);
+    var best = found.Candidates[0];
+    if (Math.Abs(best.Metrics.X50Cm / 30 - 1) > 0.05) throw new Exception($"the best variant gives {best.Metrics.X50Cm:0.0} cm");
+    win.Select(1); Pump();
+    // the axes of the size chart say what they are and in what unit
+    {
+        string Tip(string name) => ToolTip.GetTip(win.GetLogicalDescendants().OfType<Border>().First(b => b.Name == name)) as string ?? "";
+        if (!Tip("sizeAxis").Contains(BlastDesigner.App.Services.Loc.Ui(SizeUnits.Symbol(unit)))) throw new Exception("size axis tip: " + Tip("sizeAxis"));
+        if (!Tip("passAxis").Contains("%")) throw new Exception("passing axis tip: " + Tip("passAxis"));
+    }
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "95_fragmentation_target.png"));
+    // two explosives: a water resistant bottom charge under the column, from the products
+    win.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "twoExplosives").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    Wait(win.Solve());
+    if (win.Result is not { Candidates.Count: > 0 } two || two.Candidates[0].Design.Scheme.IsSingle) throw new Exception("no two-explosive variant");
+    win.Select(1); Pump();
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "95b_fragmentation_target_two_explosives.png"));
+    // closed without applying, the rock edited: the project as it was, byte for byte
+    Type(win, "rockFactorA", "9");
+    Wait(win.CloseAsked());
+    if (!BlastDesigner.Domain.ProjectJson.Serialize(vm.Project!).SequenceEqual(before) || vm.Doc.UndoNames.Count != steps) throw new Exception("closing without Apply changed the project");
+
+    // applied: the rock, the grid and the charge in one step, undone together
+    var again = Open();
+    Type(again, "rockFactorA", "9");
+    Type(again, "targetX50", SizeUnits.FromCm(30, unit).ToString(System.Globalization.CultureInfo.CurrentCulture));
+    Wait(again.Solve());
+    if (again.Rows.Count < 2) throw new Exception("no variant the second time");
+    again.Select(1); Pump();
+    var chosen = again.Rows[1];
+    Wait(again.Apply());
+    if (again.Applied == null) throw new Exception("not applied");
+    if (vm.Doc.UndoNames.Count != steps + 1) throw new Exception($"{vm.Doc.UndoNames.Count - steps} undo steps");
+    var pat = vm.Project!.FindPattern(patId)!;
+    if (Math.Abs(pat.Burden - chosen.Design.Burden) > 1e-9 || vm.Project.Fragmentation.RockFactor != 9 || vm.Project.Fragmentation.Target?.X50Cm != 30)
+        throw new Exception($"applied: B {pat.Burden} (wanted {chosen.Design.Burden}), A {vm.Project.Fragmentation.RockFactor}, target {vm.Project.Fragmentation.Target?.X50Cm}");
+    var x50 = Fragmentation.Compute(vm.Project).X50Cm;
+    if (Math.Abs(x50 / 30 - 1) > 0.05) throw new Exception($"after Apply X50 is {x50:0.0} cm");
+    if (again.IsVisible) throw new Exception("the window stayed open after Apply");
+    vm.Undo(); Pump();
+    if (!BlastDesigner.Domain.ProjectJson.Serialize(vm.Project!).SequenceEqual(before)) throw new Exception("Undo did not bring the project back");
+    if (vm.Project!.Fragmentation.RockFactor != 8) throw new Exception("Undo did not bring A back");
 });
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>

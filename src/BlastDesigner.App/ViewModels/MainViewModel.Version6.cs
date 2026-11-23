@@ -63,6 +63,7 @@ public sealed partial class MainViewModel
             Sub("Environmental prediction",
                 Item("Flyrock prediction", () => AnalisysWindows.Flyrock(this), P),
                 Item("Fragmentation prediction", () => AnalisysWindows.Fragmentation(this), P),
+                Item("Fragmentation target…", Run(FragmentationTarget), P),
                 Item("Exclusion zone calculator", () => AnalisysWindows.ExclusionZone(this), P)),
             Item("Design tolerance check", () => AnalisysWindows.Tolerances(this), P),
             Item("Strata intercepts", () => AnalisysWindows.StrataIntercepts(this), P)

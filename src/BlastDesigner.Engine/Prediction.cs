@@ -107,6 +107,34 @@ public static class Fragmentation
         return Math.Clamp(n, 0.5, 3);
     }
 
+    /// <summary>
+    /// Cunningham uniformity index n with the bottom charge term: (|BCL − CCL| / L + 0.1)^0.1 from the bottom and column
+    /// charge lengths. One explosive in the column (BCL = L, CCL = 0) gives 1.1^0.1, as <see cref="Uniformity(double, double, double, double, double, double)"/>.
+    /// </summary>
+    public static double Uniformity(double burden, double spacing, double diameterMm, double drillDev, double chargeLength, double benchHeight, double bottomLength, double columnLength)
+    {
+        if (burden <= 0 || diameterMm <= 0 || benchHeight <= 0) return 1;
+        var term = (chargeLength > 0 ? Math.Abs(bottomLength - columnLength) / chargeLength : 1) + 0.1;
+        var n = (2.2 - 14 * burden / diameterMm) * Math.Sqrt((1 + spacing / burden) / 2) * (1 - drillDev / burden) * Math.Pow(term, 0.1) * (chargeLength / benchHeight);
+        return Math.Clamp(n, 0.5, 3);
+    }
+
+    /// <summary>
+    /// Bottom charge length of a column (decks by depth): the explosive decks of the product of the deepest explosive deck,
+    /// summed in the order of the decks (as the charge length is, so one explosive gives the charge length to the last bit).
+    /// </summary>
+    public static double BottomChargeLength(IReadOnlyList<Deck> decks, Func<string?, Product?> product)
+    {
+        Deck? deepest = null;
+        foreach (var d in decks)
+            if (product(d.ProductId)?.IsExplosive == true && (deepest == null || d.Bottom >= deepest.Bottom)) deepest = d;
+        if (deepest == null) return 0;
+        double s = 0;
+        foreach (var d in decks)
+            if (product(d.ProductId)?.IsExplosive == true && d.ProductId == deepest.ProductId) s += d.Length;
+        return s;
+    }
+
     public static double RosinRammler(double x, double x50, double n) => 1 - Math.Exp(-0.693 * Math.Pow(x / x50, n));
 
     /// <summary>Swebrec passing fraction with the undulation b linked to the Kuz-Ram n.</summary>

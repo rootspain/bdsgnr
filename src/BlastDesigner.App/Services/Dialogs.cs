@@ -71,8 +71,15 @@ public static class Dialogs
     public static void ShowError(Exception ex)
     {
         Log.Error("Unhandled UI error", ex);
-        Dispatcher.UIThread.Post(() => _ = Show("Error", ex.Message, new[] { "OK" }));
+        Dispatcher.UIThread.Post(() => _ = Show("Error", ErrorText(ex), new[] { "OK" }));
     }
+
+    /// <summary>
+    /// The message of an error nothing expected: a line in the language of the program first, as the message of the
+    /// framework itself is in English; that one stays below for the report.
+    /// </summary>
+    public static string ErrorText(Exception ex) =>
+        Loc.T("Something went wrong in the program. The details are in the log.") + "\n\n" + ex.Message;
 
     private static bool _failureShown;
 
@@ -87,7 +94,7 @@ public static class Dialogs
         _failureShown = true;
         Dispatcher.UIThread.Post(async () =>
         {
-            try { await Show("Error", ex.Message, new[] { "OK" }); }
+            try { await Show("Error", ErrorText(ex), new[] { "OK" }); }
             catch (Exception shown) { Log.Error("Could not show an error", shown); }
             finally { _failureShown = false; }
         });

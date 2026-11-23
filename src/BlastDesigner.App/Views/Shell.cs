@@ -192,7 +192,8 @@ public static class Ui
     }
 
     public static string Tip(RibbonItem it) =>
-        Loc.Ui(it.Label) + (it.Key != null ? $" ({it.Key})" : "") + (it.Lock != null ? " — " + Loc.T(it.Lock) : "");
+        Loc.Ui(it.Label) + (it.Key != null ? $" ({it.Key})" : "") + (it.Lock != null ? " — " + Loc.T(it.Lock) : "")
+        + (it.Hint != null ? "\n" + Loc.T(it.Hint) : "");
 }
 
 /// <summary>The ribbon of the selected stage; its stage tabs (<see cref="TabStrip"/>) are shown in the header of the window.</summary>

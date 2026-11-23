@@ -104,6 +104,48 @@ public sealed class FragmentationModel
     /// the program settings give it then (<see cref="SizeUnits.Default"/>).
     /// </summary>
     public SizeUnit? SizeUnit { get; set; }
+    /// <summary>
+    /// The fragmentation the blast is designed for (the target fragmentation window); null in files from before it and
+    /// until a target is first set. Not shown on the fragmentation inputs page.
+    /// </summary>
+    public FragTarget? Target { get; set; }
+    /// <summary>
+    /// Measured mean sizes of past blasts of the site, from which the rock factor A is worked back (Kuz-Ram the other way);
+    /// null until one is entered. Kept with the rock inputs and in their preset.
+    /// </summary>
+    public List<FragCalibration>? Calibration { get; set; }
+}
+
+/// <summary>A past blast with its measured mean size: what it was loaded with gives the rock factor A that explains it.</summary>
+public sealed class FragCalibration
+{
+    public string Name { get; set; } = string.Empty;
+    /// <summary>The mean size measured (photo analysis, sieving), cm.</summary>
+    public double MeasuredX50Cm { get; set; }
+    /// <summary>The powder factor of that blast, kg/m³.</summary>
+    public double PowderFactor { get; set; }
+    /// <summary>The mean charge of a hole of that blast, kg.</summary>
+    public double ChargeKg { get; set; }
+    /// <summary>The relative weight strength of its explosive, %.</summary>
+    public double Rws { get; set; } = 100;
+    public bool Use { get; set; } = true;
+}
+
+/// <summary>Target fragmentation: the mean size X50 with its tolerance and optional limits of X80, oversize and fines.</summary>
+public sealed class FragTarget
+{
+    /// <summary>Mean fragment size wanted, cm.</summary>
+    public double X50Cm { get; set; } = 30;
+    /// <summary>How far X50 may be from <see cref="X50Cm"/>, % of it.</summary>
+    public double TolerancePct { get; set; } = 5;
+    /// <summary>X80 at most, cm; null: no limit.</summary>
+    public double? X80MaxCm { get; set; }
+    /// <summary>Oversize at most, %; null: no limit.</summary>
+    public double? OversizeMaxPct { get; set; }
+    /// <summary>Fines at most, %; null: no limit.</summary>
+    public double? FinesMaxPct { get; set; }
+
+    public FragTarget Clone() => (FragTarget)MemberwiseClone();
 }
 
 public enum SizeUnit { Mm, Cm }
