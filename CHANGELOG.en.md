@@ -6,6 +6,25 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.12 — 2026-11-23
+
+### New
+- **Fragmentation target:** Analysis ▸ Fragmentation ▸ Fragmentation target, also in the menu of a pattern. Set the
+  mean size X50 wanted with a tolerance (X80, oversize and fines too if wanted) and what may change (the grid, S/B,
+  diameter, azimuth, one or two explosives); the program finds variants by the Kuz-Ram prediction: a table with the
+  figures, the size curve, what changes in the project. The project changes only on Apply, as one undo step.
+- **Automatic tie-up — layouts to choose from:** the Automatic tie-up window builds several surface layouts (row by
+  row, V, echelon, diagonal, fan), shows the plan of the chosen one, the cost and checks of each and the best;
+  OK applies the chosen one.
+- **Tooltips of the ribbon buttons:** each button shows its name in bold with the key at the right, below what it does,
+  and muted what it works on (the selected holes or all, a tool by clicks) and why it is not available. Optimize on the
+  Layout stage is renamed Even out spacing.
+
+### Fixed
+- In the fragmentation target window, adding an own diameter a second time raised an error.
+- The window of an internal error starts with a line in the language of the program; the English message stays below,
+  for the report.
+
 ## 0.3.11 — 2026-11-22
 
 ### New
@@ -27,9 +46,6 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   font of the names of all tabs (ribbon stages, right panel, windows) and of the search, the size of the right panel (the fields grow with
   the text), the font, background and text of the tooltips with a sample. Seen at once; Cancel brings the old back,
   Reset the fonts the first.
-- **Tooltips of the ribbon buttons:** each button shows its name in bold with the key at the right, below what it does,
-  and muted what it works on (the selected holes or all, a tool by clicks) and why it is not available. Optimize on the
-  Layout stage is renamed Even out spacing.
 
 ### Changed
 - **The font size of the labels goes to the ties too:** the delays on the ties are written in the size of Visibility ▸
