@@ -120,7 +120,7 @@ public static class AutoTieUpWindow
             if (selected.Warnings.Count == 0)
                 notes.Children.Add(Line(Ok, L("Checks passed: no neighbours within the window, the network is laid out before the first hole fires")));
             if (selected.Risky)
-                notes.Children.Add(Line(Look.Danger, L("Some holes may not fire: the signal gets to them after the holes around have fired and may be cut. Take a variant without this mark, shorter connectors, a point nearer the middle or a longer in-hole delay")));
+                notes.Children.Add(Line(Look.Danger, L("Some holes may not fire: their ties pass near holes that fire before the signal and may be cut. Take a variant without this mark, shorter connectors, a point nearer the middle or a longer in-hole delay")));
             foreach (var w in selected.Warnings) notes.Children.Add(Line(Warn, Loc.F(w.Format, w.Args)));
             if (selected.ByProduct.Count > 0)
                 notes.Children.Add(Line(Look.Muted, string.Join(" · ", selected.ByProduct.OrderBy(k => k.Key.DelayMs).Select(k => $"{k.Key.Name} × {k.Value}"))));
@@ -188,7 +188,7 @@ public static class AutoTieUpWindow
                 // a warning shows in the colour of the cell it is about
                 if (plan.Overlaps > 0) ((TextBlock)cells[6]).Foreground = Warn;
                 if (plan.CutOffRisk > 0) ((TextBlock)cells[8]).Foreground = Look.Danger;
-                if (plan.LateHoles > 0) ((TextBlock)cells[7]).Foreground = Look.Danger;
+                if (plan.LateHoles > 0) ((TextBlock)cells[7]).Foreground = Warn;
                 r++;
             }
         }
@@ -306,7 +306,7 @@ public static class AutoTieUpWindow
         var ok = await Dialogs.Custom("Automatic tie-up", body, validate: () => selected != null, width: 1240, height: 860, subtitle: subtitle, bare: true, okText: L("Apply variant"));
         if (!ok || selected == null) return null;
         // a variant with holes that may not fire is applied only when asked twice
-        if (selected.Risky && !await Dialogs.Confirm(Loc.F("In the variant «{0}» {1} holes get the signal after the first hole has fired and {2} ties may be cut: these holes may not fire. Apply it anyway?", SchemeName(selected.Scheme), selected.LateHoles + selected.Unreached, selected.CutOffRisk), L("Automatic tie-up")))
+        if (selected.Risky && !await Dialogs.Confirm(Loc.F("In the variant «{0}» {1} ties pass near holes that fire before the signal and may be cut, {2} holes are not reached: these holes may not fire. Apply it anyway?", SchemeName(selected.Scheme), selected.CutOffRisk, selected.Unreached), L("Automatic tie-up")))
             return null;
         return new Result(selected);
     }

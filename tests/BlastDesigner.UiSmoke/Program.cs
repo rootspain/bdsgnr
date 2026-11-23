@@ -1988,7 +1988,8 @@ Step("dropdown buttons open menus", () =>
     var buttons = window.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().ToList();
     void Click(string tip, int minItems)
     {
-        var b = buttons.FirstOrDefault(x => Avalonia.Controls.ToolTip.GetTip(x) as string == tip) ?? throw new Exception("button not found: " + tip);
+        // a ribbon button: its tooltip is laid out, the text of it (name first) is the help text
+        var b = buttons.FirstOrDefault(x => (Avalonia.Controls.ToolTip.GetTip(x) as string ?? Avalonia.Automation.AutomationProperties.GetHelpText(x)?.Split('\n')[0]) == tip) ?? throw new Exception("button not found: " + tip);
         b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
         Pump();
         var m = BlastDesigner.App.Views.Ui.LastMenu;
@@ -6442,7 +6443,7 @@ Step("Menus stand out from the ribbon, recent files show the name over a shorten
         if (vm.RecentEntries().First().Note != when.ToString("g", System.Globalization.CultureInfo.CurrentCulture) || entries[1].Note != null) throw new Exception($"opened: {vm.RecentEntries().First().Note} / {entries[1].Note}");
         window.Ribbon.Select(0); Pump();
         var tip = BlastDesigner.App.Services.Loc.Ui("Recent");
-        var open = window.GetLogicalDescendants().OfType<Button>().First(b => (Avalonia.Controls.ToolTip.GetTip(b) as string)?.StartsWith(tip) == true);
+        var open = window.GetLogicalDescendants().OfType<Button>().First(b => Avalonia.Automation.AutomationProperties.GetHelpText(b)?.StartsWith(tip) == true);
         open.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
         Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
         var menu = BlastDesigner.App.Views.Ui.LastMenu!;

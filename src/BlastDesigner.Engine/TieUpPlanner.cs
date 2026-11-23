@@ -86,16 +86,22 @@ public sealed class TieUpPlan
     /// <summary>Holes the surface signal reaches after the first hole has fired.</summary>
     public int LateHoles { get; set; }
     public int CutOffRisk { get; set; }
+    /// <summary>
+    /// The least distance, m, from a tie to a hole that has fired before the signal passed the tie (how far the signal
+    /// runs ahead of the blasting); null when the whole network is laid out before the first hole fires.
+    /// </summary>
+    public double? FrontGapM { get; set; }
     public int ShortLeads { get; set; }
     public int Nominals { get; set; }
     public int Unreached { get; set; }
     public double Score { get; set; }
     public bool Best { get; set; }
     /// <summary>
-    /// Some holes may not fire: not reached, reached by the signal after the first hole has fired (the network may be
-    /// cut by then), or fed by a tie near a hole that fires before the signal passes.
+    /// Some holes may not fire: not reached, or fed by a tie near a hole that fires before the signal passes it (cut-off).
+    /// Holes reached after the first hole has fired are not a risk while the signal runs far enough ahead of the
+    /// blasting (<see cref="FrontGapM"/> over the cut-off radius): the tie-up of a large blast commonly works so.
     /// </summary>
-    public bool Risky => Unreached > 0 || LateHoles > 0 || CutOffRisk > 0;
+    public bool Risky => Unreached > 0 || CutOffRisk > 0;
     public List<TieUpWarning> Warnings { get; } = new();
 }
 
@@ -156,12 +162,12 @@ public static class TieUpPlanner
         if (plans.Count == 0) return;
         static double Econ(TieUpPlan p) => p.Cost > 0 ? p.Cost : p.Connectors;
         static double Seis(TieUpPlan p) => (p.MaxCharge > 0 ? p.MaxCharge : p.MaxHolesInWindow) * (1 + p.Overlaps / (double)Math.Max(1, p.Firing.Count));
-        static double Rel(TieUpPlan p) => 1 + p.CutOffRisk + p.LateHoles + p.ShortLeads + 10 * p.Unreached;
+        static double Rel(TieUpPlan p) => 1 + 10 * p.CutOffRisk + 0.1 * p.LateHoles + p.ShortLeads + 10 * p.Unreached;
         double me = Math.Max(1e-9, plans.Max(Econ)), ms = Math.Max(1e-9, plans.Max(Seis)), mr = Math.Max(1e-9, plans.Max(Rel));
         foreach (var p in plans)
             p.Score = o.WeightEconomy * Econ(p) / me + o.WeightSeismic * Seis(p) / ms + o.WeightReliability * Rel(p) / mr;
         // a variant some holes of which may not fire is never the best while another fires them all
-        var best = plans.OrderBy(p => p.Risky).ThenBy(p => p.Unreached).ThenBy(p => p.LateHoles + p.CutOffRisk).ThenBy(p => p.Score).First();
+        var best = plans.OrderBy(p => p.Risky).ThenBy(p => p.Unreached).ThenBy(p => p.CutOffRisk).ThenBy(p => p.Score).First();
         foreach (var p in plans) p.Best = p == best;
     }
 
@@ -591,14 +597,19 @@ public static class TieUpPlanner
                 if (!feed.TryGetValue(i, out var tie)) continue;
                 var from = tie.From == o.Start.Id ? o.Start.Position : index.TryGetValue(tie.From, out var fi) ? _h[fi].Collar : pi;
                 var s = plan.Surface[_h[i].Id];
-                if (idx.Any(j => j != i && fire[j] < s && SegmentDistance(_h[j].Collar, from, pi) <= cut)) plan.CutOffRisk++;
+                var gap = idx.Where(j => j != i && fire[j] < s).Select(j => SegmentDistance(_h[j].Collar, from, pi)).DefaultIfEmpty(double.MaxValue).Min();
+                if (gap == double.MaxValue) continue;
+                plan.FrontGapM = Math.Min(plan.FrontGapM ?? double.MaxValue, gap);
+                if (gap <= cut) plan.CutOffRisk++;
             }
 
             var minInhole = idx.Select(i => _inhole[i]).Where(d => d > 0).DefaultIfEmpty(0).Min();
             if (plan.Unreached > 0) plan.Warnings.Add(new TieUpWarning("{0} holes are not reached by the tie-up", plan.Unreached));
             if (minInhole > 0 && plan.NetworkMs > minInhole)
                 plan.Warnings.Add(new TieUpWarning("The surface network takes {0} ms, longer than the in-hole delay {1} ms", Math.Round(plan.NetworkMs), Math.Round(minInhole)));
-            if (plan.LateHoles > 0) plan.Warnings.Add(new TieUpWarning("{0} holes get the signal after the first hole has fired", plan.LateHoles));
+            if (plan.LateHoles > 0 && plan.CutOffRisk == 0 && plan.FrontGapM is double fg)
+                plan.Warnings.Add(new TieUpWarning("{0} holes get the signal after the first hole has fired; the signal runs at least {1} m ahead of the blasting (cut-off radius {2} m)", plan.LateHoles, Math.Round(fg, 1), Math.Round(cut, 1)));
+            else if (plan.LateHoles > 0) plan.Warnings.Add(new TieUpWarning("{0} holes get the signal after the first hole has fired", plan.LateHoles));
             if (plan.CutOffRisk > 0) plan.Warnings.Add(new TieUpWarning("{0} ties pass near holes that fire before the signal: risk of cut-off", plan.CutOffRisk));
             if (plan.ShortLeads > 0) plan.Warnings.Add(new TieUpWarning("{0} ties are longer than the lead of their connector", plan.ShortLeads));
             if (plan.Overlaps > 0) plan.Warnings.Add(new TieUpWarning("{0} holes fire within {1} ms of a neighbour", plan.Overlaps, w));
