@@ -191,9 +191,39 @@ public static class Ui
         catch (Exception ex) { Dialogs.ShowError(ex); }
     }
 
-    public static string Tip(RibbonItem it) =>
-        Loc.Ui(it.Label) + (it.Key != null ? $" ({it.Key})" : "") + (it.Lock != null ? " — " + Loc.T(it.Lock) : "")
-        + (it.Hint != null ? "\n" + Loc.T(it.Hint) : "");
+    /// <summary>The tooltip of a ribbon button as text: the name and key, then what it does and what it works on.</summary>
+    public static string Tip(RibbonItem it)
+    {
+        var hint = RibbonHints.For(it.Label);
+        return Loc.Ui(it.Label) + (it.Key != null ? $" ({it.Key})" : "") + (it.Lock != null ? " — " + Loc.T(it.Lock) : "")
+            + (hint is { } h ? "\n" + Loc.T(h.What) + (h.Scope != null ? "\n" + Loc.T(h.Scope) : "") : "");
+    }
+
+    /// <summary>
+    /// The tooltip of a ribbon button as shown (doc/ribbon-tooltips.md): the name in bold with the key at the right, what it
+    /// does below, then muted what it works on and why it is not available. The size and colours are those of the settings
+    /// (the tooltip passes them down).
+    /// </summary>
+    public static Control TipView(RibbonItem it)
+    {
+        var hint = RibbonHints.For(it.Label);
+        var head = new DockPanel { LastChildFill = true };
+        if (it.Key != null)
+        {
+            var key = new TextBlock { Text = it.Key, Opacity = 0.65, Margin = new Thickness(16, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            DockPanel.SetDock(key, Dock.Right);
+            head.Children.Add(key);
+        }
+        head.Children.Add(new TextBlock { Text = Loc.Ui(it.Label), FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
+        var view = new StackPanel { Spacing = 4, MaxWidth = 360, Name = "ribbonTip", Children = { head } };
+        if (hint is { } h)
+        {
+            view.Children.Add(new TextBlock { Text = Loc.T(h.What), TextWrapping = TextWrapping.Wrap });
+            if (h.Scope != null) view.Children.Add(new TextBlock { Text = Loc.T(h.Scope), TextWrapping = TextWrapping.Wrap, Opacity = 0.65 });
+        }
+        if (it.Lock != null) view.Children.Add(new TextBlock { Text = Loc.T(it.Lock), TextWrapping = TextWrapping.Wrap, Opacity = 0.65, FontStyle = FontStyle.Italic });
+        return view;
+    }
 }
 
 /// <summary>The ribbon of the selected stage; its stage tabs (<see cref="TabStrip"/>) are shown in the header of the window.</summary>
@@ -435,7 +465,9 @@ public sealed class RibbonBar : DockPanel
 
     private void Wire(Button b, RibbonItem it)
     {
-        ToolTip.SetTip(b, Ui.Tip(it));
+        // the text form for screen readers; the tooltip itself is the laid out view
+        AutomationProperties.SetHelpText(b, Ui.Tip(it));
+        ToolTip.SetTip(b, Ui.TipView(it));
         if (it.Drop != null)
         {
             Ui.DropDown(b, it.Drop);

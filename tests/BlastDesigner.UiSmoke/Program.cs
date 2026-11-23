@@ -465,6 +465,24 @@ Step("initiation and auto tie-up", () => vm.Change("Automatic tie-up", p =>
     var c42 = p.Products.First(x => x.Kind == ProductKind.SurfaceConnector && x.DelayMs == 42);
     Timing.AutoTieUp(p, p.Holes.ToList(), ip, c17, c42, 2);
 }));
+Step("auto tie-up window plans and compares the layouts, the fan among them", () =>
+{
+    var holes = vm.Project!.Holes.Where(h => !h.IsDummy).ToList();
+    _ = AutoTieUpWindow.Show(vm, holes, 0); Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    try
+    {
+        w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "07b_auto_tie_up.png"));
+        var table = w.GetLogicalDescendants().OfType<Grid>().First(g => g.Name == "variants");
+        var rows = table.Children.OfType<Border>().Count(b => b.Tag is TieUpPlan);
+        if (rows != TieUpPlanner.AllSchemes.Length) throw new Exception($"{rows} variants in the table");
+        if (!table.Children.OfType<Border>().Any(b => b.Tag is TieUpPlan { Best: true })) throw new Exception("no variant marked best");
+        var titles = w.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToList();
+        if (!titles.Contains("Веер")) throw new Exception("the fan layout is not in the table");
+    }
+    finally { w.Close(); Pump(); }
+});
 Step("monitoring point", () => vm.Change("Add point", p => p.Add(new PointEntity { Position = new Vec3(1300, 2200, 300), Kind = PointKind.Monitoring, Label = "House" })));
 Step("timing labels are independent", () =>
 {
@@ -1485,12 +1503,24 @@ Step("ribbon commands resolve", () =>
     var resourcesWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
     if (resourcesWindow.Title != BlastDesigner.App.Services.Loc.T("Available resources")) throw new Exception("the button opened " + resourcesWindow.Title);
     resourcesWindow.Close(); Pump();
-    // a button with a description: the name on the first line of the tooltip, what it does below, in the language
-    var optimize = stages.SelectMany(s => s.Groups).First(g => g.Name == "Rows").Items.Single(i => i.Label == "Optimize");
-    var tip = BlastDesigner.App.Views.Ui.Tip(optimize).Split('\n');
-    if (tip.Length != 2 || tip[0] != BlastDesigner.App.Services.Loc.Ui("Optimize") || tip[1] != BlastDesigner.App.Services.Loc.T(optimize.Hint!))
-        throw new Exception("the tooltip of Optimize: " + string.Join(" | ", tip));
-    if (settings.Language == "ru" && tip[1] == optimize.Hint) throw new Exception("the description of Optimize is not translated");
+    // every button of the ribbon says what it does (doc/ribbon-tooltips.md): a description for each, none for a button
+    // that is gone, and the tooltip laid out as the name in bold, the description, then muted what it works on
+    var buttons = stages.SelectMany(s => s.Groups).SelectMany(g => g.Items).ToList();
+    var bare = buttons.Where(b => b.Lock == null && BlastDesigner.App.Services.RibbonHints.For(b.Label) == null).Select(b => b.Label).ToList();
+    if (bare.Count > 0) throw new Exception("ribbon buttons without a description: " + string.Join(", ", bare));
+    var gone = BlastDesigner.App.Services.RibbonHints.Labels.Where(l => buttons.All(b => b.Label != l)).ToList();
+    if (gone.Count > 0) throw new Exception("descriptions of no button: " + string.Join(", ", gone));
+    var even = buttons.Single(b => b.Label == "Even out spacing");
+    var view = (StackPanel)BlastDesigner.App.Views.Ui.TipView(even);
+    var lines = view.GetLogicalDescendants().OfType<TextBlock>().ToList();
+    var hint = BlastDesigner.App.Services.RibbonHints.For("Even out spacing")!.Value;
+    if (lines.Count != 3 || lines[0].Text != BlastDesigner.App.Services.Loc.Ui("Even out spacing") || lines[0].FontWeight != Avalonia.Media.FontWeight.SemiBold
+        || lines[1].Text != BlastDesigner.App.Services.Loc.T(hint.What) || lines[2].Text != BlastDesigner.App.Services.Loc.T(hint.Scope!) || lines[2].Opacity >= 1)
+        throw new Exception("the tooltip of Even out spacing: " + string.Join(" | ", lines.Select(t => t.Text)));
+    if (settings.Language == "ru" && lines[0].Text != "Выровнять шаг") throw new Exception("the button is " + lines[0].Text);
+    // the key at the right of the name
+    var keyed = (StackPanel)BlastDesigner.App.Views.Ui.TipView(buttons.First(b => b.Key != null && b.Lock == null));
+    if (!keyed.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Opacity < 1 && DockPanel.GetDock(t) == Dock.Right)) throw new Exception("no key in the tooltip");
 });
 Step("shell translations", () =>
 {
@@ -1506,6 +1536,9 @@ Step("shell translations", () =>
     var untranslated = missing.Distinct().Where(m => !BlastDesigner.App.Services.Loc.HasTranslation("ui:" + m) && m.Any(char.IsLetter)).ToList();
     File.WriteAllLines(Path.Combine(outDir, "untranslated.txt"), untranslated);
     if (untranslated.Count > 0) throw new Exception("untranslated: " + string.Join(" | ", untranslated));
+    // the descriptions in the tooltips of the ribbon
+    var hints = BlastDesigner.App.Services.RibbonHints.Texts.Where(t => !BlastDesigner.App.Services.Loc.HasTranslation(t)).ToList();
+    if (hints.Count > 0) throw new Exception("untranslated descriptions: " + string.Join(" | ", hints));
 });
 Step("object context menus", () =>
 {

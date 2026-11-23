@@ -27,6 +27,9 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   font of the names of all tabs (ribbon stages, right panel, windows) and of the search, the size of the right panel (the fields grow with
   the text), the font, background and text of the tooltips with a sample. Seen at once; Cancel brings the old back,
   Reset the fonts the first.
+- **Tooltips of the ribbon buttons:** each button shows its name in bold with the key at the right, below what it does,
+  and muted what it works on (the selected holes or all, a tool by clicks) and why it is not available. Optimize on the
+  Layout stage is renamed Even out spacing.
 
 ### Changed
 - **The font size of the labels goes to the ties too:** the delays on the ties are written in the size of Visibility ▸

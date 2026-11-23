@@ -638,7 +638,8 @@ public sealed class ProductsEditor : DockPanel
             ProductKind.Stemming => new() { Fields(Density(), new Border()) },
             ProductKind.Booster => new() { Fields(UnitMass("Mass", BlastDesigner.Domain.Quantity.SmallMass), Density(), Energy(), Vod()) },
             ProductKind.DownholeDetonator => new() { Fields(Delay(), Labeled("Signal down the tube", Propagation(p))) },
-            ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => new() { Fields(Delay(), new Border()) },
+            ProductKind.SurfaceConnector => new() { Fields(Delay(), Labeled("Lead length", Number("leadLength", BlastDesigner.Domain.Quantity.Length, p.LeadLengthM, v => p.LeadLengthM = Math.Max(0, v)))) },
+            ProductKind.CordRelay or ProductKind.ElectricDetonator => new() { Fields(Delay(), new Border()) },
             ProductKind.HarnessWire => new(),
             ProductKind.ElectronicDetonator => new() { Fields(Labeled("Default delay", Number("delay", p.DelayMs, v => p.DelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true)), new Border()) },
             ProductKind.DetonatingCord => new() { Fields(UnitMass("Core load", BlastDesigner.Domain.Quantity.CordLoad), Vod()) },
@@ -896,7 +897,7 @@ public sealed class ProductsEditor : DockPanel
 
     private static bool Same(Product a, Product b) =>
         a.Name == b.Name && a.Manufacturer == b.Manufacturer && a.Family == b.Family && a.FamilyId == b.FamilyId && a.KindId == b.KindId && a.Deleted == b.Deleted && a.Density == b.Density && a.RelativeWeightStrength == b.RelativeWeightStrength
-        && a.Energy == b.Energy && a.Vod == b.Vod && a.DelayMs == b.DelayMs && a.UnitMass == b.UnitMass && a.UnitLength == b.UnitLength
+        && a.Energy == b.Energy && a.Vod == b.Vod && a.DelayMs == b.DelayMs && a.LeadLengthM == b.LeadLengthM && a.UnitMass == b.UnitMass && a.UnitLength == b.UnitLength
         && a.WaterResistant == b.WaterResistant && a.Cost == b.Cost && a.Color == b.Color;
 
     private void UpdateStatus()

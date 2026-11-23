@@ -3910,3 +3910,58 @@ Something went wrong in the program. The details are in the log.	В програ
 Size of the piece, {0}; the scale is logarithmic	Размер куска, {0}; шкала логарифмическая
 Passing, % of the mass: the share of pieces smaller than the size below	Проход, % по массе: доля кусков мельче размера на нижней оси
 Evens out the spacing in the rows: the first and the last hole of a row stay, the holes between them are moved to equal steps on the line between those two; the collar heights stay. The rows of the selected holes, or every row when nothing is selected. One undo step.	Выравнивает шаг в рядах: первая и последняя скважины ряда остаются на месте, промежуточные переносятся на равные шаги по прямой между ними; отметки устьев не меняются. Действует на ряды выделенных скважин, а если ничего не выделено — на все ряды. Отменяется одним шагом.
+1 — a block for each hole	1 — свой блок на каждую скважину
+Apply variant	Применить вариант
+Balanced	Баланс
+Checks passed: no neighbours within the window, the network is laid out before the first hole fires	Проверки пройдены: соседей в окне нет, сеть инициирована до первого взрыва
+Connectors	Замедлители
+Cut-off risk	Риск обрыва
+Cut-off risk: a hole firing within 2 burdens of a tie the signal has not passed yet	Риск обрыва: скважина взрывается ближе 2 ЛНС от связи, по которой сигнал ещё не прошёл
+Delays	Замедления
+Diagonal	Диагональ
+Echelon	Эшелон с угла
+Economy	Экономия
+Fan	Веер
+Firing {0} – {1} ms	Взрыв {0} – {1} мс
+Goal	Цель
+Holes in window	Скв. в окне
+Holes on one connector block (fan)	Скважин на один блок (веер)
+Holes: {0} · non-electric	Скважин: {0} · НСИ
+Initiation	Инициирование
+Layout	Схема
+Layouts to compare	Схемы для сравнения
+Lead length	Длина вывода
+ui:Lead length	Длина вывода
+Length, m	Длина, м
+Materials	Материалы
+Max charge, kg	МВЗ, кг
+Network, ms	Сеть, мс
+No downhole detonator of {0} ms among the resources: the delay is set on the primers	В ресурсах нет внутрискважинного детонатора {0} мс: замедление задано на боевиках
+No holes to tie with surface connectors.	Нет скважин для связки поверхностными замедлителями.
+No in-hole delays: holes fire on the surface signal	Внутрискважинных замедлений нет: скважины взрываются по поверхностному сигналу
+Overlaps	Перекрытия
+Pick the lead length for each tie	Подбирать длину вывода под каждую связь
+Reliability	Надёжность
+Row by row	Порядная
+Score	Оценка
+Seismic	Сейсмика
+Shortest in-hole delay: {0} ms; the surface network should be shorter	Наименьшее внутрискважинное замедление: {0} мс; поверхностная сеть должна быть короче
+The surface network takes {0} ms, longer than the in-hole delay {1} ms	Поверхностная сеть длится {0} мс, дольше внутрискважинного замедления {1} мс
+V diagonal	V-диагональ
+V from the front	V от фронта
+Window of the 8 ms rule: {0} ms (Vibration settings)	Окно правила 8 мс: {0} мс (настройки сейсмики)
+With several holes on a block their order comes from in-hole delays stepped by the block delay	При нескольких скважинах на блоке очерёдность задаётся внутрискважинными замедлениями с шагом «замедление блока / число скважин»
+best	лучший
+left out with electronic detonators only: {0}	пропущено с одними электронными детонаторами: {0}
+{0} holes are not reached by the tie-up	{0} скв. не охвачены связкой
+{0} holes fire within {1} ms of a neighbour	{0} скв. взрываются в пределах {1} мс от соседа
+{0} holes from one block	{0} скважины от одного блока
+{0} holes get the signal after the first hole has fired	{0} скв. получают сигнал после первого взрыва
+{0} ms/m of burden · {1} ms/m of spacing	{0} мс/м по ЛНС · {1} мс/м по шагу
+{0} ties are longer than the lead of their connector	{0} связей длиннее вывода своего замедлителя
+{0} ties pass near holes that fire before the signal: risk of cut-off	{0} связей проходят рядом со скважинами, взрывающимися раньше сигнала: риск обрыва
+{0}: {1} ties created	{0}: создано связей: {1}
+{0}: {1} ties created; holes with electronic detonators only left out: {2}	{0}: создано связей: {1}; пропущено скважин только с электронными детонаторами: {2}
+misfire risk	риск отказа
+Some holes may not fire: the signal gets to them after the holes around have fired and may be cut. Take a variant without this mark, shorter connectors, a point nearer the middle or a longer in-hole delay	Часть скважин может не взорваться: сигнал приходит к ним после взрыва соседних и может быть оборван. Выберите вариант без этой пометки, более короткие замедлители, точку ближе к середине или более длинное внутрискважинное замедление
+In the variant «{0}» {1} holes get the signal after the first hole has fired and {2} ties may be cut: these holes may not fire. Apply it anyway?	В варианте «{0}» {1} скв. получают сигнал после первого взрыва, и {2} связей могут быть оборваны: эти скважины могут не взорваться. Всё равно применить?

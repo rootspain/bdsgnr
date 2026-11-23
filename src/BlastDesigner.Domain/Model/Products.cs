@@ -73,6 +73,11 @@ public sealed class Product
     public double UnitMass { get; set; }
     /// <summary>Cartridge length for packaged products, m.</summary>
     public double UnitLength { get; set; }
+    /// <summary>
+    /// Length of the lead (tube) of a surface connector, m: the farthest hole it reaches; 0 when not known. The automatic
+    /// tie-up takes the shortest lead that reaches each tie and warns of ties longer than their lead.
+    /// </summary>
+    public double LeadLengthM { get; set; }
     public bool WaterResistant { get; set; }
     /// <summary>Cost per kg for bulk/packaged/stemming, per unit otherwise.</summary>
     public double Cost { get; set; }

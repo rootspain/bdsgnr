@@ -719,29 +719,26 @@ public sealed partial class MainViewModel
     public async void AutoTieUp()
     {
         if (Doc == null) return;
-        var ip = Project!.Entities.OfType<InitiationPoint>().FirstOrDefault();
-        if (ip == null) { await Dialogs.Info(Loc.T("Place an initiation point (lead-in) first.")); return; }
-        var connectors = Project.ActiveProducts.Where(p => p.Kind == ProductKind.SurfaceConnector).ToList();
-        if (connectors.Count == 0) { await Dialogs.Info(Loc.T("Add surface connectors to the available resources first.")); return; }
-        var names = connectors.Select(c => c.Name).ToList();
-        var hi = await Dialogs.Choose("Automatic tie-up", Loc.T("Connector between holes in a row"), names, 0);
-        if (hi is not int h) return;
-        var ri = await Dialogs.Choose("Automatic tie-up", Loc.T("Connector between rows"), names, Math.Min(names.Count - 1, 2));
-        if (ri is not int r) return;
+        if (!Project!.Entities.OfType<InitiationPoint>().Any()) { await Dialogs.Info(Loc.T("Place an initiation point (lead-in) first.")); return; }
+        if (TieUpPlanner.SurfaceConnectors(Project).Count == 0) { await Dialogs.Info(Loc.T("Add surface connectors to the available resources first.")); return; }
         // its ties are surface connectors: the holes with electronic detonators only are left to ESI ties
-        var holes = SelectedOrAllHoles().Where(x => !x.IsDummy).ToList();
-        var ids = holes.Where(x => TieFit.Fits(Project, x.Id, esi: false)).Select(x => x.Id).ToHashSet();
-        var left = holes.Count - ids.Count;
-        var ipId = ip.Id;
+        var all = SelectedOrAllHoles().Where(x => !x.IsDummy).ToList();
+        var holes = all.Where(x => TieFit.Fits(Project, x.Id, esi: false)).ToList();
+        var left = all.Count - holes.Count;
+        if (holes.Count == 0) { await Dialogs.Info(Loc.T("No holes to tie with surface connectors.")); return; }
+        // the variants are planned in the window: the layouts, their cost and checks, the one to apply chosen there
+        if (await AutoTieUpWindow.Show(this, holes, left) is not { } chosen) return;
+        var ids = holes.Select(x => x.Id).ToHashSet();
         int n = 0;
         Change("Automatic tie-up", p =>
         {
             var had = p.Ties.Select(t => t.Id).ToHashSet();
-            n = Timing.AutoTieUp(p, HolesById(p, ids), (InitiationPoint)p.FindEntity(ipId)!, connectors[h], connectors[r], p.Design.Burden / 2);
+            n = TieUpPlanner.Apply(p, HolesById(p, ids), chosen.Plan);
             // the route numbers of the holes along the ties made, in the order they were made
             RouteNumbers.Number(p, p.Ties.Where(t => !had.Contains(t.Id)).Select(t => (t.FromId, t.ToId)).ToList());
         });
-        SetStatus(left > 0 ? Loc.F("{0} ties created; holes with electronic detonators only left out: {1}", n, left) : Loc.F("{0} ties created", n));
+        var scheme = AutoTieUpWindow.SchemeName(chosen.Plan.Scheme);
+        SetStatus(left > 0 ? Loc.F("{0}: {1} ties created; holes with electronic detonators only left out: {2}", scheme, n, left) : Loc.F("{0}: {1} ties created", scheme, n));
     }
 
     public void ConnectSelectedInOrder()
