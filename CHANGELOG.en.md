@@ -23,8 +23,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   horizontal); DXF/DWG import — Drawing in feet; CSV export in the imperial system — in feet, inches and pounds, the
   unit in the name of a column, an angle from horizontal as a Dip column.
 - **Interface fonts and the tooltip look:** Program settings ▸ Appearance ▸ Fonts and Tooltip. The font of the ribbon
-  buttons (the icons and key marks as they were), the room above and below the ribbon buttons and between them, the
-  font of the names of all tabs (ribbon stages, right panel, windows), the size of the right panel (the fields grow with
+  buttons (the icons and key marks as they were), the room above and below the ribbon buttons and the group names and between the buttons left and right, the
+  font of the names of all tabs (ribbon stages, right panel, windows) and of the search, the size of the right panel (the fields grow with
   the text), the font, background and text of the tooltips with a sample. Seen at once; Cancel brings the old back,
   Reset the fonts the first.
 

@@ -35,7 +35,7 @@ public sealed class ProgramSettings
     public double RibbonFontSize { get; set; } = DefaultRibbonFont;
     /// <summary>Room above and below the text of a ribbon button, pixels (a large button has 2 more).</summary>
     public double RibbonButtonPadding { get; set; } = DefaultRibbonPadding;
-    /// <summary>Room between the rows of small ribbon buttons and between the large ones, pixels (the large: 1 more).</summary>
+    /// <summary>Room left and right between the ribbon buttons, pixels: 1 more is drawn, so the default of 1 keeps the 2 of before.</summary>
     public double RibbonButtonGap { get; set; } = DefaultRibbonGap;
     /// <summary>Font of the names of every tab: the stages of the ribbon, the right panel, the windows; points.</summary>
     public double TabFontSize { get; set; } = DefaultTabFont;

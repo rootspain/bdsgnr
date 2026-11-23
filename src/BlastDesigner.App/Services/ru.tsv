@@ -3755,11 +3755,8 @@ ui:Fonts	Шрифты
 ui:Ribbon buttons	Кнопки ленты
 ui:The names of the buttons and of the groups; the icons and the key marks keep their size	Названия кнопок и групп; иконки и метки клавиш — прежнего размера
 ui:Ribbon buttons: room above and below	Отступ кнопок ленты сверху и снизу
-ui:One value for the top and the bottom; a large button has 2 more	Одно значение сверху и снизу; у крупной кнопки на 2 больше
 ui:Ribbon buttons: room between them	Промежуток между кнопками ленты
-ui:Between the rows of small buttons; between the large buttons 1 more	Между рядами малых кнопок; между крупными — на 1 больше
 ui:Tab names	Названия вкладок
-ui:The stages of the ribbon, the right panel and the windows	Этапы ленты, правая панель и окна
 ui:Right panel	Правая панель
 ui:Properties, Layers, Visibility: the fields grow with the text	Свойства, Слои, Видимость: поля растут вместе с текстом
 ui:Tooltip	Подсказка
@@ -3773,3 +3770,8 @@ ui:A tooltip looks like this	Так выглядит подсказка
 ui:Reset the fonts	Сбросить шрифты
 ui:The sizes and the tooltip colours as they were at first	Размеры и цвета подсказки — как при установке
 ui:pt	пт
+ui:One value for the top and the bottom; a large button has 2 more; the group names too	Одно значение сверху и снизу; у крупной кнопки на 2 больше; названия групп — тоже
+ui:Left and right only: between the large buttons and the columns of small ones	Только слева и справа: между крупными кнопками и столбцами малых
+ui:Less by 1	Меньше на 1
+ui:More by 1	Больше на 1
+ui:The stages of the ribbon, the search, the right panel and the windows	Этапы ленты, строка поиска, правая панель и окна

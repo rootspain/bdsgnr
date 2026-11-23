@@ -201,7 +201,9 @@ public sealed class RibbonBar : DockPanel
     private readonly MainViewModel _vm;
     private readonly List<Stage> _stages;
     private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal, Spacing = 2 };
-    private readonly StackPanel _groups = new() { Orientation = Orientation.Horizontal };
+    // at the top of the ribbon: the group names stand under the tallest group of the stage, the room a taller stage
+    // keeps (the ribbon as high on every stage) is left under them
+    private readonly StackPanel _groups = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top, Name = "ribbonGroups" };
     private readonly List<(RibbonItem Item, Button Button)> _buttons = new();
     private readonly Border _band;
     /// <summary>The height of the groups of the tallest stage, once measured in the window.</summary>
@@ -304,12 +306,23 @@ public sealed class RibbonBar : DockPanel
     /// <summary>A small ribbon button: 24 high for the default font of 12 and room of 4, the line of its text and the room above and below.</summary>
     public static double SmallButtonHeight(double font, double padding) => Math.Ceiling(font * 4 / 3) + 2 * padding;
 
+    /// <summary>
+    /// The room above and below the name of a ribbon group follows the room of the buttons: none of its own for the
+    /// default of 4 (the group keeps 3 under it), more for more; less takes from below only, not into the buttons.
+    /// </summary>
+    public static Thickness CaptionMargin(double padding)
+    {
+        var d = padding - IO.ProgramSettings.DefaultRibbonPadding;
+        return new Thickness(0, Math.Max(0, d), 0, Math.Max(-3, d));
+    }
+
     private void BuildGroups(Stage stage)
     {
         _groups.Children.Clear();
         _buttons.Clear();
         foreach (var g in stage.Groups)
         {
+            // as high as the group: the large buttons reach down to the group name
             var bigs = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Look.RibbonGap + 1 };
             // the small buttons in columns of three, made here and not by a wrap panel: a wrap panel exactly three buttons
             // high put two in a column when it measured them on a scaled screen (150 %, 175 %: a button rounds to a little
@@ -331,11 +344,11 @@ public sealed class RibbonBar : DockPanel
                 }
                 _buttons.Add((it, b));
             }
-            var body = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+            var body = new StackPanel { Orientation = Orientation.Horizontal, Spacing = Look.RibbonGap + 1, VerticalAlignment = VerticalAlignment.Top };
             if (bigs.Children.Count > 0) body.Children.Add(bigs);
             if (smalls.Children.Count > 0) body.Children.Add(smalls);
             var group = new DockPanel { Margin = new Thickness(8, 6, 8, 3) };
-            var caption = new TextBlock { Text = Loc.Ui(g.Name), Foreground = Look.Accent, FontSize = Look.RibbonSize(11), HorizontalAlignment = HorizontalAlignment.Center, Name = "ribbonCaption" };
+            var caption = new TextBlock { Text = Loc.Ui(g.Name), Foreground = Look.Accent, FontSize = Look.RibbonSize(11), HorizontalAlignment = HorizontalAlignment.Center, Name = "ribbonCaption", Margin = CaptionMargin(Look.RibbonPadding) };
             DockPanel.SetDock(caption, Dock.Bottom);
             group.Children.Add(caption);
             group.Children.Add(body);
@@ -365,18 +378,29 @@ public sealed class RibbonBar : DockPanel
             icon.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, -2, -10, 0), Child = Look.Icon(it.Lock != null ? "lock" : "down", 11, Look.Faint, 2) });
         stack.Children.Add(icon);
         stack.Children.Add(new TextBlock { Text = it.TwoLines ? TwoLines(Loc.Ui(it.Label)) : Loc.Ui(it.Label), FontSize = Look.RibbonSize(11.5), TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.NoWrap, Foreground = Look.Text, Name = "bigLabel" });
-        if (it.Key != null) stack.Children.Add(new Border { HorizontalAlignment = HorizontalAlignment.Center, Child = Look.Kbd(it.Key, 9) });
+        // the icon and the name at the top, by the first row of small buttons; the key mark at the bottom, right over the
+        // name of the group: the room the column of small buttons is higher by stays inside the button, not under it
+        var content = new DockPanel();
+        if (it.Key != null)
+        {
+            var key = new Border { HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 3, 0, 0), Child = Look.Kbd(it.Key, 9), Name = "bigKey" };
+            DockPanel.SetDock(key, Dock.Bottom);
+            content.Children.Add(key);
+        }
+        stack.VerticalAlignment = VerticalAlignment.Top;
+        content.Children.Add(stack);
         var b = new Button
         {
-            Content = stack,
+            Content = content,
             MinWidth = 72,
-            // room of 4: 76 high and 6 above and below the content, as before
+            // as high as the column of small buttons beside it; alone, 76 for the room of 4
             MinHeight = 76 + 2 * (Look.RibbonPadding - IO.ProgramSettings.DefaultRibbonPadding),
-            Padding = new Thickness(2, Look.RibbonPadding + 2),
+            // the room of the settings above, 4 less below (2 by default): the key mark close over the group name
+            Padding = new Thickness(2, Look.RibbonPadding + 2, 2, Math.Max(0, Look.RibbonPadding - 2)),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(6),
-            VerticalContentAlignment = VerticalAlignment.Top,
+            VerticalContentAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Center
         };
         b.Classes.Add("flat");
@@ -396,7 +420,8 @@ public sealed class RibbonBar : DockPanel
             Content = row,
             Height = SmallButtonHeight(Look.RibbonSize(12), Look.RibbonPadding),
             Padding = new Thickness(8, 0),
-            Margin = new Thickness(0, 0, 2, Look.RibbonGap),
+            // the gap of the settings goes between the columns (2 by default), not between the rows
+            Margin = new Thickness(0, 0, Look.RibbonGap + 1, 1),
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
             CornerRadius = new CornerRadius(5),
@@ -454,7 +479,6 @@ public sealed class CommandPalette : Border
         BorderBrush = Look.Line;
         BorderThickness = new Thickness(1);
         CornerRadius = new CornerRadius(8);
-        Height = 30;
         Padding = new Thickness(10, 0, 6, 0);
         var row = new DockPanel();
         var icon = Look.Icon("search", 16, Look.Faint);
@@ -473,6 +497,11 @@ public sealed class CommandPalette : Border
         _box.Classes.Add(NumberStep.TextClass);
         _box.KeyDown += OnKey;
         _list.DoubleTapped += (_, _) => Run();
+        // the font of the tab names (Program settings ▸ Appearance), as the stage tabs beside it; as high as they are
+        _box.Bind(TextBox.FontSizeProperty, _box.GetResourceObservable(Look.TabFontKey));
+        _list.Bind(ListBox.FontSizeProperty, _list.GetResourceObservable(Look.TabFontKey));
+        Height = RibbonBar.StageTabHeight(Look.TabFont);
+        Look.FontsChanged += () => Height = RibbonBar.StageTabHeight(Look.TabFont);
     }
 
     public void Focus2() { _box.Focus(); _box.SelectAll(); }

@@ -86,7 +86,7 @@ public static class Look
     public static double RibbonFont { get; private set; } = IO.ProgramSettings.DefaultRibbonFont;
     /// <summary>Room above and below the text of a ribbon button, pixels.</summary>
     public static double RibbonPadding { get; private set; } = IO.ProgramSettings.DefaultRibbonPadding;
-    /// <summary>Room between the rows of small ribbon buttons (the large ones: 1 more), pixels.</summary>
+    /// <summary>Room left and right between the ribbon buttons, pixels (1 more is drawn).</summary>
     public static double RibbonGap { get; private set; } = IO.ProgramSettings.DefaultRibbonGap;
     /// <summary>Font of the names of the tabs, points.</summary>
     public static double TabFont { get; private set; } = IO.ProgramSettings.DefaultTabFont;

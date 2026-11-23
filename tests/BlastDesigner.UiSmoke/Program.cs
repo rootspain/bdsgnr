@@ -735,7 +735,8 @@ Step("interface fonts (Program settings ▸ Appearance): the ribbon, its spacing
     try
     {
         // the defaults: the interface as it was
-        if (SmallRibbonButton().Height != 24 || SmallRibbonButton().Margin.Bottom != 1) throw new Exception($"a small ribbon button by default: {SmallRibbonButton().Height}, {SmallRibbonButton().Margin}");
+        if (window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "ribbonCaption").Margin != default(Thickness)) throw new Exception("the caption of a ribbon group by default has no room of its own");
+        if (SmallRibbonButton().Height != 24 || SmallRibbonButton().Margin != new Thickness(0, 0, 2, 1)) throw new Exception($"a small ribbon button by default: {SmallRibbonButton().Height}, {SmallRibbonButton().Margin}");
         if (StageTab().Height != 30) throw new Exception("a stage tab by default: " + StageTab().Height);
         if (PanelTab().FontSize != 13 || PanelScale() != 1) throw new Exception($"the right panel by default: tab {PanelTab().FontSize}, scale {PanelScale()}");
         // typed in the window: seen before Apply
@@ -745,6 +746,18 @@ Step("interface fonts (Program settings ▸ Appearance): the ribbon, its spacing
         var box = form.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "ribbonFont") ?? throw new Exception("no font of the ribbon in the settings");
         box.Text = "16"; box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump();
         if (BlastDesigner.App.Services.Look.RibbonFont != 16) throw new Exception("the font of the ribbon was not seen at once");
+        // − and + beside every size: a step of 1, seen at once, kept within the range
+        void Press(string name) => (form.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == name) ?? throw new Exception("no button " + name))
+            .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Press("ribbonFontPlus"); Pump();
+        if (BlastDesigner.App.Services.Look.RibbonFont != 17 || box.Text != "17") throw new Exception($"+ of the ribbon font: {BlastDesigner.App.Services.Look.RibbonFont}, {box.Text}");
+        Press("ribbonFontMinus"); Pump();
+        if (BlastDesigner.App.Services.Look.RibbonFont != 16) throw new Exception("− of the ribbon font: " + BlastDesigner.App.Services.Look.RibbonFont);
+        foreach (var n in new[] { "ribbonPadding", "ribbonGap", "tabFont", "panelFont", "toolTipFont" })
+            if (form.GetLogicalDescendants().OfType<Button>().Count(b => b.Name == n + "Minus" || b.Name == n + "Plus") != 2) throw new Exception("no − and + by " + n);
+        for (int i = 0; i < 8; i++) Press("ribbonPaddingMinus");
+        Pump();
+        if (form.Edited.RibbonButtonPadding != 0) throw new Exception("the room went below 0: " + form.Edited.RibbonButtonPadding);
         if (form.GetLogicalDescendants().OfType<Border>().All(b => b.Name != "toolTipSample")) throw new Exception("no tooltip sample");
         var e = form.Edited;
         e.RibbonButtonPadding = 6; e.RibbonButtonGap = 3; e.TabFontSize = 16; e.PanelFontSize = 15; e.ToolTipFontSize = 16; e.ToolTipBackground = 0xFFFFF7D6;
@@ -752,13 +765,21 @@ Step("interface fonts (Program settings ▸ Appearance): the ribbon, its spacing
         vm.ApplyProgramSettings(e); Pump();
         // the ribbon: the text, the room above and below, between the rows; the key marks keep their size
         var small = SmallRibbonButton();
-        if (small.Height != BlastDesigner.App.Views.RibbonBar.SmallButtonHeight(16, 6) || small.Margin.Bottom != 3) throw new Exception($"a small ribbon button: {small.Height}, {small.Margin}");
+        // the gap left and right only: the rows keep their 1
+        if (small.Height != BlastDesigner.App.Views.RibbonBar.SmallButtonHeight(16, 6) || small.Margin != new Thickness(0, 0, 4, 1)) throw new Exception($"a small ribbon button: {small.Height}, {small.Margin}");
         var big = window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "bigLabel" && t.IsEffectivelyVisible);
         if (big.FontSize != 15.5) throw new Exception("the name of a large ribbon button: " + big.FontSize);
-        if (window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "ribbonCaption").FontSize != 14.5) throw new Exception("the caption of a ribbon group");
+        var caption = window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == "ribbonCaption");
+        if (caption.FontSize != 14.5) throw new Exception("the caption of a ribbon group");
+        // the room of the buttons goes round the group names too: 2 more than the default of 4
+        if (caption.Margin != new Thickness(0, 2, 0, 2)) throw new Exception("the room round the caption of a ribbon group: " + caption.Margin);
         // the tabs: the stages and every TabItem
         if (StageTab().Height != BlastDesigner.App.Views.RibbonBar.StageTabHeight(16)) throw new Exception("a stage tab: " + StageTab().Height);
         if (PanelTab().FontSize != 16) throw new Exception("a tab of the right panel: " + PanelTab().FontSize);
+        // the search of the header in the font of the tabs, as high as the stage tabs
+        var palette = window.GetLogicalDescendants().OfType<BlastDesigner.App.Views.CommandPalette>().First();
+        if (palette.GetLogicalDescendants().OfType<TextBox>().First().FontSize != 16 || palette.Height != BlastDesigner.App.Views.RibbonBar.StageTabHeight(16))
+            throw new Exception($"the search of the header: font {palette.GetLogicalDescendants().OfType<TextBox>().First().FontSize}, height {palette.Height}");
         // the right panel scaled; the tooltip from the resources of the theme
         if (Math.Abs(PanelScale() - 1.25) > 1e-9) throw new Exception("the right panel: " + PanelScale());
         var res = Avalonia.Application.Current!.Resources;
@@ -1881,7 +1902,9 @@ Step("the header: the menu, Undo and Redo, the stage tabs, the search; New, Open
     if (Math.Abs(o.Y - g.Y) > 2 || o.X > g.X || g.X - o.X > 20) throw new Exception($"the search is not on the line of the magnifier, left of it: field ends at {o}, magnifier at {g}");
     Shot("90c_header_narrow_search");
     var box = over.GetLogicalDescendants().OfType<TextBox>().Single();
-    box.Text = BlastDesigner.App.Services.Loc.T("Zoom all"); Pump();
+    // a command of the View menu (Zoom all is no menu command: its words found View everything, now Reset all view filters)
+    box.Text = BlastDesigner.App.Services.Loc.T("Reset all view filters"); Pump();
+    if (over.GetLogicalDescendants().OfType<ListBox>().First().ItemCount == 0) throw new Exception("the search found no command: " + box.Text);
     box.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); Pump();
     if (popup.IsOpen) throw new Exception("the search over the plan stayed open after the command");
     // Ctrl+K opens it too, Esc closes it

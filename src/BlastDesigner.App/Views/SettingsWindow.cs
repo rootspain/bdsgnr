@@ -370,17 +370,40 @@ public sealed class SettingsForm : DockPanel
     /// <summary>The fonts of the ribbon, the tabs, the right panel and the tooltips, and the spacing of the ribbon buttons; seen at once.</summary>
     private IEnumerable<Control> FontRows()
     {
-        Control Size(string name, double value, Action<double> set, string unit, double min, double max) =>
-            Number(name, value, v => { set(v); Preview(); }, unit, min, max, "0.#");
+        // a field with − and + beside it: a step of 1 within its range, seen at once like a value typed
+        Control Size(string name, double value, Action<double> set, string unit, double min, double max)
+        {
+            var box = Number(name, value, v => { set(v); Preview(); }, unit, min, max, "0.#");
+            Button Step(string text, double by, string tip)
+            {
+                var b = new Button
+                {
+                    Content = text, Name = name + (by < 0 ? "Minus" : "Plus"), Width = 32, Height = 32, MinHeight = 32, Padding = new Thickness(0),
+                    HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+                    Background = Look.Field, BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6), FontSize = 15
+                };
+                ToolTip.SetTip(b, L(tip));
+                b.Click += (_, _) =>
+                {
+                    var now = Parse(box.Text) ?? value;
+                    // to the next whole value: 11.5 goes to 12 or 11
+                    box.Text = N(Math.Clamp(by > 0 ? Math.Floor(now) + 1 : Math.Ceiling(now) - 1, min, max), "0.#");
+                    // taken as a typed value is: clamped, set, previewed
+                    box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(InputElement.LostFocusEvent));
+                };
+                return b;
+            }
+            return Ui.Row(6, Step("−", -1, "Less by 1"), box, Step("+", 1, "More by 1"));
+        }
         yield return new TextBlock { Text = L("Fonts"), FontWeight = FontWeight.SemiBold, Foreground = Look.Text, Margin = new Thickness(0, 8, 0, 0) };
         yield return Row("Ribbon buttons", Size("ribbonFont", Edited.RibbonFontSize, v => Edited.RibbonFontSize = v, "pt", ProgramSettings.MinFont, ProgramSettings.MaxFont),
             "The names of the buttons and of the groups; the icons and the key marks keep their size");
         yield return Row("Ribbon buttons: room above and below", Size("ribbonPadding", Edited.RibbonButtonPadding, v => Edited.RibbonButtonPadding = v, "px", 0, ProgramSettings.MaxRibbonSpacing),
-            "One value for the top and the bottom; a large button has 2 more");
+            "One value for the top and the bottom; a large button has 2 more; the group names too");
         yield return Row("Ribbon buttons: room between them", Size("ribbonGap", Edited.RibbonButtonGap, v => Edited.RibbonButtonGap = v, "px", 0, ProgramSettings.MaxRibbonSpacing),
-            "Between the rows of small buttons; between the large buttons 1 more");
+            "Left and right only: between the large buttons and the columns of small ones");
         yield return Row("Tab names", Size("tabFont", Edited.TabFontSize, v => Edited.TabFontSize = v, "pt", 10, ProgramSettings.MaxTabFont),
-            "The stages of the ribbon, the right panel and the windows");
+            "The stages of the ribbon, the search, the right panel and the windows");
         yield return Row("Right panel", Size("panelFont", Edited.PanelFontSize, v => Edited.PanelFontSize = v, "pt", ProgramSettings.MinFont, ProgramSettings.MaxFont),
             "Properties, Layers, Visibility: the fields grow with the text");
 
