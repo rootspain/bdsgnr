@@ -139,6 +139,49 @@ public sealed class Hole : Entity
         return Collar + Direction * depth;
     }
 
+    // ---- the hole as it is drawn: from the design or from what was drilled (ViewState.HoleBasis) ----
+
+    /// <summary>The collar drawn: the design collar, or the surveyed one (the design collar when not surveyed).</summary>
+    public Vec3 DrawnCollar(HoleBasis basis) => basis == HoleBasis.Actual ? DrawnTrackStart() : Collar;
+
+    /// <summary>The length drawn: the design length, or the dipped one (the design length when not dipped).</summary>
+    public double DrawnLength(HoleBasis basis) => basis == HoleBasis.Actual ? EffectiveLength : Length;
+
+    /// <summary>The toe drawn: the design toe, or the toe at the dipped depth along the surveyed track (straight from the collar without one).</summary>
+    public Vec3 DrawnToe(HoleBasis basis) => basis == HoleBasis.Actual ? DrawnPointAtDepth(basis, EffectiveLength) : DesignToe;
+
+    /// <summary>A point at a depth along the hole as drawn: straight from the design collar, or along what was drilled.</summary>
+    public Vec3 DrawnPointAtDepth(HoleBasis basis, double depth)
+    {
+        if (basis == HoleBasis.Design) return Collar + Direction * depth;
+        if (BoreTrack is { Count: > 1 }) return GeoMath.PointAlong(BoreTrack, depth, out _);
+        return DrawnTrackStart() + Direction * depth;
+    }
+
+    /// <summary>The track drawn, collar to toe: two points for a straight hole, the surveyed track (down to the dipped depth) for the actual one.</summary>
+    public IReadOnlyList<Vec3> DrawnTrack(HoleBasis basis)
+    {
+        if (basis == HoleBasis.Actual && BoreTrack is { Count: > 1 } track)
+        {
+            var points = new List<Vec3>();
+            var length = EffectiveLength;
+            var along = 0.0;
+            points.Add(track[0]);
+            for (int i = 1; i < track.Count && along < length; i++)
+            {
+                var step = Vec3.Distance(track[i - 1], track[i]);
+                if (along + step >= length) { points.Add(GeoMath.PointAlong(track, length, out _)); break; }
+                points.Add(track[i]);
+                along += step;
+            }
+            return points;
+        }
+        return new[] { DrawnCollar(basis), DrawnToe(basis) };
+    }
+
+    /// <summary>The collar of what was drilled: the surveyed collar, else the design collar.</summary>
+    private Vec3 DrawnTrackStart() => ActualCollar ?? Collar;
+
     public override IEnumerable<Vec3> GetVertices()
     {
         yield return Collar;

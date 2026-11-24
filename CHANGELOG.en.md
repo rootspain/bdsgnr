@@ -8,7 +8,41 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 
 ## 0.3.14 — 2026-11-24
 
+### New
+- **Stage buttons over the plan:** after the chips, the frames "DRILLING [Plan|Fact]" and "LOADING [Plan|Fact]". A click
+  switches a button on and the others off (a second click switches it off), Ctrl+click switches only it, leaving the
+  others; the plan and the fact of one stage are never on together. A button on shows its layers, a button off hides
+  them (but those of another button on), other layers are left alone; the hole states shown are those of the buttons
+  on. F8: drilling plan/fact, Shift+F8: loading plan/fact. Switching is no undo step.
+- **A button's settings by a right click:** its layers (with their counts; a layer of another button signed with its
+  name), the six hole states and "Hole data", design or actual. The bindings are kept in the project; older files open
+  with all layers shared and the buttons off. A new blast binds the layers "Проект бурения", "Контур блока", "Съёмка
+  устьев", "Замеры глубин", "Проект заряжания", "Факт заряжания" by name when it has them.
+- **Layers tab:** a "New layers → …" card and four narrow columns D·P, D·F, L·P, L·F; a click on a square binds the layer
+  to a button or takes it off. A new layer (the New layer command, a DXF or survey import) goes to every button on, its
+  default name their names and the date ("Drilling · Fact · 2026-11-24"); a deleted layer leaves the bindings, undo
+  brings it back.
+- **Design and actual hole data:** with the actual data a hole is drawn from its surveyed collar, down to its dipped
+  depth and along its surveyed track (a hole with no fact as designed), its "L" the dipped length; with the design data
+  the collar, the design toe and length. A hole is picked where it is drawn (click, box, lasso, snap, section). The
+  calculations do not change.
+- **Print by stage button:** the print and report window chooses "Current view" or one of the four buttons; a button's
+  sheets take its layers, hole states and hole data, the view on the screen stays as it is.
+- **Surfaces and blocks from AutoCAD:** DXF/DWG import reads polyface meshes (PFACE), M×N meshes (3DMESH) and MESH —
+  each becomes a surface of its own named after its layer (Topo, Topo 2, …). Blocks without attributes are taken apart
+  as AutoCAD explodes them: turned, scaled, with nested blocks and array insertions; the objects of layer 0 in a block
+  go to the layer of the insertion. Civil 3D surfaces and ACIS solids cannot be read: the status line says how many were
+  left out and that they should be exported in AutoCAD as 3D faces or a mesh.
+
 ### Changed
+- **Stage buttons as chips:** the view on looks as a chip on (soft fill, accent outline and text), a view off is bare
+  text; the frame of a group with a view on has a touch of the accent. A click on the name of a group folds it to the
+  name ("● DRILLING · Fact" with a view on) and opens it again; the fold is kept in the program settings, F8 and
+  Shift+F8 work folded too.
+- The chips over the plan, the stage frames, the 2D | 3D switch and the eye have a see-through ground: the plan shows
+  under them. The row of chips is closer to the ribbon and the tool rail (6 px, was 12).
+- The camera switch over the plan is "2D | 3D" (was "Plan | 3D"): "Plan" and "Fact" are now words of the stage
+  buttons. The tips of the Visibility tab and the hot keys page say "2D and 3D" too.
 - **Visibility tab in three groups:** "Topography objects" (surfaces, polylines, polygons, circles, points, arrows,
   dimensions, text — a box per kind, with its count), "Holes and ties" (holes, ties, initiation point, rows, hole display,
   labels, filters) and "Interface" (grid, axes, legends). Each box is there once and has a tool tip. "Hole types" shows
@@ -28,6 +62,10 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   holes" is gone from Hole types.
 - Visibility tab: the "Actual track" box is gone and the surveyed bore track is no longer drawn; "Deviation" still
   shows the offset of the toe.
+
+### Fixed
+- Under the mouse a chip over the plan (and the Plan | Fact stage buttons) looked the same on and off; now an on one
+  stays in the accent colour, only brighter, and an off one grey with a highlight.
 
 ## 0.3.13 — 2026-11-23
 

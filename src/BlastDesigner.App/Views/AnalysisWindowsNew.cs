@@ -720,7 +720,7 @@ public static class AnalisysWindows
         };
     }
 
-    /// <summary>What the arrows of the zone measure: buttons side by side in one frame, as Plan and 3D over the plan.</summary>
+    /// <summary>What the arrows of the zone measure: buttons side by side in one frame, as 2D and 3D over the plan.</summary>
     private static Control SizeSwitch(MainViewModel vm)
     {
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };

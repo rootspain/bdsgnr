@@ -33,6 +33,8 @@ internal static class EngineModule
         Document.Followers.Add(SurfaceSources.Follow);
         // one block a layer, and a block layer goes with its block
         Document.Followers.Add(BlockLayers.Follow);
+        // a new layer goes to the stage buttons on, a deleted one out of them
+        Document.Followers.Add(StageViews.Follow);
     }
 }
 

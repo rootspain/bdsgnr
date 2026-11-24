@@ -160,4 +160,144 @@ public class CadImportTests
         Assert.Contains(r.Layers.Values, l => !l.Visible);
         Assert.DoesNotContain(r.Items.Select(i => i.Entity).OfType<TextEntity>(), t => t.Text.Contains(@"\P") || t.Text.Contains(@"\f") || t.Text.Contains('{'));
     }
+
+    // ---- surfaces: meshes, faces in blocks, what cannot be read (doc/cad-surfaces-plan.md) ----
+
+    private static CadImport ReadDoc(Action<CadDocument> fill, CadImportOptions? o = null)
+    {
+        var doc = new CadDocument();
+        fill(doc);
+        var path = Path.Combine(Path.GetTempPath(), $"bd_cad_{Guid.NewGuid():N}.dxf");
+        using (var w = new DxfWriter(path, doc, false)) w.Write();
+        return Read(path, o);
+    }
+
+    private static Layer NewLayer(CadDocument doc, string name) { var l = new Layer(name); doc.Layers.Add(l); return l; }
+
+    private static List<SurfaceEntity> Surfaces(CadImport r) => r.Items.Select(i => i.Entity).OfType<SurfaceEntity>().ToList();
+
+    private static PolyfaceMesh Polyface(Layer layer, double dx = 0)
+    {
+        // a triangle and a square beside it: three triangles
+        var pf = new PolyfaceMesh { Layer = layer };
+        foreach (var p in new[] { new XYZ(0, 0, 10), new XYZ(10, 0, 10), new XYZ(10, 10, 11), new XYZ(0, 10, 11), new XYZ(20, 0, 10), new XYZ(20, 10, 11) })
+            pf.Vertices.Add(new VertexFaceMesh(new XYZ(p.X + dx, p.Y, p.Z)));
+        pf.Faces.Add(new VertexFaceRecord { Index1 = 1, Index2 = 2, Index3 = 4 });
+        pf.Faces.Add(new VertexFaceRecord { Index1 = 2, Index2 = -5, Index3 = 6, Index4 = 3 });
+        return pf;
+    }
+
+    [Fact]
+    public void APolyfaceMeshIsASurfaceOfItsOwn_ItsFacesInTriangles()
+    {
+        var r = ReadDoc(doc => doc.Entities.Add(Polyface(NewLayer(doc, "Topo"))));
+        var s = Assert.Single(Surfaces(r));
+        Assert.Equal("Topo", s.Name);
+        Assert.Equal(9, s.Triangles.Count);
+        Assert.Equal(6, s.Vertices.Count);
+        Assert.Contains(s.Vertices, v => v.X == 20 && v.Y == 10 && v.Z == 11);
+        Assert.Empty(r.Skipped);
+        // without the faces to surfaces the meshes stay out, as the 3D faces
+        Assert.Empty(Surfaces(ReadDoc(doc => doc.Entities.Add(Polyface(NewLayer(doc, "Topo"))), new CadImportOptions { FacesToSurfaces = false })));
+    }
+
+    [Fact]
+    public void APolygonMeshIsAGridOfCells_ClosedInMItJoinsTheLastRowToTheFirst()
+    {
+        PolygonMesh Grid(bool closed)
+        {
+            var pm = new PolygonMesh { MVertexCount = 3, NVertexCount = 3 };
+            pm.Flags |= PolylineFlags.PolygonMesh;
+            if (closed) pm.Flags |= PolylineFlags.ClosedPolylineOrClosedPolygonMeshInM;
+            for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++) pm.Vertices.Add(new PolygonMeshVertex(new XYZ(i * 5, j * 5, i + j)));
+            return pm;
+        }
+        Assert.Equal(8 * 3, Assert.Single(Surfaces(ReadDoc(doc => doc.Entities.Add(Grid(false))))).Triangles.Count);
+        Assert.Equal(12 * 3, Assert.Single(Surfaces(ReadDoc(doc => doc.Entities.Add(Grid(true))))).Triangles.Count);
+    }
+
+    [Fact]
+    public void AMeshFaceOfFiveCornersIsAFanOfThreeTriangles()
+    {
+        // MESH straight to the surface: the writer of the test library does not write MESH
+        var mesh = new Mesh();
+        foreach (var p in new[] { new XYZ(0, 0, 0), new XYZ(4, 0, 0), new XYZ(5, 3, 0), new XYZ(2, 5, 0), new XYZ(-1, 3, 0) }) mesh.Vertices.Add(p);
+        mesh.Faces.Add(new[] { 0, 1, 2, 3, 4 });
+        mesh.Faces.Add(new[] { 0, 1, 1 });
+        var s = CadFiles.MeshSurface(mesh)!;
+        Assert.Equal(new[] { 0, 1, 2, 0, 2, 3, 0, 3, 4 }, s.Triangles);
+    }
+
+    [Fact]
+    public void SeveralSurfacesOfALayer_TheFacesFirst_TheMeshesNumbered()
+    {
+        var r = ReadDoc(doc =>
+        {
+            var topo = NewLayer(doc, "Topo");
+            doc.Entities.Add(new Face3D { Layer = topo, FirstCorner = new XYZ(0, 0, 0), SecondCorner = new XYZ(1, 0, 0), ThirdCorner = new XYZ(0, 1, 0), FourthCorner = new XYZ(0, 1, 0) });
+            doc.Entities.Add(Polyface(topo));
+            doc.Entities.Add(Polyface(topo, 100));
+        });
+        Assert.Equal(new[] { "Topo", "Topo 2", "Topo 3" }, Surfaces(r).Select(s => s.Name));
+        Assert.All(r.Items.Where(i => i.Entity is SurfaceEntity), i => Assert.Equal("Topo", i.Layer));
+    }
+
+    [Fact]
+    public void ABlockIsTakenApart_TurnedAndScaledAsInserted_Layer0IsTheLayerOfTheInsertion()
+    {
+        var r = ReadDoc(doc =>
+        {
+            var inner = new BlockRecord("Inner");
+            inner.Entities.Add(new Point(new XYZ(1, 0, 0)));
+            doc.BlockRecords.Add(inner);
+            var block = new BlockRecord("Bench");
+            var own = NewLayer(doc, "Crest");
+            block.Entities.Add(new Line(new XYZ(0, 0, 5), new XYZ(10, 0, 5)));
+            block.Entities.Add(new Line(new XYZ(0, 1, 5), new XYZ(10, 1, 5)) { Layer = own });
+            block.Entities.Add(new Face3D { FirstCorner = new XYZ(0, 0, 5), SecondCorner = new XYZ(10, 0, 5), ThirdCorner = new XYZ(0, 10, 5), FourthCorner = new XYZ(0, 10, 5) });
+            block.Entities.Add(new Insert(inner));
+            doc.BlockRecords.Add(block);
+            // at (100, 50), turned 90° and twice as large
+            doc.Entities.Add(new Insert(block) { Layer = NewLayer(doc, "Survey"), InsertPoint = new XYZ(100, 50, 0), Rotation = Math.PI / 2, XScale = 2, YScale = 2, ZScale = 1 });
+        });
+        var line = (PolylineEntity)r.Items.Single(i => i.Layer == "Survey" && i.Entity is PolylineEntity).Entity;
+        Assert.Equal(100, line.Points[1].X, 6);
+        Assert.Equal(70, line.Points[1].Y, 6);
+        Assert.Equal(5, line.Points[1].Z, 6);
+        // the line on a layer of its own keeps it
+        Assert.Contains(r.Items, i => i.Layer == "Crest" && i.Entity is PolylineEntity);
+        // the 3D face of the block is a surface of the layer of the insertion
+        var face = Assert.Single(Surfaces(r));
+        Assert.Equal("Survey", r.Items.Single(i => i.Entity == face).Layer);
+        // the block in the block: its point at (1, 0) of it, turned and scaled with the outer one
+        var point = (PointEntity)r.Items.Single(i => i.Entity is PointEntity).Entity;
+        Assert.Equal(100, point.Position.X, 6);
+        Assert.Equal(52, point.Position.Y, 6);
+    }
+
+    [Fact]
+    public void AnArrayInsertionGivesEveryCopy()
+    {
+        var r = ReadDoc(doc =>
+        {
+            var mark = new BlockRecord("Mark");
+            mark.Entities.Add(new Point(new XYZ(0, 0, 0)));
+            doc.BlockRecords.Add(mark);
+            // two columns 10 apart and three rows 5 apart, the whole turned 90°
+            doc.Entities.Add(new Insert(mark) { InsertPoint = new XYZ(100, 0, 0), Rotation = Math.PI / 2, ColumnCount = 2, ColumnSpacing = 10, RowCount = 3, RowSpacing = 5 });
+        });
+        var at = r.Items.Select(i => i.Entity).OfType<PointEntity>().Select(p => (Math.Round(p.Position.X, 6), Math.Round(p.Position.Y, 6))).OrderBy(p => p).ToList();
+        Assert.Equal(new[] { (90.0, 0.0), (90.0, 10.0), (95.0, 0.0), (95.0, 10.0), (100.0, 0.0), (100.0, 10.0) }, at);
+    }
+
+    [Fact]
+    public void SolidsAndRegionsAreLeftOutAsACIS_ALineIsNot()
+    {
+        // the writer of the test library does not write them: the kind straight from the object
+        Assert.Equal("ACIS", CadFiles.Unreadable(new Solid3D()));
+        Assert.Equal("ACIS", CadFiles.Unreadable(new Region()));
+        Assert.Null(CadFiles.Unreadable(new Line()));
+        Assert.Null(CadFiles.Unreadable(new Hatch()));
+    }
 }
+

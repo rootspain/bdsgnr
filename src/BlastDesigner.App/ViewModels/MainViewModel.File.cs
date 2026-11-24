@@ -55,6 +55,8 @@ public sealed partial class MainViewModel
         header.Created = DateTime.Now;
         project.Header = header;
         Settings.Author = header.Author;
+        // the stage buttons of the new blast take its layers by name, their hole states and hole data
+        InitialStages(project);
         Detach();
         Attach(new Document(project));
         SetStatus(Loc.T("Created new file"));
@@ -69,6 +71,7 @@ public sealed partial class MainViewModel
         p.View.LabelColors = new(Settings.HoleLabelColors);
         p.Header.Author = Settings.Author;
         p.Header.ShotDate = DateTime.Today;
+        InitialStages(p);
         Attach(new Document(p));
         Window.Ribbon.Select(0);
     }
@@ -295,7 +298,26 @@ public sealed partial class MainViewModel
         if (_looseBlocks.Count > 0) status += "; " + Loc.F("the lines on {0} make no block", string.Join(", ", _looseBlocks));
         if (drawing.SkippedHidden > 0) status += "; " + Loc.F("{0} on hidden layers skipped", drawing.SkippedHidden);
         if (drawing.FlatLines > 0) status += "; " + Loc.F("{0} flat lines moved to 2D layers", drawing.FlatLines);
+        if (SkippedText(drawing.Skipped) is { } skipped) status += "; " + skipped;
         SetStatus(status);
+    }
+
+    /// <summary>What of a drawing could not be read, by kind, and what to do about it; null when nothing was left out.</summary>
+    public static string? SkippedText(IReadOnlyDictionary<string, int> skipped)
+    {
+        if (skipped.Count == 0) return null;
+        var parts = skipped.OrderBy(k => k.Key).Select(k => k.Key switch
+        {
+            "AECC" => Loc.F("Civil 3D objects: {0}", k.Value),
+            "PROXY" => Loc.F("objects of other programs: {0}", k.Value),
+            "ACIS" => Loc.F("solids and ACIS surfaces: {0}", k.Value),
+            "INSERT" => Loc.F("blocks nested too deep: {0}", k.Value),
+            _ => Loc.F("meshes without faces: {0}", k.Value)
+        });
+        var text = Loc.F("left out: {0}", string.Join(", ", parts));
+        if (skipped.Keys.Any(k => k is "AECC" or "PROXY" or "ACIS"))
+            text += " — " + Loc.T("export them in AutoCAD as 3D faces or a mesh");
+        return text;
     }
 
     /// <param name="ignoreDiameters">Asked after the file is chosen when null.</param>

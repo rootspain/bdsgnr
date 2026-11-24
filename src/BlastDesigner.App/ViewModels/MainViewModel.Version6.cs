@@ -370,15 +370,15 @@ public sealed partial class MainViewModel
         var holes = ExportHolesSet().ToList();
         var choice = await BpdExportWindow.Show(Project!, holes);
         if (choice == null) return;
-        var r = DeviTronic.Build(Project!, holes, choice.Paths, choice.Unit, choice.Header.SourceFile, levels: choice.Levels, header: choice.Header);
+        var r = DaveyTronic.Build(Project!, holes, choice.Paths, choice.Unit, choice.Header.SourceFile, levels: choice.Levels, header: choice.Header);
         string Text(IEnumerable<BpdMessage> list) => string.Join("\n", list.Take(12).Select(m => "• " + Loc.F(m.Format, m.Args)));
-        if (r.Errors.Count > 0) { await Dialogs.Info(Loc.T("The BPD file was not written:") + "\n" + Text(r.Errors), Loc.T("DaveyTronic (.BPD)")); return; }
+        if (r.Errors.Count > 0) { await Dialogs.Info(Loc.T("The BPD file was not written:") + "\n" + Text(r.Errors), Loc.T("Davey Tronic (.BPD)")); return; }
         if (r.Warnings.Count > 0)
         {
             // holes left out of the file: they can be selected in the plan instead of writing it
             var left = r.Warnings.SelectMany(w => w.Holes).Distinct().ToList();
             var buttons = left.Count > 0 ? new[] { "Yes", "Select the holes not written", "No" } : new[] { "Yes", "No" };
-            var answer = await Dialogs.Show("DaveyTronic (.BPD)", Text(r.Warnings) + "\n\n" + Loc.T("Write the file?"), buttons);
+            var answer = await Dialogs.Show("Davey Tronic (.BPD)", Text(r.Warnings) + "\n\n" + Loc.T("Write the file?"), buttons);
             if (left.Count > 0 && answer == 1)
             {
                 Doc!.Select(left);
@@ -387,9 +387,9 @@ public sealed partial class MainViewModel
             }
             if (answer != 0) return;
         }
-        var path = await Dialogs.SaveFile("DaveyTronic (.BPD)", DeviTronic.DefaultFileName, ".BPD", ("BPD", new[] { "*.BPD", "*.bpd" }));
+        var path = await Dialogs.SaveFile("Davey Tronic (.BPD)", DaveyTronic.DefaultFileName, ".BPD", ("BPD", new[] { "*.BPD", "*.bpd" }));
         if (path == null) return;
-        DeviTronic.Save(path, r.Plan);
+        DaveyTronic.Save(path, r.Plan);
         // the names written go with the project, for its next export
         var (full, displayed) = (choice.Header.FullName, choice.Header.DisplayedName);
         if (Project!.BpdExport is not { } kept || kept.FullName != full || kept.DisplayedName != displayed)

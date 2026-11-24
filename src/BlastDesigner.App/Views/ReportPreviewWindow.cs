@@ -246,7 +246,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         saveDesign.Name = "saveDesign";
         var loadDesign = FormKit.Tool("open", Loc.Ui("Load design…"), LoadDesignFrom, Loc.Ui("Replace the choices of the report, the frame, the stamps and the visibility with those of a file"));
         loadDesign.Name = "loadDesign";
-        var right = Ui.Row(14, Ui.Row(4, saveDesign, loadDesign), Ui.Row(4, width, page), _save, _print);
+        var right = Ui.Row(14, StageChoice(), Ui.Row(4, saveDesign, loadDesign), Ui.Row(4, width, page), _save, _print);
         right.Margin = new Thickness(0, 0, 0, 8);
         DockPanel.SetDock(right, Dock.Right);
         // the tabs stand on the line under the band
@@ -260,6 +260,41 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
             Padding = new Thickness(10, 8, 14, 0),
             Child = new DockPanel { Children = { right, tabs } }
         };
+    }
+
+    /// <summary>
+    /// What the pages show: the current view (as on the screen) or the view of one stage button, its layers, hole states
+    /// and hole data, without switching it on the screen.
+    /// </summary>
+    private Control StageChoice()
+    {
+        var views = _vm.StageButtons.ToList();
+        var items = new List<string> { Loc.Ui("Current view") };
+        items.AddRange(views.Select(MainViewModel.StageName));
+        var box = new ComboBox { ItemsSource = items, SelectedIndex = 0, MinHeight = 32, MinWidth = 170, Name = "printStage", VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(box, Loc.Ui("Print the current view, or the layers, hole states and hole data of a stage button (the view on the screen stays as it is)"));
+        box.SelectionChanged += (_, _) =>
+        {
+            if (box.SelectedIndex < 0) return;
+            _stage = box.SelectedIndex == 0 ? null : views[box.SelectedIndex - 1];
+            Rebuild();
+        };
+        return box;
+    }
+
+    /// <summary>The stage button whose view is printed; null for the current view.</summary>
+    private StageView? _stage;
+    /// <summary>The copies of the blast in the view of each stage button, made once each.</summary>
+    private readonly Dictionary<(WorkStage, StageMode), Task<BlastProject>> _stageProjects = new();
+
+    /// <summary>The blast for the pages: the copy taken when the window opened, or a copy of it in the view of a stage button.</summary>
+    private Task<BlastProject> ProjectFor(StageView? stage)
+    {
+        if (stage == null) return _project;
+        var key = (stage.Stage, stage.Mode);
+        if (!_stageProjects.TryGetValue(key, out var task))
+            _stageProjects[key] = task = _project.ContinueWith(t => { var p = StageViews.ForPrint(t.Result, stage); Timing.Solve(p); return p; }, TaskScheduler.Default);
+        return task;
     }
 
     /// <summary>The bar under the page: the pages and the zoom in the middle of the page, the button that closes the window at the end.</summary>
@@ -976,6 +1011,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
 
         // everything the build reads is copied here: the window goes on changing its own
         var (kind, now, design) = (_kind, DateTime.Now, ProjectJson.DeepClone(Design));
+        var source = ProjectFor(_stage);
         var arrows = new FirstMovementSheet { Analysis = _arrows.Analysis, IsolineIntervalMs = _arrows.IsolineIntervalMs, Title = _arrows.Title, Landscape = _arrows.Landscape, HideGeometry = _arrows.HideGeometry, Yaw = _arrows.Yaw, Arrows = _arrows.Arrows, ReliefLimit = _arrows.ReliefLimit };
         var sections = new CrossSectionSheet { Title = _sections.Title, Landscape = _sections.Landscape, HalfWidth = _sections.HalfWidth, Line = _sections.Line };
         var previous = _building;
@@ -984,7 +1020,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         {
             // one at a time: they read the same copy of the project, and the plan changes its view while it draws
             await previous.ContinueWith(_ => { });
-            var project = await _project;
+            var project = await source;
             if (kind == ReportKind.FirstMovement && !AnalysisWindows.HasAnalysis(project, arrows.Analysis)) note = AnalysisWindows.NoFirstMovement(project);
             if (kind == ReportKind.CrossSection && sections.Line == null && Reports.SectionLines(project).Count == 0) note = Loc.Ui("The blast has no section lines. Draw one with the Section line tool.");
             return kind switch

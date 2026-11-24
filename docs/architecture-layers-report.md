@@ -69,7 +69,7 @@ Rendering Recognition  IO(Data)   Engine ──► Calc ──► Domain
 
 | Ссылка | Почему неправильно | Как используется |
 |---|---|---|
-| `IO → Engine` | слой данных зависит от слоя бизнес-логики | `Charging.*` в `DeviTronic.cs`, `TextFiles.cs`, `Interchange.cs`, `ProjectFile.cs`; `Timing.Solve` в `Interchange.cs:335`, `TextFiles.cs:264`; `HoleDesign.*` в `Interchange.cs:251`, `TextFiles.cs:192`; `CalcService.Value` в `TextFiles.cs:209` |
+| `IO → Engine` | слой данных зависит от слоя бизнес-логики | `Charging.*` в `DaveyTronic.cs`, `TextFiles.cs`, `Interchange.cs`, `ProjectFile.cs`; `Timing.Solve` в `Interchange.cs:335`, `TextFiles.cs:264`; `HoleDesign.*` в `Interchange.cs:251`, `TextFiles.cs:192`; `CalcService.Value` в `TextFiles.cs:209` |
 | `Recognition → Engine` | формально Services → Services, но проект совмещает загрузку ресурса (Data) и вызов логики Engine | `SurveyFeatures`, `SurveyRecognizer` |
 | UI-фреймворк в Services/Data | **нет** | — |
 | Циклы | **нет** | — |
@@ -119,7 +119,7 @@ Rendering Recognition  IO(Data)   Engine ──► Calc ──► Domain
 
 | Класс | Слой фактически |
 |---|---|
-| `ProjectFile`, `CadFiles`, `SurveyDxf`, `TextFiles`, `Interchange`, `DeviTronic`, `ReportDesignFile`, `UserCatalogue`, `FragmentationPreset`, `Changelog`, `UsageLog` | Data (но см. нарушения: `TextFiles`, `Interchange`, `DeviTronic`, `ProjectFile` содержат бизнес-правила) |
+| `ProjectFile`, `CadFiles`, `SurveyDxf`, `TextFiles`, `Interchange`, `DaveyTronic`, `ReportDesignFile`, `UserCatalogue`, `FragmentationPreset`, `Changelog`, `UsageLog` | Data (но см. нарушения: `TextFiles`, `Interchange`, `DaveyTronic`, `ProjectFile` содержат бизнес-правила) |
 | `ProgramSettings` | Data + модель настроек; в том же файле статические `SafeFile` и `Log` |
 | `UsageAnalysis` | **Services** (аналитика журнала использования) |
 | `Utm` | **Services** (геодезическая математика) |
@@ -135,7 +135,7 @@ Rendering Recognition  IO(Data)   Engine ──► Calc ──► Domain
 |---|---|---|---|
 | UI | 69 (App 63 + Rendering 6) | 11 (App Services/VM/Views с IO, Rendering `Reports`/`ReportDocument`) | App, Rendering |
 | Services (+ модель) | 55 (Engine 25, Calc 12, Domain 18) | 6 (`CalcService`, `CalcProfile`, `ProjectJson`, `SurveyModel`, `UsageAnalysis`, `Utm`) | Engine, Calc, Domain, (Recognition) |
-| Data | 10 (IO) | 5 (`TextFiles`, `Interchange`, `DeviTronic`, `ProjectFile`, `SurveyLabels`) | IO, (Recognition) |
+| Data | 10 (IO) | 5 (`TextFiles`, `Interchange`, `DaveyTronic`, `ProjectFile`, `SurveyLabels`) | IO, (Recognition) |
 
 *Смешанные файлы учтены один раз, по основному слою проекта; суммы приблизительные.*
 
@@ -167,7 +167,7 @@ Rendering Recognition  IO(Data)   Engine ──► Calc ──► Domain
 | `src/BlastDesigner.IO/TextFiles.cs:209` | B | `CalcService.Value(project, propertyId, h)`: расчёт формул в экспорте | сервис формирует строки отчёта, IO форматирует CSV |
 | `src/BlastDesigner.IO/TextFiles.cs:192` | B | `HoleDesign.SetLengthToGrade` при импорте: правило проектирования внутри парсера | парсер возвращает сырые записи, сервис импорта применяет правила |
 | `src/BlastDesigner.IO/Interchange.cs:251` | B | `HoleDesign.CreateHole(...)` в импорте | так же: сервис импорта |
-| `src/BlastDesigner.IO/DeviTronic.cs:228-249` | B | `Charging.PrimerTimes/Primers/HasElectronicDetonator`: расчёт времён и состава заряда при экспорте в DeviTronic | сервис готовит модель экспорта |
+| `src/BlastDesigner.IO/DaveyTronic.cs:228-249` | B | `Charging.PrimerTimes/Primers/HasElectronicDetonator`: расчёт времён и состава заряда при экспорте в Davey Tronic | сервис готовит модель экспорта |
 | `src/BlastDesigner.IO/ProjectFile.cs:95-108` | B | миграция схемы содержит бизнес-правило (`Charging.HasElectronicDetonator`, `InitiationLinks.Normalize`, `ProductCatalogue.Attach`) | разделить: IO читает JSON и версию, `ProjectMigration` в Services применяет правила |
 | `src/BlastDesigner.Rendering/Reports.cs:39`, `:204` | B/D | отрисовка отчёта вызывает `Timing.Solve` и меняет модель | отчёт получает уже решённый проект (вызов в сервисе или VM) |
 | `src/BlastDesigner.App/Services/Trial.cs:199-259` | C+D | логика пробного периода, чтение реестра (`HKLM\...\Cryptography`, `HKCU`), файлы `state.bin` и `.bdcache`: UI + Services + Data в одном классе | `TrialService` (Services) + `ITrialStore` (реализации Registry и File в Data) |
@@ -276,7 +276,7 @@ BlastDesigner.Services      ← сейчас Engine + Calc + бизнес-час
                   ITrialStore, ISettingsStore, ILog)
 BlastDesigner.Domain        ← модель (можно оставить отдельной сборкой как «ядро» слоя 2)
 BlastDesigner.Data          ← сейчас IO + загрузчики ресурсов
-   ProjectFile, CadFiles, TextFiles (только парсинг/запись), Interchange, DeviTronic,
+   ProjectFile, CadFiles, TextFiles (только парсинг/запись), Interchange, DaveyTronic,
    CalcProfileRepository, FormulaResource (Formulas.bdcalc), SurveyModelResource (onnx),
    SettingsStore, UsageLog, TrialStore (Registry/File), Changelog
 ```
@@ -286,7 +286,7 @@ BlastDesigner.Data          ← сейчас IO + загрузчики ресу�
 ### 6.2 Пошаговый план миграции (по приоритетам)
 
 **P1: убрать бизнес-логику из слоя данных и разорвать `IO → Engine`** (наибольший эффект, умеренный объём)
-1. Вынести из `TextFiles`, `Interchange`, `DeviTronic` расчётные вызовы. Ввести `ExportService` в Engine, который решает времена (`Timing.Solve`), считает массы и формулы и отдаёт плоские DTO (`HoleExportRow`, `DeckExportRow`). IO только сериализует DTO.
+1. Вынести из `TextFiles`, `Interchange`, `DaveyTronic` расчётные вызовы. Ввести `ExportService` в Engine, который решает времена (`Timing.Solve`), считает массы и формулы и отдаёт плоские DTO (`HoleExportRow`, `DeckExportRow`). IO только сериализует DTO.
 2. Импорт: парсеры возвращают сырые записи, `ImportService` в Engine вызывает `HoleDesign.CreateHole` и `SetLengthToGrade`.
 3. Разделить `ProjectFile` на чтение и запись JSON (Data) и `ProjectMigration` (Services) с правилами из `ProjectFile.cs:95-108`.
 4. Перенести `UsageAnalysis`, `Utm` в Engine.

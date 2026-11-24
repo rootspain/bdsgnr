@@ -96,7 +96,7 @@ public sealed partial class MainViewModel
         View.ZoomAll();
     }
 
-    /// <summary>The eye by Plan and 3D (Shift+H): what is behind a surface paler, or everything drawn far to near as it comes.</summary>
+    /// <summary>The eye by 2D and 3D (Shift+H): what is behind a surface paler, or everything drawn far to near as it comes.</summary>
     public void ToggleFadeHidden()
     {
         if (Doc == null) return;
@@ -283,7 +283,9 @@ public sealed partial class MainViewModel
 
     public async Task NewLayer(string group = "")
     {
-        var name = await Dialogs.Prompt("New layer", Loc.T("Layer name"), Loc.T("Layer") + " " + (Project!.Layers.Count + 1));
+        // with stage buttons on, the layer is named by them and the date (it goes to them, Document.Followers)
+        var suggested = StageViews.NewLayerName(Project!, StageName, DateTime.Today) ?? Loc.T("Layer") + " " + (Project!.Layers.Count + 1);
+        var name = await Dialogs.Prompt("New layer", Loc.T("Layer name"), suggested);
         if (string.IsNullOrWhiteSpace(name)) return;
         Change("New layer", p => p.Layers.Add(new Layer { Name = name, Group = group, Color = 0xFF334155 }));
     }
@@ -478,46 +480,46 @@ public sealed partial class MainViewModel
     {
         // topography
         VisFlag("Surfaces", "Surfaces", ViewKinds.Topography, v => v.ShowSurfaces, (v, on) => v.ShowSurfaces = on,
-            "Plan and 3D: the triangulated surfaces (topography, grade, top of rock), filled by their type or by elevation. Hiding them changes no calculation: lengths to the grade and volumes use the surfaces either way."),
-        VisKind(ViewKinds.PolylineKind, "Polylines", "Plan and 3D: open lines (crest, toe, markout lines and the like). The crest is used by the burden marker and the burden check whether it is shown or not."),
-        VisKind(ViewKinds.PolygonKind, "Polygons", "Plan and 3D: closed outlines (blast outline, zones, boundaries)."),
-        VisKind(ViewKinds.CircleKind, "Circles", "Plan and 3D: circles (zones, danger radii and the like)."),
-        VisKind(ViewKinds.PointKind, "Points", "Plan and 3D: monitoring points, grade pegs, survey stations, the north point and plain points, with their labels."),
-        VisKind(ViewKinds.ArrowKind, "Arrows", "Plan and 3D: arrows (direction of throw, notes)."),
-        VisKind(ViewKinds.DimensionKind, "Dimensions", "Plan and 3D: dimension lines with the distance written on them."),
-        VisKind(ViewKinds.TextKind, "Text", "Plan and 3D: text notes. The hole labels are not in it: they have their own switch, Hole labels."),
+            "2D and 3D: the triangulated surfaces (topography, grade, top of rock), filled by their type or by elevation. Hiding them changes no calculation: lengths to the grade and volumes use the surfaces either way."),
+        VisKind(ViewKinds.PolylineKind, "Polylines", "2D and 3D: open lines (crest, toe, markout lines and the like). The crest is used by the burden marker and the burden check whether it is shown or not."),
+        VisKind(ViewKinds.PolygonKind, "Polygons", "2D and 3D: closed outlines (blast outline, zones, boundaries)."),
+        VisKind(ViewKinds.CircleKind, "Circles", "2D and 3D: circles (zones, danger radii and the like)."),
+        VisKind(ViewKinds.PointKind, "Points", "2D and 3D: monitoring points, grade pegs, survey stations, the north point and plain points, with their labels."),
+        VisKind(ViewKinds.ArrowKind, "Arrows", "2D and 3D: arrows (direction of throw, notes)."),
+        VisKind(ViewKinds.DimensionKind, "Dimensions", "2D and 3D: dimension lines with the distance written on them."),
+        VisKind(ViewKinds.TextKind, "Text", "2D and 3D: text notes. The hole labels are not in it: they have their own switch, Hole labels."),
         // holes and ties
         new VisibilityToggle(ViewKinds.HoleKind, "Holes", ViewKinds.Holes, v => !v.HiddenKinds.Contains(ViewKinds.HoleKind),
             v => { if (!v.HiddenKinds.Remove(ViewKinds.HoleKind)) v.HiddenKinds.Add(ViewKinds.HoleKind); },
-            "Plan and 3D: all the holes, dummy holes too. Hidden holes cannot be selected but count in the calculations. Hole types and states are hidden with the filters below."),
+            "2D and 3D: all the holes, dummy holes too. Hidden holes cannot be selected but count in the calculations. Hole types and states are hidden with the filters below."),
         VisFlag("Ties", "Ties", ViewKinds.Holes, v => v.ShowTies, (v, on) => v.ShowTies = on,
-            "Plan and 3D: the surface ties between holes in the colour of their connector, with the delay."),
+            "2D and 3D: the surface ties between holes in the colour of their connector, with the delay."),
         new VisibilityToggle(ViewKinds.InitiationPointKind, "Initiation pt.", ViewKinds.Holes, v => !v.HiddenKinds.Contains(ViewKinds.InitiationPointKind),
             v => { if (!v.HiddenKinds.Remove(ViewKinds.InitiationPointKind)) v.HiddenKinds.Add(ViewKinds.InitiationPointKind); },
-            "Plan and 3D: the point the blast is fired from, with its time. The surface times and the firing order of the holes start from it."),
+            "2D and 3D: the point the blast is fired from, with its time. The surface times and the firing order of the holes start from it."),
         VisFlag("Rows", "Rows", ViewKinds.Holes, v => v.ShowRows, (v, on) => v.ShowRows = on,
             "Plan: the lines of the rows the holes are laid out in. A row is picked by clicking its line only while the rows are shown."),
         VisFlag("HoleTrack", "Hole track", ViewKinds.Holes, v => !v.CollarsOnly, (v, on) => v.CollarsOnly = !on,
-            "Plan and 3D: a loaded hole shows its charge column, the decks in their product colours; an empty one the line from collar to toe with a dot at the toe. Off: collars only. Display only; the same decks give the explosive mass, quantities, costs and the vibration charge."),
+            "2D and 3D: a loaded hole shows its charge column, the decks in their product colours; an empty one the line from collar to toe with a dot at the toe. Off: collars only. Display only; the same decks give the explosive mass, quantities, costs and the vibration charge."),
         VisFlag("Collar", "Collar", ViewKinds.Holes, v => v.ShowCollars, (v, on) => v.ShowCollars = on,
-            "Plan and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only."),
+            "2D and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only."),
         VisFlag("DipTrack", "Dip track", ViewKinds.Holes, v => v.ShowDipTrack, (v, on) => v.ShowDipTrack = on,
-            "Plan and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check."),
+            "2D and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check."),
         VisFlag("GradePoint", "Grade point", ViewKinds.Holes, v => v.ShowGradePoint, (v, on) => v.ShowGradePoint = on,
-            "Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction."),
+            "2D and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction."),
         VisFlag("Deviation", "Deviation", ViewKinds.Holes, v => v.ShowDeviation, (v, on) => v.ShowDeviation = on,
-            "Plan and 3D: red lines with \"Δ\" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check."),
+            "2D and 3D: red lines with \"Δ\" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check."),
         VisFlag("BurdenMarker", "Burden marker", ViewKinds.Holes, v => v.ShowBurdenMarker, (v, on) => v.ShowBurdenMarker = on,
             "Plan: a dashed violet line with \"B\" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction."),
         VisFlag("Profile", "MWD profile", ViewKinds.Holes, v => v.ShowProfile, (v, on) => v.ShowProfile = on,
-            "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar."),
+            "2D and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar."),
         VisFlag("HoleLabels", "Hole labels", ViewKinds.Holes, v => v.ShowText, (v, on) => v.ShowText = on,
-            "Plan and 3D: all the hole labels at once (numbers, times, lengths and the rest). Which labels and on which side is set in the columns below."),
+            "2D and 3D: all the hole labels at once (numbers, times, lengths and the rest). Which labels and on which side is set in the columns below."),
         // interface
         VisFlag("Grid", "Grid", ViewKinds.Interface, v => v.ShowGrid, (v, on) => v.ShowGrid = on,
-            "Plan and 3D: the coordinate grid with the coordinates at its edges (G)."),
+            "2D and 3D: the coordinate grid with the coordinates at its edges (G)."),
         VisFlag("Axes", "Axes", ViewKinds.Interface, v => v.ShowAxes, (v, on) => v.ShowAxes = on,
-            "Plan and 3D: the X, Y, Z axes in the corner."),
+            "2D and 3D: the X, Y, Z axes in the corner."),
         VisFlag("HoleLegend", "Hole legend", ViewKinds.Interface, v => v.ShowHoleLegend, (v, on) => v.ShowHoleLegend = on,
             "Printed plans: the hole types with their colours and counts. On the screen it shows only at the Layout stage and with two or more hole types."),
         VisFlag("TieLegend", "Tie legend", ViewKinds.Interface, v => v.ShowTieLegend, (v, on) => v.ShowTieLegend = on,

@@ -44,7 +44,7 @@ public sealed partial class MainViewModel
             new("Ctrl+Shift+H", "Horizontal slice"),
             new("Ctrl+Shift+R", "Row check view")
         }),
-        ("Plan and 3D view", new HotKey[]
+        ("2D and 3D view", new HotKey[]
         {
             new("V", "Select tool"),
             new("H", "Pan"),
@@ -68,6 +68,8 @@ public sealed partial class MainViewModel
             new("X", "Cross-section"),
             new("F7", "Layers tab of the inspector"),
             new("Shift+H", "Fade what is behind a surface"),
+            new("F8", "Drilling: plan, then fact (stage buttons)"),
+            new("Shift+F8", "Loading: plan, then fact (stage buttons)"),
             new("Esc", "Leave the tool; with the Select tool, clear the selection")
         })
     };

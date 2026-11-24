@@ -59,6 +59,28 @@
       <Setter Property="BorderBrush" Value="{x:Static svc:Look.AccentPressed}"/>
       <Setter Property="Foreground" Value="{x:Static svc:Look.OnAccent}"/>
     </Style>
+    <!-- a chip under the mouse or pressed keeps showing whether it is on: off — a lighter ground and the text brighter,
+         on — the accent a step stronger; without these the theme paints both the same -->
+    <Style Selector="Button.chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{x:Static svc:Look.Hover}"/>
+      <Setter Property="BorderBrush" Value="{x:Static svc:Look.LineStrong}"/>
+      <Setter Property="Foreground" Value="{x:Static svc:Look.Text}"/>
+    </Style>
+    <Style Selector="Button.chip:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{x:Static svc:Look.Line}"/>
+      <Setter Property="BorderBrush" Value="{x:Static svc:Look.LineStrong}"/>
+      <Setter Property="Foreground" Value="{x:Static svc:Look.Text}"/>
+    </Style>
+    <Style Selector="Button.chip.on:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{x:Static svc:Look.AccentSoftHover}"/>
+      <Setter Property="BorderBrush" Value="{x:Static svc:Look.AccentHover}"/>
+      <Setter Property="Foreground" Value="{x:Static svc:Look.AccentHover}"/>
+    </Style>
+    <Style Selector="Button.chip.on:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{x:Static svc:Look.AccentSoftHover}"/>
+      <Setter Property="BorderBrush" Value="{x:Static svc:Look.AccentPressed}"/>
+      <Setter Property="Foreground" Value="{x:Static svc:Look.AccentPressed}"/>
+    </Style>
     <Style Selector="ContextMenu">
       <Setter Property="WindowManagerAddShadowHint" Value="True"/>
     </Style>

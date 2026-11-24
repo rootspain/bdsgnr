@@ -47,6 +47,7 @@ public sealed class LayersPanel : DockPanel
         _list.Children.Clear();
         var p = _vm.Project;
         if (p == null) return;
+        _list.Children.Add(NewLayersCard(p));
         // groups by name, but Topography just before Drawing and layers without a group last
         static string SortKey(string g) => g == StandardLayers.TopographyGroup ? "Drawing" : g;
         foreach (var group in p.Layers.GroupBy(l => l.Group).OrderBy(g => g.Key.Length == 0).ThenBy(g => SortKey(g.Key)).ThenBy(g => g.Key != StandardLayers.TopographyGroup))
@@ -98,8 +99,11 @@ public sealed class LayersPanel : DockPanel
         DockPanel.SetDock(visible, Dock.Left);
         DockPanel.SetDock(swatch, Dock.Left);
         DockPanel.SetDock(flags, Dock.Right);
+        var stages = StageColumns(p, layer);
+        DockPanel.SetDock(stages, Dock.Right);
         row.Children.Add(visible);
         row.Children.Add(swatch);
+        row.Children.Add(stages);
         row.Children.Add(flags);
         row.Children.Add(name);
         row.DoubleTapped += async (_, _) => await _vm.EditLayer(layer);
@@ -126,6 +130,70 @@ public sealed class LayersPanel : DockPanel
             })
         };
         return row;
+    }
+
+    /// <summary>Width of a column of a stage button at the right of the layer rows, px.</summary>
+    private const double StageColumn = 24;
+
+    /// <summary>
+    /// The card over the layers: which stage buttons a new layer goes to (those on), or that it is shared; under it the
+    /// names of the four columns of the stage buttons.
+    /// </summary>
+    private Control NewLayersCard(BlastProject p)
+    {
+        var on = StageViews.Enabled(p).Select(MainViewModel.StageName).ToList();
+        var text = Loc.Ui("New layers") + " → " + (on.Count > 0 ? string.Join(", ", on) : Loc.Ui("shared (no stage button on)"));
+        var card = new Border
+        {
+            Name = "newLayersCard",
+            Background = on.Count > 0 ? Look.AccentSoft : Look.Panel,
+            BorderBrush = on.Count > 0 ? Look.Accent : Look.Line,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Padding = new Thickness(8, 4),
+            Margin = new Thickness(4, 2, 4, 2),
+            Child = new TextBlock { Text = text, FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = on.Count > 0 ? Look.Text : Look.Muted }
+        };
+        ToolTip.SetTip(card, Loc.Ui("A new layer (the New layer command, a DXF or survey import) goes to the stage buttons on; with none on it is shared and shown"));
+        var heads = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 4, 0) };
+        foreach (var v in StageViews.Of(p))
+        {
+            var t = new TextBlock { Text = MainViewModel.StageShort(v), Width = StageColumn, FontSize = 10, TextAlignment = TextAlignment.Center, Foreground = v.On ? Look.Accent : Look.Faint };
+            ToolTip.SetTip(t, MainViewModel.StageName(v));
+            heads.Children.Add(t);
+        }
+        return new StackPanel { Children = { card, heads } };
+    }
+
+    /// <summary>The four squares of a layer row, one a stage button: filled when the layer is bound to it; a click binds it or takes it off.</summary>
+    private Control StageColumns(BlastProject p, Layer layer)
+    {
+        var cells = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 0, 0) };
+        foreach (var v in StageViews.Of(p))
+        {
+            var view = v;
+            var bound = view.Layers.Contains(layer.Id);
+            var square = new Border
+            {
+                Width = 12, Height = 12,
+                CornerRadius = new CornerRadius(2),
+                BorderThickness = new Thickness(1),
+                BorderBrush = bound ? Look.Accent : Look.LineStrong,
+                Background = bound ? Look.Accent : Brushes.Transparent
+            };
+            var cell = new Border { Width = StageColumn, Height = 18, Background = Brushes.Transparent, Cursor = new Cursor(StandardCursorType.Hand), Child = square, Tag = "stage" };
+            square.HorizontalAlignment = HorizontalAlignment.Center;
+            square.VerticalAlignment = VerticalAlignment.Center;
+            ToolTip.SetTip(cell, MainViewModel.StageName(view) + ": " + Loc.Ui(bound ? "the layer is bound (click to take it off)" : "click to bind the layer"));
+            cell.PointerPressed += (_, e) =>
+            {
+                if (!e.GetCurrentPoint(cell).Properties.IsLeftButtonPressed) return;
+                e.Handled = true;
+                Ui.Safe(() => { _vm.SetStageLayer(view, layer.Id, !bound); _vm.StagesEdited(); });
+            };
+            cells.Children.Add(cell);
+        }
+        return cells;
     }
 }
 

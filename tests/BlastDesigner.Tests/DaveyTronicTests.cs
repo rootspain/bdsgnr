@@ -7,7 +7,7 @@ using Xunit;
 namespace BlastDesigner.Tests;
 
 /// <summary>DaveyTronic BPD export checked against the reference file made by O-Pitblast (CRC 52627).</summary>
-public class DeviTronicTests
+public class DaveyTronicTests
 {
     static BpdPlan ReferencePlan()
     {
@@ -33,49 +33,49 @@ public class DeviTronicTests
     }
 
     [Fact]
-    public void Crc16X25_CheckValue() => Assert.Equal(0x906E, DeviTronic.Crc16X25(Encoding.ASCII.GetBytes("123456789")));
+    public void Crc16X25_CheckValue() => Assert.Equal(0x906E, DaveyTronic.Crc16X25(Encoding.ASCII.GetBytes("123456789")));
 
     [Fact]
     public void Write_ReproducesReferenceFile()
     {
-        var text = DeviTronic.Write(ReferencePlan());
+        var text = DaveyTronic.Write(ReferencePlan());
         Assert.StartsWith("<PU_AUTO_BLASTPLAN>\r\n<CRC>52627</CRC>\r\n<DATA>\r\n    <HEADER>\r\n      <DATE>2020/09/24</DATE>\r\n", text);
         Assert.EndsWith("      </HOLE>\r\n    </PATH>\r\n</DATA>\r\n</PU_AUTO_BLASTPLAN>\n", text);
         Assert.Equal(3386, Encoding.ASCII.GetByteCount(text));
-        Assert.True(DeviTronic.CheckCrc(text));
-        Assert.False(DeviTronic.CheckCrc(text.Replace("<DELAY>5000</DELAY>", "<DELAY>5001</DELAY>")));
+        Assert.True(DaveyTronic.CheckCrc(text));
+        Assert.False(DaveyTronic.CheckCrc(text.Replace("<DELAY>5000</DELAY>", "<DELAY>5001</DELAY>")));
     }
 
     [Fact]
     public void TheDisplayedName_IsPaddedAndCutToEight()
     {
-        Assert.Equal("Trial___", DeviTronic.PadDisplayed("Trial"));
-        Assert.Equal("Blast_12", DeviTronic.PadDisplayed("Blast 12"));
-        Assert.Equal("ABCDEFGH", DeviTronic.PadDisplayed("ABCDEFGHIJ"));
-        Assert.Equal("Vzryv___", DeviTronic.PadDisplayed("Взрыв"));
-        Assert.Equal("BLAST___", DeviTronic.PadDisplayed("—"));
+        Assert.Equal("Trial___", DaveyTronic.PadDisplayed("Trial"));
+        Assert.Equal("Blast_12", DaveyTronic.PadDisplayed("Blast 12"));
+        Assert.Equal("ABCDEFGH", DaveyTronic.PadDisplayed("ABCDEFGHIJ"));
+        Assert.Equal("Vzryv___", DaveyTronic.PadDisplayed("Взрыв"));
+        Assert.Equal("BLAST___", DaveyTronic.PadDisplayed("—"));
     }
 
     [Fact]
     public void Names_TakeLatinLettersAndDigits_CyrillicInLatin_TheRestOneUnderscore()
     {
-        Assert.Equal("Karer_Sever_blok_12", DeviTronic.ToFileName("Карьер Север, блок 12", 30));
-        Assert.Equal("YoZhKhTsChShShchYEYuYa", DeviTronic.ToFileName("ЁЖХЦЧШЩЫЭЮЯ", 30));
-        Assert.Equal("yozhshch", DeviTronic.ToFileName("ёжщ", 30));
+        Assert.Equal("Karer_Sever_blok_12", DaveyTronic.ToFileName("Карьер Север, блок 12", 30));
+        Assert.Equal("YoZhKhTsChShShchYEYuYa", DaveyTronic.ToFileName("ЁЖХЦЧШЩЫЭЮЯ", 30));
+        Assert.Equal("yozhshch", DaveyTronic.ToFileName("ёжщ", 30));
         // Ь and Ъ go; the signs, spaces and other letters become one '_' in a row
-        Assert.Equal("obekt", DeviTronic.ToFileName("объект", 30));
-        Assert.Equal("Blok_12", DeviTronic.ToFileName("Блок - 12", 30));
-        Assert.Equal("A_B", DeviTronic.ToFileName("A__ß/€B", 30));
-        Assert.Equal("_12_", DeviTronic.ToFileName("-12-", 30));
+        Assert.Equal("obekt", DaveyTronic.ToFileName("объект", 30));
+        Assert.Equal("Blok_12", DaveyTronic.ToFileName("Блок - 12", 30));
+        Assert.Equal("A_B", DaveyTronic.ToFileName("A__ß/€B", 30));
+        Assert.Equal("_12_", DaveyTronic.ToFileName("-12-", 30));
         // the limit counts the Latin text: Щ is four characters
-        Assert.Equal("Shchuk", DeviTronic.ToFileName("Щука", 6));
-        Assert.Equal(30, DeviTronic.ToFileName(new string('Щ', 20), 30).Length);
+        Assert.Equal("Shchuk", DaveyTronic.ToFileName("Щука", 6));
+        Assert.Equal(30, DaveyTronic.ToFileName(new string('Щ', 20), 30).Length);
         // by default: the number of the blast, else its name; the displayed one its first 8 in capitals
         var p = BlastProject.CreateNew("Карьер Север");
-        Assert.Equal("Karer_Sever", DeviTronic.DefaultFullName(p));
+        Assert.Equal("Karer_Sever", DaveyTronic.DefaultFullName(p));
         p.Header.BlastNumber = "Блок 12/3";
-        Assert.Equal("Blok_12_3", DeviTronic.DefaultFullName(p));
-        Assert.Equal("BLOK_12_", DeviTronic.DefaultDisplayedName("Blok_12_3"));
+        Assert.Equal("Blok_12_3", DaveyTronic.DefaultFullName(p));
+        Assert.Equal("BLOK_12_", DaveyTronic.DefaultDisplayedName("Blok_12_3"));
     }
 
     [Fact]
@@ -95,13 +95,13 @@ public class DeviTronicTests
         p.Entities.Add(new TieEntity { FromId = c.Id, ToId = d.Id, ProductId = edet.Id });
         p.Entities.Add(new TieEntity { FromId = d.Id, ToId = e.Id, ProductId = edet.Id });
         p.Coordinates.UtmZone = 29;
-        var chains = DeviTronic.Chains(p);
+        var chains = DaveyTronic.Chains(p);
         var full = "Karer_Sever_blok_12_2026_11_20";
         Assert.Equal(30, full.Length);
         var header = new BpdHeader(new DateTime(2026, 11, 20, 2, 7, 41), full, "BLOK12", "Blast Designer 0.3.9", 33, true);
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1"), new BpdPathRequest(chains[1].Key, "2") }, BpdDelayUnit.Ms, "ignored", header: header);
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1"), new BpdPathRequest(chains[1].Key, "2") }, BpdDelayUnit.Ms, "ignored", header: header);
         Assert.Empty(r.Errors);
-        var text = DeviTronic.Write(r.Plan);
+        var text = DaveyTronic.Write(r.Plan);
         Assert.Contains("<DATE>2026/11/20</DATE>", text);
         Assert.Contains("<TIME>02:07:41</TIME>", text);
         Assert.Contains("<FULL_NAME>" + full + "</FULL_NAME>", text);
@@ -109,16 +109,16 @@ public class DeviTronicTests
         Assert.Contains("<SOURCE_FILE>Blast Designer 0.3.9</SOURCE_FILE>", text);
         Assert.Equal(2, text.Split("<UTM_ZONE_LETTER>S</UTM_ZONE_LETTER>").Length - 1);
         Assert.Equal(2, text.Split("<UTM_ZONE_NUMBER>33</UTM_ZONE_NUMBER>").Length - 1);
-        Assert.True(DeviTronic.CheckCrc(text));
+        Assert.True(DaveyTronic.CheckCrc(text));
         // the zone of the file only: the site keeps its own
         Assert.Equal((29, false), (p.Coordinates.UtmZone, p.Coordinates.SouthernHemisphere));
         // what the window shows of each line is what the file has: two detonators a hole, the frame of its holes
-        var preview = DeviTronic.Preview(p, p.Holes, chains, new[] { "A", "B" });
+        var preview = DaveyTronic.Preview(p, p.Holes, chains, new[] { "A", "B" });
         Assert.Equal(new[] { 4, 6 }, preview.Select(x => x.Detonators));
         Assert.Equal(r.Plan.Paths.Select(x => ((long, long, long, long)?)(x.West, x.South, x.East, x.North)), preview.Select(x => x.Frame));
         Assert.Equal(new[] { 4, 6 }, r.Plan.Paths.Select(x => x.DetonatorCount));
         // names not of the rule, a zone out of 1–60 and a source not of printable Latin: no file
-        var bad = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t",
+        var bad = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t",
             header: header with { FullName = full + "X", DisplayedName = "Блок", SourceFile = "Источник", UtmZone = 0 });
         Assert.Equal(4, bad.Errors.Count);
     }
@@ -149,10 +149,10 @@ public class DeviTronicTests
         p.Coordinates.OffsetEasting = 500000;
         p.Coordinates.OffsetNorthing = 4000000;
 
-        var chains = DeviTronic.Chains(p);
+        var chains = DaveyTronic.Chains(p);
         Assert.Equal(new[] { c17.Id, c42.Id }, chains.Select(c => c.TieTypeKey));
         Assert.Equal(("1", "2"), (chains[0].FirstHole, chains[0].LastHole));
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[1].Key, "700"), new BpdPathRequest(chains[0].Key, "602") }, BpdDelayUnit.TenthMs, "Blast Designer 6", new DateTime(2026, 11, 9));
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[1].Key, "700"), new BpdPathRequest(chains[0].Key, "602") }, BpdDelayUnit.TenthMs, "Blast Designer 6", new DateTime(2026, 11, 9));
         Assert.Empty(r.Errors);
         var a = r.Plan.Paths[0];
         var b = r.Plan.Paths[1];
@@ -164,13 +164,13 @@ public class DeviTronicTests
         Assert.Equal(new[] { (1, 1, 1000L), (2, 1, 1174L), (3, 2, 1174L) }, b.Holes.SelectMany(h => h.Detonators).Select(d => (d.OrderNumber, d.Level, d.Delay)));
         Assert.Equal((500010L, 500015L, 4000020L, 4000021L), (b.West, b.East, b.South, b.North));
         // LEVEL 1 = top detonator: in hole 2 the upper primer (depth 5) comes first
-        var top = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "602") }, BpdDelayUnit.Ms, "t", levels: BpdLevelOrder.TopFirst);
+        var top = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "602") }, BpdDelayUnit.Ms, "t", levels: BpdLevelOrder.TopFirst);
         Assert.Equal(new[] { (1, 1), (2, 1), (3, 2) }, top.Plan.Paths[0].Holes.SelectMany(h => h.Detonators).Select(d => (d.OrderNumber, d.Level)));
         Assert.Equal(new[] { 5.0, 9.5 }, top.Plan.Paths[0].Holes[1].Source!.Decks[0].Primers.Select(x => x.Depth).OrderBy(x => x));
-        var text = DeviTronic.Write(r.Plan);
+        var text = DaveyTronic.Write(r.Plan);
         Assert.Contains("<TOTAL_DETS_QUANTITY>5</TOTAL_DETS_QUANTITY>", text);
         Assert.Contains("<PATH_QUANTITY>2</PATH_QUANTITY>", text);
-        Assert.True(DeviTronic.CheckCrc(text));
+        Assert.True(DaveyTronic.CheckCrc(text));
     }
 
     [Fact]
@@ -185,7 +185,7 @@ public class DeviTronicTests
         void Tie(Entity a, Entity b) => p.Entities.Add(new TieEntity { FromId = a.Id, ToId = b.Id, ProductId = "w" });
         // point → 5, then from 5 the branch to 9 was drawn before the branch to 1; 9 → 3 runs through hole 4 (not written)
         Tie(ip, h5); Tie(h5, h9); Tie(h5, h1); Tie(h9, h4); Tie(h4, h3); Tie(h1, h2);
-        var order = DeviTronic.OrderAlongTies(p.Ties.ToList(), new List<Hole> { h1, h2, h3, h5, h9 });
+        var order = DaveyTronic.OrderAlongTies(p.Ties.ToList(), new List<Hole> { h1, h2, h3, h5, h9 });
         Assert.Equal(new[] { "5", "9", "3", "1", "2" }, order.Select(h => h.Label));
     }
 
@@ -204,9 +204,9 @@ public class DeviTronicTests
             if (i > 0) p.Entities.Add(new TieEntity { FromId = prev.Id, ToId = h.Id, ProductId = "w" });
             prev = h;
         }
-        var chain = Assert.Single(DeviTronic.Chains(p));
+        var chain = Assert.Single(DaveyTronic.Chains(p));
         Assert.Equal(801, chain.TieCount);
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chain.Key, "1") }, BpdDelayUnit.Ms, "t");
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chain.Key, "1") }, BpdDelayUnit.Ms, "t");
         Assert.Empty(r.Errors);
         Assert.Contains(r.Warnings, w => w.Format.Contains("ties, more than"));
         Assert.Equal(802, r.Plan.Paths[0].DetonatorCount);
@@ -223,10 +223,10 @@ public class DeviTronicTests
         Tie(h1, h2, "w"); Tie(h3, h4, "w");   // the same type, not touching: two chains
         Tie(h2, h5, "x");                     // another type from hole 2: a chain of its own
         Tie(h4, h5, "w");                     // continues the second w chain
-        var chains = DeviTronic.Chains(p);
+        var chains = DaveyTronic.Chains(p);
         Assert.Equal(new[] { ("w", "1", "2", 1), ("w", "3", "5", 2), ("x", "2", "5", 1) },
             chains.Select(c => (c.TieTypeKey, c.FirstHole, c.LastHole, c.TieCount)));
-        var map = DeviTronic.HoleChains(p, chains);
+        var map = DaveyTronic.HoleChains(p, chains);
         Assert.Equal(chains[0].Key, map[h2.Id]);   // hole 2: the chain of the tie coming in
         Assert.Equal(chains[2].Key, map[h5.Id]);   // hole 5: the first tie drawn into it is 2 → 5 (type x)
     }
@@ -250,8 +250,8 @@ public class DeviTronicTests
         p.Entities.Add(new TieEntity { FromId = h1.Id, ToId = h2.Id, ProductId = "w" });
         p.Entities.Add(new TieEntity { FromId = h3.Id, ToId = h4.Id, ProductId = "x" });
         p.Coordinates.UtmZone = 29;
-        var chains = DeviTronic.Chains(p);
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t");
+        var chains = DaveyTronic.Chains(p);
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1") }, BpdDelayUnit.Ms, "t");
         Assert.Empty(r.Errors);
         var untied = Assert.Single(r.Warnings, w => w.Format.Contains("no chain of ESI ties"));
         Assert.Equal(new[] { h5.Id }, untied.Holes);
@@ -265,7 +265,7 @@ public class DeviTronicTests
     {
         var p = BlastProject.CreateNew();
         Ebs(p, "w", "x");
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest("chain:x", "1"), new BpdPathRequest("chain:x", "2") }, BpdDelayUnit.Ms, "t");
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest("chain:x", "1"), new BpdPathRequest("chain:x", "2") }, BpdDelayUnit.Ms, "t");
         Assert.NotEmpty(r.Errors);
     }
 
@@ -290,14 +290,14 @@ public class DeviTronicTests
         p.Entities.Add(new TieEntity { FromId = b1.Id, ToId = b2.Id, ProductId = "w" });
         p.Entities.Add(new TieEntity { FromId = a1.Id, ToId = a2.Id, ProductId = "w" });
         p.Entities.Add(new TieEntity { FromId = x1.Id, ToId = x2.Id, ProductId = "w" });
-        var chains = DeviTronic.Chains(p);
-        Assert.Equal(new[] { "B", "A", "C" }, DeviTronic.Lines(p, chains));
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1", "B"), new BpdPathRequest(chains[1].Key, "2", "A") }, BpdDelayUnit.Ms, "t");
+        var chains = DaveyTronic.Chains(p);
+        Assert.Equal(new[] { "B", "A", "C" }, DaveyTronic.Lines(p, chains));
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1", "B"), new BpdPathRequest(chains[1].Key, "2", "A") }, BpdDelayUnit.Ms, "t");
         Assert.Empty(r.Errors);
         Assert.Equal(new[] { "B", "A" }, r.Plan.Paths.Select(x => x.Id));
         Assert.Equal("B0001", r.Plan.Paths[0].Holes[0].HoleId);
         // without a line, or with one taken, the next free one
-        var d = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1", "A"), new BpdPathRequest(chains[1].Key, "2", "A") }, BpdDelayUnit.Ms, "t");
+        var d = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chains[0].Key, "1", "A"), new BpdPathRequest(chains[1].Key, "2", "A") }, BpdDelayUnit.Ms, "t");
         Assert.Equal(new[] { "A", "B" }, d.Plan.Paths.Select(x => x.Id));
     }
 
@@ -318,9 +318,9 @@ public class DeviTronicTests
         p.Entities.Add(new TieEntity { FromId = a.Id, ToId = b.Id, ProductId = edet.Id });
         p.Entities.Add(new TieEntity { FromId = c.Id, ToId = d.Id, ProductId = tube.Id });
         p.Entities.Add(new TieEntity { FromId = e.Id, ToId = f.Id, DelayMs = 17 });
-        var chain = Assert.Single(DeviTronic.Chains(p));
+        var chain = Assert.Single(DaveyTronic.Chains(p));
         Assert.Equal(edet.Id, chain.TieTypeKey);
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chain.Key, "1") }, BpdDelayUnit.Ms, "t");
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chain.Key, "1") }, BpdDelayUnit.Ms, "t");
         Assert.Empty(r.Errors);
         Assert.Equal(new[] { "h0", "h5" }, r.Plan.Paths[0].Holes.Select(h => h.Source!.Label));
         // the holes on the shock tube and the bare ties are left out, and named

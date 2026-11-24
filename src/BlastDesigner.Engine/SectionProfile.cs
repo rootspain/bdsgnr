@@ -35,10 +35,13 @@ public sealed record SectionProfile(IReadOnlyList<SectionHole> Holes, double? Sp
         foreach (var h in project.Holes)
         {
             if (hidden?.Contains(h.Id) == true) continue;
-            double ox = h.Collar.X - a.X, oy = h.Collar.Y - a.Y;
+            // the hole as it is drawn: from the design or from what was drilled (the stage buttons)
+            var basis = project.View.HoleBasis;
+            var collar = h.DrawnCollar(basis);
+            double ox = collar.X - a.X, oy = collar.Y - a.Y;
             var across = -ox * dy + oy * dx;
             if (Math.Abs(across) > halfWidth) continue;
-            holes.Add(new SectionHole(h, ox * dx + oy * dy, h.Collar, h.Toe, h.GradePoint.Z));
+            holes.Add(new SectionHole(h, ox * dx + oy * dy, collar, h.DrawnToe(basis), h.DrawnPointAtDepth(basis, Math.Max(0, h.Length - h.Subdrill)).Z));
         }
         holes.Sort((p, q) => p.Along.CompareTo(q.Along));
         return new SectionProfile(holes, holes.Count >= 2 ? holes[1].Along - holes[0].Along : null);

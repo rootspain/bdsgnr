@@ -9,7 +9,7 @@ namespace BlastDesigner.Tests;
 /// <summary>The Davey Tronic detonator, primers with times of their own and the charges they fire.</summary>
 public class PrimerTimingTests
 {
-    private const string DeviTronicId = "5f2d6f31-4a02-4514-a200-0a6d6490db5a";
+    private const string DaveyTronicId = "5f2d6f31-4a02-4514-a200-0a6d6490db5a";
 
     private static BlastProject Reopened(BlastProject p)
     {
@@ -20,22 +20,22 @@ public class PrimerTimingTests
     }
 
     [Fact]
-    public void DeviTronicIsInANewProjectAndInAnOldOneOnce_AndAHoleWithItIsElectronic()
+    public void DaveyTronicIsInANewProjectAndInAnOldOneOnce_AndAHoleWithItIsElectronic()
     {
         var fresh = BlastProject.CreateNew();
-        Assert.Single(fresh.Products, x => x.Id == DeviTronicId);
+        Assert.Single(fresh.Products, x => x.Id == DaveyTronicId);
         Assert.Contains(fresh.Catalogue.Families, f => f.Id == "31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2" && f.Name == "Davey Tronic");
 
-        // a file saved before DeviTronic was in the catalogue
+        // a file saved before Davey Tronic was in the catalogue
         var old = BlastProject.CreateNew();
-        old.Products.RemoveAll(x => x.Id == DeviTronicId);
+        old.Products.RemoveAll(x => x.Id == DaveyTronicId);
         var opened = Reopened(old);
-        var devi = Assert.Single(opened.Products, x => x.Id == DeviTronicId);
-        Assert.Equal(ProductKind.ElectronicDetonator, devi.Kind);
-        Assert.Single(Reopened(opened).Products, x => x.Id == DeviTronicId);
+        var davey = Assert.Single(opened.Products, x => x.Id == DaveyTronicId);
+        Assert.Equal(ProductKind.ElectronicDetonator, davey.Kind);
+        Assert.Single(Reopened(opened).Products, x => x.Id == DaveyTronicId);
 
         var hole = new Hole { Length = 10 };
-        hole.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = opened.Products.First(x => x.IsExplosive).Id, Primers = { new Primer { Depth = 9.5, DetonatorId = DeviTronicId } } });
+        hole.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = opened.Products.First(x => x.IsExplosive).Id, Primers = { new Primer { Depth = 9.5, DetonatorId = DaveyTronicId } } });
         Assert.True(Charging.HasElectronicDetonator(opened, hole));
     }
 
@@ -44,20 +44,20 @@ public class PrimerTimingTests
     {
         const string family = "31bbb3a1-1929-4dcd-b8aa-3d7b0325c3d2";
         var old = BlastProject.CreateNew();
-        var det = old.Products.Single(x => x.Id == DeviTronicId);
+        var det = old.Products.Single(x => x.Id == DaveyTronicId);
         det.Name = "DeviTronic";
         det.Family = "DeviTronic";
         old.Catalogue.Families.Single(f => f.Id == family).Name = "DeviTronic";
         var opened = Reopened(old);
-        var now = opened.Products.Single(x => x.Id == DeviTronicId);
+        var now = opened.Products.Single(x => x.Id == DaveyTronicId);
         Assert.Equal("Davey Tronic", now.Name);
         Assert.Equal("Davey Tronic", now.Family);
         Assert.Equal("Davey Tronic", opened.Catalogue.Families.Single(f => f.Id == family).Name);
-        Assert.DoesNotContain(opened.Products, x => x.Name == "DeviTronic" || x.Name == "Davey Tronic" && x.Id != DeviTronicId);
+        Assert.DoesNotContain(opened.Products, x => x.Name == "DeviTronic" || x.Name == "Davey Tronic" && x.Id != DaveyTronicId);
 
         var own = BlastProject.CreateNew();
-        own.Products.Single(x => x.Id == DeviTronicId).Name = "Мой детонатор";
-        Assert.Equal("Мой детонатор", Reopened(own).Products.Single(x => x.Id == DeviTronicId).Name);
+        own.Products.Single(x => x.Id == DaveyTronicId).Name = "Мой детонатор";
+        Assert.Equal("Мой детонатор", Reopened(own).Products.Single(x => x.Id == DaveyTronicId).Name);
     }
 
     private static string Explosive(BlastProject p) => p.Products.First(x => x.IsExplosive).Id;
@@ -69,9 +69,9 @@ public class PrimerTimingTests
     {
         var h = new Hole { Length = 12, Label = "1" };
         h.Decks.Add(new Deck { Top = 0, Bottom = 3, ProductId = Stemming(p) });
-        h.Decks.Add(new Deck { Top = 3, Bottom = 6, ProductId = Explosive(p), Primers = { new Primer { Depth = 5.5, DetonatorId = DeviTronicId, BoosterId = Booster(p) } } });
+        h.Decks.Add(new Deck { Top = 3, Bottom = 6, ProductId = Explosive(p), Primers = { new Primer { Depth = 5.5, DetonatorId = DaveyTronicId, BoosterId = Booster(p) } } });
         h.Decks.Add(new Deck { Top = 6, Bottom = 7, ProductId = Stemming(p) });
-        h.Decks.Add(new Deck { Top = 7, Bottom = 12, ProductId = Explosive(p), Primers = { new Primer { Depth = 11.5, DetonatorId = DeviTronicId, BoosterId = Booster(p) } } });
+        h.Decks.Add(new Deck { Top = 7, Bottom = 12, ProductId = Explosive(p), Primers = { new Primer { Depth = 11.5, DetonatorId = DaveyTronicId, BoosterId = Booster(p) } } });
         return h;
     }
 
@@ -96,7 +96,7 @@ public class PrimerTimingTests
         Charging.ApplyRule(p, loaded, copy);
         var primers = Charging.Primers(loaded).Select(x => x.Primer).ToList();
         Assert.Equal(3, primers.Count);
-        Assert.Contains(primers, x => x.OffsetMs == 25 && x.DetonatorId == DeviTronicId && Math.Abs(x.Depth - 5.5) < 1e-9);
+        Assert.Contains(primers, x => x.OffsetMs == 25 && x.DetonatorId == DaveyTronicId && Math.Abs(x.Depth - 5.5) < 1e-9);
         Assert.Contains(primers, x => x.DelayMs == 475 && Math.Abs(x.Depth - 8) < 1e-9);
     }
 
@@ -155,7 +155,7 @@ public class PrimerTimingTests
         var p = BlastProject.CreateNew();
         p.Electronic.IntraDeckDelayMs = 9;
         var h = TwoDecks(p);
-        var extra = new Primer { Depth = 8, DetonatorId = DeviTronicId };
+        var extra = new Primer { Depth = 8, DetonatorId = DaveyTronicId };
         h.Decks[3].Primers.Add(extra);
         var t = Charging.PrimerTimes(p, h, 50);
         Assert.Equal(50, t[h.Decks[3].Primers[0]]);
@@ -217,8 +217,8 @@ public class PrimerTimingTests
         Assert.Equal(h.PointAtDepth(9.5), EbsTimingLine.TimingPoint(p, h));
 
         // BPD: each detonator at the time of its primer
-        var chain = Assert.Single(DeviTronic.Chains(p));
-        var r = DeviTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chain.Key, "1") }, BpdDelayUnit.Ms, "t");
+        var chain = Assert.Single(DaveyTronic.Chains(p));
+        var r = DaveyTronic.Build(p, p.Holes, new[] { new BpdPathRequest(chain.Key, "1") }, BpdDelayUnit.Ms, "t");
         Assert.Empty(r.Errors);
         var first = r.Plan.Paths[0].Holes.First(x => x.Source == h);
         Assert.Equal(new long[] { 200, 225 }, first.Detonators.Select(d => d.Delay));
@@ -228,7 +228,7 @@ public class PrimerTimingTests
     private static Hole Ebs(BlastProject p, double x, double y)
     {
         var h = new Hole { Label = $"{x}/{y}", Collar = new Vec3(x, y, 100), Length = 10 };
-        h.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = Explosive(p), Primers = { new Primer { Depth = 9.5, DetonatorId = DeviTronicId } } });
+        h.Decks.Add(new Deck { Top = 3, Bottom = 10, ProductId = Explosive(p), Primers = { new Primer { Depth = 9.5, DetonatorId = DaveyTronicId } } });
         return h;
     }
 
@@ -309,7 +309,7 @@ public class PrimerTimingTests
         // the in-hole delay of the labels and the exports takes it too
         Assert.Equal(det.DelayMs + 5, h.InholeDelayMs, 9);
         // an electronic primer does not take it
-        Assert.Equal(0, Charging.PropagationDelay(p, new Primer { Depth = 10, DetonatorId = DeviTronicId }));
+        Assert.Equal(0, Charging.PropagationDelay(p, new Primer { Depth = 10, DetonatorId = DaveyTronicId }));
         // a file before it reads 0
         det.PropagationMsPerM = 0;
         Timing.Solve(p);

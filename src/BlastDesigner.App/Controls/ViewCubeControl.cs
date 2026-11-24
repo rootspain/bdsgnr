@@ -12,7 +12,7 @@ using BlastDesigner.Rendering;
 namespace BlastDesigner.App.Controls;
 
 /// <summary>
-/// The view cube under the Plan and 3D buttons: a see-through cube that turns with the view's azimuth. A click on a visible
+/// The view cube under the 2D and 3D buttons: a see-through cube that turns with the view's azimuth. A click on a visible
 /// face, edge or corner looks at the blast from there.
 /// </summary>
 public sealed class ViewCubeControl : Control

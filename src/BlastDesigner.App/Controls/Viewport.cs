@@ -283,7 +283,7 @@ public sealed class Viewport : Control
             if (!includeLocked && accept == null && ViewKinds.Locked(project.View, e)) continue;
             if (accept != null && !accept(e)) continue;
             if (section != null && !PlanRenderer.InSlice(section, Camera, e)) continue;
-            var d = section != null && e is Hole sh ? SegmentsDistance(new[] { sh.Collar, sh.Toe }, false, sx, sy)
+            var d = section != null && e is Hole sh ? SegmentsDistance(sh.DrawnTrack(project.View.HoleBasis), false, sx, sy)
                 : section != null && e is SurfaceEntity ss ? PlanRenderer.SurfaceCut(Camera, ss).Select(c => SegmentsDistance(new[] { c.A, c.B }, false, sx, sy)).DefaultIfEmpty(double.MaxValue).Min()
                 : ScreenDistance(e, sx, sy, clip, selection);
             if (e is Hole) d -= 2;
@@ -372,7 +372,8 @@ public sealed class Viewport : Control
         {
             case Hole h:
             {
-                var (x, y) = Camera.ToScreen(h.Collar);
+                // where it is drawn: at the design collar or at the surveyed one (the stage buttons)
+                var (x, y) = Camera.ToScreen(h.DrawnCollar(Project?.View.HoleBasis ?? HoleBasis.Design));
                 return Math.Max(0, Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy)) - h.RadiusM * Camera.Scale);
             }
             case PointEntity pt:
@@ -483,13 +484,13 @@ public sealed class Viewport : Control
             {
                 // a hole of a section: a box round its collar takes the whole hole (the number over it is drawn there);
                 // a crossing also takes it by its toe or its shaft running through the box
-                var (cx, cy) = Camera.ToScreen(sh.Collar);
-                var (tx, ty) = Camera.ToScreen(sh.Toe);
+                var (cx, cy) = Camera.ToScreen(sh.DrawnCollar(project.View.HoleBasis));
+                var (tx, ty) = Camera.ToScreen(sh.DrawnToe(project.View.HoleBasis));
                 if (shape.Contains(cx, cy) || (crossing && (shape.Contains(tx, ty) || shape.CutsEdge(cx, cy, tx, ty)))) yield return e;
                 continue;
             }
             var verts = section != null && e is SurfaceEntity ss ? PlanRenderer.SurfaceCut(Camera, ss).SelectMany(c => new[] { c.A, c.B }).ToArray()
-                : e is Hole hh ? new[] { hh.Collar } : e is TieEntity t ? new[] { t.FromPos, t.ToPos }
+                : e is Hole hh ? new[] { hh.DrawnCollar(project.View.HoleBasis) } : e is TieEntity t ? new[] { t.FromPos, t.ToPos }
                 : clip != null && e is PolylineEntity pl ? clip.Pieces(pl.Points, pl.Closed).SelectMany(x => x).ToArray()
                 : clip != null && e is SurfaceEntity se ? PlanRenderer.CutSurface(clip, se)?.Vertices.ToArray() ?? Array.Empty<Vec3>()
                 // a dimension by what is drawn of it: its measured points and the ends of its dimension line
@@ -541,7 +542,7 @@ public sealed class Viewport : Control
             // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
             if (e is Hole && !project.View.ShowCollars) continue;
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
-            var verts = e is Hole h ? new[] { h.Collar } : e is BlockEntity || clip == null ? e.GetVertices() : e.GetVertices().Where(clip.Contains);
+            var verts = e is Hole h ? new[] { h.DrawnCollar(project.View.HoleBasis) } : e is BlockEntity || clip == null ? e.GetVertices() : e.GetVertices().Where(clip.Contains);
             foreach (var v in verts)
             {
                 var (x, y) = Camera.ToScreen(v);
@@ -572,7 +573,7 @@ public sealed class Viewport : Control
             // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
             if (e is Hole && !project.View.ShowCollars) continue;
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
-            var verts = e is Hole h ? new[] { h.Collar } : e is BlockEntity || clip == null ? e.GetVertices() : e.GetVertices().Where(clip.Contains);
+            var verts = e is Hole h ? new[] { h.DrawnCollar(project.View.HoleBasis) } : e is BlockEntity || clip == null ? e.GetVertices() : e.GetVertices().Where(clip.Contains);
             foreach (var v in verts)
             {
                 var (x, y) = Camera.ToScreen(v);

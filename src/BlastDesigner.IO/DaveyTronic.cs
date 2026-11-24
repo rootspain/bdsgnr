@@ -85,11 +85,11 @@ public sealed record BpdBuildResult(BpdPlan Plan, List<BpdMessage> Errors, List<
 
 /// <summary>
 /// The HEADER of a BPD file and the UTM zone of its lines (DETZONE), as set in the export window: written as given (the
-/// displayed name padded with '_' to 8), each checked by <see cref="DeviTronic.Build"/>.
+/// displayed name padded with '_' to 8), each checked by <see cref="DaveyTronic.Build"/>.
 /// </summary>
-/// <param name="FullName">FULL_NAME: Latin letters, digits and '_', up to <see cref="DeviTronic.FullNameLength"/>.</param>
-/// <param name="DisplayedName">DISPLAYED_NAME: the same, up to <see cref="DeviTronic.NameLength"/>.</param>
-/// <param name="SourceFile">SOURCE_FILE: printable ASCII, up to <see cref="DeviTronic.SourceLength"/>.</param>
+/// <param name="FullName">FULL_NAME: Latin letters, digits and '_', up to <see cref="DaveyTronic.FullNameLength"/>.</param>
+/// <param name="DisplayedName">DISPLAYED_NAME: the same, up to <see cref="DaveyTronic.NameLength"/>.</param>
+/// <param name="SourceFile">SOURCE_FILE: printable ASCII, up to <see cref="DaveyTronic.SourceLength"/>.</param>
 /// <param name="UtmZone">UTM_ZONE_NUMBER, 1–60.</param>
 /// <param name="Southern">UTM_ZONE_LETTER: S for the southern hemisphere, N for the northern.</param>
 public sealed record BpdHeader(DateTime Created, string FullName, string DisplayedName, string SourceFile, int UtmZone, bool Southern);
@@ -99,7 +99,7 @@ public sealed record BpdHeader(DateTime Created, string FullName, string Display
 /// one PATH per programming unit, its detonation zone in UTM and the holes with their detonators. The CRC is checked by the
 /// programming unit, so the text is written byte for byte in the layout of the reference file (ASCII, CRLF, fixed indents).
 /// </summary>
-public static class DeviTronic
+public static class DaveyTronic
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 

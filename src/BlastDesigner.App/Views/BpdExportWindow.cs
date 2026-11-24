@@ -21,13 +21,13 @@ public sealed record BpdExportChoice(BpdDelayUnit Unit, BpdLevelOrder Levels, Li
 /// "Davey Tronic (.BPD)", top to bottom:
 /// <list type="bullet">
 /// <item>the header of the file (HEADER): FULL_NAME (up to 30) and DISPLAYED_NAME (up to 8, padded with '_'), taken as typed by
-/// <see cref="DeviTronic.ToFileName"/> (Latin letters and digits, Cyrillic in Latin, the rest one '_'), kept in the project;
+/// <see cref="DaveyTronic.ToFileName"/> (Latin letters and digits, Cyrillic in Latin, the rest one '_'), kept in the project;
 /// the date and the time (YYYY/MM/DD, HH24:MI:SS), the source, and the UTM zone of the lines (for this file only: the site
 /// keeps its own);</item>
 /// <item>which detonator of a hole is LEVEL 1;</item>
 /// <item>one row per chain of EBS ties, by the letter of its route numbers: its PU serial number, its holes and the
 /// electronic detonators it gives the file; opened, the frame of the line (DETZONE). A chain of more than
-/// <see cref="DeviTronic.MaxTiesPerPath"/> ties is marked with a yellow warning sign;</item>
+/// <see cref="DaveyTronic.MaxTiesPerPath"/> ties is marked with a yellow warning sign;</item>
 /// <item>the lines and the detonators the file will have.</item>
 /// </list>
 /// Errors show as the fields are filled; the file is written only without them.
@@ -94,27 +94,27 @@ public static class BpdExportWindow
 
     public static async Task<BpdExportChoice?> Show(BlastProject project, IReadOnlyCollection<Hole> holes)
     {
-        var all = DeviTronic.Chains(project);
+        var all = DaveyTronic.Chains(project);
         if (all.Count == 0)
         {
-            await Dialogs.Info(Loc.T("There are no ESI ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators."), Loc.T("DaveyTronic (.BPD)"));
+            await Dialogs.Info(Loc.T("There are no ESI ties in the plan: the lines (PATH) are made by chains of ties of electronic detonators."), Loc.T("Davey Tronic (.BPD)"));
             return null;
         }
-        var holeChains = DeviTronic.HoleChains(project, all);
+        var holeChains = DaveyTronic.HoleChains(project, all);
         // the line of a chain is the letter of its route numbers; the rows go by the letters
-        var lineOf = DeviTronic.Lines(project, all);
+        var lineOf = DaveyTronic.Lines(project, all);
         var order = Enumerable.Range(0, all.Count).OrderBy(i => lineOf[i], StringComparer.Ordinal).ToList();
         var types = order.Select(i => all[i]).ToList();
         var lines = order.Select(i => lineOf[i]).ToList();
         // what each line gives the file, built as the file is
-        var preview = DeviTronic.Preview(project, holes, types, lines);
+        var preview = DaveyTronic.Preview(project, holes, types, lines);
 
         // ---- the header of the file
         var saved = project.BpdExport;
-        var fullName = Box(saved is { FullName.Length: > 0 } ? saved.FullName : DeviTronic.DefaultFullName(project), "bpdFullName", DeviTronic.FullNameLength);
-        var displayed = Box(saved is { DisplayedName.Length: > 0 } ? saved.DisplayedName : DeviTronic.DefaultDisplayedName(fullName.Text!), "bpdDisplayedName", DeviTronic.NameLength);
+        var fullName = Box(saved is { FullName.Length: > 0 } ? saved.FullName : DaveyTronic.DefaultFullName(project), "bpdFullName", DaveyTronic.FullNameLength);
+        var displayed = Box(saved is { DisplayedName.Length: > 0 } ? saved.DisplayedName : DaveyTronic.DefaultDisplayedName(fullName.Text!), "bpdDisplayedName", DaveyTronic.NameLength);
         // the displayed name follows the full one while it is the one the window put there (not typed in itself)
-        var auto = DeviTronic.DefaultDisplayedName(fullName.Text!);
+        var auto = DaveyTronic.DefaultDisplayedName(fullName.Text!);
         var fullCount = new TextBlock { FontSize = 11, FontFamily = Look.Mono, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
         var displayedCount = new TextBlock { FontSize = 11, FontFamily = Look.Mono, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
         fullName.InnerRightContent = fullCount;
@@ -138,7 +138,7 @@ public static class BpdExportWindow
             time.Text = t.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
         };
         var version = typeof(BpdExportWindow).Assembly.GetName().Version;
-        var source = Box("Blast Designer " + (version == null ? "6" : $"{version.Major}.{version.Minor}.{version.Build}"), "bpdSource", DeviTronic.SourceLength);
+        var source = Box("Blast Designer " + (version == null ? "6" : $"{version.Major}.{version.Minor}.{version.Build}"), "bpdSource", DaveyTronic.SourceLength);
         source.FontFamily = FontFamily.Default;
 
         // the UTM zone of the lines: for this file only
@@ -168,7 +168,7 @@ public static class BpdExportWindow
         var displayedRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 8, Children = { displayed } };
         Grid.SetColumn(shownBox, 1);
         displayedRow.Children.Add(shownBox);
-        Put(Stack(Caption("Full name", "FULL_NAME"), fullName, Hint(Loc.F("Latin letters, digits and _, up to {0}; Cyrillic in Latin letters", DeviTronic.FullNameLength))), 0, 0);
+        Put(Stack(Caption("Full name", "FULL_NAME"), fullName, Hint(Loc.F("Latin letters, digits and _, up to {0}; Cyrillic in Latin letters", DaveyTronic.FullNameLength))), 0, 0);
         Put(Stack(Caption("Displayed name", "DISPLAYED_NAME"), displayedRow, Hint(Loc.T("8 characters on the PU, a shorter name is padded with _"))), 0, 1);
         Put(Stack(Caption("Date and time", "DATE · TIME"), Ui.Row(8, date, time, nowButton),
             Ui.Row(8, new TextBlock { Text = Loc.T("Date") + ": YYYY/MM/DD", Width = 150, FontSize = 11.5, Foreground = Look.Faint }, new TextBlock { Text = Loc.T("Time") + ": HH24:MI:SS", FontSize = 11.5, Foreground = Look.Faint })), 1, 0);
@@ -263,8 +263,8 @@ public static class BpdExportWindow
             var detCount = new TextBlock { Text = dets.ToString(CultureInfo.CurrentCulture), FontFamily = Look.Mono, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Name = "bpdDets" + i };
             var warn = WarningSign();
             warn.Name = "bpdWarn" + i;
-            warn.IsVisible = chain.TieCount > DeviTronic.MaxTiesPerPath;
-            ToolTip.SetTip(warn, Loc.F("{0} ties in the chain: more than {1}.", chain.TieCount, DeviTronic.MaxTiesPerPath));
+            warn.IsVisible = chain.TieCount > DaveyTronic.MaxTiesPerPath;
+            ToolTip.SetTip(warn, Loc.F("{0} ties in the chain: more than {1}.", chain.TieCount, DaveyTronic.MaxTiesPerPath));
             Cell(opener, row, 0);
             Cell(id, row, 1);
             Cell(serial, row, 2);
@@ -325,13 +325,13 @@ public static class BpdExportWindow
                 busy = false;
             };
         }
-        Rule(fullName, t => DeviTronic.ToFileName(t, DeviTronic.FullNameLength));
-        Rule(displayed, t => DeviTronic.ToFileName(t, DeviTronic.NameLength));
-        Rule(source, t => new string(t.Where(c => c is >= ' ' and <= '~').Take(DeviTronic.SourceLength).ToArray()));
+        Rule(fullName, t => DaveyTronic.ToFileName(t, DaveyTronic.FullNameLength));
+        Rule(displayed, t => DaveyTronic.ToFileName(t, DaveyTronic.NameLength));
+        Rule(source, t => new string(t.Where(c => c is >= ' ' and <= '~').Take(DaveyTronic.SourceLength).ToArray()));
         fullName.TextChanged += (_, _) =>
         {
             if (busy || displayed.Text != auto) return;
-            auto = DeviTronic.DefaultDisplayedName(fullName.Text ?? "");
+            auto = DaveyTronic.DefaultDisplayedName(fullName.Text ?? "");
             busy = true;
             displayed.Text = auto;
             busy = false;
@@ -371,9 +371,9 @@ public static class BpdExportWindow
         // the counters, the displayed name as shown, the zone; and what is wrong, at once
         describe = () =>
         {
-            fullCount.Text = $"{(fullName.Text ?? "").Length}/{DeviTronic.FullNameLength}";
-            displayedCount.Text = $"{(displayed.Text ?? "").Length}/{DeviTronic.NameLength}";
-            shown.Text = (displayed.Text ?? "").Length == 0 ? "" : DeviTronic.PadDisplayed(displayed.Text!);
+            fullCount.Text = $"{(fullName.Text ?? "").Length}/{DaveyTronic.FullNameLength}";
+            displayedCount.Text = $"{(displayed.Text ?? "").Length}/{DaveyTronic.NameLength}";
+            shown.Text = (displayed.Text ?? "").Length == 0 ? "" : DaveyTronic.PadDisplayed(displayed.Text!);
             zoneShown.Text = zone.Value is decimal z ? $"UTM {z:0}{(southern ? "S" : "N")}" : "";
             Validate();
         };
@@ -381,7 +381,7 @@ public static class BpdExportWindow
         zone.ValueChanged += (_, _) => describe();
         describe();
 
-        if (!await Dialogs.Custom("DaveyTronic (.BPD)", content, Validate, serialBoxes.FirstOrDefault(), width: 900, okText: Loc.T("Write the file…"))) return null;
+        if (!await Dialogs.Custom("Davey Tronic (.BPD)", content, Validate, serialBoxes.FirstOrDefault(), width: 900, okText: Loc.T("Write the file…"))) return null;
 
         var paths = new List<BpdPathRequest>();
         for (int i = 0; i < types.Count; i++)

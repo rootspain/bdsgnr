@@ -498,18 +498,18 @@ public sealed class MainWindow : Window
 
     private ViewCubeControl? _viewCube;
     private Button? _eye;
-    /// <summary>The view cube under the Plan and 3D buttons; for tests.</summary>
+    /// <summary>The view cube under the 2D and 3D buttons; for tests.</summary>
     public ViewCubeControl? ViewCube => _viewCube;
 
     private Control BuildPlanOverlay()
     {
-        foreach (var (label, action) in new (string, Action)[] { ("Plan", _vm.PlanView), ("3D", _vm.View3D) })
+        foreach (var (label, action) in new (string, Action)[] { ("2D", _vm.PlanView), ("3D", _vm.View3D) })
         {
             var b = new Button { Content = Loc.Ui(label), Padding = new Thickness(10, 4), CornerRadius = new CornerRadius(6), Background = Brushes.Transparent, BorderThickness = new Thickness(0), Foreground = Look.Muted };
             b.Click += (_, _) => { UsageLog.Track(UsageLog.Button, label, "view"); Ui.Safe(action); RefreshChips(); };
             _modes.Children.Add(b);
         }
-        var modes = new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(2), Child = _modes };
+        var modes = new Border { Background = Look.ChipGround, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8), Padding = new Thickness(2), Child = _modes };
         var compass = new Button
         {
             Content = Look.Icon("north", 18, Look.Accent),
@@ -528,7 +528,8 @@ public sealed class MainWindow : Window
         // turns the camera to the north; the blast direction is set in the pattern panel and by its command
         ToolTip.SetTip(compass, Loc.Ui("Turn to north"));
         compass.Click += (_, _) => { UsageLog.Track(UsageLog.Button, "Turn to north", "view"); Ui.Safe(_vm.ResetOrientation); };
-        var top = new DockPanel { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12) };
+        // 6 px from the ribbon and the tool rail, 12 from the right edge (the Turn to north button)
+        var top = new DockPanel { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(6, 6, 12, 12) };
         DockPanel.SetDock(compass, Dock.Right);
         top.Children.Add(compass);
         _viewCube = new ViewCubeControl(_viewport, from => { _vm.ViewFrom(from); RefreshChips(); }) { Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
@@ -540,7 +541,7 @@ public sealed class MainWindow : Window
             Width = 36, Height = 34,
             Padding = new Thickness(0),
             CornerRadius = new CornerRadius(8),
-            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1),
+            Background = Look.ChipGround, BorderBrush = Look.Line, BorderThickness = new Thickness(1),
             HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top
         };
@@ -562,6 +563,8 @@ public sealed class MainWindow : Window
         void Chip(string label, bool on, Action toggle, string tip)
         {
             var b = Ui.Chip(Loc.Ui(label), () => { UsageLog.Track(UsageLog.Button, label, "chip"); toggle(); RefreshChips(); }, on, Loc.Ui(tip));
+            // over the plan a chip off lets the plan show through
+            if (!on) b.Background = Look.ChipGround;
             b.IsEnabled = p != null;
             _chips.Children.Add(b);
         }
@@ -573,6 +576,8 @@ public sealed class MainWindow : Window
             if (MainViewModel.FindToggle(id) is not { Pinnable: true } t) continue;
             Chip(t.Label, v != null && t.Get(v), () => _vm.ToggleVisibility(t), t.Tip);
         }
+        // the stage buttons: Drilling and Loading, each plan or fact (right click: their layers, states and hole data)
+        foreach (var c in StageButtons.Build(_vm, RefreshChips)) _chips.Children.Add(c);
         if (_vm.HasAnalysisDisplay)
         {
             var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { _vm.ClearAnalysis(); RefreshChips(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan"));
@@ -582,7 +587,7 @@ public sealed class MainWindow : Window
         {
             var on = v?.FadeHidden == true;
             _eye.IsEnabled = p != null;
-            _eye.Background = on ? Look.AccentSoft : Look.Panel;
+            _eye.Background = on ? Look.AccentSoft : Look.ChipGround;
             _eye.BorderBrush = on ? Look.Accent : Look.Line;
             _eye.Content = Look.Icon("eye", 16, on ? Look.Accent : Look.Muted);
         }
@@ -690,6 +695,9 @@ public sealed class MainWindow : Window
         };
         else if (m == KeyModifiers.Shift && e.Key == Key.Z && !typing) a = _vm.UndoZoom;
         else if (m == KeyModifiers.Shift && e.Key == Key.H && !typing) a = () => { _vm.ToggleFadeHidden(); RefreshChips(); };
+        // the stage buttons: F8 drilling plan/fact, Shift+F8 loading plan/fact
+        else if (m is KeyModifiers.None or KeyModifiers.Shift && e.Key == Key.F8 && !typing)
+            a = () => { _vm.CycleStage(m == KeyModifiers.Shift ? WorkStage.Loading : WorkStage.Drilling); RefreshChips(); };
         // the plus of the main keys comes with Shift
         else if (m is KeyModifiers.None or KeyModifiers.Shift && !typing && _vm.ActiveTool is TieTool && e.Key is Key.Add or Key.OemPlus or Key.Subtract or Key.OemMinus)
             a = () => StepTargetRadius(e.Key is Key.Add or Key.OemPlus ? 1 : -1);

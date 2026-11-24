@@ -136,6 +136,9 @@ public static class Ui
         b.Background = active ? Look.AccentSoft : Look.Panel;
         b.BorderBrush = active ? Look.Accent : Look.Line;
         b.Foreground = active ? Look.Accent : Look.Muted;
+        // under the mouse the chip keeps saying whether it is on (App.axaml: Button.chip and Button.chip.on)
+        b.Classes.Set("chip", true);
+        b.Classes.Set("on", active);
     }
 
     /// <summary>
@@ -1110,10 +1113,10 @@ public sealed class Inspector : DockPanel
         (_labelHost.Parent as Panel)?.Children.Remove(_labelHost);
         holes.Children.Add(_labelHost);
         BuildLabelColumns();
-        void Filter(Panel into, string text, bool shown, Action toggle)
+        void Filter(Panel into, string text, bool shown, Action toggle, string? tip = null)
         {
             var cb = new CheckBox { Content = text, IsChecked = shown, MinHeight = 0 };
-            ToolTip.SetTip(cb, Loc.Ui("Shows or hides the holes of this kind. Hidden holes cannot be selected but count in the calculations."));
+            ToolTip.SetTip(cb, tip ?? Loc.Ui("Shows or hides the holes of this kind. Hidden holes cannot be selected but count in the calculations."));
             cb.IsCheckedChanged += (_, _) => toggle();
             into.Children.Add(cb);
         }
@@ -1141,7 +1144,12 @@ public sealed class Inspector : DockPanel
         foreach (var st in Enum.GetValues<HoleState>())
         {
             var state = st;
-            Filter(holes, $"{Loc.Enum(state)} ({p.Holes.Count(h => h.State == state)})", !p.View.HiddenStates.Contains(state), () => _vm.ToggleState(state));
+            // the states the stage buttons on show say which button they come from
+            var owners = _vm.StageOwnersOfState(state);
+            var byStages = StageViews.Enabled(p).Any(v => v.States.Count > 0);
+            var tip = owners.Count > 0 ? Loc.F(Loc.Ui("From {0}"), string.Join(", ", owners.Select(o => "«" + o + "»")))
+                : byStages ? Loc.Ui("Hidden: no stage button on shows this state") : null;
+            Filter(holes, $"{Loc.Enum(state)} ({p.Holes.Count(h => h.State == state)})", !p.View.HiddenStates.Contains(state), () => _vm.ToggleState(state), tip);
         }
         var symbols = new Expander
         {
@@ -1269,23 +1277,23 @@ public sealed class Inspector : DockPanel
     /// <summary>Name and tip of each hole label: where it shows, what it is for and which calculations use the same data.</summary>
     private static readonly Dictionary<HoleLabel, (string Name, string Tip)> LabelInfo = new()
     {
-        [HoleLabel.Number] = ("Hole number", "Plan, 3D and printed plans: the hole number, in blue. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it."),
-        [HoleLabel.Length] = ("Length", "Plan and 3D: \"L\" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length."),
-        [HoleLabel.Diameter] = ("Diameter", "Plan and 3D: \"Ø\" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter."),
-        [HoleLabel.Elevation] = ("Elevation", "Plan and 3D: \"Z\", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast."),
-        [HoleLabel.Angle] = ("Angle", "Plan and 3D: \"α\", the angle of the hole as Program settings ▸ Units count it (from vertical or from horizontal). Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check."),
-        [HoleLabel.Bearing] = ("Bearing", "Plan and 3D: \"Az\", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check."),
-        [HoleLabel.Temperature] = ("Temperature", "Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations."),
-        [HoleLabel.ExplosiveMass] = ("Explosive mass", "Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration."),
-        [HoleLabel.DeckMasses] = ("Deck masses", "Plan and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay."),
-        [HoleLabel.HoleOrder] = ("Hole order", "Plan and 3D: the firing order of the hole, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis."),
-        [HoleLabel.DeckSequence] = ("Deck sequence", "Plan and 3D: the firing order of the decks in the hole, top to bottom (\"2-1\" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes."),
-        [HoleLabel.InholeDelay] = ("In-hole delay", "Plan and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time."),
-        [HoleLabel.SurfaceTime] = ("Surface time", "Plan and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time."),
-        [HoleLabel.RouteNumber] = ("Route no.", "Plan and 3D: the letter of the chain (A the first, B the second…) and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted in the middle of a chain makes the holes after it a chain of the next letter, numbered from 1."),
-        [HoleLabel.DetonatorId] = ("Detonator ID", "Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator."),
-        [HoleLabel.HoleTime] = ("Hole time", "Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it."),
-        [HoleLabel.Type] = ("Hole type", "Plan and 3D: \"T\" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.")
+        [HoleLabel.Number] = ("Hole number", "2D, 3D and printed plans: the hole number, in blue. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it."),
+        [HoleLabel.Length] = ("Length", "2D and 3D: \"L\" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length."),
+        [HoleLabel.Diameter] = ("Diameter", "2D and 3D: \"Ø\" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter."),
+        [HoleLabel.Elevation] = ("Elevation", "2D and 3D: \"Z\", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast."),
+        [HoleLabel.Angle] = ("Angle", "2D and 3D: \"α\", the angle of the hole as Program settings ▸ Units count it (from vertical or from horizontal). Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check."),
+        [HoleLabel.Bearing] = ("Bearing", "2D and 3D: \"Az\", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check."),
+        [HoleLabel.Temperature] = ("Temperature", "2D and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations."),
+        [HoleLabel.ExplosiveMass] = ("Explosive mass", "2D and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration."),
+        [HoleLabel.DeckMasses] = ("Deck masses", "2D and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay."),
+        [HoleLabel.HoleOrder] = ("Hole order", "2D and 3D: the firing order of the hole, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis."),
+        [HoleLabel.DeckSequence] = ("Deck sequence", "2D and 3D: the firing order of the decks in the hole, top to bottom (\"2-1\" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes."),
+        [HoleLabel.InholeDelay] = ("In-hole delay", "2D and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time."),
+        [HoleLabel.SurfaceTime] = ("Surface time", "2D and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time."),
+        [HoleLabel.RouteNumber] = ("Route no.", "2D and 3D: the letter of the chain (A the first, B the second…) and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted in the middle of a chain makes the holes after it a chain of the next letter, numbered from 1."),
+        [HoleLabel.DetonatorId] = ("Detonator ID", "2D and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator."),
+        [HoleLabel.HoleTime] = ("Hole time", "2D and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it."),
+        [HoleLabel.Type] = ("Hole type", "2D and 3D: \"T\" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.")
     };
 
     // ---- hole labels: two sides of the collar, each in the order it is drawn -------------------------------------

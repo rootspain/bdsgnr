@@ -24,6 +24,13 @@ public static class Look
     public static readonly SolidColorBrush Faint = Brush(0xFF8A929D);
     public static readonly SolidColorBrush Accent = Brush(0xFFF0A63A);
     public static readonly SolidColorBrush AccentSoft = Brush(0x29F0A63A);
+    /// <summary>
+    /// The ground of the chips over the plan (chips off, stage frames, 2D | 3D, the eye): the panel at half, so the
+    /// plan shows through. No blur. The panels keep <see cref="Panel"/>.
+    /// </summary>
+    public static readonly SolidColorBrush ChipGround = Brush(0x801B1E23);
+    /// <summary>A switched on chip under the mouse: the soft accent, a step stronger.</summary>
+    public static readonly SolidColorBrush AccentSoftHover = Brush(0x45F0A63A);
     public static readonly SolidColorBrush AccentHover = Brush(0xFFFFB956);
     public static readonly SolidColorBrush AccentPressed = Brush(0xFFE0962A);
     public static readonly SolidColorBrush Blue = Brush(0xFF4C9BFF);
@@ -57,6 +64,9 @@ public static class Look
         var a = Color.FromUInt32(accent | 0xFF000000);
         Accent.Color = a;
         AccentSoft.Color = Color.FromArgb(light ? (byte)0x22 : (byte)0x29, a.R, a.G, a.B);
+        var panel = Color.FromUInt32(c[1]);
+        ChipGround.Color = Color.FromArgb(0x80, panel.R, panel.G, panel.B);
+        AccentSoftHover.Color = Color.FromArgb(light ? (byte)0x3C : (byte)0x45, a.R, a.G, a.B);
         AccentHover.Color = Mix(a, Colors.White, 0.18);
         AccentPressed.Color = Mix(a, Colors.Black, 0.12);
         OnAccent.Color = Luminance(a) > 0.5 ? Color.FromUInt32(0xFF15181C) : Colors.White;

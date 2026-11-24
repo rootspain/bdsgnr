@@ -393,7 +393,6 @@ Exported to {0}	Экспортировано в {0}
 Extra detonator	Лишний детонатор
 Extra hole	Лишняя скважина
 Face angle	Угол откоса
-Faces to surfaces	Грани в поверхности
 Factor applied to explosive mass (1 = nominal)	Коэффициент к массе ВВ (1 — номинал)
 File	Файл
 File closed	Файл закрыт
@@ -1207,7 +1206,6 @@ Show quantities	Ведомость
 Show pattern	Параметры сетки
 Corner	Угол экрана
 Min point distance	Мин. расстояние между точками
-Faces to surfaces	Грани в поверхности
 Import text	Импорт текста
 Edge offset	Отступ от контура
 Label prefix	Префикс номера
@@ -2530,7 +2528,6 @@ Drawing layers	Слои чертежа
 Layers switched off or frozen in the drawing	Слои, выключенные или замороженные в чертеже
 Lines at elevation 0 (grid, design outline, annotation) go to layers "name (2D)" and stay out of the survey	Линии на высоте 0 (сетка, проектный контур, подписи) уйдут в слои «имя (2D)» и не смешаются со съёмкой
 Objects	Объекты
-3D faces of a layer become one surface	3D-грани слоя собираются в одну поверхность
 Labels and multi-line text, without the formatting codes	Подписи и многострочный текст, без кодов форматирования
 Line vertices closer than this are dropped; 0 keeps them all	Вершины линий ближе этого расстояния отбрасываются; 0 — оставить все
 m	м
@@ -2664,30 +2661,30 @@ ui:Outside the usual range {0}–{1}	Вне обычного диапазона 
 ui:Linked with f and the rock mass	Связан с f и описанием массива
 ui:f does not enter A while E is below 50 GPa: A is kept as typed	При E ниже 50 ГПа f не входит в A: A оставлен как введён
 ui:With this rock mass f would be {0}: A is kept as typed	При таком массиве f было бы {0}: A оставлен как введён
-ui:Plan, 3D and printed plans: the hole number, in blue. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it.	План, 3D и печатный план: номер скважины, синим. По нему скважины различают в таблице, листах заряжания, отчётах и отчёте регистрации ЭДС, по нему же ищут скважину.
-ui:Plan and 3D: "L" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length.	План и 3D: «L» у устья — замеренная длина, если есть замер, иначе проектная. Используется в расчёте колонки заряда и забойки, в метрах бурения и стоимости бурения, при подборе правил заряжания по длине.
-ui:Plan and 3D: "Ø" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter.	План и 3D: «Ø» в мм у устья. Определяет погонную массу и массу ВВ, минимальную забойку (в диаметрах), прогноз дробления и подбор правил заряжания по диаметру.
-ui:Plan and 3D: "Z", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast.	План и 3D: «Z» — отметка устья. Используется при расчёте длины до подошвы уступа в проекте, на разрезах и в объёме блока.
-ui:Plan and 3D: "α", the angle of the hole as Program settings ▸ Units count it (from vertical or from horizontal). Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check.	План и 3D: «α» — угол скважины, как его отсчитывают Настройки программы ▸ Единицы (от вертикали или от горизонтали). Определяет положение забоя; используется для высоты уступа в прогнозе дробления, разлёте и проверке допусков бурения.
-ui:Plan and 3D: "Az", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check.	План и 3D: «Az» — азимут наклона по часовой от севера. Определяет положение забоя наклонной скважины; используется в проверке допусков бурения.
-ui:Plan and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations.	План и 3D: замеренная температура в °C, только у скважин с замером. Нужна, чтобы видеть горячие или реакционные породы перед заряжанием; в расчётах не участвует.
-ui:Plan and 3D: a loaded hole shows its charge column, the decks in their product colours; an empty one the line from collar to toe with a dot at the toe. Off: collars only. Display only; the same decks give the explosive mass, quantities, costs and the vibration charge.	План и 3D: у заряженной скважины — колонка заряда, интервалы цветами продуктов; у незаряженной — линия от устья до забоя с точкой в забое. Выключено — только устья. Только отображение; по этим же интервалам считаются масса ВВ, ведомость, стоимость и заряд для сейсмики.
-ui:Plan and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only.	План и 3D: кружок устья, заливка по состоянию скважины (проектная — пустая, пробуренная — бледная, заряженная — сплошная). Выключено — устья не видны и у выделенных скважин, выбирать скважины по-прежнему можно. Только отображение.
-ui:Plan and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check.	План и 3D: толстая бирюзовая линия до замеренной глубины с отметкой на конце, только у замеренных скважин. Замеренная длина заменяет проектную в заряжании, ведомости и проверке допусков.
-ui:Plan and 3D: the surveyed bore track, dashed orange, only for surveyed holes. Used by the drilling tolerance check (toe, angle and bearing deviation) and the dashboard quality figures.	План и 3D: фактическая траектория по инклинометрии, оранжевый пунктир, только у снятых скважин. Используется проверкой допусков бурения (отклонение забоя, угла и азимута) и показателями качества в сводке.
-ui:Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction.	План и 3D: зелёный ромб в точке пересечения скважины с проектной подошвой (длина минус перебур). Показывает подошву уступа; высота уступа по ней используется в ведомости, объёмах и прогнозе дробления.
-ui:Plan and 3D: red lines with "Δ" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check.	План и 3D: красные линии с «Δ» от проектного устья к фактическому и от проектного забоя к фактическому. Эти же отклонения сравниваются с допусками в проверке допусков бурения.
-ui:Plan and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration.	План и 3D: масса ВВ скважины в кг. Считается по колонке заряда; из неё складываются ведомость, удельный расход, стоимость и максимальный заряд на замедление для сейсмики.
+ui:2D, 3D and printed plans: the hole number, in blue. Tells the holes apart in the hole table, loading sheets, reports and the electronic logging report; holes are found by it.	2D, 3D и печатный план: номер скважины, синим. По нему скважины различают в таблице, листах заряжания, отчётах и отчёте регистрации ЭДС, по нему же ищут скважину.
+ui:2D and 3D: "L" next to the collar, the dipped length when measured, otherwise the design length. Used for the charge column and stemming, drilled metres and drilling cost, and for matching loading rules by length.	2D и 3D: «L» у устья — замеренная длина, если есть замер, иначе проектная. Используется в расчёте колонки заряда и забойки, в метрах бурения и стоимости бурения, при подборе правил заряжания по длине.
+ui:2D and 3D: "Ø" in mm next to the collar. Sets the charge per metre and the explosive mass, the minimum stemming (in diameters), the fragmentation prediction, and the loading rules chosen by diameter.	2D и 3D: «Ø» в мм у устья. Определяет погонную массу и массу ВВ, минимальную забойку (в диаметрах), прогноз дробления и подбор правил заряжания по диаметру.
+ui:2D and 3D: "Z", the collar elevation. Used for the length down to the grade surface in the design, for sections and for the volume of the blast.	2D и 3D: «Z» — отметка устья. Используется при расчёте длины до подошвы уступа в проекте, на разрезах и в объёме блока.
+ui:2D and 3D: "α", the angle of the hole as Program settings ▸ Units count it (from vertical or from horizontal). Sets where the toe is; used for the bench height in the fragmentation prediction, flyrock and the drilling tolerance check.	2D и 3D: «α» — угол скважины, как его отсчитывают Настройки программы ▸ Единицы (от вертикали или от горизонтали). Определяет положение забоя; используется для высоты уступа в прогнозе дробления, разлёте и проверке допусков бурения.
+ui:2D and 3D: "Az", the bearing of the lean clockwise from north. Sets where the toe of an inclined hole is; used in the drilling tolerance check.	2D и 3D: «Az» — азимут наклона по часовой от севера. Определяет положение забоя наклонной скважины; используется в проверке допусков бурения.
+ui:2D and 3D: measured temperature in °C, only for holes where it was measured. Marks hot or reactive ground before loading; not used in the calculations.	2D и 3D: замеренная температура в °C, только у скважин с замером. Нужна, чтобы видеть горячие или реакционные породы перед заряжанием; в расчётах не участвует.
+ui:2D and 3D: a loaded hole shows its charge column, the decks in their product colours; an empty one the line from collar to toe with a dot at the toe. Off: collars only. Display only; the same decks give the explosive mass, quantities, costs and the vibration charge.	2D и 3D: у заряженной скважины — колонка заряда, интервалы цветами продуктов; у незаряженной — линия от устья до забоя с точкой в забое. Выключено — только устья. Только отображение; по этим же интервалам считаются масса ВВ, ведомость, стоимость и заряд для сейсмики.
+ui:2D and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only.	2D и 3D: кружок устья, заливка по состоянию скважины (проектная — пустая, пробуренная — бледная, заряженная — сплошная). Выключено — устья не видны и у выделенных скважин, выбирать скважины по-прежнему можно. Только отображение.
+ui:2D and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check.	2D и 3D: толстая бирюзовая линия до замеренной глубины с отметкой на конце, только у замеренных скважин. Замеренная длина заменяет проектную в заряжании, ведомости и проверке допусков.
+ui:2D and 3D: the surveyed bore track, dashed orange, only for surveyed holes. Used by the drilling tolerance check (toe, angle and bearing deviation) and the dashboard quality figures.	2D и 3D: фактическая траектория по инклинометрии, оранжевый пунктир, только у снятых скважин. Используется проверкой допусков бурения (отклонение забоя, угла и азимута) и показателями качества в сводке.
+ui:2D and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction.	2D и 3D: зелёный ромб в точке пересечения скважины с проектной подошвой (длина минус перебур). Показывает подошву уступа; высота уступа по ней используется в ведомости, объёмах и прогнозе дробления.
+ui:2D and 3D: red lines with "Δ" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check.	2D и 3D: красные линии с «Δ» от проектного устья к фактическому и от проектного забоя к фактическому. Эти же отклонения сравниваются с допусками в проверке допусков бурения.
+ui:2D and 3D: explosive mass of the hole in kg. Comes from the charge column; adds up to the quantities, powder factor, costs and the maximum charge per delay for vibration.	2D и 3D: масса ВВ скважины в кг. Считается по колонке заряда; из неё складываются ведомость, удельный расход, стоимость и максимальный заряд на замедление для сейсмики.
 ui:Plan: a dashed violet line with "B" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction.	План: фиолетовый пунктир с «B» от скважин первого ряда до ближайшей точки бровки. Нужна линия бровки; эта же ЛСПП используется проверкой ЛСПП и прогнозом разлёта от откоса.
-ui:Plan and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay.	План и 3D: масса каждого заряда ВВ в кг сверху вниз. Показывает, как разделён рассредоточенный заряд; каждый заряд учитывается отдельно в заряде на замедление.
-ui:Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.	План и 3D: крепость пород по данным MWD вдоль трассы, от синего (мягкие) до красного (крепкие), только у скважин с данными. Правила заряжания по нему подставляют продукт для крепких или мягких пород и удлиняют забойку в мягком устье.
-ui:Plan and 3D: the firing order of the hole, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis.	План и 3D: порядковый номер взрывания, по расчёту замедлений. Для проверки последовательности инициирования; этот же порядок используется в анимации взрыва и анализе первого движения.
-ui:Plan and 3D: the firing order of the decks in the hole, top to bottom ("2-1" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes.	План и 3D: порядок взрывания зарядов в скважине сверху вниз («2-1» — нижний срабатывает первым), только у скважин с двумя и более боевиками в разных зарядах. Для проверки внутрискважинных замедлений рассредоточенных зарядов.
-ui:Plan and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time.	План и 3D: замедление внутрискважинного детонатора в мс, красным. Прибавляется к времени поверхностной сети и даёт время взрывания скважины.
-ui:Plan and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time.	План и 3D: время прихода сигнала поверхностной сети к устью в мс, красным. Считается по связям и поверхностным замедлителям; часть времени взрывания скважины.
-ui:Plan and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator.	План и 3D: идентификатор зарегистрированного электронного детонатора, только у скважин, где он есть. Используется в отчёте регистрации ЭДС и для поиска скважины по детонатору.
-ui:Plan and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.	План и 3D: время взрывания скважины в мс (поверхностная сеть плюс внутрискважинное замедление), красным. По нему считаются сейсмика (заряд в окне замедления), изолинии, анимация взрыва и первое движение.
-ui:Plan and 3D: "T" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.	План и 3D: «T» и номер типа скважины. Тип задаёт цвет скважины, по нему подбираются правила заряжания и инициирования и фильтруются показываемые скважины.
+ui:2D and 3D: the mass of each explosive deck in kg, top to bottom. Shows how a decked hole is split; each deck counts on its own in the charge per delay.	2D и 3D: масса каждого заряда ВВ в кг сверху вниз. Показывает, как разделён рассредоточенный заряд; каждый заряд учитывается отдельно в заряде на замедление.
+ui:2D and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.	2D и 3D: крепость пород по данным MWD вдоль трассы, от синего (мягкие) до красного (крепкие), только у скважин с данными. Правила заряжания по нему подставляют продукт для крепких или мягких пород и удлиняют забойку в мягком устье.
+ui:2D and 3D: the firing order of the hole, from the timing. Checks the initiation sequence; the same order drives the blast animation and the first-movement analysis.	2D и 3D: порядковый номер взрывания, по расчёту замедлений. Для проверки последовательности инициирования; этот же порядок используется в анимации взрыва и анализе первого движения.
+ui:2D and 3D: the firing order of the decks in the hole, top to bottom ("2-1" — the bottom deck fires first), only for holes with two or more primed decks. Checks the in-hole delays of decked holes.	2D и 3D: порядок взрывания зарядов в скважине сверху вниз («2-1» — нижний срабатывает первым), только у скважин с двумя и более боевиками в разных зарядах. Для проверки внутрискважинных замедлений рассредоточенных зарядов.
+ui:2D and 3D: the in-hole detonator delay in ms, in red. It is added to the surface time to give the hole firing time.	2D и 3D: замедление внутрискважинного детонатора в мс, красным. Прибавляется к времени поверхностной сети и даёт время взрывания скважины.
+ui:2D and 3D: the time the surface signal reaches the collar in ms, in red. Comes from the ties and connectors; part of the hole firing time.	2D и 3D: время прихода сигнала поверхностной сети к устью в мс, красным. Считается по связям и поверхностным замедлителям; часть времени взрывания скважины.
+ui:2D and 3D: the logged electronic detonator ID, only for holes that have one. Used in the electronic logging report and to find a hole by its detonator.	2D и 3D: идентификатор зарегистрированного электронного детонатора, только у скважин, где он есть. Используется в отчёте регистрации ЭДС и для поиска скважины по детонатору.
+ui:2D and 3D: the hole firing time in ms (surface time plus in-hole delay), in red. The vibration prediction (charge per delay window), isochrones, the blast animation and first movement use it.	2D и 3D: время взрывания скважины в мс (поверхностная сеть плюс внутрискважинное замедление), красным. По нему считаются сейсмика (заряд в окне замедления), изолинии, анимация взрыва и первое движение.
+ui:2D and 3D: "T" and the hole type number. The type sets the hole colour, chooses the loading and initiation rules and filters the holes shown.	2D и 3D: «T» и номер типа скважины. Тип задаёт цвет скважины, по нему подбираются правила заряжания и инициирования и фильтруются показываемые скважины.
 ui:I (highest strength)	I (в высшей степени крепкие)
 ui:Quartzites, basalts (extremely strong).	Кварциты, базальты (в высшей степени крепкие).
 ui:II (very strong)	II (очень крепкие)
@@ -2914,7 +2911,7 @@ mean	ср.
 My properties	Мои
 Insert a calculated field…	Вставить вычисляемое поле…
 ui:Insert a calculated field…	Вставить вычисляемое поле…
-# DaveyTronic (.BPD)
+# Davey Tronic (.BPD)
 Davey Tronic file (.BPD)…	Файл Davey Tronic (.BPD)...
 Line	Линия
 Tie type	Тип связи
@@ -3400,7 +3397,7 @@ Burden relief	Разгрузка ЛНС
 The angle at which each hole is initiated, from the times of its neighbours	Угол, под которым инициируется каждая скважина, по времени её соседей
 Route number	Марш. номер
 ui:Route no.	Марш. номер
-ui:Plan and 3D: the letter of the chain (A the first, B the second…) and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted in the middle of a chain makes the holes after it a chain of the next letter, numbered from 1.	План и 3D: литера цепочки (A — первая, B — вторая…) и маршрутный номер скважины с электронным детонатором — её место в цепочке связей по порядку связывания: 1 — первая скважина, каждая следующая на 1 больше той, от которой к ней провели связь. При удалении связи в середине цепочки скважины после неё становятся цепочкой со следующей литерой, с номерами от 1.
+ui:2D and 3D: the letter of the chain (A the first, B the second…) and the route number of a hole with an electronic detonator, its place in its chain of ties in the order they were made: 1 the first hole, each hole tied from another one more. A tie deleted in the middle of a chain makes the holes after it a chain of the next letter, numbered from 1.	2D и 3D: литера цепочки (A — первая, B — вторая…) и маршрутный номер скважины с электронным детонатором — её место в цепочке связей по порядку связывания: 1 — первая скважина, каждая следующая на 1 больше той, от которой к ней провели связь. При удалении связи в середине цепочки скважины после неё становятся цепочкой со следующей литерой, с номерами от 1.
 Hole {0} has an electronic detonator: a tie comes into it already, or this one would close a ring. A tie goes to the start of a chain only	У скважины {0} электронный детонатор: в неё уже входит связь или эта связь замкнёт кольцо. Связь можно провести только к началу цепочки
 ui:Default colour	Цвет по умолчанию
 ui:Label colour	Цвет подписи
@@ -3667,7 +3664,7 @@ ui:Export IREDES plan	Экспорт плана IREDES
 ui:Overview	Обзор
 ui:Single hole view (bullseye)	Вид одной скважины
 ui:Row check view	Проверка рядов
-ui:Plan and 3D view	План и 3D
+ui:2D and 3D view	2D и 3D
 ui:Select tool	Инструмент «Выбор»
 ui:Pan	Панорама
 ui:Drawing tool	Инструмент рисования
@@ -4133,21 +4130,21 @@ ui:Hole display	Отображение скважин
 ui:Hole types	Типы скважин
 ui:Material types	Типы пород
 ui:Hole state	Состояние скважины
-ui:Plan and 3D: the triangulated surfaces (topography, grade, top of rock), filled by their type or by elevation. Hiding them changes no calculation: lengths to the grade and volumes use the surfaces either way.	План и 3D: триангулированные поверхности (рельеф, подошва, кровля) с заливкой по типу или по отметке. Скрытие не меняет расчётов: длины до подошвы и объёмы считаются по поверхностям в любом случае.
-ui:Plan and 3D: open lines (crest, toe, markout lines and the like). The crest is used by the burden marker and the burden check whether it is shown or not.	План и 3D: незамкнутые линии (бровка, подошва, линии разметки и т. п.). Бровка нужна маркеру ЛНС и проверке ЛНС, видна она или нет.
-ui:Plan and 3D: closed outlines (blast outline, zones, boundaries).	План и 3D: замкнутые контуры (контур блока, зоны, границы).
-ui:Plan and 3D: circles (zones, danger radii and the like).	План и 3D: окружности (зоны, радиусы опасности и т. п.).
-ui:Plan and 3D: monitoring points, grade pegs, survey stations, the north point and plain points, with their labels.	План и 3D: точки мониторинга, пикеты подошвы, точки съёмки, север и простые точки, с подписями.
-ui:Plan and 3D: arrows (direction of throw, notes).	План и 3D: стрелки (направление отброса, пояснения).
-ui:Plan and 3D: dimension lines with the distance written on them.	План и 3D: размерные линии с подписью расстояния.
-ui:Plan and 3D: text notes. The hole labels are not in it: they have their own switch, Hole labels.	План и 3D: текстовые надписи. Подписи скважин сюда не входят: у них своя галочка «Подписи скважин».
-ui:Plan and 3D: all the holes, dummy holes too. Hidden holes cannot be selected but count in the calculations. Hole types and states are hidden with the filters below.	План и 3D: все скважины, и обычные, и фиктивные. Скрытые скважины нельзя выделить, но в расчётах они участвуют. Типы и состояния скрываются фильтрами ниже.
-ui:Plan and 3D: the surface ties between holes in the colour of their connector, with the delay.	План и 3D: поверхностные связи между скважинами в цвет соединителя, с замедлением.
-ui:Plan and 3D: the point the blast is fired from, with its time. The surface times and the firing order of the holes start from it.	План и 3D: точка, от которой инициируется взрыв, с временем. От неё считаются время на поверхности и порядок скважин.
+ui:2D and 3D: the triangulated surfaces (topography, grade, top of rock), filled by their type or by elevation. Hiding them changes no calculation: lengths to the grade and volumes use the surfaces either way.	2D и 3D: триангулированные поверхности (рельеф, подошва, кровля) с заливкой по типу или по отметке. Скрытие не меняет расчётов: длины до подошвы и объёмы считаются по поверхностям в любом случае.
+ui:2D and 3D: open lines (crest, toe, markout lines and the like). The crest is used by the burden marker and the burden check whether it is shown or not.	2D и 3D: незамкнутые линии (бровка, подошва, линии разметки и т. п.). Бровка нужна маркеру ЛНС и проверке ЛНС, видна она или нет.
+ui:2D and 3D: closed outlines (blast outline, zones, boundaries).	2D и 3D: замкнутые контуры (контур блока, зоны, границы).
+ui:2D and 3D: circles (zones, danger radii and the like).	2D и 3D: окружности (зоны, радиусы опасности и т. п.).
+ui:2D and 3D: monitoring points, grade pegs, survey stations, the north point and plain points, with their labels.	2D и 3D: точки мониторинга, пикеты подошвы, точки съёмки, север и простые точки, с подписями.
+ui:2D and 3D: arrows (direction of throw, notes).	2D и 3D: стрелки (направление отброса, пояснения).
+ui:2D and 3D: dimension lines with the distance written on them.	2D и 3D: размерные линии с подписью расстояния.
+ui:2D and 3D: text notes. The hole labels are not in it: they have their own switch, Hole labels.	2D и 3D: текстовые надписи. Подписи скважин сюда не входят: у них своя галочка «Подписи скважин».
+ui:2D and 3D: all the holes, dummy holes too. Hidden holes cannot be selected but count in the calculations. Hole types and states are hidden with the filters below.	2D и 3D: все скважины, и обычные, и фиктивные. Скрытые скважины нельзя выделить, но в расчётах они участвуют. Типы и состояния скрываются фильтрами ниже.
+ui:2D and 3D: the surface ties between holes in the colour of their connector, with the delay.	2D и 3D: поверхностные связи между скважинами в цвет соединителя, с замедлением.
+ui:2D and 3D: the point the blast is fired from, with its time. The surface times and the firing order of the holes start from it.	2D и 3D: точка, от которой инициируется взрыв, с временем. От неё считаются время на поверхности и порядок скважин.
 ui:Plan: the lines of the rows the holes are laid out in. A row is picked by clicking its line only while the rows are shown.	План: линии рядов, по которым расставлены скважины. Ряд выделяется щелчком по его линии, только пока ряды показаны.
-ui:Plan and 3D: all the hole labels at once (numbers, times, lengths and the rest). Which labels and on which side is set in the columns below.	План и 3D: все подписи скважин разом (номера, времена, длины и т. д.). Какие подписи и с какой стороны, задаётся в столбцах ниже.
-ui:Plan and 3D: the coordinate grid with the coordinates at its edges (G).	План и 3D: координатная сетка с координатами по краям (G).
-ui:Plan and 3D: the X, Y, Z axes in the corner.	План и 3D: оси X, Y, Z в углу.
+ui:2D and 3D: all the hole labels at once (numbers, times, lengths and the rest). Which labels and on which side is set in the columns below.	2D и 3D: все подписи скважин разом (номера, времена, длины и т. д.). Какие подписи и с какой стороны, задаётся в столбцах ниже.
+ui:2D and 3D: the coordinate grid with the coordinates at its edges (G).	2D и 3D: координатная сетка с координатами по краям (G).
+ui:2D and 3D: the X, Y, Z axes in the corner.	2D и 3D: оси X, Y, Z в углу.
 ui:Printed plans: the hole types with their colours and counts. On the screen it shows only at the Layout stage and with two or more hole types.	На печати: типы скважин с цветом и количеством. На экране видна только на этапе «Расстановка» и при двух и более типах.
 ui:Printed plans: the connectors of the ties with their colours and counts. Not drawn on the screen: the connectors are listed in the tie palette.	На печати: соединители связей с цветом и количеством. На экране не рисуется: соединители видны в палитре связей.
 ui:Draw the objects in reverse order: what was underneath comes on top. Helps where lines or surfaces cover each other.	Рисовать объекты в обратном порядке: то, что было снизу, окажется сверху. Помогает, когда линии или поверхности закрывают друг друга.
@@ -4159,3 +4156,41 @@ ui:Lock the objects of the group: they stay drawn but cannot be selected, moved 
 ui:Add to the chips over the plan	Добавить в чипы над планом
 ui:Add to the chips over the plan (five are pinned already)	Добавить в чипы над планом (уже закреплено пять)
 ui:Remove from the chips over the plan	Убрать из чипов над планом
+# stage buttons over the plan (Drilling/Loading · Plan/Fact)
+stage:Drilling	Бурение
+stage:Loading	Заряжание
+stage:Plan	План
+stage:Fact	Факт
+stage:Design	Проектные
+stage:Actual	Фактические
+ui:{0}: on	{0}: включено
+ui:{0}: off	{0}: выключено
+ui:Click: show only this stage view (click again to switch it off)	Клик: показать только этот вид стадии (повторный клик выключает)
+ui:Ctrl+click: switch this one on or off, keeping the others (the other view of the same stage goes off)	Ctrl+клик: включить или выключить только эту кнопку, не трогая другие (соседняя кнопка той же стадии выключается)
+ui:Right click: its layers, hole states and hole data	ПКМ: слои, состояния скважин и данные скважин кнопки
+ui:No layers of its own	Своих слоёв нет
+ui:Layers:	Слои:
+ui:Hole states	Состояния скважин
+ui:Hole data	Данные скважин
+ui:New layers	Новые слои
+ui:shared (no stage button on)	общие (ни одна кнопка стадии не включена)
+ui:A new layer (the New layer command, a DXF or survey import) goes to the stage buttons on; with none on it is shared and shown	Новый слой (команда «Новый слой», импорт DXF или съёмки) привязывается ко всем включённым кнопкам стадий; если ни одна не включена, слой общий и видимый
+ui:the layer is bound (click to take it off)	слой назначен (щелчок снимает)
+ui:click to bind the layer	щелчок назначает слой
+ui:From {0}	Из {0}
+ui:Hidden: no stage button on shows this state	Скрыто: ни одна включённая кнопка стадии не показывает это состояние
+ui:Current view	Текущий вид
+ui:Print the current view, or the layers, hole states and hole data of a stage button (the view on the screen stays as it is)	Печатать текущий вид или слои, состояния и данные скважин одной из кнопок стадий (вид на экране не меняется)
+ui:Drilling: plan, then fact (stage buttons)	Бурение: план, затем факт (кнопки стадий)
+ui:Loading: plan, then fact (stage buttons)	Заряжание: план, затем факт (кнопки стадий)
+3D faces and meshes to surfaces	3D-грани и сети — в поверхности
+The 3D faces of a layer become one surface, each mesh (PFACE, 3DMESH, MESH) a surface of its own	3D-грани слоя собираются в одну поверхность, каждая сеть (PFACE, 3DMESH, MESH) — в свою
+Civil 3D objects: {0}	объектов Civil 3D: {0}
+objects of other programs: {0}	объектов других программ: {0}
+solids and ACIS surfaces: {0}	тел и поверхностей ACIS: {0}
+blocks nested too deep: {0}	слишком глубоко вложенных блоков: {0}
+meshes without faces: {0}	сетей без граней: {0}
+left out: {0}	пропущено: {0}
+export them in AutoCAD as 3D faces or a mesh	экспортируйте их в AutoCAD как 3D-грани или сеть
+ui:Show the plan and fact buttons of this stage	Показать кнопки «План» и «Факт» этой стадии
+ui:Fold the group to its name (F8 and Shift+F8 still switch it)	Свернуть группу до названия (F8 и Shift+F8 по-прежнему переключают её)

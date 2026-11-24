@@ -1540,6 +1540,28 @@ Step("no Isolines button on Initiation (the isolines are a tab of the Blast anal
     vm.ToggleDepths();
     if (!vm.Project!.View.CollarsOnly) throw new Exception("the depths chip off still shows the depths");
 });
+Step("a chip under the mouse still shows whether it is on", () =>
+{
+    var on = BlastDesigner.App.Views.Ui.Chip("On", () => { }, true);
+    var off = BlastDesigner.App.Views.Ui.Chip("Off", () => { }, false);
+    var host = new Window { Width = 400, Height = 100, Content = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Children = { on, off } } };
+    host.Show(); Pump();
+    Avalonia.Media.IBrush? Ground(Button b, bool over)
+    {
+        ((Avalonia.Controls.IPseudoClasses)b.Classes).Set(":pointerover", over); Pump();
+        var presenter = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(b).OfType<Avalonia.Controls.Presenters.ContentPresenter>().First(p => p.Name == "PART_ContentPresenter");
+        return presenter.Background;
+    }
+    string Colour(Avalonia.Media.IBrush? b) => (b as Avalonia.Media.ISolidColorBrush)?.Color.ToString() ?? "none";
+    foreach (var (a, b, what) in new[] { (on, off, "chip") })
+    {
+        var aOver = Colour(Ground(a, true)); var bOver = Colour(Ground(b, true));
+        if (aOver == bOver) throw new Exception($"{what}: on and off look the same under the mouse ({aOver})");
+        if (Colour(Ground(b, false)) == bOver) throw new Exception($"{what}: off does not answer the mouse");
+    }
+    if (Colour(Ground(on, true)) != BlastDesigner.App.Services.Look.AccentSoftHover.Color.ToString()) throw new Exception("the chip on under the mouse is not the stronger soft accent");
+    host.Close(); Pump();
+});
 Step("tolerances", () => AnalisysWindows.Tolerances(vm));
 WindowShot("20_tolerances");
 Step("strata intercepts", () => AnalisysWindows.StrataIntercepts(vm));
@@ -3689,7 +3711,7 @@ Step("surfaces coloured by kind", () =>
     vm.View3D(); vm.ZoomAll();
 });
 Shot("44_surfaces_by_kind");
-Step("the eye by Plan and 3D: what is behind a surface paler, by the button and by Shift+H", () =>
+Step("the eye by 2D and 3D: what is behind a surface paler, by the button and by Shift+H", () =>
 {
     var eye = window.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "fadeHidden");
     if (vm.Project!.View.FadeHidden) throw new Exception("a new blast should start with everything drawn far to near");
@@ -5417,7 +5439,7 @@ Step("Davey Tronic export window: the header with its rules, the zone for the fi
         T Get<T>(string name) where T : Control => w.GetLogicalDescendants().OfType<T>().FirstOrDefault(c => c.Name == name) ?? throw new Exception("no " + name + " in the export window");
         var full = Get<TextBox>("bpdFullName");
         var displayed = Get<TextBox>("bpdDisplayedName");
-        if (full.Text != BlastDesigner.IO.DeviTronic.DefaultFullName(vm.Project) || displayed.Text != BlastDesigner.IO.DeviTronic.DefaultDisplayedName(full.Text!)) throw new Exception($"the names by default: {full.Text}, {displayed.Text}");
+        if (full.Text != BlastDesigner.IO.DaveyTronic.DefaultFullName(vm.Project) || displayed.Text != BlastDesigner.IO.DaveyTronic.DefaultDisplayedName(full.Text!)) throw new Exception($"the names by default: {full.Text}, {displayed.Text}");
         if (!System.Text.RegularExpressions.Regex.IsMatch(Get<TextBox>("bpdDate").Text ?? "", @"^\d{4}/\d{2}/\d{2}$") || !System.Text.RegularExpressions.Regex.IsMatch(Get<TextBox>("bpdTime").Text ?? "", @"^\d{2}:\d{2}:\d{2}$")) throw new Exception("the date and the time by default");
         // the rule of the names as typed: Cyrillic in Latin, the rest one '_'; the displayed one follows until typed itself
         full.Text = "Карьер Север, блок 12"; Pump();
@@ -5428,7 +5450,7 @@ Step("Davey Tronic export window: the header with its rules, the zone for the fi
         if (displayed.Text != "Blok_1") throw new Exception("a displayed name typed in should no more follow the full one");
         // a line per chain of EBS ties, its electronic detonators (two a hole) and, opened, its frame
         var line = w.GetLogicalDescendants().OfType<TextBlock>().Where(t => t.Name?.StartsWith("bpdDets") == true).ToList();
-        var mine = BlastDesigner.IO.DeviTronic.Chains(vm.Project).FindIndex(c => c.Ties.Any(t => t.FromId == made[0]));
+        var mine = BlastDesigner.IO.DaveyTronic.Chains(vm.Project).FindIndex(c => c.Ties.Any(t => t.FromId == made[0]));
         if (mine < 0 || !line.Any(t => t.Text == "6")) throw new Exception("the detonators of the line: " + string.Join(",", line.Select(t => t.Text)));
         if (Get<TextBlock>("bpdTotalDets").Text != line.Sum(t => int.Parse(t.Text!)).ToString()) throw new Exception("the total of the detonators");
         var row = line.First(t => t.Text == "6").Name!["bpdDets".Length..];
@@ -6271,6 +6293,42 @@ Step("DXF import window: hidden layers as chips with a note, toggles, Import ret
     dlg.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "61_dxf_import.png"));
     form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "import").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     if (!task.IsCompleted || task.Result?.HiddenLayers != CadHiddenLayers.Skip) throw new Exception("Import did not return the chosen options");
+});
+Step("DXF import of meshes and blocks: a polyface mesh is a surface, a block is taken apart, the left out are named", () =>
+{
+    // a drawing of a polyface mesh on "Topo" and a block with a point inserted on "Marks"
+    var doc = new ACadSharp.CadDocument();
+    var topo = new ACadSharp.Tables.Layer("Topo");
+    var marks = new ACadSharp.Tables.Layer("Marks");
+    doc.Layers.Add(topo); doc.Layers.Add(marks);
+    var pf = new ACadSharp.Entities.PolyfaceMesh { Layer = topo };
+    foreach (var (x, y) in new[] { (0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0) }) pf.Vertices.Add(new ACadSharp.Entities.VertexFaceMesh(new CSMath.XYZ(x, y, 400 + x / 10)));
+    pf.Faces.Add(new ACadSharp.Entities.VertexFaceRecord { Index1 = 1, Index2 = 2, Index3 = 3, Index4 = 4 });
+    doc.Entities.Add(pf);
+    var mark = new ACadSharp.Tables.BlockRecord("Measured");
+    mark.Entities.Add(new ACadSharp.Entities.Point(new CSMath.XYZ(0, 0, 0)));
+    doc.BlockRecords.Add(mark);
+    doc.Entities.Add(new ACadSharp.Entities.Insert(mark) { Layer = marks, InsertPoint = new CSMath.XYZ(5, 5, 401) });
+    var path = Path.Combine(outDir, "meshes.dxf");
+    using (var w = new ACadSharp.IO.DxfWriter(path, doc, false)) w.Write();
+
+    var surfaces = vm.Project!.Entities.OfType<SurfaceEntity>().Count();
+    var task = vm.ImportCad(path); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    var form = dlg.GetLogicalDescendants().OfType<CadImportForm>().First();
+    var faces = form.GetLogicalDescendants().OfType<ToggleSwitch>().First(t => t.Name == "faces");
+    faces.IsChecked = true; Pump();
+    form.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "import").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+    for (int i = 0; i < 1000 && !task.IsCompleted; i++) { Pump(); Thread.Sleep(10); }
+    if (!task.IsCompleted || task.IsFaulted) throw new Exception("the import did not end: " + task.Exception?.Message);
+    var mesh = vm.Project.Entities.OfType<SurfaceEntity>().Skip(surfaces).SingleOrDefault() ?? throw new Exception("the polyface mesh is not a surface");
+    if (mesh.Name != "Topo" || mesh.Triangles.Count != 6) throw new Exception($"the surface {mesh.Name}: {mesh.Triangles.Count / 3} triangles");
+    if (!vm.Project.Entities.OfType<PointEntity>().Any(p => Math.Abs(p.Position.X - 5) < 1e-6 && Math.Abs(p.Position.Z - 401) < 1e-6)) throw new Exception("the point of the block is not in");
+    // what cannot be read is named, with what to do about it
+    var left = BlastDesigner.App.ViewModels.MainViewModel.SkippedText(new Dictionary<string, int> { ["AECC"] = 3, ["ACIS"] = 2 })!;
+    if (!left.Contains('3') || !left.Contains("Civil 3D") || !left.Contains(BlastDesigner.App.Services.Loc.T("export them in AutoCAD as 3D faces or a mesh"))) throw new Exception("left out: " + left);
+    if (BlastDesigner.App.ViewModels.MainViewModel.SkippedText(new Dictionary<string, int>()) != null) throw new Exception("nothing left out, yet a word on it");
+    vm.Undo(); Pump();
 });
 Step("A selection touches no model views, the fragmentation window follows it; the recovery file is made in the background", () =>
 {
@@ -7819,6 +7877,77 @@ Step("fragmentation target: the rock editor of the properties page, variants fou
     vm.Undo(); Pump();
     if (!BlastDesigner.Domain.ProjectJson.Serialize(vm.Project!).SequenceEqual(before)) throw new Exception("Undo did not bring the project back");
     if (vm.Project!.Fragmentation.RockFactor != 8) throw new Exception("Undo did not bring A back");
+});
+Step("stage buttons: the chips over the plan, a click and Ctrl+click, the hole picked where it is drawn", () =>
+{
+    vm.NewSilent(); Pump();
+    var p = vm.Project!;
+    if (p.StageViews.Count != 4) throw new Exception($"{p.StageViews.Count} stage buttons in a new blast");
+    T Find<T>(string name) where T : Control => window.GetLogicalDescendants().OfType<T>().FirstOrDefault(c => c.Name == name) ?? throw new Exception("no " + name);
+    var drillPlan = Find<Button>("stageDrillingPlan");
+    var drillFact = Find<Button>("stageDrillingFact");
+    Find<Button>("stageLoadingPlan");
+    Find<Button>("stageLoadingFact");
+    var plan = StageViews.Get(p, WorkStage.Drilling, StageMode.Plan);
+    var fact = StageViews.Get(p, WorkStage.Drilling, StageMode.Fact);
+    var loadPlan = StageViews.Get(p, WorkStage.Loading, StageMode.Plan);
+    var steps = vm.Doc!.UndoNames.Count;
+    drillPlan.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (!plan.On || fact.On) throw new Exception("a click did not switch Drilling · Plan on alone");
+    if (vm.Doc.UndoNames.Count != steps) throw new Exception("switching a stage button made an undo step");
+    vm.SwitchStage(loadPlan, true); Pump();
+    vm.SwitchStage(fact, true); Pump();
+    if (plan.On || !fact.On || !loadPlan.On) throw new Exception("Ctrl+click: the other view of the stage should go off, the other stage stay");
+    if (p.View.HoleBasis != HoleBasis.Actual) throw new Exception("the hole data of Drilling · Fact is the actual one");
+    // F8 cycles the drilling views
+    vm.CycleStage(WorkStage.Drilling); Pump();
+    if (!plan.On || fact.On) throw new Exception("F8 did not go from fact to plan");
+    // a drilled hole is picked at its surveyed collar while the actual data is drawn, at its design collar otherwise
+    vm.Change("Setup", q => q.Add(new Hole { Label = "S1", Collar = new Vec3(0, 0, 100), Length = 10, State = HoleState.Drilled, ActualCollar = new Vec3(3, 0, 100) }, q.GetOrCreateLayer(StandardLayers.Holes)));
+    Pump();
+    var hole = vm.Project!.Holes.Single(h => h.Label == "S1");
+    foreach (var v in StageViews.Enabled(vm.Project).ToList()) vm.SwitchStage(v, true);
+    vm.Project.View.HiddenStates.Clear();
+    vm.View.Camera.Pitch = 90; vm.View.Camera.Yaw = 0; vm.View.Camera.Scale = 20; vm.View.Camera.Target = new Vec3(1.5, 0, 100); Pump();
+    var cam = vm.View.Camera;
+    var (dx, dy) = cam.ToScreen(hole.Collar);
+    var (ax, ay) = cam.ToScreen(hole.ActualCollar!.Value);
+    if (vm.View.HitTest(dx, dy)?.Id != hole.Id || vm.View.HitTest(ax, ay)?.Id == hole.Id) throw new Exception("design data: the hole should be picked at its design collar only");
+    vm.Project.View.HoleBasis = HoleBasis.Actual; Pump();
+    if (vm.View.HitTest(ax, ay)?.Id != hole.Id || vm.View.HitTest(dx, dy)?.Id == hole.Id) throw new Exception("actual data: the hole should be picked at its surveyed collar only");
+    Shot("stage_buttons_actual");
+    vm.Project.View.HoleBasis = HoleBasis.Design;
+});
+Step("stage buttons: the name of a group folds it to the name and back, kept in the program settings; F8 works folded", () =>
+{
+    if (vm.Doc == null) vm.NewSilent();
+    Pump();
+    var p = vm.Project!;
+    T Find<T>(string name) where T : Control => window.GetLogicalDescendants().OfType<T>().FirstOrDefault(c => c.Name == name) ?? throw new Exception("no " + name);
+    void Click(string name) { Find<Button>(name).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    bool Has(string name) => window.GetLogicalDescendants().OfType<Control>().Any(c => c.Name == name);
+    foreach (var v in StageViews.Enabled(p).ToList()) vm.SwitchStage(v, true);
+    vm.SwitchStage(StageViews.Get(p, WorkStage.Drilling, StageMode.Fact), false); Pump();
+    // the frame and the buttons off let the plan through, as the chips off
+    if (Find<Border>("stageDrilling").Background != BlastDesigner.App.Services.Look.ChipGround) throw new Exception("the frame should have the see-through ground of the chips");
+    if (Find<Button>("stageDrillingFact").Background != BlastDesigner.App.Services.Look.AccentSoft || !Find<Button>("stageDrillingFact").Classes.Contains("on")) throw new Exception("the view on should look as a chip on");
+    Shot("stage_buttons_open");
+    var steps = vm.Doc!.UndoNames.Count;
+    Click("stageNameDrilling");
+    if (!vm.IsStageFolded(WorkStage.Drilling) || vm.Settings.FoldedStages?.Contains("Drilling") != true) throw new Exception("the fold is not kept in the settings");
+    if (Has("stageDrillingPlan") || Has("stageDrillingFact")) throw new Exception("a folded group still shows its buttons");
+    if (Find<TextBlock>("stageFoldedMode").Text != "· " + BlastDesigner.App.ViewModels.MainViewModel.StageWord("Fact")) throw new Exception("a folded group should say which view is on");
+    if (!Has("stageLoadingPlan")) throw new Exception("folding one group folded the other");
+    if (vm.Doc.UndoNames.Count != steps) throw new Exception("folding made an undo step");
+    Click("stageNameLoading");
+    Shot("stage_buttons_folded");
+    // F8 switches the drilling views with the group folded
+    vm.CycleStage(WorkStage.Drilling); Pump();
+    if (!StageViews.Get(p, WorkStage.Drilling, StageMode.Plan).On) throw new Exception("F8 did nothing with the group folded");
+    Click("stageNameDrilling");
+    Click("stageNameLoading");
+    if (vm.IsStageFolded(WorkStage.Drilling) || vm.IsStageFolded(WorkStage.Loading) || vm.Settings.FoldedStages != null) throw new Exception("opening the groups again did not clear the setting");
+    if (!Has("stageDrillingPlan")) throw new Exception("the open group has no buttons");
 });
 // last: the messages these errors open stay open
 Step("A failed change keeps the times on screen; an error in a command is logged and the program goes on", () =>

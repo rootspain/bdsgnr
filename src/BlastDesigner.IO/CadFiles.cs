@@ -13,7 +13,7 @@ public sealed class CadImportOptions
 {
     /// <summary>Points closer than this along a line are dropped (thinning filter).</summary>
     public double MinPointDistance { get; set; }
-    /// <summary>3D faces are collected into one surface per layer.</summary>
+    /// <summary>3D faces are collected into one surface per layer; each polyface mesh, polygon mesh and MESH is a surface of its own.</summary>
     public bool FacesToSurfaces { get; set; } = true;
     public bool ImportText { get; set; } = true;
     /// <summary>What to do with layers switched off or frozen in the drawing.</summary>
@@ -42,6 +42,12 @@ public sealed class CadImport
     public Dictionary<string, CadLayerInfo> Layers { get; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Objects left out because their layer is off or frozen (<see cref="CadHiddenLayers.Skip"/>).</summary>
     public int SkippedHidden { get; set; }
+    /// <summary>
+    /// Objects left out because they cannot be read, by kind: AECC (a Civil 3D surface or other object), PROXY (an object of
+    /// another program), ACIS (a solid or a surface of AutoCAD), INSERT (blocks nested too deep), or the name of a mesh without faces.
+    /// </summary>
+    public Dictionary<string, int> Skipped { get; } = new();
+    internal void Skip(string kind) => Skipped[kind] = Skipped.GetValueOrDefault(kind) + 1;
     /// <summary>Lines moved to "(2D)" layers (<see cref="CadImportOptions.SeparateFlatLines"/>).</summary>
     public int FlatLines { get; set; }
     /// <summary>The line types of the drawing (its LTYPE table, without the continuous, by layer and by block ones).</summary>
@@ -64,15 +70,22 @@ public static class CadFiles
         var doc = Path.GetExtension(path).Equals(".dwg", StringComparison.OrdinalIgnoreCase) ? DwgReader.Read(path) : DxfReader.Read(path);
         var result = new CadImport();
         var faces = new Dictionary<string, List<Vec3>>();
+        // the surfaces of the meshes, one for each, named after their layer when all is read
+        var meshes = new List<(string Layer, SurfaceEntity Surface)>();
 
-        foreach (var e in doc.Entities)
+        // an object of the drawing, or of a block taken apart: layer "0" and by-block colour inside a block are those of
+        // the insertion, as AutoCAD draws them
+        void Take(Cad.Entity e, string? blockLayer, ACadSharp.Tables.Layer? blockLayerRow, uint? blockColor, int depth)
         {
-            var layer = e.Layer?.Name ?? "0";
-            var shown = e.Layer == null || (e.Layer.IsOn && !e.Layer.Flags.HasFlag(ACadSharp.Tables.LayerFlags.Frozen));
-            if (!shown && options.HiddenLayers == CadHiddenLayers.Skip) { result.SkippedHidden++; continue; }
+            var row = e.Layer;
+            var layer = row?.Name ?? "0";
+            if (blockLayer != null && layer == "0") { layer = blockLayer; row = blockLayerRow; }
+            var shown = row == null || (row.IsOn && !row.Flags.HasFlag(ACadSharp.Tables.LayerFlags.Frozen));
+            if (!shown && options.HiddenLayers == CadHiddenLayers.Skip) { result.SkippedHidden++; return; }
             if (!result.Layers.ContainsKey(layer))
-                result.Layers[layer] = new CadLayerInfo(e.Layer == null ? null : Argb(e.Layer.Color), shown || options.HiddenLayers == CadHiddenLayers.ImportVisible,
-                    e.Layer == null ? null : LayerWeight(e.Layer.LineWeight), TypeName(e.Layer?.LineType));
+                result.Layers[layer] = new CadLayerInfo(row == null ? null : Argb(row.Color), shown || options.HiddenLayers == CadHiddenLayers.ImportVisible,
+                    row == null ? null : LayerWeight(row.LineWeight), TypeName(row?.LineType));
+            var color = e.Color.IsByBlock && blockLayer != null ? blockColor : Argb(e.Color);
             Entity? item = null;
             switch (e)
             {
@@ -98,12 +111,21 @@ public static class CadFiles
                 case Cad.Circle c:
                     item = new CircleEntity { Center = V(c.Center), Radius = c.Radius };
                     break;
-                case Cad.Spline s when s.TryPolygonalVertexes(Math.Max(16, s.ControlPoints.Count * 8), out var sp):
-                    item = new PolylineEntity { Points = Thin(sp.Select(V), options.MinPointDistance), Closed = s.IsClosed };
+                case Cad.Spline sp when sp.TryPolygonalVertexes(Math.Max(16, sp.ControlPoints.Count * 8), out var pts):
+                    item = new PolylineEntity { Points = Thin(pts.Select(V), options.MinPointDistance), Closed = sp.IsClosed };
                     break;
                 case Cad.Insert ins when ins.HasAttributes:
                     item = SurveyPoint(ins);
                     break;
+                case Cad.Insert ins:
+                    // a block without attributes is taken apart, as AutoCAD's Explode does, blocks in it too
+                    if (depth >= MaxBlockDepth || ins.Block == null) { result.Skip("INSERT"); return; }
+                    foreach (var part in ExplodeAll(ins))
+                        if (part is not Cad.AttributeDefinition)
+                            Take(part, layer, row, color, depth + 1);
+                    return;
+                case Cad.AttributeDefinition:
+                    return;
                 case Cad.TextEntity t when options.ImportText:
                     item = new TextEntity { Position = V(t.InsertPoint), Text = t.Value, Height = t.Height, Rotation = t.Rotation / GeoMath.Deg };
                     break;
@@ -114,10 +136,18 @@ public static class CadFiles
                     if (!faces.TryGetValue(layer, out var list)) faces[layer] = list = new();
                     list.Add(V(f.FirstCorner)); list.Add(V(f.SecondCorner)); list.Add(V(f.ThirdCorner));
                     if (!f.FourthCorner.Equals(f.ThirdCorner)) { list.Add(V(f.FirstCorner)); list.Add(V(f.ThirdCorner)); list.Add(V(f.FourthCorner)); }
-                    break;
+                    return;
+                case Cad.PolyfaceMesh or Cad.PolygonMesh or Cad.Mesh when options.FacesToSurfaces:
+                    if (MeshSurface(e) is { } mesh) { mesh.Color = color; meshes.Add((layer, mesh)); }
+                    else result.Skip(e.ObjectName);
+                    return;
+                default:
+                    // what cannot be read at all: Civil 3D surfaces (proxies), ACIS solids and surfaces
+                    if (Unreadable(e) is { } kind) result.Skip(kind);
+                    return;
             }
-            if (item == null) continue;
-            item.Color = Argb(e.Color);
+            if (item == null) return;
+            item.Color = color;
             if (item is ILineStyled styled)
             {
                 styled.LineWeight = Weight(e.LineWeight);
@@ -126,7 +156,20 @@ public static class CadFiles
             }
             result.Items.Add((layer, item));
         }
+
+        foreach (var e in doc.Entities) Take(e, null, null, null, 0);
         foreach (var (layer, tri) in faces) result.Items.Add((layer, SurfaceFromTriangleSoup(tri, layer)));
+        // one surface for each mesh: the name of its layer, numbered when the layer has several surfaces
+        foreach (var g in meshes.GroupBy(m => m.Layer, StringComparer.OrdinalIgnoreCase))
+        {
+            int n = faces.ContainsKey(g.Key) ? 1 : 0;
+            foreach (var (layer, surface) in g)
+            {
+                n++;
+                surface.Name = n == 1 ? layer : layer + " " + n;
+                result.Items.Add((layer, surface));
+            }
+        }
         foreach (var lt in doc.LineTypes)
             if (TypeName(lt) is { } name && lt.Segments.Any())
                 result.LineTypes.Add(new LineTypeDef { Name = name, Description = lt.Description ?? "", Pattern = lt.Segments.Select(x => x.Length).ToList() });
@@ -134,6 +177,101 @@ public static class CadFiles
         if (options.InFeet) ToMetres(result.Items, 0.3048);
         if (options.SeparateFlatLines) SeparateFlat(result);
         return result;
+    }
+
+    /// <summary>Blocks in blocks are taken apart this deep at most (a block that holds itself would never end).</summary>
+    private const int MaxBlockDepth = 8;
+
+    /// <summary>
+    /// The objects of a block insertion where the insertion puts them; an array insertion (rows and columns) gives each copy,
+    /// moved by its row and column along the turned axes of the insertion.
+    /// </summary>
+    private static IEnumerable<Cad.Entity> ExplodeAll(Cad.Insert ins)
+    {
+        var parts = ins.Explode().ToList();
+        int rows = Math.Max(1, (int)ins.RowCount), cols = Math.Max(1, (int)ins.ColumnCount);
+        if (rows == 1 && cols == 1) return parts;
+        var list = new List<Cad.Entity>();
+        double cos = Math.Cos(ins.Rotation), sin = Math.Sin(ins.Rotation);
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+            {
+                double dx = c * ins.ColumnSpacing, dy = r * ins.RowSpacing;
+                var shift = new CSMath.XYZ(dx * cos - dy * sin, dx * sin + dy * cos, 0);
+                foreach (var part in parts)
+                {
+                    var copy = (Cad.Entity)part.Clone();
+                    copy.Layer = part.Layer;
+                    if (shift.X != 0 || shift.Y != 0) copy.ApplyTransform(new CSMath.Transform(shift, new CSMath.XYZ(1, 1, 1), CSMath.XYZ.Zero));
+                    list.Add(copy);
+                }
+            }
+        return list;
+    }
+
+    /// <summary>
+    /// A polyface mesh, a polygon mesh (M×N) or a MESH as a surface of triangles; null when it has no face. A face of four
+    /// corners is two triangles, of more a fan from its first corner; a face with a corner repeated or missing is left out.
+    /// </summary>
+    public static SurfaceEntity? MeshSurface(Cad.Entity e)
+    {
+        var s = new SurfaceEntity();
+        void Face(IReadOnlyList<int> corners)
+        {
+            var distinct = new List<int>();
+            foreach (var c in corners) if (c >= 0 && c < s.Vertices.Count && (distinct.Count == 0 || distinct[^1] != c)) distinct.Add(c);
+            if (distinct.Count > 1 && distinct[0] == distinct[^1]) distinct.RemoveAt(distinct.Count - 1);
+            if (distinct.Count < 3 || distinct.Distinct().Count() != distinct.Count) return;
+            for (int k = 1; k + 1 < distinct.Count; k++) { s.Triangles.Add(distinct[0]); s.Triangles.Add(distinct[k]); s.Triangles.Add(distinct[k + 1]); }
+        }
+        switch (e)
+        {
+            case Cad.PolyfaceMesh pf:
+                foreach (var v in pf.Vertices) s.Vertices.Add(V(v.Location));
+                // the indexes start at 1; a negative one is an invisible edge, the corner is the same
+                foreach (var f in pf.Faces)
+                    Face(new[] { f.Index1, f.Index2, f.Index3, f.Index4 }.Where(x => x != 0).Select(x => Math.Abs((int)x) - 1).ToList());
+                break;
+            case Cad.PolygonMesh pm:
+            {
+                var pts = pm.Vertices.Select(v => V(v.Location)).ToList();
+                int m = pm.MVertexCount, n = pm.NVertexCount;
+                // a smoothed mesh keeps its smoothed vertices after the control ones
+                if (m * n != pts.Count && pm.MSmoothSurfaceDensity * pm.NSmoothSurfaceDensity == pts.Count) { m = pm.MSmoothSurfaceDensity; n = pm.NSmoothSurfaceDensity; }
+                if (m < 2 || n < 2 || m * n > pts.Count) return null;
+                s.Vertices.AddRange(pts.Take(m * n));
+                bool closedM = pm.Flags.HasFlag(Cad.PolylineFlags.ClosedPolylineOrClosedPolygonMeshInM), closedN = pm.Flags.HasFlag(Cad.PolylineFlags.ClosedPolygonMeshInN);
+                int At(int i, int j) => (i % m) * n + j % n;
+                for (int i = 0; i < (closedM ? m : m - 1); i++)
+                    for (int j = 0; j < (closedN ? n : n - 1); j++)
+                    {
+                        Face(new[] { At(i, j), At(i + 1, j), At(i + 1, j + 1) });
+                        Face(new[] { At(i, j), At(i + 1, j + 1), At(i, j + 1) });
+                    }
+                break;
+            }
+            case Cad.Mesh mesh:
+                foreach (var v in mesh.Vertices) s.Vertices.Add(V(v));
+                foreach (var f in mesh.Faces) Face(f);
+                break;
+            default:
+                return null;
+        }
+        return s.Triangles.Count == 0 ? null : s;
+    }
+
+    /// <summary>What of the drawing holds a surface or a solid that cannot be read: its kind for the count of the left out, else null.</summary>
+    public static string? Unreadable(Cad.Entity e)
+    {
+        var name = (e.ObjectName ?? "").ToUpperInvariant();
+        if (name.StartsWith("AECC_", StringComparison.Ordinal)) return "AECC";
+        if (e is Cad.ProxyEntity || name == "ACAD_PROXY_ENTITY") return "PROXY";
+        return name switch
+        {
+            "3DSOLID" or "BODY" or "REGION" or "SURFACE" or "PLANESURFACE" or "EXTRUDEDSURFACE" or "LOFTEDSURFACE" or "REVOLVEDSURFACE"
+                or "SWEPTSURFACE" or "NURBSURFACE" => "ACIS",
+            _ => null
+        };
     }
 
     /// <summary>Objects of a drawing in feet to metres: every point, the radius of a circle, the height of a text.</summary>

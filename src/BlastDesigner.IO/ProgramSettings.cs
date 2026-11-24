@@ -248,6 +248,8 @@ public sealed class ProgramSettings
     /// null: the chips of before (hole labels, hole track, ties).
     /// </summary>
     public List<string>? PinnedChips { get; set; }
+    /// <summary>Groups of the stage buttons over the plan folded to their name ("Drilling", "Loading"); null: none.</summary>
+    public List<string>? FoldedStages { get; set; }
     public Dictionary<string, string> Window { get; set; } = new();
 
     /// <summary>

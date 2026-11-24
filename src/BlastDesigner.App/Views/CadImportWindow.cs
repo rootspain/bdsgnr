@@ -115,7 +115,7 @@ public sealed class CadImportForm : DockPanel
             Setting("separateFlat", "Separate flat lines", "Lines at elevation 0 (grid, design outline, annotation) go to layers \"name (2D)\" and stay out of the survey",
                 _options.SeparateFlatLines, v => _options.SeparateFlatLines = v)));
         body.Children.Add(Card("Objects",
-            Setting("faces", "Faces to surfaces", "3D faces of a layer become one surface", _options.FacesToSurfaces, v => _options.FacesToSurfaces = v),
+            Setting("faces", "3D faces and meshes to surfaces", "The 3D faces of a layer become one surface, each mesh (PFACE, 3DMESH, MESH) a surface of its own", _options.FacesToSurfaces, v => _options.FacesToSurfaces = v),
             Setting("text", "Import text", "Labels and multi-line text, without the formatting codes", _options.ImportText, v => _options.ImportText = v)));
         var unitText = new TextBlock { Text = Loc.Ui(_options.InFeet ? "ft" : "m"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center };
         body.Children.Add(Card("Units",

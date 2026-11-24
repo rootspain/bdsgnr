@@ -138,6 +138,8 @@ public static class PlanRenderer
         BlastDesigner.Domain.Measure.Store(BlastDesigner.Domain.Quantity.Length, NiceStep(BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, rawMetres)));
 
     [ThreadStatic] private static bool _dark;
+    /// <summary>The data the holes of the scene being drawn come from (<see cref="ViewState.HoleBasis"/>).</summary>
+    [ThreadStatic] private static HoleBasis _basis;
     /// <summary>Collars coloured by a calculated property this frame: the property and the range of its values over the drawn holes.</summary>
     [ThreadStatic] private static (string Id, double Min, double Max)? _colorBy;
 
@@ -187,6 +189,8 @@ public static class PlanRenderer
     public static void Render(SKCanvas canvas, Camera cam, BlastProject project, SceneOptions opt)
     {
         _dark = IsDark(opt.Background);
+        // the holes are drawn from the design or from what was drilled (the stage buttons)
+        _basis = project.View.HoleBasis;
         _topInset = opt.TopInset;
         if (!opt.HaloPass)
             using (var bg = new SKPaint { Color = opt.Background, Style = SKPaintStyle.Fill })
@@ -547,7 +551,7 @@ public static class PlanRenderer
         if (showRows) DrawRows(canvas, cam, project, byId!, stroke);
 
         var holes = entities.OfType<Hole>().Where(h => HoleVisible(view, h)).ToList();
-        if (!cam.IsPlan) holes = holes.OrderBy(h => cam.Depth(h.Collar)).ToList();
+        if (!cam.IsPlan) holes = holes.OrderBy(h => cam.Depth(h.DrawnCollar(_basis))).ToList();
         if (view.ShowDipTrack || view.ShowDeviation || view.ShowGradePoint || view.ShowProfile)
             foreach (var h in holes) { var mc = BeginMove(h); DrawHoleTracks(canvas, cam, h, view); EndMove(mc); }
         // Depth lines and charge columns of all holes in one batch, under the collars: in 3D with the charge shown they
@@ -1783,7 +1787,7 @@ public static class PlanRenderer
     {
         static Vec3? PositionOf(IReadOnlyDictionary<Guid, Entity> byId, Guid id) => byId.TryGetValue(id, out var e) ? e switch
         {
-            Hole h => h.Collar,
+            Hole h => h.DrawnCollar(_basis),
             InitiationPoint ip => ip.Position,
             _ => null
         } : null;
@@ -1840,7 +1844,7 @@ public static class PlanRenderer
         stroke.PathEffect = SKPathEffect.CreateDash(new[] { 6f, 4f }, 0);
         foreach (var r in project.Rows)
         {
-            var pts = r.HoleIds.Select(id => byId.TryGetValue(id, out var e) ? e : null).OfType<Hole>().Select(h => h.Collar).ToList();
+            var pts = r.HoleIds.Select(id => byId.TryGetValue(id, out var e) ? e : null).OfType<Hole>().Select(h => h.DrawnCollar(_basis)).ToList();
             DrawPolyline(c, cam, pts, false, stroke);
         }
         stroke.PathEffect = null;
@@ -1855,8 +1859,8 @@ public static class PlanRenderer
         var view = project.View;
         if (view.CollarsOnly) return;
         if (opt.HiddenDepths?.Contains(h.Id) == true) return;
-        var (x, y) = cam.ToScreen(h.Collar);
-        var (tx, ty) = cam.ToScreen(h.Toe);
+        var (x, y) = cam.ToScreen(h.DrawnCollar(_basis));
+        var (tx, ty) = cam.ToScreen(h.DrawnToe(_basis));
         if (Math.Abs(tx - x) + Math.Abs(ty - y) <= 1) return;
         var selected = opt.Selection.Contains(h.Id);
         var typeColor = HoleColour(project, h);
@@ -1869,8 +1873,8 @@ public static class PlanRenderer
             {
                 var p = project.FindProduct(d.ProductId);
                 if (p == null) continue;
-                var (ax, ay) = cam.ToScreen(h.PointAtDepth(d.Top));
-                var (bx, by) = cam.ToScreen(h.PointAtDepth(d.Bottom));
+                var (ax, ay) = cam.ToScreen(h.DrawnPointAtDepth(_basis, d.Top));
+                var (bx, by) = cam.ToScreen(h.DrawnPointAtDepth(_basis, d.Bottom));
                 lines.Line(new SKColor(p.Color), Math.Max(3, r), ax, ay, bx, by);
             }
         if (!charged)
@@ -1892,7 +1896,7 @@ public static class PlanRenderer
         var selected = opt.Selection.Contains(h.Id);
         var typeColor = HoleColour(project, h);
         var color = selected ? opt.SelectionColor : typeColor;
-        var (x, y) = cam.ToScreen(h.Collar);
+        var (x, y) = cam.ToScreen(h.DrawnCollar(_basis));
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
 
         bool fired = opt.AnimationTimeMs is double at && h.FiringTimeMs is double ft && ft <= at;
@@ -1962,7 +1966,7 @@ public static class PlanRenderer
     private static void DrawHoleLabels(Camera cam, BlastProject project, Hole h, ViewState view, (List<HoleLabel> Left, List<HoleLabel> Right) sides, SceneOptions opt, SKPaint text, TextBatch batch)
     {
         if (cam.Scale < 1.2 || opt.HideHoleLabels) return;
-        var (x, y) = cam.ToScreen(h.Collar);
+        var (x, y) = cam.ToScreen(h.DrawnCollar(_basis));
         if (x < -100 || y < -100 || x > cam.Width + 100 || y > cam.Height + 100) return;
         // the Labels chip over the plan takes the columns of every hole off, the layer's own switch those of its holes
         if (!view.ShowText) return;
@@ -2013,11 +2017,11 @@ public static class PlanRenderer
         switch (l)
         {
             case HoleLabel.Number: yield return h.Label; break;
-            case HoleLabel.Length: yield return $"L {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.EffectiveLength):0.0}"; break;
+            case HoleLabel.Length: yield return $"L {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.DrawnLength(_basis)):0.0}"; break;
             case HoleLabel.Diameter: yield return BlastDesigner.Domain.Measure.System == BlastDesigner.Domain.UnitSystem.Metric ? $"Ø {h.Diameter:0}" : $"Ø {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Diameter, h.Diameter):0.##}"; break;
             case HoleLabel.Angle: yield return $"α {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.HoleAngle, h.Angle):0}°"; break;
             case HoleLabel.Bearing: yield return $"Az {h.Bearing:0}°"; break;
-            case HoleLabel.Elevation: yield return $"Z {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.Collar.Z):0.0}"; break;
+            case HoleLabel.Elevation: yield return $"Z {BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, h.DrawnCollar(_basis).Z):0.0}"; break;
             case HoleLabel.ExplosiveMass: yield return U($"{Charging.ExplosiveMass(project, h):0.0} kg"); break;
             case HoleLabel.DeckMasses:
                 foreach (var d in h.Decks.OrderBy(d => d.Top))
@@ -2069,7 +2073,7 @@ public static class PlanRenderer
             for (int i = 1; i < samples.Count; i++)
             {
                 stroke.Color = ColorRamp.Heat(Math.Clamp((samples[i - 1].Hardness + samples[i].Hardness) / 2, 0, 1)).WithAlpha(200);
-                Line(h.PointAtDepth(samples[i - 1].Depth), h.PointAtDepth(samples[i].Depth));
+                Line(h.DrawnPointAtDepth(_basis, samples[i - 1].Depth), h.DrawnPointAtDepth(_basis, samples[i].Depth));
             }
         }
         if (view.ShowDipTrack && h.ActualLength is double dipped)
@@ -2077,15 +2081,15 @@ public static class PlanRenderer
             stroke.StrokeWidth = 3;
             stroke.StrokeCap = SKStrokeCap.Round;
             stroke.Color = Adapt(new SKColor(0xB022B8C8));
-            var end = h.PointAtDepth(dipped);
-            Line(h.Collar, end);
+            var end = h.DrawnPointAtDepth(_basis, dipped);
+            Line(h.DrawnCollar(_basis), end);
             var (ex, ey) = cam.ToScreen(end);
             fill.Color = Adapt(new SKColor(0xFF22B8C8));
             c.DrawRect(ex - 3, ey - 1, 6, 2.5f, fill);
         }
         if (view.ShowGradePoint)
         {
-            var (gx, gy) = cam.ToScreen(h.GradePoint);
+            var (gx, gy) = cam.ToScreen(h.DrawnPointAtDepth(_basis, Math.Max(0, h.Length - h.Subdrill)));
             fill.Color = Adapt(new SKColor(0xFF16A34A));
             using var diamond = new SKPath();
             diamond.MoveTo(gx, gy - 4); diamond.LineTo(gx + 4, gy); diamond.LineTo(gx, gy + 4); diamond.LineTo(gx - 4, gy); diamond.Close();
@@ -2121,11 +2125,11 @@ public static class PlanRenderer
             var bestD = double.MaxValue;
             for (int i = 1; i < crest.Points.Count; i++)
             {
-                var (q, _) = GeoMath.ClosestOnSegment2D(crest.Points[i - 1], crest.Points[i], h.Collar);
-                var d = Vec3.Distance2D(q, h.Collar);
+                var (q, _) = GeoMath.ClosestOnSegment2D(crest.Points[i - 1], crest.Points[i], h.DrawnCollar(_basis));
+                var d = Vec3.Distance2D(q, h.DrawnCollar(_basis));
                 if (d < bestD) { bestD = d; best = q; }
             }
-            return (Hole: h, Point: best.WithZ(h.Collar.Z), Burden: bestD);
+            return (Hole: h, Point: best.WithZ(h.DrawnCollar(_basis).Z), Burden: bestD);
         }).ToList();
         // Front row: the holes about as close to the crest as the closest one.
         var limit = Math.Max(1.5 * Math.Max(project.Design.Burden, 1), near.Min(n => n.Burden) * 1.3);
@@ -2135,7 +2139,7 @@ public static class PlanRenderer
         text.TextSize = 10;
         foreach (var (h, point, burden) in near.Where(n => n.Burden <= limit))
         {
-            var (x0, y0) = cam.ToScreen(h.Collar);
+            var (x0, y0) = cam.ToScreen(h.DrawnCollar(_basis));
             var (x1, y1) = cam.ToScreen(point);
             c.DrawLine(x0, y0, x1, y1, stroke);
             c.DrawText($"B {burden:0.0}", (x0 + x1) / 2 + 3, (y0 + y1) / 2 - 3, text);
@@ -2147,7 +2151,7 @@ public static class PlanRenderer
     /// <summary>Amber warning triangle with "!" above the collar of a hole whose charge fails a loading check.</summary>
     private static void DrawLoadingWarning(SKCanvas c, Camera cam, Hole h, SceneOptions opt, SKPaint fill)
     {
-        var (x, y) = cam.ToScreen(h.Collar);
+        var (x, y) = cam.ToScreen(h.DrawnCollar(_basis));
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
         const float size = 13;
         var bottom = y - r - 10;

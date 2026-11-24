@@ -65,6 +65,11 @@ public sealed class BlastProject
     public ReportDesign? ReportDesign { get; set; }
     /// <summary>The names of the blast in its last Davey Tronic plan (BPD); null until it is first exported.</summary>
     public BpdExportSettings? BpdExport { get; set; }
+    /// <summary>
+    /// The stage buttons over the plan (<see cref="Model.StageViews"/>): the layers, hole states and hole data each shows.
+    /// Empty in files from before them: all layers shared, the buttons off.
+    /// </summary>
+    public List<StageView> StageViews { get; set; } = new();
 
     [JsonIgnore] public IEnumerable<Hole> Holes => Entities.OfType<Hole>();
     [JsonIgnore] public IEnumerable<TieEntity> Ties => Entities.OfType<TieEntity>();
@@ -604,6 +609,8 @@ public sealed class ViewState
     public HashSet<string> HiddenGroups { get; set; } = new();
     /// <summary>Groups of the Visibility tab locked by their padlock: what is in them is drawn but cannot be selected.</summary>
     public HashSet<string> LockedGroups { get; set; } = new();
+    /// <summary>The data the holes are drawn from: the design or what was drilled (set by the stage buttons).</summary>
+    public HoleBasis HoleBasis { get; set; } = HoleBasis.Design;
 }
 
 /// <summary>

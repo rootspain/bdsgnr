@@ -274,7 +274,7 @@ public class RouteNumberTests
         Assert.True(RouteNumbers.CanTie(doc.Project, a.Id, e.Id));
         Assert.False(RouteNumbers.CanTie(doc.Project, d.Id, e.Id));
         // the order of a Davey Tronic line goes the new way too
-        Assert.Equal(new[] { "d", "c", "b", "a" }, BlastDesigner.IO.DeviTronic.OrderAlongTies(doc.Project.Ties.ToList(), new[] { a, b, c, d }.Select(Now).ToList()).Select(h => h.Label));
+        Assert.Equal(new[] { "d", "c", "b", "a" }, BlastDesigner.IO.DaveyTronic.OrderAlongTies(doc.Project.Ties.ToList(), new[] { a, b, c, d }.Select(Now).ToList()).Select(h => h.Label));
         // one undo brings the ties and the numbers back
         doc.Undo();
         Assert.Equal(new int?[] { 1, 2, 3, 4 }, new[] { a, b, c, d }.Select(h => Now(h).RouteNumber));

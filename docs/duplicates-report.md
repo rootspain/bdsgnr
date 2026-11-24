@@ -385,7 +385,7 @@ trim, убрать пробелы и NBSP, запятая → точка, Invari
 
 **Где:** экранирование CSV — `BlastDesigner.IO/TextFiles.cs:205` (`Csv(string)`) и инлайн в `BlastDesigner.IO/Interchange.cs:311`;
 `F(double)` — `TextFiles.cs:204` и `Interchange.cs:16` (одинаковое `"0.###"`, Invariant); поле `CultureInfo.InvariantCulture` под
-именами `Ci`/`Inv` — `CadFiles.cs:47`, `SurveyDxf.cs:19`, `DeviTronic.cs:87`, `Interchange.cs:15`.
+именами `Ci`/`Inv` — `CadFiles.cs:47`, `SurveyDxf.cs:19`, `DaveyTronic.cs:87`, `Interchange.cs:15`.
 
 **Насколько совпадает:** идентично.
 
