@@ -279,6 +279,8 @@ public sealed class Viewport : Control
         {
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || !Shown(project, e, hidden, clip)) continue;
             if (!includeLocked && (layer.Frozen)) continue;
+            // a group locked on the Visibility tab is not selected; a tool that asks for its own objects still finds them
+            if (!includeLocked && accept == null && ViewKinds.Locked(project.View, e)) continue;
             if (accept != null && !accept(e)) continue;
             if (section != null && !PlanRenderer.InSlice(section, Camera, e)) continue;
             var d = section != null && e is Hole sh ? SegmentsDistance(new[] { sh.Collar, sh.Toe }, false, sx, sy)
@@ -293,7 +295,8 @@ public sealed class Viewport : Control
         if (best == null && section == null)
         {
             var shown = project.Entities.OfType<SurfaceEntity>().Where(s =>
-                layers.TryGetValue(s.LayerId, out var l) && l.Visible && (includeLocked || !l.Frozen) && Shown(project, s, hidden, clip) && (accept == null || accept(s)));
+                layers.TryGetValue(s.LayerId, out var l) && l.Visible && (includeLocked || !l.Frozen) && Shown(project, s, hidden, clip) && (accept == null || accept(s))
+                && (includeLocked || accept != null || !ViewKinds.Locked(project.View, s)));
             if (clip == null) best = SurfaceAt(sx, sy, shown);
             else
             {
@@ -474,6 +477,7 @@ public sealed class Viewport : Control
         {
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || layer.Frozen) continue;
             if (!Shown(project, e, hidden, clip)) continue;
+            if (ViewKinds.Locked(project.View, e)) continue;
             if (section != null && !PlanRenderer.InSlice(section, Camera, e)) continue;
             if (section != null && e is Hole sh)
             {

@@ -107,11 +107,12 @@ public sealed partial class MainViewModel
     // ---- selection ------------------------------------------------------------------
 
     /// <summary>
-    /// Objects that can be selected: on a visible, unfrozen layer, drawn under the current display switches and, with
-    /// blocks shown, inside them.
+    /// Objects that can be selected: on a visible, unfrozen layer, drawn under the current display switches, not in a group
+    /// locked on the Visibility tab and, with blocks shown, inside them.
     /// </summary>
     public bool IsSelectable(Entity e) =>
         Project!.FindLayer(e.LayerId) is { Visible: true, Frozen: false } && !HiddenEntities.Contains(e.Id) && Rendering.PlanRenderer.EntityShown(Project.View, e)
+        && !ViewKinds.Locked(Project.View, e)
         && (Blocks is not { } blocks || blocks.Shows(e));
 
     private BlockClip? _blocks;

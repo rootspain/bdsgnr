@@ -243,6 +243,11 @@ public sealed class ProgramSettings
     /// <summary>Colours of the hole labels last chosen: a new blast starts with them, the project keeps its own.</summary>
     public Dictionary<BlastDesigner.Domain.Model.HoleLabel, uint> HoleLabelColors { get; set; } = new();
     public bool ShowCoordinatesBox { get; set; } = true;
+    /// <summary>
+    /// Switches of the Visibility tab pinned as chips over the plan, in order (ids of MainViewModel.VisibilityToggles);
+    /// null: the chips of before (hole labels, hole track, ties).
+    /// </summary>
+    public List<string>? PinnedChips { get; set; }
     public Dictionary<string, string> Window { get; set; } = new();
 
     /// <summary>

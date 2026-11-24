@@ -320,7 +320,7 @@ public sealed class SectionSession
             list.Add(Piece(Held(h.Hole, SectionHolePart.Collar), Held(h.Hole, SectionHolePart.Toe)));
         var cam = View.Camera;
         var shown = project.Layers.Where(l => l.Visible).Select(l => l.Id).ToHashSet();
-        foreach (var s in project.Entities.OfType<SurfaceEntity>().Where(s => shown.Contains(s.LayerId) && project.View.ShowSurfaces))
+        foreach (var s in project.Entities.OfType<SurfaceEntity>().Where(s => shown.Contains(s.LayerId) && project.View.ShowSurfaces && ViewKinds.Shown(project.View, s)))
             foreach (var (a, b) in PlanRenderer.SurfaceCut(cam, s))
             {
                 var (sa, za) = frame.ToSection(a);

@@ -68,7 +68,7 @@ public sealed class RowPick : ISelectGesture
     private HoleRow? RowAt(double sx, double sy)
     {
         var p = _vm.Project!;
-        if (!p.View.ShowRows) return null;
+        if (!p.View.ShowRows || !ViewKinds.GroupShown(p.View, ViewKinds.Holes) || p.View.LockedGroups.Contains(ViewKinds.Holes)) return null;
         var cam = View.Camera;
         HoleRow? best = null;
         double bestD = View.TargetRadius;

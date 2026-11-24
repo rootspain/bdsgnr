@@ -5,6 +5,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using BlastDesigner.App.Services;
 using BlastDesigner.App.Tools;
 using BlastDesigner.App.ViewModels;
@@ -954,7 +955,8 @@ public sealed class Inspector : DockPanel
     private readonly MainViewModel _vm;
     private readonly TabControl _tabs = new();
     private readonly StackPanel _selectionBar = new() { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(12, 8, 12, 0) };
-    private readonly StackPanel _visibility = new() { Spacing = 2, Margin = new Thickness(12, 8) };
+    // the right margin keeps the boxes, lists and buttons clear of the scroll bar, which runs over the content
+    private readonly StackPanel _visibility = new() { Spacing = 2, Margin = new Thickness(12, 8, 26, 8) };
 
     public Inspector(MainViewModel vm, PropertiesPanel properties, LayersPanel layers)
     {
@@ -1031,98 +1033,53 @@ public sealed class Inspector : DockPanel
         _visibility.Children.Clear();
         var p = _vm.Project;
         if (p == null) return;
-        BuildObjectVisibility(p);
-        // Two columns, like a hole legend; long names wrap inside their column.
-        UniformGrid Columns() => new() { Columns = 2 };
-        UniformGrid? grid = null;
-        void Add(CheckBox cb)
+        // the quick actions work on every group
+        var actions = new WrapPanel { Margin = new Thickness(0, 2, 0, 2) };
+        void Action(string label, Action run)
         {
-            cb.Content = new TextBlock { Text = (string)cb.Content!, TextWrapping = TextWrapping.Wrap };
-            cb.Margin = new Thickness(0, 0, 6, 0);
-            cb.VerticalAlignment = VerticalAlignment.Top;
-            grid!.Children.Add(cb);
+            var chip = Ui.Chip(Loc.T(label), () => { if (_vm.Doc == null) return; run(); _vm.View.Redraw(); BuildVisibility(); });
+            chip.Margin = new Thickness(0, 0, 4, 4);
+            actions.Children.Add(chip);
         }
-        // tip: where the item shows, what it is for and which calculations use the same data
-        void Check(string label, Func<ViewState, bool> get, Action<ViewState> toggle, bool ui = false, string? tip = null)
+        Action("Show only the selection", () =>
         {
-            var cb = new CheckBox { Content = ui ? Loc.Ui(label) : Loc.T(label), IsChecked = get(p.View) };
-            if (tip != null) ToolTip.SetTip(cb, Loc.Ui(tip));
-            cb.IsCheckedChanged += (_, _) => { if (cb.IsChecked != get(p.View)) _vm.ToggleView(toggle); };
-            Add(cb);
-        }
-        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Show"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
-        grid = Columns();
-        Check("Ties", v => v.ShowTies, v => v.ShowTies = !v.ShowTies);
-        Check("Rows", v => v.ShowRows, v => v.ShowRows = !v.ShowRows);
-        Check("Surfaces", v => v.ShowSurfaces, v => v.ShowSurfaces = !v.ShowSurfaces);
-        Check("Grid", v => v.ShowGrid, v => v.ShowGrid = !v.ShowGrid);
-        Check("Axes", v => v.ShowAxes, v => v.ShowAxes = !v.ShowAxes);
-        Check("Hole legend", v => v.ShowHoleLegend, v => v.ShowHoleLegend = !v.ShowHoleLegend);
-        Check("Tie legend", v => v.ShowTieLegend, v => v.ShowTieLegend = !v.ShowTieLegend);
-        Check("Reverse draw order", v => v.ReverseDrawOrder, v => v.ReverseDrawOrder = !v.ReverseDrawOrder);
-        _visibility.Children.Add(grid);
+            _vm.HiddenEntities.Clear();
+            foreach (var e in p.Entities.Where(e => !_vm.Doc!.Selection.Contains(e.Id))) _vm.HiddenEntities.Add(e.Id);
+        });
+        Action("Hide the selection", () => { foreach (var id in _vm.Doc!.Selection) _vm.HiddenEntities.Add(id); _vm.Doc.ClearSelection(); });
+        Action("Hide all", () => { foreach (var e in p.Entities) _vm.HiddenEntities.Add(e.Id); _vm.Doc!.ClearSelection(); });
+        Action("Show all", _vm.ShowEverything);
+        _visibility.Children.Add(actions);
 
-        _visibility.Children.Add(HoleLabelsHeader());
-        _visibility.Children.Add(_labelHost);
-        BuildLabelColumns();
-
-        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Holes"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
-        grid = Columns();
-        // one switch for the depth of the holes: a loaded hole shows its charge column, an empty one the line to the toe
-        Check("Hole track", v => !v.CollarsOnly, v => v.CollarsOnly = !v.CollarsOnly, ui: true,
-            tip: "Plan and 3D: a loaded hole shows its charge column, the decks in their product colours; an empty one the line from collar to toe with a dot at the toe. Off: collars only. Display only; the same decks give the explosive mass, quantities, costs and the vibration charge.");
-        Check("Collar", v => v.ShowCollars, v => v.ShowCollars = !v.ShowCollars, ui: true,
-            tip: "Plan and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only.");
-        Check("Dip track", v => v.ShowDipTrack, v => v.ShowDipTrack = !v.ShowDipTrack, ui: true,
-            tip: "Plan and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check.");
-        Check("Grade point", v => v.ShowGradePoint, v => v.ShowGradePoint = !v.ShowGradePoint, ui: true,
-            tip: "Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction.");
-        Check("Deviation", v => v.ShowDeviation, v => v.ShowDeviation = !v.ShowDeviation, ui: true,
-            tip: "Plan and 3D: red lines with \"Δ\" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check.");
-        Check("Burden marker", v => v.ShowBurdenMarker, v => v.ShowBurdenMarker = !v.ShowBurdenMarker, ui: true,
-            tip: "Plan: a dashed violet line with \"B\" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction.");
-        Check("MWD profile", v => v.ShowProfile, v => v.ShowProfile = !v.ShowProfile, ui: true,
-            tip: "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.");
-        _visibility.Children.Add(grid);
-        // hole types, material types and hole states: the filters that were in the View menu (dummy holes go with "Hole" in Objects)
-        _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole types"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
-        void Filter(string text, bool shown, Action toggle)
+        var counts = p.Entities.GroupBy(ViewKinds.KindOf).Where(g => g.Key != null).ToDictionary(g => g.Key!, g => g.Count());
+        int Count(string kind) => counts.TryGetValue(kind, out var n) ? n : 0;
+        // two columns, each a stack of its own: a box wrapped on two lines in one column leaves no gap in the other
+        Grid Columns()
         {
-            var cb = new CheckBox { Content = text, IsChecked = shown };
-            cb.IsCheckedChanged += (_, _) => toggle();
-            _visibility.Children.Add(cb);
-        }
-        foreach (var t in p.Design.HoleTypes)
-        {
-            var idx = t.Index;
-            Filter(Loc.Name(t.Name), !p.View.HiddenHoleTypes.Contains(idx), () => _vm.ToggleHoleType(idx));
-        }
-        if (p.Design.MaterialTypes.Any())
-        {
-            _visibility.Children.Add(new TextBlock { Text = Loc.T("Material types"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
-            foreach (var t in p.Design.MaterialTypes)
+            var g = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), Name = "visColumns" };
+            for (int i = 0; i < 2; i++)
             {
-                var idx = t.Index;
-                Filter(Loc.Name(t.Name), !p.View.HiddenMaterialTypes.Contains(idx), () => _vm.ToggleMaterialType(idx));
+                var column = new StackPanel();
+                Grid.SetColumn(column, i);
+                g.Children.Add(column);
             }
+            return g;
         }
-        _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole state"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
-        foreach (var st in Enum.GetValues<HoleState>())
+        void Toggles(Grid into, IEnumerable<MainViewModel.VisibilityToggle> toggles, Func<MainViewModel.VisibilityToggle, int?>? count = null)
         {
-            var state = st;
-            Filter(Loc.Enum(state), !p.View.HiddenStates.Contains(state), () => _vm.ToggleState(state));
+            int i = 0;
+            foreach (var t in toggles) ((StackPanel)into.Children[i++ % 2]).Children.Add(ToggleBox(p.View, t, count?.Invoke(t)));
         }
-        var symbols = new Expander
-        {
-            Header = Loc.Ui("Hole symbols"),
-            IsExpanded = _symbolsOpen,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Margin = new Thickness(0, 12, 0, 0),
-            Content = HoleSymbolLegend.Build(p, _vm.Settings.BackgroundColor)
-        };
-        symbols.Expanded += (_, _) => _symbolsOpen = true;
-        symbols.Collapsed += (_, _) => _symbolsOpen = false;
-        _visibility.Children.Add(symbols);
+        IEnumerable<MainViewModel.VisibilityToggle> Of(string group, params string[] ids) =>
+            ids.Select(id => MainViewModel.FindToggle(id)!).Where(t => t.Group == group);
+        TextBlock Sub(string text) => new() { Text = Loc.Ui(text), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) };
+
+        // ---- topography: one box per kind, always the same eight, the count of each (0: greyed)
+        var topo = GroupBody(ViewKinds.Topography, "Topography objects", ViewKinds.TopographyKinds.Sum(Count).ToString(), true);
+        var topoGrid = Columns();
+        Toggles(topoGrid, MainViewModel.VisibilityToggles.Where(t => t.Group == ViewKinds.Topography),
+            t => Count(t.Id == "Surfaces" ? ViewKinds.SurfaceKind : t.Id));
+        topo.Children.Add(topoGrid);
         if (SurfaceLegend.Build(p, _vm.Settings) is { } surfaceKey)
         {
             var surfaces = new Expander
@@ -1135,8 +1092,178 @@ public sealed class Inspector : DockPanel
             };
             surfaces.Expanded += (_, _) => _surfacesOpen = true;
             surfaces.Collapsed += (_, _) => _surfacesOpen = false;
-            _visibility.Children.Add(surfaces);
+            topo.Children.Add(surfaces);
         }
+
+        // ---- holes and ties: the objects, how a hole is drawn, its labels and the hole filters
+        var holes = GroupBody(ViewKinds.Holes, "Holes and ties", $"{Count(ViewKinds.HoleKind)} · {Count(ViewKinds.TieKind)}", true);
+        var objects = Columns();
+        Toggles(objects, Of(ViewKinds.Holes, ViewKinds.HoleKind, "Ties", ViewKinds.InitiationPointKind, "Rows"),
+            t => t.Id == "Rows" ? null : Count(t.Id == "Ties" ? ViewKinds.TieKind : t.Id));
+        holes.Children.Add(objects);
+        holes.Children.Add(Sub("Hole display"));
+        var display = Columns();
+        Toggles(display, Of(ViewKinds.Holes, "HoleTrack", "Collar", "DipTrack", "GradePoint", "Deviation", "BurdenMarker", "Profile"));
+        holes.Children.Add(display);
+        holes.Children.Add(HoleLabelsHeader());
+        // the host is kept across rebuilds: off the panel of the last build first (it is not under _visibility directly any more)
+        (_labelHost.Parent as Panel)?.Children.Remove(_labelHost);
+        holes.Children.Add(_labelHost);
+        BuildLabelColumns();
+        void Filter(Panel into, string text, bool shown, Action toggle)
+        {
+            var cb = new CheckBox { Content = text, IsChecked = shown, MinHeight = 0 };
+            ToolTip.SetTip(cb, Loc.Ui("Shows or hides the holes of this kind. Hidden holes cannot be selected but count in the calculations."));
+            cb.IsCheckedChanged += (_, _) => toggle();
+            into.Children.Add(cb);
+        }
+        // hole types: only with holes of two or more types (or a type hidden, to bring it back); dummy holes go with "Holes"
+        var used = p.Holes.Where(h => !h.IsDummy).Select(h => h.HoleType).ToHashSet();
+        if (used.Count > 1 || p.View.HiddenHoleTypes.Any(t => t != 0))
+        {
+            holes.Children.Add(Sub("Hole types"));
+            foreach (var t in p.Design.HoleTypes.Where(t => used.Contains(t.Index) || p.View.HiddenHoleTypes.Contains(t.Index)))
+            {
+                var idx = t.Index;
+                Filter(holes, $"{Loc.Name(t.Name)} ({p.Holes.Count(h => !h.IsDummy && h.HoleType == idx)})", !p.View.HiddenHoleTypes.Contains(idx), () => _vm.ToggleHoleType(idx));
+            }
+        }
+        if (p.Design.MaterialTypes.Any())
+        {
+            holes.Children.Add(Sub("Material types"));
+            foreach (var t in p.Design.MaterialTypes)
+            {
+                var idx = t.Index;
+                Filter(holes, Loc.Name(t.Name), !p.View.HiddenMaterialTypes.Contains(idx), () => _vm.ToggleMaterialType(idx));
+            }
+        }
+        holes.Children.Add(Sub("Hole state"));
+        foreach (var st in Enum.GetValues<HoleState>())
+        {
+            var state = st;
+            Filter(holes, $"{Loc.Enum(state)} ({p.Holes.Count(h => h.State == state)})", !p.View.HiddenStates.Contains(state), () => _vm.ToggleState(state));
+        }
+        var symbols = new Expander
+        {
+            Header = Loc.Ui("Hole symbols"),
+            IsExpanded = _symbolsOpen,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Margin = new Thickness(0, 12, 0, 0),
+            Content = HoleSymbolLegend.Build(p, _vm.Settings.BackgroundColor)
+        };
+        symbols.Expanded += (_, _) => _symbolsOpen = true;
+        symbols.Collapsed += (_, _) => _symbolsOpen = false;
+        holes.Children.Add(symbols);
+
+        // ---- interface
+        var ui = GroupBody(ViewKinds.Interface, "Interface", null, false);
+        var uiGrid = Columns();
+        Toggles(uiGrid, MainViewModel.VisibilityToggles.Where(t => t.Group == ViewKinds.Interface));
+        ui.Children.Add(uiGrid);
+    }
+
+    /// <summary>Groups of the Visibility tab folded by their header: kept across rebuilds of the tab.</summary>
+    private readonly HashSet<string> _foldedGroups = new();
+
+    /// <summary>
+    /// The header of a group of the Visibility tab (fold arrow, name, count, padlock, eye) and the panel under it, which
+    /// is returned for the group's boxes.
+    /// </summary>
+    private StackPanel GroupBody(string group, string title, string? count, bool lockable)
+    {
+        var view = _vm.Project!.View;
+        var body = new StackPanel { Spacing = 2, Margin = new Thickness(0, 2, 0, 4), IsVisible = !_foldedGroups.Contains(group) };
+        var arrow = new TextBlock { Text = body.IsVisible ? "▾" : "▸", Foreground = Look.Muted, FontSize = 11, Width = 14, VerticalAlignment = VerticalAlignment.Center };
+        var name = new TextBlock { Text = Loc.Ui(title), Foreground = Look.Text, FontWeight = FontWeight.SemiBold, FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center };
+        var row = new DockPanel { LastChildFill = true };
+        Button IconButton(string icon, bool on, string tip, Action click, string automation)
+        {
+            var b = new Button
+            {
+                Content = Look.Icon(icon, 15, on ? Look.Accent : Look.Faint), Width = 26, Height = 22, MinWidth = 0, MinHeight = 0,
+                Padding = new Thickness(0), Margin = new Thickness(4, 0, 0, 0), Background = on && icon == "lock" ? Look.AccentSoft : (IBrush)Brushes.Transparent,
+                BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center, Name = automation
+            };
+            b.Classes.Add("flat");
+            ToolTip.SetTip(b, Loc.Ui(tip));
+            b.Click += (_, _) => { Ui.Safe(click); BuildVisibility(); };
+            return b;
+        }
+        var shown = ViewKinds.GroupShown(view, group);
+        var eye = IconButton("eye", shown, shown ? "Hide everything in the group; a second click brings it back as its boxes have it" : "The group is hidden: show it again as its boxes have it",
+            () => _vm.ToggleGroupHidden(group), "groupEye" + group);
+        DockPanel.SetDock(eye, Dock.Right);
+        row.Children.Add(eye);
+        if (lockable)
+        {
+            var locked = view.LockedGroups.Contains(group);
+            var padlock = IconButton(locked ? "lock" : "unlock", locked, locked ? "The objects of the group are locked: drawn, but not selected. Click to unlock them" : "Lock the objects of the group: they stay drawn but cannot be selected, moved or deleted by accident",
+                () => _vm.ToggleGroupLocked(group), "groupLock" + group);
+            DockPanel.SetDock(padlock, Dock.Right);
+            row.Children.Add(padlock);
+        }
+        if (count != null)
+        {
+            var c = new TextBlock { Text = count, Foreground = Look.Faint, FontFamily = Look.Mono, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 2, 0) };
+            DockPanel.SetDock(c, Dock.Right);
+            row.Children.Add(c);
+        }
+        DockPanel.SetDock(arrow, Dock.Left);
+        row.Children.Add(arrow);
+        row.Children.Add(name);
+        var header = new Border
+        {
+            Child = row, Background = Look.Hover, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 1), Padding = new Thickness(6, 3, 20, 3), // the eye off the right edge: the scroll bar runs over it
+            Margin = new Thickness(-12, 10, -26, 2), Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        // the header folds the group (the buttons on it do their own work)
+        header.PointerPressed += (_, e) =>
+        {
+            if (e.Source is Visual v && v.FindAncestorOfType<Button>(true) != null) return;
+            if (!_foldedGroups.Remove(group)) _foldedGroups.Add(group);
+            body.IsVisible = !_foldedGroups.Contains(group);
+            arrow.Text = body.IsVisible ? "▾" : "▸";
+        };
+        _visibility.Children.Add(header);
+        _visibility.Children.Add(body);
+        return body;
+    }
+
+    /// <summary>
+    /// A switch of the Visibility tab as a check box with its tool tip; with a count, the number of such objects (none:
+    /// greyed). A switch that can be a chip over the plan is pinned or unpinned by the right button, and shows a blue
+    /// stripe at its right edge while pinned.
+    /// </summary>
+    private Control ToggleBox(ViewState view, MainViewModel.VisibilityToggle t, int? count = null)
+    {
+        var label = Loc.Ui(t.Label) + (count is int n ? $" ({n})" : "");
+        var cb = new CheckBox
+        {
+            Content = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap },
+            IsChecked = t.Get(view), VerticalAlignment = VerticalAlignment.Top, Name = "vis" + t.Id, MinHeight = 0
+        };
+        if (count == 0) cb.Opacity = 0.55;
+        AutomationProperties.SetName(cb, label);
+        ToolTip.SetTip(cb, Loc.Ui(t.Tip));
+        cb.IsCheckedChanged += (_, _) => { if (_vm.Project is { } p && cb.IsChecked != t.Get(p.View)) _vm.ToggleVisibility(t); };
+        var pinned = t.Pinnable && _vm.IsPinned(t.Id);
+        var box = new Border
+        {
+            Child = cb, Margin = new Thickness(0, 0, 6, 0), Padding = new Thickness(pinned ? 4 : 7, 0, 0, 0),
+            BorderBrush = Look.Blue, BorderThickness = new Thickness(pinned ? 3 : 0, 0, 0, 0), Background = Brushes.Transparent
+        };
+        if (t.Pinnable)
+        {
+            var full = !pinned && _vm.PinnedChips.Count(id => MainViewModel.FindToggle(id) != null) >= MainViewModel.MaxPinnedChips;
+            var item = new MenuItem
+            {
+                Header = Loc.Ui(pinned ? "Remove from the chips over the plan" : full ? "Add to the chips over the plan (five are pinned already)" : "Add to the chips over the plan"),
+                IsEnabled = pinned || !full, Name = "pin" + t.Id
+            };
+            item.Click += (_, _) => { _vm.TogglePin(t.Id); BuildVisibility(); };
+            box.ContextMenu = new ContextMenu { Items = { item } };
+        }
+        return box;
     }
 
     /// <summary>Name and tip of each hole label: where it shows, what it is for and which calculations use the same data.</summary>
@@ -1176,7 +1303,7 @@ public sealed class Inspector : DockPanel
     {
         var reset = Ui.Chip(Loc.Ui("Default order"), () => ChangeLabels(HoleLabelLayout.Reset), tip: Loc.Ui("Put every label back on its usual side and in its usual order"));
         reset.Height = 24;
-        var title = new TextBlock { Text = Loc.Ui("Hole labels"), Foreground = Look.Blue, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        // the switch of all the hole labels (the chip of before), pinned like the other switches
         var hint = new TextBlock
         {
             Text = Loc.Ui("Drag a label to the other side or along its side: the order is the order at the hole, top to bottom."),
@@ -1185,6 +1312,9 @@ public sealed class Inspector : DockPanel
         var top = new DockPanel { Margin = new Thickness(0, 10, 0, 0) };
         DockPanel.SetDock(reset, Dock.Right);
         top.Children.Add(reset);
+        var title = _vm.Project is { } lp ? ToggleBox(lp.View, MainViewModel.FindToggle("HoleLabels")!) : new TextBlock { Text = Loc.Ui("Hole labels") };
+        // written as the section names of the tab, in blue
+        if (title is Border { Child: CheckBox { Content: TextBlock name } }) { name.Foreground = Look.Blue; name.FontSize = 11; }
         top.Children.Add(title);
         var size = new NumericUpDown
         {
@@ -1422,38 +1552,4 @@ public sealed class Inspector : DockPanel
 
     /// <summary>The symbol and surface keys stay open or closed across rebuilds of the tab.</summary>
     private bool _symbolsOpen = true, _surfacesOpen = true;
-
-    /// <summary>One check box per object kind with its count, and quick isolate / hide / show-all actions.</summary>
-    private void BuildObjectVisibility(BlastProject p)
-    {
-        _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Objects"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 4) });
-        // dummy holes go with the holes: one box for both
-        foreach (var kind in p.Entities.GroupBy(e => e is Hole ? "Hole" : e.KindName).OrderBy(g => g.Key))
-        {
-            var ids = kind.Select(e => e.Id).ToList();
-            var cb = new CheckBox { Content = $"{Loc.T(kind.Key)} ({ids.Count})", IsChecked = !ids.All(_vm.HiddenEntities.Contains) };
-            cb.IsCheckedChanged += (_, _) =>
-            {
-                foreach (var id in ids) { if (cb.IsChecked == true) _vm.HiddenEntities.Remove(id); else _vm.HiddenEntities.Add(id); }
-                _vm.View.Redraw();
-            };
-            _visibility.Children.Add(cb);
-        }
-        var actions = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
-        void Action(string label, Action run)
-        {
-            var chip = Ui.Chip(Loc.T(label), () => { if (_vm.Doc == null) return; run(); _vm.View.Redraw(); BuildVisibility(); });
-            chip.Margin = new Thickness(0, 0, 4, 4);
-            actions.Children.Add(chip);
-        }
-        Action("Show only the selection", () =>
-        {
-            _vm.HiddenEntities.Clear();
-            foreach (var e in p.Entities.Where(e => !_vm.Doc!.Selection.Contains(e.Id))) _vm.HiddenEntities.Add(e.Id);
-        });
-        Action("Hide all", () => { foreach (var e in p.Entities) _vm.HiddenEntities.Add(e.Id); _vm.Doc!.ClearSelection(); });
-        Action("Hide the selection", () => { foreach (var id in _vm.Doc!.Selection) _vm.HiddenEntities.Add(id); _vm.Doc.ClearSelection(); });
-        Action("Show all", () => _vm.HiddenEntities.Clear());
-        _visibility.Children.Add(actions);
-    }
 }

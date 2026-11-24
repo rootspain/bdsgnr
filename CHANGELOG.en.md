@@ -9,6 +9,18 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 ## 0.3.14 — 2026-11-24
 
 ### Changed
+- **Visibility tab in three groups:** "Topography objects" (surfaces, polylines, polygons, circles, points, arrows,
+  dimensions, text — a box per kind, with its count), "Holes and ties" (holes, ties, initiation point, rows, hole display,
+  labels, filters) and "Interface" (grid, axes, legends). Each box is there once and has a tool tip. "Hole types" shows
+  only with two or more types.
+- **Eye and padlock on the groups:** the eye hides a whole group and brings it back as its boxes have it; the padlock
+  (topography and holes) keeps the objects drawn but not selectable. Both are kept in the project.
+- **Chips over the plan to choose:** a right click on a box of "Topography objects" or "Holes and ties" pins it as a chip
+  or takes it off (up to five; a pinned box has a blue stripe at its left). "Visualization" stays. The chips are kept in
+  the program settings.
+- "Show all" on the tab brings everything back: hidden one by one, by kind, groups, ties, surfaces and hole filters.
+- The "Hole labels" box (the "Labels" chip of before) is for the hole labels alone; text and the labels of points and
+  lines go by their own boxes and their layer.
 - Visibility tab: "Hole track" and "Charge track" are one check box, "Hole track". A loaded hole shows its charge
   column in the product colours, an empty one the line from collar to toe. The collar of a loaded hole is always filled
   with the explosive colour. Ctrl+Shift+L and the "Depths" chip switch the same box.

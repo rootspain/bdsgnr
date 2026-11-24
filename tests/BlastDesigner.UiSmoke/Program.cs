@@ -567,8 +567,49 @@ Shot("02_selection");
 Step("visibility tab lists objects", () =>
 {
     window.ShowInspectorTab(2); Pump();
-    var boxes = window.GetLogicalDescendants().OfType<CheckBox>().Where(c => c.IsEffectivelyVisible && c.Content is string t && t.EndsWith(")")).ToList();
+    var boxes = window.GetLogicalDescendants().OfType<CheckBox>().Where(c => c.IsEffectivelyVisible && c.Content is TextBlock { Text: { } t } && t.EndsWith(")")).ToList();
     if (boxes.Count == 0) throw new Exception("no object kinds on the Visibility tab");
+});
+Step("visibility groups: the eye hides a group, the padlock stops its selection, a right click pins a box as a chip", () =>
+{
+    var p = vm.Project!;
+    // the padlock drops a selection of the group: the row selected above is put back for the next steps
+    var selection = vm.Doc!.Selection.ToList();
+    window.ShowInspectorTab(2); Pump();
+    void Click(string name)
+    {
+        var b = window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(x => x.Name == name && x.IsEffectivelyVisible) ?? throw new Exception("no " + name + " on the Visibility tab");
+        b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    }
+    Click("groupEyeHoles");
+    if (!p.View.HiddenGroups.Contains(BlastDesigner.Domain.Model.ViewKinds.Holes) || p.Holes.Any(h => BlastDesigner.Rendering.PlanRenderer.EntityShown(p.View, h)))
+        throw new Exception("the eye of Holes and ties did not hide the holes");
+    Click("groupEyeHoles");
+    if (p.View.HiddenGroups.Count != 0 || !p.Holes.Any(h => BlastDesigner.Rendering.PlanRenderer.EntityShown(p.View, h))) throw new Exception("the eye did not bring the holes back");
+    Click("groupLockHoles");
+    if (p.Holes.Any(vm.IsSelectable)) throw new Exception("locked holes can still be selected");
+    Click("groupLockHoles");
+    if (!p.Holes.Any(vm.IsSelectable)) throw new Exception("unlocked holes cannot be selected");
+    var saved = File.Exists(ProgramSettings.SettingsPath) ? File.ReadAllBytes(ProgramSettings.SettingsPath) : null;
+    var pins = vm.Settings.PinnedChips;
+    try
+    {
+        if (vm.TogglePin("Grid")) throw new Exception("a box of the interface should not be pinned as a chip");
+        foreach (var id in new[] { BlastDesigner.Domain.Model.ViewKinds.PolylineKind, "Rows" })
+            if (!vm.TogglePin(id) || !vm.IsPinned(id)) throw new Exception(id + " was not pinned");
+        if (vm.PinnedChips.Count != 5 || vm.TogglePin("Collar")) throw new Exception("more than five chips: " + string.Join(", ", vm.PinnedChips));
+        Pump();
+        var stripe = window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "vis" + BlastDesigner.Domain.Model.ViewKinds.PolylineKind).Parent as Border;
+        if (stripe?.BorderThickness.Left != 3 || stripe.ContextMenu == null) throw new Exception("a pinned box shows no blue stripe or has no menu");
+        Shot("02e_visibility_groups");
+    }
+    finally
+    {
+        vm.Settings.PinnedChips = pins;
+        if (saved != null) File.WriteAllBytes(ProgramSettings.SettingsPath, saved);
+        else File.Delete(ProgramSettings.SettingsPath);
+        vm.RefreshAll(); vm.Doc!.Select(selection); Pump();
+    }
 });
 Step("hole labels in two columns", () =>
 {
@@ -1493,9 +1534,9 @@ Step("no Isolines button on Initiation (the isolines are a tab of the Blast anal
     if (stage.Groups[0].Name == "Display") throw new Exception("an empty Display group is left on Initiation");
     if (stage.Groups.SelectMany(g => g.Items).Any(i => i.Label is "V pattern" or "Encoding sequence" or "i-kon loggers")) throw new Exception("V pattern, Encoding sequence or i-kon loggers is still on Initiation");
     // the depths chip: on shows the charge columns too, off neither
-    vm.ToggleView(v => { v.CollarsOnly = true; v.ShowLoading = false; });
+    vm.ToggleView(v => v.CollarsOnly = true);
     vm.ToggleDepths();
-    if (vm.Project!.View.CollarsOnly || !vm.Project.View.ShowLoading) throw new Exception("the depths chip on does not show the charge columns");
+    if (vm.Project!.View.CollarsOnly) throw new Exception("the depths chip on does not show the depths");
     vm.ToggleDepths();
     if (!vm.Project!.View.CollarsOnly) throw new Exception("the depths chip off still shows the depths");
 });
@@ -3806,9 +3847,14 @@ Step("hole form: To the surface puts in each hole the level of the surface its o
 Step("visibility: hole items in two columns", () =>
 {
     window.ShowInspectorTab(0); Pump(); window.ShowInspectorTab(2); Pump();
-    var grids = window.GetLogicalDescendants().OfType<Avalonia.Controls.Primitives.UniformGrid>().Where(g => g.Columns == 2).ToList();
-    var labels = grids.SelectMany(g => g.Children.OfType<CheckBox>()).Select(c => (c.Content as TextBlock)?.Text).ToList();
-    foreach (var name in new[] { "Dip track", "Actual track", "Grade point", "Deviation", "Burden marker", "MWD profile", "Collar" })
+    var grids = window.GetLogicalDescendants().OfType<Grid>().Where(g => g.Name == "visColumns" && g.IsEffectivelyVisible).ToList();
+    var labels = grids.SelectMany(g => g.GetLogicalDescendants().OfType<CheckBox>()).Select(c => (c.Content as TextBlock)?.Text).ToList();
+    // each column a stack of its own: Ties and Rows one under the other, whatever the height of the boxes beside them
+    Control Box(string id) => grids.SelectMany(g => g.GetLogicalDescendants().OfType<CheckBox>()).First(c => c.Name == "vis" + id).Parent as Control ?? throw new Exception("no box " + id);
+    var ties = Box("Ties"); var rowsBox = Box("Rows");
+    var gap = rowsBox.TranslatePoint(new Point(), window)!.Value.Y - ties.TranslatePoint(new Point(0, ties.Bounds.Height), window)!.Value.Y;
+    if (Math.Abs(gap) > 0.5) throw new Exception($"a gap of {gap:0} px between Ties and Rows");
+    foreach (var name in new[] { "Dip track", "Grade point", "Deviation", "Burden marker", "MWD profile", "Collar" })
         if (!labels.Contains(BlastDesigner.App.Services.Loc.Ui(name))) throw new Exception($"{name} missing from the two-column lists");
     // the labels written at the hole are rows of the side columns
     var rows = window.GetLogicalDescendants().OfType<Control>().Select(c => c.Name).ToHashSet();
@@ -5287,7 +5333,8 @@ Step("tie tool: holes with an electronic detonator take route numbers in the ord
         vm.ActiveTool!.Cancel();
         // the label: Route no. among the hole labels of the Visibility tab, its section names in blue
         window.ShowInspectorTab(2); Pump();
-        var title = window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Hole labels")) ?? throw new Exception("no Hole labels section");
+        // the box of the tab, not the chip of the same name over the plan (Hole labels is pinned there by default)
+        var title = window.GetLogicalDescendants().OfType<CheckBox>().Where(c => c.Name == "visHoleLabels").Select(c => c.Content).OfType<TextBlock>().FirstOrDefault(t => t.Text == BlastDesigner.App.Services.Loc.Ui("Hole labels")) ?? throw new Exception("no Hole labels section");
         if (title.Foreground != BlastDesigner.App.Services.Look.Blue) throw new Exception("the section names of the Visibility tab should be blue");
         var route = window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => Avalonia.Automation.AutomationProperties.GetName(c) == BlastDesigner.App.Services.Loc.Ui("Route no.")) ?? throw new Exception("no Route no. among the hole labels");
         route.IsChecked = true; Pump();

@@ -598,6 +598,63 @@ public sealed class ViewState
     /// (the number blue, the times red, the others the colour of the text).
     /// </summary>
     public Dictionary<HoleLabel, uint> LabelColors { get; set; } = new();
+    /// <summary>Kinds of objects switched off on the Visibility tab (<see cref="ViewKinds"/>); ties and surfaces have their own switches.</summary>
+    public HashSet<string> HiddenKinds { get; set; } = new();
+    /// <summary>Groups of the Visibility tab hidden by their eye: what is in them is not drawn, its own switches are kept.</summary>
+    public HashSet<string> HiddenGroups { get; set; } = new();
+    /// <summary>Groups of the Visibility tab locked by their padlock: what is in them is drawn but cannot be selected.</summary>
+    public HashSet<string> LockedGroups { get; set; } = new();
+}
+
+/// <summary>
+/// The kinds of objects the Visibility tab switches and the groups they belong to: survey (topography) objects, holes
+/// with their ties, and the interface (grid, axes, legends).
+/// </summary>
+public static class ViewKinds
+{
+    public const string Topography = "Topography", Holes = "Holes", Interface = "Interface";
+    public const string HoleKind = "Hole", TieKind = "Tie", InitiationPointKind = "InitiationPoint", SurfaceKind = "Surface",
+        PolylineKind = "Polyline", PolygonKind = "Polygon", CircleKind = "Circle", PointKind = "Point", ArrowKind = "Arrow",
+        DimensionKind = "Dimension", TextKind = "Text";
+
+    /// <summary>The kinds of the topography group, in the order of the tab.</summary>
+    public static readonly string[] TopographyKinds = { SurfaceKind, PolylineKind, PolygonKind, CircleKind, PointKind, ArrowKind, DimensionKind, TextKind };
+
+    /// <summary>The kind of an entity on the Visibility tab; null for what the tab does not switch (blocks and the like).</summary>
+    public static string? KindOf(Entity e) => e switch
+    {
+        Hole => HoleKind,
+        TieEntity => TieKind,
+        InitiationPoint => InitiationPointKind,
+        SurfaceEntity => SurfaceKind,
+        PolylineEntity { Closed: true } => PolygonKind,
+        PolylineEntity => PolylineKind,
+        CircleEntity => CircleKind,
+        PointEntity => PointKind,
+        ArrowEntity => ArrowKind,
+        DimensionEntity => DimensionKind,
+        TextEntity => TextKind,
+        _ => null
+    };
+
+    public static string? GroupOf(string? kind) => kind switch
+    {
+        null => null,
+        HoleKind or TieKind or InitiationPointKind => Holes,
+        _ => Topography
+    };
+
+    /// <summary>Whether the kind of the entity and its group are on (the switches of ties and surfaces are checked apart).</summary>
+    public static bool Shown(ViewState v, Entity e)
+    {
+        var kind = KindOf(e);
+        return kind == null || (!v.HiddenKinds.Contains(kind) && !v.HiddenGroups.Contains(GroupOf(kind)!));
+    }
+
+    public static bool GroupShown(ViewState v, string group) => !v.HiddenGroups.Contains(group);
+
+    /// <summary>The entity is in a group locked on the Visibility tab: drawn, but not selected.</summary>
+    public static bool Locked(ViewState v, Entity e) => GroupOf(KindOf(e)) is { } g && v.LockedGroups.Contains(g);
 }
 
 /// <summary>A value written next to a hole on the plan.</summary>

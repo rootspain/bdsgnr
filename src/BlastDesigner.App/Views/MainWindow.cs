@@ -567,9 +567,12 @@ public sealed class MainWindow : Window
         }
         var timing = _vm.VisualizationShown;
         Chip("Visualization", timing, () => { if (timing) { Dialogs.CloseWindow("Visualization"); _vm.ClearOverlays(); } else _vm.VisualizeTiming(); }, "Isochrones and colour by time (Ctrl+Shift+V)");
-        Chip("Labels", v?.ShowText == true, () => _vm.ToggleView(x => x.ShowText = !x.ShowText), "Hole labels and times");
-        Chip("Depths", v != null && !v.CollarsOnly, _vm.ToggleDepths, "Hole depths: a loaded hole shows its charge column, an empty one the line from collar to toe; off shows collars only");
-        Chip("Ties", v?.ShowTies == true, () => _vm.ToggleView(x => x.ShowTies = !x.ShowTies), "Surface ties");
+        // the other chips are the switches of the Visibility tab pinned there (right click on a check box), up to five
+        foreach (var id in _vm.PinnedChips)
+        {
+            if (MainViewModel.FindToggle(id) is not { Pinnable: true } t) continue;
+            Chip(t.Label, v != null && t.Get(v), () => _vm.ToggleVisibility(t), t.Tip);
+        }
         if (_vm.HasAnalysisDisplay)
         {
             var clear = Ui.Chip("✕ " + Loc.Ui("Clear analysis"), () => { _vm.ClearAnalysis(); RefreshChips(); }, true, Loc.Ui("Remove maps, isochrones and arrows from the plan"));

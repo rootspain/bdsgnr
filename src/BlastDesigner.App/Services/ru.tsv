@@ -1951,6 +1951,7 @@ Chart could not be drawn:	Не удалось нарисовать график:
 At least {0} points are needed	Нужно не меньше {0} точек
 Point at a deck to find it in the list; click to select it	Наведите на заряд, чтобы найти его в списке; щелчок выбирает его
 ui:Initiation point	Точка инициирования
+ui:Initiation pt.	Точка иниц-ия.
 ui:Finish row (Enter)	Завершить ряд (Enter)
 ui:Cancel segment (Backspace)	Отменить отрезок (Backspace)
 Cancel segment	Отменить отрезок
@@ -4116,3 +4117,45 @@ The table of all charges, deck by deck.	Таблица всех зарядов �
 The hole times and charges for vibration monitoring.	Время и заряды скважин для сейсмоконтроля.
 Saves the project data in other formats.	Сохранение данных проекта в других форматах.
 The drawing as a DXF file for CAD.	Чертёж в файле DXF для САПР.
+ui:Polylines	Полилинии
+ui:Polygons	Полигоны
+ui:Circles	Окружности
+ui:Arrows	Стрелки
+ui:Dimensions	Размеры
+ui:Grid	Сетка
+ui:Hole legend	Легенда скважин
+ui:Tie legend	Легенда связей
+ui:Reverse draw order	Обратный порядок прорисовки
+ui:Topography objects	Объекты топографии
+ui:Holes and ties	Скважины и связи
+ui:Interface	Интерфейс
+ui:Hole display	Отображение скважин
+ui:Hole types	Типы скважин
+ui:Material types	Типы пород
+ui:Hole state	Состояние скважины
+ui:Plan and 3D: the triangulated surfaces (topography, grade, top of rock), filled by their type or by elevation. Hiding them changes no calculation: lengths to the grade and volumes use the surfaces either way.	План и 3D: триангулированные поверхности (рельеф, подошва, кровля) с заливкой по типу или по отметке. Скрытие не меняет расчётов: длины до подошвы и объёмы считаются по поверхностям в любом случае.
+ui:Plan and 3D: open lines (crest, toe, markout lines and the like). The crest is used by the burden marker and the burden check whether it is shown or not.	План и 3D: незамкнутые линии (бровка, подошва, линии разметки и т. п.). Бровка нужна маркеру ЛНС и проверке ЛНС, видна она или нет.
+ui:Plan and 3D: closed outlines (blast outline, zones, boundaries).	План и 3D: замкнутые контуры (контур блока, зоны, границы).
+ui:Plan and 3D: circles (zones, danger radii and the like).	План и 3D: окружности (зоны, радиусы опасности и т. п.).
+ui:Plan and 3D: monitoring points, grade pegs, survey stations, the north point and plain points, with their labels.	План и 3D: точки мониторинга, пикеты подошвы, точки съёмки, север и простые точки, с подписями.
+ui:Plan and 3D: arrows (direction of throw, notes).	План и 3D: стрелки (направление отброса, пояснения).
+ui:Plan and 3D: dimension lines with the distance written on them.	План и 3D: размерные линии с подписью расстояния.
+ui:Plan and 3D: text notes. The hole labels are not in it: they have their own switch, Hole labels.	План и 3D: текстовые надписи. Подписи скважин сюда не входят: у них своя галочка «Подписи скважин».
+ui:Plan and 3D: all the holes, dummy holes too. Hidden holes cannot be selected but count in the calculations. Hole types and states are hidden with the filters below.	План и 3D: все скважины, и обычные, и фиктивные. Скрытые скважины нельзя выделить, но в расчётах они участвуют. Типы и состояния скрываются фильтрами ниже.
+ui:Plan and 3D: the surface ties between holes in the colour of their connector, with the delay.	План и 3D: поверхностные связи между скважинами в цвет соединителя, с замедлением.
+ui:Plan and 3D: the point the blast is fired from, with its time. The surface times and the firing order of the holes start from it.	План и 3D: точка, от которой инициируется взрыв, с временем. От неё считаются время на поверхности и порядок скважин.
+ui:Plan: the lines of the rows the holes are laid out in. A row is picked by clicking its line only while the rows are shown.	План: линии рядов, по которым расставлены скважины. Ряд выделяется щелчком по его линии, только пока ряды показаны.
+ui:Plan and 3D: all the hole labels at once (numbers, times, lengths and the rest). Which labels and on which side is set in the columns below.	План и 3D: все подписи скважин разом (номера, времена, длины и т. д.). Какие подписи и с какой стороны, задаётся в столбцах ниже.
+ui:Plan and 3D: the coordinate grid with the coordinates at its edges (G).	План и 3D: координатная сетка с координатами по краям (G).
+ui:Plan and 3D: the X, Y, Z axes in the corner.	План и 3D: оси X, Y, Z в углу.
+ui:Printed plans: the hole types with their colours and counts. On the screen it shows only at the Layout stage and with two or more hole types.	На печати: типы скважин с цветом и количеством. На экране видна только на этапе «Расстановка» и при двух и более типах.
+ui:Printed plans: the connectors of the ties with their colours and counts. Not drawn on the screen: the connectors are listed in the tie palette.	На печати: соединители связей с цветом и количеством. На экране не рисуется: соединители видны в палитре связей.
+ui:Draw the objects in reverse order: what was underneath comes on top. Helps where lines or surfaces cover each other.	Рисовать объекты в обратном порядке: то, что было снизу, окажется сверху. Помогает, когда линии или поверхности закрывают друг друга.
+ui:Shows or hides the holes of this kind. Hidden holes cannot be selected but count in the calculations.	Показывает или скрывает такие скважины. Скрытые скважины нельзя выделить, но в расчётах они участвуют.
+ui:Hide everything in the group; a second click brings it back as its boxes have it	Скрыть всё в группе; повторный щелчок вернёт как было по галочкам
+ui:The group is hidden: show it again as its boxes have it	Группа скрыта: показать снова, как было по галочкам
+ui:The objects of the group are locked: drawn, but not selected. Click to unlock them	Объекты группы заблокированы: видны, но не выделяются. Щелчок разблокирует
+ui:Lock the objects of the group: they stay drawn but cannot be selected, moved or deleted by accident	Заблокировать объекты группы: они остаются на плане, но их нельзя выделить, случайно сдвинуть или удалить
+ui:Add to the chips over the plan	Добавить в чипы над планом
+ui:Add to the chips over the plan (five are pinned already)	Добавить в чипы над планом (уже закреплено пять)
+ui:Remove from the chips over the plan	Убрать из чипов над планом

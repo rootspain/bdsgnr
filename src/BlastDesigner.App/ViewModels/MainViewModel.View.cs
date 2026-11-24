@@ -455,4 +455,133 @@ public sealed partial class MainViewModel
         ShowOverlay(o);
         ZoomAll();
     }
+
+    // ---- the Visibility tab: switches, groups, padlocks and the chips over the plan --------------------------------
+
+    /// <summary>
+    /// A switch of the Visibility tab. <see cref="Group"/> is the group it is shown in; a switch of the topography or
+    /// holes group can be pinned as a chip over the plan. <see cref="Tip"/> is the English text of its tool tip.
+    /// </summary>
+    public sealed record VisibilityToggle(string Id, string Label, string Group, Func<ViewState, bool> Get, Action<ViewState> Toggle, string Tip)
+    {
+        public bool Pinnable => Group != ViewKinds.Interface;
+    }
+
+    private static VisibilityToggle VisKind(string kind, string label, string tip) =>
+        new(kind, label, ViewKinds.Topography, v => !v.HiddenKinds.Contains(kind), v => { if (!v.HiddenKinds.Remove(kind)) v.HiddenKinds.Add(kind); }, tip);
+
+    private static VisibilityToggle VisFlag(string id, string label, string group, Func<ViewState, bool> get, Action<ViewState, bool> set, string tip) =>
+        new(id, label, group, get, v => set(v, !get(v)), tip);
+
+    /// <summary>Every switch of the Visibility tab, in the order of the tab.</summary>
+    public static readonly IReadOnlyList<VisibilityToggle> VisibilityToggles = new[]
+    {
+        // topography
+        VisFlag("Surfaces", "Surfaces", ViewKinds.Topography, v => v.ShowSurfaces, (v, on) => v.ShowSurfaces = on,
+            "Plan and 3D: the triangulated surfaces (topography, grade, top of rock), filled by their type or by elevation. Hiding them changes no calculation: lengths to the grade and volumes use the surfaces either way."),
+        VisKind(ViewKinds.PolylineKind, "Polylines", "Plan and 3D: open lines (crest, toe, markout lines and the like). The crest is used by the burden marker and the burden check whether it is shown or not."),
+        VisKind(ViewKinds.PolygonKind, "Polygons", "Plan and 3D: closed outlines (blast outline, zones, boundaries)."),
+        VisKind(ViewKinds.CircleKind, "Circles", "Plan and 3D: circles (zones, danger radii and the like)."),
+        VisKind(ViewKinds.PointKind, "Points", "Plan and 3D: monitoring points, grade pegs, survey stations, the north point and plain points, with their labels."),
+        VisKind(ViewKinds.ArrowKind, "Arrows", "Plan and 3D: arrows (direction of throw, notes)."),
+        VisKind(ViewKinds.DimensionKind, "Dimensions", "Plan and 3D: dimension lines with the distance written on them."),
+        VisKind(ViewKinds.TextKind, "Text", "Plan and 3D: text notes. The hole labels are not in it: they have their own switch, Hole labels."),
+        // holes and ties
+        new VisibilityToggle(ViewKinds.HoleKind, "Holes", ViewKinds.Holes, v => !v.HiddenKinds.Contains(ViewKinds.HoleKind),
+            v => { if (!v.HiddenKinds.Remove(ViewKinds.HoleKind)) v.HiddenKinds.Add(ViewKinds.HoleKind); },
+            "Plan and 3D: all the holes, dummy holes too. Hidden holes cannot be selected but count in the calculations. Hole types and states are hidden with the filters below."),
+        VisFlag("Ties", "Ties", ViewKinds.Holes, v => v.ShowTies, (v, on) => v.ShowTies = on,
+            "Plan and 3D: the surface ties between holes in the colour of their connector, with the delay."),
+        new VisibilityToggle(ViewKinds.InitiationPointKind, "Initiation pt.", ViewKinds.Holes, v => !v.HiddenKinds.Contains(ViewKinds.InitiationPointKind),
+            v => { if (!v.HiddenKinds.Remove(ViewKinds.InitiationPointKind)) v.HiddenKinds.Add(ViewKinds.InitiationPointKind); },
+            "Plan and 3D: the point the blast is fired from, with its time. The surface times and the firing order of the holes start from it."),
+        VisFlag("Rows", "Rows", ViewKinds.Holes, v => v.ShowRows, (v, on) => v.ShowRows = on,
+            "Plan: the lines of the rows the holes are laid out in. A row is picked by clicking its line only while the rows are shown."),
+        VisFlag("HoleTrack", "Hole track", ViewKinds.Holes, v => !v.CollarsOnly, (v, on) => v.CollarsOnly = !on,
+            "Plan and 3D: a loaded hole shows its charge column, the decks in their product colours; an empty one the line from collar to toe with a dot at the toe. Off: collars only. Display only; the same decks give the explosive mass, quantities, costs and the vibration charge."),
+        VisFlag("Collar", "Collar", ViewKinds.Holes, v => v.ShowCollars, (v, on) => v.ShowCollars = on,
+            "Plan and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only."),
+        VisFlag("DipTrack", "Dip track", ViewKinds.Holes, v => v.ShowDipTrack, (v, on) => v.ShowDipTrack = on,
+            "Plan and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check."),
+        VisFlag("GradePoint", "Grade point", ViewKinds.Holes, v => v.ShowGradePoint, (v, on) => v.ShowGradePoint = on,
+            "Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction."),
+        VisFlag("Deviation", "Deviation", ViewKinds.Holes, v => v.ShowDeviation, (v, on) => v.ShowDeviation = on,
+            "Plan and 3D: red lines with \"Δ\" from the design collar to the actual collar and from the design toe to the surveyed toe. The same deviations are compared with the tolerances in the drilling tolerance check."),
+        VisFlag("BurdenMarker", "Burden marker", ViewKinds.Holes, v => v.ShowBurdenMarker, (v, on) => v.ShowBurdenMarker = on,
+            "Plan: a dashed violet line with \"B\" from each front-row hole to the nearest point of the crest. Needs a crest line; the same burden is used by the burden check and the face burst (flyrock) prediction."),
+        VisFlag("Profile", "MWD profile", ViewKinds.Holes, v => v.ShowProfile, (v, on) => v.ShowProfile = on,
+            "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar."),
+        VisFlag("HoleLabels", "Hole labels", ViewKinds.Holes, v => v.ShowText, (v, on) => v.ShowText = on,
+            "Plan and 3D: all the hole labels at once (numbers, times, lengths and the rest). Which labels and on which side is set in the columns below."),
+        // interface
+        VisFlag("Grid", "Grid", ViewKinds.Interface, v => v.ShowGrid, (v, on) => v.ShowGrid = on,
+            "Plan and 3D: the coordinate grid with the coordinates at its edges (G)."),
+        VisFlag("Axes", "Axes", ViewKinds.Interface, v => v.ShowAxes, (v, on) => v.ShowAxes = on,
+            "Plan and 3D: the X, Y, Z axes in the corner."),
+        VisFlag("HoleLegend", "Hole legend", ViewKinds.Interface, v => v.ShowHoleLegend, (v, on) => v.ShowHoleLegend = on,
+            "Printed plans: the hole types with their colours and counts. On the screen it shows only at the Layout stage and with two or more hole types."),
+        VisFlag("TieLegend", "Tie legend", ViewKinds.Interface, v => v.ShowTieLegend, (v, on) => v.ShowTieLegend = on,
+            "Printed plans: the connectors of the ties with their colours and counts. Not drawn on the screen: the connectors are listed in the tie palette."),
+        VisFlag("ReverseDrawOrder", "Reverse draw order", ViewKinds.Interface, v => v.ReverseDrawOrder, (v, on) => v.ReverseDrawOrder = on,
+            "Draw the objects in reverse order: what was underneath comes on top. Helps where lines or surfaces cover each other.")
+    };
+
+    public static VisibilityToggle? FindToggle(string id) => VisibilityToggles.FirstOrDefault(t => t.Id == id);
+
+    /// <summary>At most so many switches are pinned as chips over the plan.</summary>
+    public const int MaxPinnedChips = 5;
+
+    /// <summary>The switches pinned as chips over the plan, in order; the chips of before when none were chosen.</summary>
+    public IReadOnlyList<string> PinnedChips => Settings.PinnedChips ?? new List<string> { "HoleLabels", "HoleTrack", "Ties" };
+
+    public bool IsPinned(string id) => PinnedChips.Contains(id);
+
+    /// <summary>Pins a switch as a chip over the plan or takes it off; false when five are pinned already.</summary>
+    public bool TogglePin(string id)
+    {
+        var pins = PinnedChips.Where(p => FindToggle(p) != null).ToList();
+        if (!pins.Remove(id))
+        {
+            if (pins.Count >= MaxPinnedChips || FindToggle(id) is not { Pinnable: true }) return false;
+            pins.Add(id);
+        }
+        Settings.PinnedChips = pins;
+        Settings.Save();
+        RefreshAll();
+        return true;
+    }
+
+    public void ToggleVisibility(VisibilityToggle t) => ToggleView(t.Toggle);
+
+    /// <summary>The eye of a group of the Visibility tab: everything in it hidden, or back as its own switches have it.</summary>
+    public void ToggleGroupHidden(string group) => ToggleView(v => { if (!v.HiddenGroups.Remove(group)) v.HiddenGroups.Add(group); });
+
+    /// <summary>The padlock of a group: its objects stay drawn but cannot be selected; a selection of them is dropped.</summary>
+    public void ToggleGroupLocked(string group)
+    {
+        if (Doc == null) return;
+        var locking = !ViewSettings.LockedGroups.Contains(group);
+        ToggleView(v => { if (!v.LockedGroups.Remove(group)) v.LockedGroups.Add(group); });
+        if (locking)
+        {
+            var keep = Doc.Selection.Where(id => Project!.FindEntity(id) is not { } e || !ViewKinds.Locked(ViewSettings, e)).ToList();
+            if (keep.Count != Doc.Selection.Count) Doc.Select(keep);
+        }
+    }
+
+    /// <summary>
+    /// "Show all" of the Visibility tab: every object back, hidden one by one, by its kind, its group, the ties and
+    /// surfaces switches or the hole filters. The display switches of the holes and the interface are left as they are.
+    /// </summary>
+    public void ShowEverything()
+    {
+        if (Doc == null) return;
+        HiddenEntities.Clear();
+        ToggleView(v =>
+        {
+            v.HiddenKinds.Clear(); v.HiddenGroups.Clear();
+            v.ShowTies = true; v.ShowSurfaces = true;
+            v.HiddenHoleTypes.Clear(); v.HiddenMaterialTypes.Clear(); v.HiddenStates.Clear();
+        });
+    }
 }

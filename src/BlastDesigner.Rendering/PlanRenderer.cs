@@ -196,7 +196,7 @@ public static class PlanRenderer
         var layerById = project.Layers.ToDictionary(l => l.Id);
         // the visible blocks: only what is inside them is drawn (lines and surfaces are cut below)
         var clip = BlockClip.Of(project);
-        bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && InSlice(opt, cam, e)
+        bool Visible(Entity e) => visibleLayers.Contains(e.LayerId) && (opt.HiddenEntities == null || !opt.HiddenEntities.Contains(e.Id)) && ViewKinds.Shown(view, e) && InSlice(opt, cam, e)
             && (clip == null || e is PolylineEntity or CircleEntity or SurfaceEntity || clip.Shows(e));
         SKColor ColorOf(Entity e)
         {
@@ -240,7 +240,7 @@ public static class PlanRenderer
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill };
         using var text = new SKPaint { IsAntialias = true, TextSize = 11, Color = Ink, Typeface = SKTypeface.Default };
 
-        if (!opt.HaloPass && (opt.ShowGrid ?? view.ShowGrid)) DrawGrid(canvas, cam, stroke, text);
+        if (!opt.HaloPass && (opt.ShowGrid ?? (view.ShowGrid && ViewKinds.GroupShown(view, ViewKinds.Interface)))) DrawGrid(canvas, cam, stroke, text);
         // a sheet of a section asks for its grid: the views on the screen go by the switch of the plan, and have none
         if (!opt.HaloPass && opt.ShowGrid == true && opt.SliceHalfWidth != null && cam.Pitch == 0) DrawSectionGrid(canvas, cam, stroke, text);
 
@@ -300,7 +300,7 @@ public static class PlanRenderer
                 float cx = MathF.Floor(x) + 0.5f, cy = MathF.Floor(y) + 0.5f;
                 list.Add(new SKPoint(cx - 4, cy)); list.Add(new SKPoint(cx + 5, cy));
                 list.Add(new SKPoint(cx, cy - 4)); list.Add(new SKPoint(cx, cy + 5));
-                if (!string.IsNullOrEmpty(pe.Label) && view.ShowText && (pl?.ShowText ?? true))
+                if (!string.IsNullOrEmpty(pe.Label) && (pl?.ShowText ?? true))
                     pointLabels.Add(pe.Label, x + 6, y - 6, key.Item1, text.TextSize);
                 continue;
             }
@@ -455,7 +455,8 @@ public static class PlanRenderer
             stroke.StrokeWidth = (float)(lineWidth + (selected ? opt.SelectionExtra : 0));
             fill.Color = color;
             text.Color = color;
-            var showText = view.ShowText && (lay?.ShowText ?? true);
+            // the labels of points and lines go by their layer; the hole labels switch (ShowText) is for the holes alone
+            var showText = lay?.ShowText ?? true;
             switch (e)
             {
                 case PolylineEntity pl:
@@ -485,7 +486,7 @@ public static class PlanRenderer
                 case PointEntity p:
                     DrawPoint(canvas, cam, p, stroke, fill, text, showText);
                     break;
-                case TextEntity t when view.ShowText:
+                case TextEntity t:
                 {
                     var (x, y) = cam.ToScreen(t.Position);
                     text.TextSize = (float)Math.Clamp(t.Height * cam.Scale, 6, 200);
@@ -535,7 +536,7 @@ public static class PlanRenderer
         // each end of each tie (with a survey under the blast that was most of the frame).
         Dictionary<Guid, Entity>? byId = null;
         var showTies = (view.ShowTies || opt.HideGeometry) && !opt.HideTies;
-        var showRows = view.ShowRows && !opt.HideGeometry && !opt.HaloPass && !opt.HideRows;
+        var showRows = view.ShowRows && ViewKinds.GroupShown(view, ViewKinds.Holes) && !opt.HideGeometry && !opt.HaloPass && !opt.HideRows;
         if (showTies || showRows)
         {
             byId = new Dictionary<Guid, Entity>(project.Entities.Count);
@@ -618,7 +619,8 @@ public static class PlanRenderer
             if (o is IMovePreviewOverlay mp) mp.Draw(canvas, cam, project, opt.MovedEntities, opt.MoveOffset);
             else o.Draw(canvas, cam, project);
 
-        if (view.ShowAxes && !opt.HideAxes) DrawAxes(canvas, cam, stroke, text);
+        var ui = ViewKinds.GroupShown(view, ViewKinds.Interface);
+        if (ui && view.ShowAxes && !opt.HideAxes) DrawAxes(canvas, cam, stroke, text);
         if (opt.DrawNorthArrow) DrawNorth(canvas, cam, stroke, fill, text);
         if (opt.DrawScaleBar) DrawScaleBar(canvas, cam, stroke, text);
         if (opt.DrawElevationScale && opt.SurfaceColors == null && range is { } r)
@@ -626,8 +628,8 @@ public static class PlanRenderer
             DrawElevationScale(canvas, cam, r.Min, r.Max, text);
             text.TextSize = 11;
         }
-        if (view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, project, holes, fill, text);
-        if (view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, fill, text);
+        if (ui && view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, project, holes, fill, text);
+        if (ui && view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, fill, text);
         if (opt.DrawSummaryBlock && project.Summary.Visible) DrawSummary(canvas, cam, project, fill, stroke, text);
     }
 
@@ -982,17 +984,16 @@ public static class PlanRenderer
     /// Whether an entity is drawn under the current display switches (ties, surfaces, text, hole filters), ignoring layers.
     /// Picking and selection use the same rule so nothing hidden can be selected.
     /// </summary>
-    public static bool EntityShown(ViewState view, Entity e) => e switch
+    public static bool EntityShown(ViewState view, Entity e) => ViewKinds.Shown(view, e) && e switch
     {
         Hole h => HoleVisible(view, h),
         TieEntity => view.ShowTies,
         SurfaceEntity => view.ShowSurfaces,
-        TextEntity => view.ShowText,
         _ => true
     };
 
     public static bool HoleVisible(ViewState view, Hole h) =>
-        (h.IsDummy || !view.HiddenHoleTypes.Contains(h.HoleType)) && !view.HiddenMaterialTypes.Contains(h.MaterialType) && !view.HiddenStates.Contains(h.State);
+        ViewKinds.Shown(view, h) && (h.IsDummy || !view.HiddenHoleTypes.Contains(h.HoleType)) && !view.HiddenMaterialTypes.Contains(h.MaterialType) && !view.HiddenStates.Contains(h.State);
 
     // ---- primitives -------------------------------------------------------
 

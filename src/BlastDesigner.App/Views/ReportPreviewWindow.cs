@@ -170,7 +170,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         // the blast's own design, or for a blast that has none that of the settings, framed afresh
         Design = vm.Project!.ReportDesign is { } own ? ProjectJson.DeepClone(own) : vm.Settings.ReportDesign.Portable();
         // the very first time the check boxes start as in the Visibility tab of the main window; then they are the design's own
-        if (!Design.KindsChosen) Design.HiddenKinds = vm.Project!.Entities.GroupBy(e => e.KindName).Where(g => g.All(e => vm.HiddenEntities.Contains(e.Id))).Select(g => g.Key).ToList();
+        if (!Design.KindsChosen) Design.HiddenKinds = vm.Project!.Entities.GroupBy(e => e.KindName).Where(g => g.All(e => vm.HiddenEntities.Contains(e.Id) || !ViewKinds.Shown(vm.Project.View, e))).Select(g => g.Key).ToList();
         if (!Design.KindsChosen) Design.Section.HiddenKinds = Design.HiddenKinds.ToList();
         TranslateTitle();
 
