@@ -200,11 +200,7 @@ public sealed partial class MainViewModel
     /// The Depths chip: on, a loaded hole shows its charge column and an empty one the line from collar to toe; off,
     /// the collars only.
     /// </summary>
-    public void ToggleDepths() => ToggleView(v =>
-    {
-        v.CollarsOnly = !v.CollarsOnly;
-        if (!v.CollarsOnly) v.ShowLoading = true;
-    });
+    public void ToggleDepths() => ToggleView(v => v.CollarsOnly = !v.CollarsOnly);
     public bool IsTimingLabelVisible(TimingLabelMode mode)
     {
         var view = Project?.View;

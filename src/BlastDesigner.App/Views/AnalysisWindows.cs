@@ -329,7 +329,25 @@ public static partial class AnalysisWindows
         });
         shown = w;
         Dialogs.FixHeight(w, minWidth, height);
-        w.Closed += (_, _) => { timer.Stop(); vm.ClearOverlays(); s.Save(); };
+        // a change of the project (a new tie-up, an undo) changes the firing times: the scrub bar takes their new range,
+        // or the holes firing after the old end would never be shown fired
+        void Retime()
+        {
+            var now = vm.Project?.Holes.Where(h => h.FiringTimeMs.HasValue).Select(h => h.FiringTimeMs!.Value).ToList();
+            if (now == null || now.Count == 0) return;
+            var atEnd = slider.Value >= playbackEnd;
+            min = now.Min();
+            max = now.Max();
+            playbackEnd = max > min ? max : max + 1;
+            slider.Minimum = min;
+            slider.Maximum = playbackEnd;
+            slider.Value = atEnd ? playbackEnd : Math.Clamp(slider.Value, min, playbackEnd);
+            foreach (var (chip, v) in secondsChips)
+                if (v == 0) ToolTip.SetTip(chip, Loc.F("The blast's own time: {0:0} ms", playbackEnd - min));
+            Update();
+        }
+        vm.ModelRefreshed += Retime;
+        w.Closed += (_, _) => { vm.ModelRefreshed -= Retime; timer.Stop(); vm.ClearOverlays(); s.Save(); };
     }
 
     public static void TimeEnvelope(MainViewModel vm)

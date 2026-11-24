@@ -483,6 +483,27 @@ Step("auto tie-up window plans and compares the layouts, the fan among them", ()
     }
     finally { w.Close(); Pump(); }
 });
+Step("the Visualization window takes the new range of the firing times after a new tie-up (the holes after the old end fire)", () =>
+{
+    vm.VisualizeTiming(); Pump();
+    var w = BlastDesigner.App.Services.Dialogs.LastShown!;
+    try
+    {
+        var slider = w.GetLogicalDescendants().OfType<Avalonia.Controls.Slider>().First();
+        var before = slider.Maximum;
+        vm.Change("Automatic tie-up", p =>
+        {
+            var ip = p.Entities.OfType<InitiationPoint>().First();
+            var cs = TieUpPlanner.SurfaceConnectors(p);
+            var o = new TieUpOptions { Start = ip, InRow = TieUpPlanner.Nearest(cs, 42), BetweenRows = TieUpPlanner.Nearest(cs, 109), Connectors = cs };
+            TieUpPlanner.Apply(p, p.Holes.ToList(), TieUpPlanner.Build(p, p.Holes.ToList(), o, TieScheme.Rows));
+        });
+        Pump();
+        var last = vm.Project!.Holes.Where(h => h.FiringTimeMs.HasValue).Max(h => h.FiringTimeMs!.Value);
+        if (Math.Abs(slider.Maximum - last) > 1e-6) throw new Exception($"scrub bar ends at {slider.Maximum} ms, the last hole fires at {last} ms (was {before})");
+    }
+    finally { w.Close(); Pump(); vm.Undo(); Pump(); }
+});
 Step("monitoring point", () => vm.Change("Add point", p => p.Add(new PointEntity { Position = new Vec3(1300, 2200, 300), Kind = PointKind.Monitoring, Label = "House" })));
 Step("timing labels are independent", () =>
 {

@@ -35,7 +35,7 @@ public sealed partial class MainViewModel
             new("Ctrl+Shift+T", "Hole table"),
             new("Ctrl+Shift+V", "Visualize timing"),
             new("Ctrl+Shift+Q", "Quantities"),
-            new("Ctrl+Shift+L", "Show loading"),
+            new("Ctrl+Shift+L", "Hole track"),
             new("Ctrl+Shift+S", "Section view"),
             new("Ctrl+Shift+X", "Export IREDES plan"),
             new("Ctrl+Shift+D", "Dashboard"),

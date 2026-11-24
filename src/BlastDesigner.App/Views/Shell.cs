@@ -1068,16 +1068,13 @@ public sealed class Inspector : DockPanel
 
         _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Holes"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         grid = Columns();
+        // one switch for the depth of the holes: a loaded hole shows its charge column, an empty one the line to the toe
         Check("Hole track", v => !v.CollarsOnly, v => v.CollarsOnly = !v.CollarsOnly, ui: true,
-            tip: "Plan and 3D: the line from collar to toe with a dot at the toe. Shows the direction and inclination of the holes; display only, the calculations use the hole data whether it is on or off.");
+            tip: "Plan and 3D: a loaded hole shows its charge column, the decks in their product colours; an empty one the line from collar to toe with a dot at the toe. Off: collars only. Display only; the same decks give the explosive mass, quantities, costs and the vibration charge.");
         Check("Collar", v => v.ShowCollars, v => v.ShowCollars = !v.ShowCollars, ui: true,
             tip: "Plan and 3D: the collar circle, filled by hole state (designed — empty, drilled — pale, loaded — solid). When off, selected holes show no collar either; holes can still be picked. Display only.");
         Check("Dip track", v => v.ShowDipTrack, v => v.ShowDipTrack = !v.ShowDipTrack, ui: true,
             tip: "Plan and 3D: a thick cyan line down to the dipped depth with a mark at its end, only for dipped holes. The dipped length replaces the design length in loading, quantities and the tolerance check.");
-        Check("Charge track", v => v.ShowLoading, v => v.ShowLoading = !v.ShowLoading, ui: true,
-            tip: "Plan and 3D: the decks along the hole in their product colours, and the collar filled with the explosive colour. Shows the loaded column; the same decks give the explosive mass, quantities, costs and the vibration charge.");
-        Check("Actual track", v => v.ShowActualTrack, v => v.ShowActualTrack = !v.ShowActualTrack, ui: true,
-            tip: "Plan and 3D: the surveyed bore track, dashed orange, only for surveyed holes. Used by the drilling tolerance check (toe, angle and bearing deviation) and the dashboard quality figures.");
         Check("Grade point", v => v.ShowGradePoint, v => v.ShowGradePoint = !v.ShowGradePoint, ui: true,
             tip: "Plan and 3D: a green diamond where the hole crosses the design grade (length minus subdrill). Shows the bench floor; the bench height from it is used in quantities, volumes and the fragmentation prediction.");
         Check("Deviation", v => v.ShowDeviation, v => v.ShowDeviation = !v.ShowDeviation, ui: true,
@@ -1087,7 +1084,7 @@ public sealed class Inspector : DockPanel
         Check("MWD profile", v => v.ShowProfile, v => v.ShowProfile = !v.ShowProfile, ui: true,
             tip: "Plan and 3D: rock hardness from the measure-while-drilling log along the track, blue soft to red hard, only for holes with a log. Loading rules use it to switch to the hard or soft rock product and lengthen stemming in a soft collar.");
         _visibility.Children.Add(grid);
-        // hole types (dummy holes first), material types and hole states: the filters that were in the View menu
+        // hole types, material types and hole states: the filters that were in the View menu (dummy holes go with "Hole" in Objects)
         _visibility.Children.Add(new TextBlock { Text = Loc.T("Hole types"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 10, 0, 4) });
         void Filter(string text, bool shown, Action toggle)
         {
@@ -1095,7 +1092,6 @@ public sealed class Inspector : DockPanel
             cb.IsCheckedChanged += (_, _) => toggle();
             _visibility.Children.Add(cb);
         }
-        Filter(Loc.T("Dummy holes"), !p.View.HiddenHoleTypes.Contains(0), () => _vm.ToggleHoleType(0));
         foreach (var t in p.Design.HoleTypes)
         {
             var idx = t.Index;
@@ -1431,7 +1427,8 @@ public sealed class Inspector : DockPanel
     private void BuildObjectVisibility(BlastProject p)
     {
         _visibility.Children.Add(new TextBlock { Text = Loc.Ui("Objects"), Foreground = Look.Blue, FontSize = 11, Margin = new Thickness(0, 4) });
-        foreach (var kind in p.Entities.GroupBy(e => e.KindName).OrderBy(g => g.Key))
+        // dummy holes go with the holes: one box for both
+        foreach (var kind in p.Entities.GroupBy(e => e is Hole ? "Hole" : e.KindName).OrderBy(g => g.Key))
         {
             var ids = kind.Select(e => e.Id).ToList();
             var cb = new CheckBox { Content = $"{Loc.T(kind.Key)} ({ids.Count})", IsChecked = !ids.All(_vm.HiddenEntities.Contains) };

@@ -477,8 +477,9 @@ public static class PlanRenderer
                         canvas.DrawText(pl.Label, x + 2, y - 2, text);
                     }
                     if (pl.ZoneArrows is { Count: > 0 } arrows && !opt.HaloPass) DrawZoneArrows(canvas, cam, arrows, color, opt.Background);
-                    // the name of a section line at each end of the segment it is cut along
-                    if (showText && !opt.HaloPass && cam.IsPlan && pl.Kind == LineKind.CrossSection && pl.Points.Count >= 2 && pl.Label.Trim().Length > 0)
+                    // the name of a section line at each end of the segment it is cut along, in plan and in 3D alike (seen
+                    // edge on, the segment is too short on the screen and the names are left out)
+                    if (showText && !opt.HaloPass && pl.Kind == LineKind.CrossSection && pl.Points.Count >= 2 && pl.Label.Trim().Length > 0)
                         DrawSectionName(canvas, cam, pl.Points[0], pl.Points[1], pl.Label.Trim(), color);
                     break;
                 case PointEntity p:
@@ -546,7 +547,7 @@ public static class PlanRenderer
 
         var holes = entities.OfType<Hole>().Where(h => HoleVisible(view, h)).ToList();
         if (!cam.IsPlan) holes = holes.OrderBy(h => cam.Depth(h.Collar)).ToList();
-        if (view.ShowDipTrack || view.ShowActualTrack || view.ShowDeviation || view.ShowGradePoint || view.ShowProfile)
+        if (view.ShowDipTrack || view.ShowDeviation || view.ShowGradePoint || view.ShowProfile)
             foreach (var h in holes) { var mc = BeginMove(h); DrawHoleTracks(canvas, cam, h, view); EndMove(mc); }
         // Depth lines and charge columns of all holes in one batch, under the collars: in 3D with the charge shown they
         // were three or four thick lines per hole, thousands of draws a frame. Dragged holes draw their own.
@@ -991,7 +992,7 @@ public static class PlanRenderer
     };
 
     public static bool HoleVisible(ViewState view, Hole h) =>
-        !view.HiddenHoleTypes.Contains(h.IsDummy ? 0 : h.HoleType) && !view.HiddenMaterialTypes.Contains(h.MaterialType) && !view.HiddenStates.Contains(h.State);
+        (h.IsDummy || !view.HiddenHoleTypes.Contains(h.HoleType)) && !view.HiddenMaterialTypes.Contains(h.MaterialType) && !view.HiddenStates.Contains(h.State);
 
     // ---- primitives -------------------------------------------------------
 
@@ -1845,8 +1846,8 @@ public static class PlanRenderer
     }
 
     /// <summary>
-    /// The depth of a hole into <paramref name="lines"/>: a loaded hole its charge column (with the charge track on), an
-    /// empty one the line from collar to toe with a dot at the toe. With collars only, neither.
+    /// The depth of a hole into <paramref name="lines"/>: a loaded hole its charge column, an empty one the line from
+    /// collar to toe with a dot at the toe. With collars only (the hole track off), neither.
     /// </summary>
     private static void DrawHoleColumn(SKCanvas c, Camera cam, BlastProject project, Hole h, SceneOptions opt, SKPaint fill, LineMesh lines)
     {
@@ -1860,7 +1861,7 @@ public static class PlanRenderer
         var typeColor = HoleColour(project, h);
         var color = selected ? opt.SelectionColor : typeColor;
         var r = (float)Math.Max(opt.CollarPixels / 2, h.RadiusM * cam.Scale);
-        var charged = view.ShowLoading && h.Decks.Any(d => project.FindProduct(d.ProductId) != null);
+        var charged = h.Decks.Any(d => project.FindProduct(d.ProductId) != null);
         if (!charged) lines.Line(color.WithAlpha(160), 1, x, y, tx, ty);
         else
             foreach (var d in h.Decks)
@@ -1924,7 +1925,7 @@ public static class PlanRenderer
                 HoleState.Fired => new SKColor(0xFF6B7280),
                 _ => opt.Background
             };
-            if (view.ShowLoading && h.Decks.Count > 0)
+            if (h.Decks.Count > 0)
             {
                 var exp = h.Decks.Select(d => project.FindProduct(d.ProductId)).FirstOrDefault(p => p?.IsExplosive == true);
                 if (exp != null) fill.Color = new SKColor(exp.Color);
@@ -2080,14 +2081,6 @@ public static class PlanRenderer
             var (ex, ey) = cam.ToScreen(end);
             fill.Color = Adapt(new SKColor(0xFF22B8C8));
             c.DrawRect(ex - 3, ey - 1, 6, 2.5f, fill);
-        }
-        if (view.ShowActualTrack && h.BoreTrack is { Count: > 1 } track)
-        {
-            stroke.StrokeWidth = 1.6f;
-            stroke.Color = Adapt(new SKColor(0xFFEA580C));
-            stroke.PathEffect = SKPathEffect.CreateDash(new[] { 5f, 3f }, 0);
-            DrawPolyline(c, cam, track, false, stroke);
-            stroke.PathEffect = null;
         }
         if (view.ShowGradePoint)
         {

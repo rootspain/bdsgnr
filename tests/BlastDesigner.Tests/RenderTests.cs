@@ -958,4 +958,23 @@ public class RenderTests
         Assert.Equal((0, 0), Lit(true, true));
         Assert.Equal((0, 0), Lit(false, true));
     }
+
+    [Fact]
+    public void TheNamesOfASectionLineShowInPlanAndIn3D()
+    {
+        // the names at both ends of the section line: drawn in plan, and still drawn when the view is turned free in 3D
+        int Red(Camera cam, string label)
+        {
+            var p = BlastProject.CreateNew("section");
+            p.Add(new PolylineEntity { Kind = LineKind.CrossSection, Label = label, Color = 0xFFFF0000, Points = { new Vec3(-10, 0, 0), new Vec3(10, 0, 0) } });
+            using var bitmap = new SKBitmap(400, 300);
+            using var canvas = new SKCanvas(bitmap);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions { DrawSummaryBlock = false, DrawNorthArrow = false, DrawScaleBar = false, ShowGrid = false });
+            return bitmap.Pixels.Count(c => c.Red > 180 && c.Green < 90 && c.Blue < 90);
+        }
+        var plan = new Camera { Width = 400, Height = 300, Pitch = 90, Scale = 8, Target = new Vec3(0, 0, 0) };
+        var free = new Camera { Width = 400, Height = 300, Pitch = 35, Yaw = 30, Scale = 8, Target = new Vec3(0, 0, 0) };
+        foreach (var cam in new[] { plan, free })
+            Assert.True(Red(cam, "A") > Red(cam, "") + 40, $"no section names at pitch {cam.Pitch}: {Red(cam, "A")} red pixels with, {Red(cam, "")} without");
+    }
 }

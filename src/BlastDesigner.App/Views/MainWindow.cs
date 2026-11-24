@@ -675,7 +675,7 @@ public sealed class MainWindow : Window
             Key.T => ToggleTable,
             Key.V => () => Cmd("Calculations/Visualize timing"),
             Key.Q => () => Cmd("Calculations/Quantities"),
-            Key.L => () => _vm.ToggleView(v => v.ShowLoading = !v.ShowLoading),
+            Key.L => _vm.ToggleDepths,
             Key.S => () => Cmd("View/Section view"),
             Key.X => () => Cmd("File/Export/IREDES Plan file…"),
             Key.D => () => Cmd("View/Dashboard"),

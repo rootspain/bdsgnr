@@ -552,6 +552,7 @@ public sealed class ViewState
     // new projects show collars with their charge columns, the hole number and the firing order (no plain hole tracks)
     public bool CollarsOnly { get; set; } = true;
     public bool ReverseDrawOrder { get; set; }
+    /// <summary>Not used: the hole track shows the charge column of a loaded hole by itself. Kept so older files read.</summary>
     public bool ShowLoading { get; set; } = true;
     public HoleLabelMode HoleLabels { get; set; } = HoleLabelMode.Label | HoleLabelMode.RouteNumber;
     /// <summary>Font size of the hole labels on the plan and in 3D, px; a file before it reads the default.</summary>
@@ -568,7 +569,7 @@ public sealed class ViewState
     public bool ShowSurfaces { get; set; } = true;
     /// <summary>Collar circles; off leaves only the hole tracks.</summary>
     public bool ShowCollars { get; set; } = true;
-    /// <summary>Surveyed bore track (as drilled) drawn along its points.</summary>
+    /// <summary>Not used: the surveyed bore track is no longer drawn (the deviation shows the offset of the toe). Kept so older files read.</summary>
     public bool ShowActualTrack { get; set; }
     /// <summary>Track down to the dipped (measured) depth, over the design track.</summary>
     public bool ShowDipTrack { get; set; }

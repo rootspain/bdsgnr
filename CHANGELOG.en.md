@@ -6,6 +6,23 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.14 — 2026-11-24
+
+### Changed
+- Visibility tab: "Hole track" and "Charge track" are one check box, "Hole track". A loaded hole shows its charge
+  column in the product colours, an empty one the line from collar to toe. The collar of a loaded hole is always filled
+  with the explosive colour. Ctrl+Shift+L and the "Depths" chip switch the same box.
+- Visibility tab: dummy holes have no box of their own; the "Hole" box in Objects hides and shows them, and "Dummy
+  holes" is gone from Hole types.
+- Visibility tab: the "Actual track" box is gone and the surveyed bore track is no longer drawn; "Deviation" still
+  shows the offset of the toe.
+
+## 0.3.13 — 2026-11-23
+
+### Fixed
+- The letters at the ends of a section line were lost on turning from the plan view to free 3D rotation; they now show
+  in 3D too.
+
 ## 0.3.12 — 2026-11-23
 
 ### New
