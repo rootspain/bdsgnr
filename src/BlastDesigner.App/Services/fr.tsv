@@ -2353,7 +2353,6 @@ ui:Drawing: {0} (others in the list)	Dessin : {0} (autres dans la liste)
 Click points; a click on the last point, a double-click or Enter finishes, Backspace removes the last point.	Cliquez des points ; un clic sur le dernier point, un double-clic ou Entrée termine, Retour arrière supprime le dernier point.
 Click two points to dimension. Left to right: the brackets go down; right to left: up.	Cliquez deux points à coter. De gauche à droite : les accolades vers le bas ; de droite à gauche : vers le haut.
 Click the hole the electronic blast opens from.	Cliquez le trou d'où part le tir électronique.
-Click the hole the blast is initiated at; the ties then go on from it.	Cliquez le trou où le tir est amorcé ; les liaisons partent ensuite de lui.
 Place the initiation point on a hole	Placez le point d'amorçage sur un trou
 Hole {0} already has initiation point {1}	Le trou {0} a déjà le point d'amorçage {1}
 Ties turned to run from the initiation point: {0}	Liaisons retournées pour partir du point d'amorçage : {0}
@@ -2819,7 +2818,7 @@ ui:Burden azimuth, °	Azimut de la banquette, °
 ui:Direction of the burden, degrees from north; a new value turns the grid about its centre	Direction de la banquette, en degrés depuis le nord ; une nouvelle valeur tourne la grille autour de son centre
 ui:Turned since made	Rotation depuis la création
 ui:Off its node	Écart à son nœud
-Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.	Cliquez pour sélectionner, tracez un cadre pour en sélectionner plusieurs (de droite à gauche = par intersection). Faites glisser un objet sélectionné ou appuyez sur les flèches (1 m par appui) pour le déplacer au sol, avec Maj vers le haut ou le bas (Z), avec Ctrl par pas de 0,1 m. Une poignée ronde d'une ligne sélectionnée déplace son sommet. Un clic avec Maj ajoute, avec Ctrl inverse. Sur une ligne sélectionnée, Maj ajoute un sommet, Ctrl sur une poignée le supprime. Sur un front de séquence sélectionné, le cercle d'accent au sommet le fait pivoter, un cercle à la base change son angle et sa longueur. Le cercle à la pointe de la flèche d'une maille dont un trou est sélectionné tourne sa grille (pas de 5° avec Maj, 0,1° avec Ctrl), son menu contextuel tourne d'un quart de tour, d'un angle ou le long d'une ligne. Les poignées rondes d'un bloc sélectionné changent sa taille : un coin la longueur et la largeur (avec Maj le haut ou le bas), le milieu d'une face ce côté seulement.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex, with Shift up or down on its own; a click on it selects the vertex and shows its coordinates in the properties. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.	Cliquez pour sélectionner, tracez un cadre pour en sélectionner plusieurs (de droite à gauche = par intersection). Faites glisser un objet sélectionné ou appuyez sur les flèches (1 m par appui) pour le déplacer au sol, avec Maj vers le haut ou le bas (Z), avec Ctrl par pas de 0,1 m. Une poignée ronde d'une ligne sélectionnée déplace son sommet, avec Maj seul vers le haut ou le bas ; un clic dessus sélectionne le sommet et affiche ses coordonnées dans les propriétés. Un clic avec Maj ajoute, avec Ctrl inverse. Sur une ligne sélectionnée, Maj ajoute un sommet, Ctrl sur une poignée le supprime. Sur un front de séquence sélectionné, le cercle d'accent au sommet le fait pivoter, un cercle à la base change son angle et sa longueur. Le cercle à la pointe de la flèche d'une maille dont un trou est sélectionné tourne sa grille (pas de 5° avec Maj, 0,1° avec Ctrl), son menu contextuel tourne d'un quart de tour, d'un angle ou le long d'une ligne. Les poignées rondes d'un bloc sélectionné changent sa taille : un coin la longueur et la largeur (avec Maj le haut ou le bas), le milieu d'une face ce côté seulement.
 Turn the pattern	Tourner la maille
 Turn by…	Tourner de…
 ui:Burden, m: the distance between the rows; a new value lays the grid out again	Banquette, m : la distance entre les rangées ; une nouvelle valeur reconstruit la grille
@@ -3967,3 +3966,39 @@ Copy all	Tout copier
 The section is copied	La coupe est copiée
 The section could not be put on the clipboard	La coupe n’a pas pu être mise dans le presse-papiers
 Section line length	Longueur de la ligne de coupe
+Click the hole the blast is initiated at.	Cliquez le trou où le tir est amorcé.
+ui:Do not scale	Ne pas mettre à l'échelle
+ui:On: the hole labels and the delays of the ties keep their font size at any zoom. Off: they grow and shrink with the plan, and too small to read they are not shown. Printed sheets keep the font size.	Activé : les étiquettes des trous et les retards des liaisons gardent leur taille de police à tout zoom. Désactivé : elles grandissent et rétrécissent avec le plan, et trop petites pour être lues elles ne sont pas affichées. Les feuilles imprimées gardent la taille de police.
+ui:Font	Police
+ui:Smaller	Plus petit
+ui:Larger	Plus grand
+ui:Delays of the ties	Retards des liaisons
+ui:Beside the tie	À côté de la liaison
+ui:On the tie, over a patch	Sur la liaison, sur un fond
+ui:From the initiation catalogue	Depuis le catalogue d'amorçage
+ui:Opens the initiation catalogue on the product of the selected ties: a type or family chosen goes on them at once; OK keeps it, Cancel gives back what they had	Ouvre le catalogue d'amorçage sur le produit des liaisons sélectionnées : le type ou la famille choisi s'y applique aussitôt ; OK le garde, Annuler rend ce qu'elles avaient
+Ties from the initiation catalogue	Liaisons depuis le catalogue d'amorçage
+Tie from the initiation catalogue	Liaison depuis le catalogue d'amorçage
+ui:Switched off	Désactivé
+ui:The number stands off the line, across it, and the line shows whole	Le nombre est écarté de la ligne, en travers, et la ligne se voit entière
+ui:The number stands on the middle of the line, which is cut under it	Le nombre est au milieu de la ligne, coupée sous lui
+ui:No numbers: each kind of tie (product and delay) has its own heads, up to four, then hollow ones, and the tie legend tells them	Pas de nombres : chaque sorte de liaison (produit et retard) a ses pointes, jusqu'à quatre, puis creuses, et la légende des liaisons les explique
+ui:Build only	Construire seulement
+ui:on surface	sur la surface
+ui:on points	sur les points
+ui:on lines	sur les lignes
+ui:Close the line	Fermer
+ui:The points lie on the surface under the cursor, no snapping to other objects (but the survey points and line vertices ticked here); outside the surfaces no point is put	Les points se posent sur la surface sous le curseur, sans accrochage à d'autres objets (sauf les points levés et sommets de lignes cochés ici) ; hors des surfaces aucun point n'est posé
+ui:A point goes onto a survey point under the cursor	Un point se pose sur un point levé sous le curseur
+ui:A point goes onto a vertex of a line under the cursor	Un point se pose sur un sommet de ligne sous le curseur
+ui:The last point joins the first: a closed outline (a polygon)	Le dernier point rejoint le premier : un contour fermé (un polygone)
+No survey point or line vertex under the cursor	Aucun point levé ni sommet de ligne sous le curseur
+No survey point under the cursor	Aucun point levé sous le curseur
+No line vertex under the cursor	Aucun sommet de ligne sous le curseur
+Outside the surfaces	Hors des surfaces
+Click points; a click on the first point closes the line, a click on the last point, a double-click, Enter or Esc finishes, Backspace removes the last point.	Cliquez les points ; un clic sur le premier point ferme la ligne, un clic sur le dernier point, un double-clic, Entrée ou Échap termine, Retour arrière enlève le dernier.
+Nothing to build on under the cursor: no surface, survey point or line vertex ticked	Rien sur quoi construire sous le curseur : ni surface, ni point levé ou sommet de ligne coché
+Vertex {0} of {1}	Sommet {0} sur {1}
+Vertices: {0}	Sommets : {0}
+Vertex {0} of {1}, Z {2:0.00} m	Sommet {0} sur {1}, Z {2:0.00} m
+Close line	Fermer la ligne

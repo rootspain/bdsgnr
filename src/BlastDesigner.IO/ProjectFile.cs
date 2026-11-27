@@ -102,6 +102,8 @@ public static class ProjectFile
             if (l.Group == "Survey") l.Group = StandardLayers.TopographyGroup;
         // an initiation point standing on a hole is bound to it (before 0.2.3 it only shared the position)
         InitiationLinks.Normalize(p);
+        // the shifts of the frame of a section were kept on its section line: they go to the section
+        p.TakeLegacySectionFrames();
         // schema 1: kinds and families lived on the products; the tables are made from them
         ProductCatalogue.Attach(p, new ProductCatalogue(), Array.Empty<Product>());
         // before 0.3.1 a timing line programmed pyrotechnic holes too, and a programmed time fired them past their tie-up

@@ -612,6 +612,22 @@ public sealed class SettingsForm : DockPanel
         yield return Row("Wireframe transparency", Number("wireframeTransparency", Edited.WireframeTransparency, v => Edited.WireframeTransparency = (int)Math.Round(v), "%", 0, 100, "0"), "The edges of the surface triangles");
         yield return Row("Point cloud transparency", Number("pointCloudTransparency", Edited.PointCloudTransparency, v => Edited.PointCloudTransparency = (int)Math.Round(v), "%", 0, 100, "0"), "The points of a point cloud");
         yield return Row("Collar size", Number("collar", Edited.CollarSizePixels, v => Edited.CollarSizePixels = v, "px", 2, 40, "0.#"));
+        var tieDelay = new WrapPanel { Name = "tieDelayPlace" };
+        // each choice says what it does in its own tip
+        foreach (var (key, label, tip) in new[]
+        {
+            (ProgramSettings.TieDelayBeside, "Beside the tie", "The number stands off the line, across it, and the line shows whole"),
+            (ProgramSettings.TieDelayOnLine, "On the tie, over a patch", "The number stands on the middle of the line, which is cut under it"),
+            (ProgramSettings.TieDelayOff, "Switched off", "No numbers: each kind of tie (product and delay) has its own heads, up to four, then hollow ones, and the tie legend tells them")
+        })
+        {
+            var k = key;
+            var chip = Ui.Chip(L(label), () => { if (Edited.TieDelayPlace != k) { Edited.TieDelayPlace = k; Build(); } }, Edited.TieDelayPlace == key, L(tip));
+            chip.Margin = new Thickness(0, 0, 6, 6);
+            chip.Tag = "tieDelay:" + key;
+            tieDelay.Children.Add(chip);
+        }
+        yield return Row("Delays of the ties", tieDelay);
         yield return Row("Coordinates box", Toggle(Edited.ShowCoordinatesBox, v => Edited.ShowCoordinatesBox = v), "Cursor coordinates in the status bar");
         yield return Row("FPS", Toggle(Edited.ShowFps, v => Edited.ShowFps = v, "showFps"), "Frames per second");
     }

@@ -111,6 +111,14 @@ public sealed class ProgramSettings
     /// <summary>The alpha of a colour drawn with a transparency of <paramref name="percent"/>.</summary>
     public static byte Alpha(int percent) => (byte)Math.Round(255 * (100 - Math.Clamp(percent, 0, 100)) / 100.0);
     public const string WireframeAlways = "Always", WireframeWhileStill = "WhileStill", WireframeSelected = "Selected", WireframeNever = "Never";
+
+    /// <summary>
+    /// Where the delays of the ties are written: <see cref="TieDelayBeside"/> (the default), beside the line, clear of
+    /// it; <see cref="TieDelayOnLine"/>, on the middle of the line over a patch of the background; <see cref="TieDelayOff"/>,
+    /// not written: the heads of the arrows tell the kinds of the ties, and the tie legend shows them.
+    /// </summary>
+    public string TieDelayPlace { get; set; } = TieDelayBeside;
+    public const string TieDelayBeside = "Beside", TieDelayOnLine = "OnLine", TieDelayOff = "Off";
     /// <summary>Fill colour per surface kind (SurfaceKind names); kinds missing here use <see cref="DefaultSurfaceColors"/>.</summary>
     public Dictionary<string, uint> SurfaceColors { get; set; } = new();
 
@@ -242,6 +250,8 @@ public sealed class ProgramSettings
     public double CollarSizePixels { get; set; } = 6;
     /// <summary>Font size of the hole labels last chosen: a new blast starts with it, the project keeps its own.</summary>
     public int HoleLabelFontSize { get; set; } = BlastDesigner.Domain.Model.ViewState.DefaultHoleLabelFontSize;
+    /// <summary>"Do not scale" of the hole labels last chosen: a new blast starts with it, the project keeps its own.</summary>
+    public bool HoleLabelsFixedSize { get; set; }
     /// <summary>Colours of the hole labels last chosen: a new blast starts with them, the project keeps its own.</summary>
     public Dictionary<BlastDesigner.Domain.Model.HoleLabel, uint> HoleLabelColors { get; set; } = new();
     public bool ShowCoordinatesBox { get; set; } = true;

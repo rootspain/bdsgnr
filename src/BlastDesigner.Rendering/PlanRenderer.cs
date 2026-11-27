@@ -39,6 +39,13 @@ public sealed record SceneOptions
     public SKColor Background { get; init; } = SKColors.White;
     public SKColor SelectionColor { get; init; } = new(0xFFFF00FF);
     public float CollarPixels { get; init; } = 6;
+    /// <summary>The delays of the ties on the middle of the line over a patch of the background; false (the default): beside the line.</summary>
+    public bool TieDelayOnLine { get; init; }
+    /// <summary>
+    /// No delays on the ties: each kind of tie (its product and delay, <see cref="PlanRenderer.TieKinds"/>) is told by
+    /// the heads of its arrows (<see cref="PlanRenderer.TieHeads"/>), and the tie legend shows them.
+    /// </summary>
+    public bool TieDelaysOff { get; init; }
     public bool DrawSummaryBlock { get; init; } = true;
     /// <summary>No labels by the holes: a section that writes their numbers over its frame (<see cref="SectionAnnotations"/>).</summary>
     public bool HideHoleLabels { get; init; }
@@ -253,7 +260,9 @@ public static class PlanRenderer
         if (opt.ClipScene?.Invoke(cam, project) is { } frameRect) { frameRect.Inflate(2, 2); canvas.ClipRect(frameRect); }
         var replaced = opt.Replaced is { Count: > 0 } swap ? swap : null;
         var entities = (replaced == null ? project.Entities : project.Entities.Select(e => replaced.TryGetValue(e.Id, out var c) ? c : e)).Where(e => Visible(e) && (!opt.HideGeometry || e is Hole or InitiationPoint or TieEntity) && (!opt.HaloPass || opt.Selection.Contains(e.Id))).ToList();
-        if (clip != null) entities = entities.SelectMany(e => CutByBlocks(clip, e)).ToList();
+        // the lines selected or being edited are drawn whole: their grips are on every vertex, also outside the blocks, and a
+        // vertex dragged out of a block keeps its segments to it
+        if (clip != null) entities = entities.SelectMany(e => e is PolylineEntity && (opt.Selection.Contains(e.Id) || replaced?.ContainsKey(e.Id) == true) ? new[] { e } : CutByBlocks(clip, e)).ToList();
         if (view.ReverseDrawOrder) entities.Reverse();
 
         // Every surface shares one height scale, from the lowest point of any shown surface to the highest: by elevation
@@ -577,7 +586,7 @@ public static class PlanRenderer
         foreach (var ip in entities.OfType<InitiationPoint>())
         {
             var mc = BeginMove(ip);
-            DrawInitiationPoint(canvas, cam, ip, opt.Selection.Contains(ip.Id) ? opt.SelectionColor : ColorOf(ip), text, opt.Selection.Contains(ip.Id));
+            DrawInitiationPoint(canvas, cam, project, ip, opt.Selection.Contains(ip.Id) ? opt.SelectionColor : ColorOf(ip), opt.Selection.Contains(ip.Id));
             EndMove(mc);
         }
         var holeLabels = new TextBatch();
@@ -636,7 +645,8 @@ public static class PlanRenderer
             text.TextSize = 11;
         }
         if (ui && view.ShowHoleLegend && opt.DrawHoleLegend) DrawHoleLegend(canvas, project, holes, fill, text);
-        if (ui && view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, fill, text);
+        // by its switch (Visibility ▸ Tie legend); with the delays off it tells the kinds of the ties by their heads
+        if (ui && view.ShowTieLegend && opt.DrawTieLegend) DrawTieLegend(canvas, cam, project, opt, fill, text);
         if (opt.DrawSummaryBlock && project.Summary.Visible) DrawSummary(canvas, cam, project, fill, stroke, text);
     }
 
@@ -819,8 +829,11 @@ public static class PlanRenderer
             if (e is PolylineEntity pl)
             {
                 key.Add(pl.Points.Count); key.Add(pl.Closed);
-                // the ends and the middle: an edited or moved line changes one of them
-                key.Add(pl.Points[0]); key.Add(pl.Points[^1]); key.Add(pl.Points[pl.Points.Count / 2]);
+                // every vertex, weighted by its place: a vertex moved anywhere on the line changes the key (the ends and the
+                // middle alone missed the others, and the line was drawn where it was)
+                double sum = 0;
+                for (int i = 0; i < pl.Points.Count; i++) { var v = pl.Points[i]; sum += (v.X * 31 + v.Y * 17 + v.Z) * (i + 1); }
+                key.Add(sum);
             }
             else if (e is CircleEntity c) { key.Add(c.Center); key.Add(c.Radius); }
         }
@@ -1328,32 +1341,104 @@ public static class PlanRenderer
         text.Color = oldColor;
     }
 
-    /// <summary>Outer radius of the initiation point star, px: large enough to stick out from under the hole it sits on.</summary>
-    public const float InitiationStarRadius = 16;
-    /// <summary>Radius of the see-through middle of the star, px: the collar of the hole under it shows (and is picked) there.</summary>
-    public const float InitiationStarHole = 5.5f;
+    /// <summary>Smallest font size scaled hole labels are drawn at, px; smaller, they are left out.</summary>
+    public const float MinScaledLabel = 4;
 
-    private static void DrawInitiationPoint(SKCanvas c, Camera cam, InitiationPoint ip, SKColor color, SKPaint text, bool selected = false)
+    /// <summary>
+    /// Font size of the hole labels and the delays of the ties, px: <see cref="ViewState.HoleLabelFontSize"/>; when the
+    /// labels scale with the plan (<see cref="ViewState.HoleLabelsFixedSize"/> off) in proportion to the zoom, the font
+    /// size being theirs at <see cref="ViewState.HoleLabelScaleAt"/> pixels per metre, up to 200 px. A printed sheet
+    /// (<paramref name="print"/>) keeps the font size: its scale would make them too small to read.
+    /// </summary>
+    public static float HoleLabelSize(ViewState view, Camera cam, bool print = false)
+    {
+        float size = Math.Clamp(view.HoleLabelFontSize, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize);
+        if (view.HoleLabelsFixedSize || print || cam.Scale <= 0) return size;
+        return (float)Math.Min(200, size * cam.Scale / ViewState.HoleLabelScaleAt);
+    }
+
+    /// <summary>Radius round the collar of an initiation point, px, where the tie tool starts at the point (a plain pick there takes the hole).</summary>
+    public const float InitiationRing = 5.5f;
+    /// <summary>The tag of an initiation point, px: from the collar to its point, the point, the body beyond it and its width.</summary>
+    public const float InitiationTagGap = 12.5f, InitiationTagPoint = 7, InitiationTagLength = 22, InitiationTagWidth = 14;
+
+    /// <summary>
+    /// The way from the collar of an initiation point to its tag on the screen: away from the holes around it. The screen
+    /// directions to its neighbours (its own hole left out; the holes no farther than half as far again as the nearest)
+    /// are summed and taken to the nearer of the four sides, the tag on the other one. Two neighbours on opposite sides (the middle of a row) cancel: the tag goes across the
+    /// row, to a side with no hole near (up first). Holes near on all four sides (inside a pattern): to the south. With
+    /// no hole near, to the right.
+    /// </summary>
+    public static (float X, float Y) InitiationTagSide(Camera cam, BlastProject project, InitiationPoint ip)
+    {
+        var basis = project.View.HoleBasis;
+        var (x, y) = cam.ToScreen(ip.Position);
+        var others = project.Holes.Where(h => h.Id != ip.HoleId && !h.IsDummy && Vec3.Distance2D(h.Collar, ip.Position) > 1e-3)
+            .Select(h => (Hole: h, D: Vec3.Distance2D(h.Collar, ip.Position))).OrderBy(o => o.D).ToList();
+        if (others.Count == 0) return (1, 0);
+        (float X, float Y) SideOf(double dx, double dy) => Math.Abs(dx) >= Math.Abs(dy) ? (dx > 0 ? 1 : -1, 0) : (0, dy > 0 ? 1 : -1);
+        (double X, double Y) Screen(Hole h) { var (hx, hy) = cam.ToScreen(h.DrawnCollar(basis)); return (hx - x, hy - y); }
+        // the sides with a hole near: within half as far again as the nearest
+        var reach = others[0].D * 1.5;
+        var taken = others.TakeWhile(o => o.D <= reach).Select(o => Screen(o.Hole)).Where(v => Math.Abs(v.X) + Math.Abs(v.Y) > 1e-6)
+            .Select(v => SideOf(v.X, v.Y)).ToHashSet();
+        if (taken.Count == 4)
+        {
+            // surrounded: the south of the plan, wherever it is on the screen
+            var (ax, ay) = cam.ToScreen(ip.Position + new Vec3(0, -1, 0));
+            return Math.Abs(ax - x) + Math.Abs(ay - y) < 1e-6 ? (0, 1) : SideOf(ax - x, ay - y);
+        }
+        // the neighbours: the holes near (in a pattern its next ones along the row and across it and the diagonal ones;
+        // the two nearest alone can be any two of four alike)
+        double sx = 0, sy = 0;
+        foreach (var o in others.TakeWhile(o => o.D <= reach))
+        {
+            var (dx, dy) = Screen(o.Hole);
+            var len = Math.Sqrt(dx * dx + dy * dy);
+            if (len < 1e-6) continue;
+            sx += dx / len;
+            sy += dy / len;
+        }
+        if (Math.Abs(sx) < 1e-3 && Math.Abs(sy) < 1e-3)
+        {
+            // the two on opposite sides: across the line through them, a side with no hole near first, up before down
+            var (dx, dy) = Screen(others[0].Hole);
+            var across = Math.Abs(dx) >= Math.Abs(dy) ? new (float X, float Y)[] { (0, -1), (0, 1) } : new (float X, float Y)[] { (1, 0), (-1, 0) };
+            return across.FirstOrDefault(s => !taken.Contains(s), across[0]);
+        }
+        return Math.Abs(sx) >= Math.Abs(sy) ? (sx > 0 ? -1 : 1, 0) : (0, sy > 0 ? -1 : 1);
+    }
+
+    /// <summary>
+    /// The tag of an initiation point on the screen, its point first: a pentagon whose point is turned to the collar from
+    /// the side of <see cref="InitiationTagSide"/>, the base of the point as wide as the body.
+    /// </summary>
+    public static SKPoint[] InitiationTag(Camera cam, BlastProject project, InitiationPoint ip)
     {
         var (x, y) = cam.ToScreen(ip.Position);
-        using var p = new SKPaint { IsAntialias = true, Color = selected ? color : Adapt(ip.IsElectronic ? new SKColor(0xFF00897B) : new SKColor(0xFFDC2626)), Style = SKPaintStyle.Fill };
+        var (ux, uy) = InitiationTagSide(cam, project, ip);
+        float px = -uy, py = ux, h = InitiationTagWidth / 2;
+        // close in, the hole is drawn wider: the point stays clear of its circle
+        var hole = ip.HoleId is Guid hid ? project.FindEntity(hid) as Hole : project.Holes.FirstOrDefault(o => Vec3.Distance2D(o.Collar, ip.Position) < 1e-3);
+        var gap = Math.Max(InitiationTagGap, hole == null ? 0 : (float)(hole.RadiusM * cam.Scale) + 5);
+        var tip = new SKPoint(x + ux * gap, y + uy * gap);
+        var b = new SKPoint(tip.X + ux * InitiationTagPoint, tip.Y + uy * InitiationTagPoint);
+        var e = new SKPoint(b.X + ux * InitiationTagLength, b.Y + uy * InitiationTagLength);
+        return new[] { tip, new SKPoint(b.X + px * h, b.Y + py * h), new SKPoint(e.X + px * h, e.Y + py * h), new SKPoint(e.X - px * h, e.Y - py * h), new SKPoint(b.X - px * h, b.Y - py * h) };
+    }
+
+    /// <summary>
+    /// An initiation point: a tag pointing at the collar from the side away from the holes around it, so it covers none of
+    /// them; the hole itself is drawn as it is. No text on it.
+    /// </summary>
+    private static void DrawInitiationPoint(SKCanvas c, Camera cam, BlastProject project, InitiationPoint ip, SKColor color, bool selected = false)
+    {
+        var colour = selected ? color : Adapt(ip.IsElectronic ? new SKColor(0xFF00897B) : new SKColor(0xFFDC2626));
+        // the tag alone: the hole under the point is drawn as it is, nothing over it
+        using var fill = new SKPaint { IsAntialias = true, Color = colour, Style = SKPaintStyle.Fill };
         using var path = new SKPath();
-        for (int i = 0; i < 10; i++)
-        {
-            var r = i % 2 == 0 ? InitiationStarRadius : InitiationStarRadius * 0.44f;
-            var a = -Math.PI / 2 + i * Math.PI / 5;
-            var px = x + (float)(r * Math.Cos(a));
-            var py = y + (float)(r * Math.Sin(a));
-            if (i == 0) path.MoveTo(px, py); else path.LineTo(px, py);
-        }
-        path.Close();
-        // a see-through middle, so the hole the point sits on stays visible
-        path.AddCircle(x, y, InitiationStarHole);
-        path.FillType = SKPathFillType.EvenOdd;
-        c.DrawPath(path, p);
-        text.Color = p.Color;
-        c.DrawText($"{ip.Label} {ip.StartTimeMs:0} {T("ms")}", x + InitiationStarRadius + 2, y - 10, text);
-        text.Color = color;
+        path.AddPoly(InitiationTag(cam, project, ip), close: true);
+        c.DrawPath(path, fill);
     }
 
     /// <summary>Per-surface render cache: shaded colours (geometry + theme only) and reusable per-frame buffers.</summary>
@@ -1786,6 +1871,102 @@ public static class PlanRenderer
     /// <summary>Length of the head of a tie's arrow on the screen, px.</summary>
     public const float TieArrowHead = 11;
 
+    /// <summary>A kind of tie: its product and its delay, ms, with how many ties of the blast are of it.</summary>
+    public sealed record TieKind(string Key, Product? Product, double DelayMs, int Count);
+
+    /// <summary>The key of the kind of a tie: its product and its delay rounded to the millisecond.</summary>
+    private static string TieKindKey(BlastProject project, TieEntity t, Vec3? a = null, Vec3? b = null) =>
+        (t.ProductId ?? "") + "|" + Math.Round(Timing.TieDelay(project, t, a, b)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The kinds of the ties of a blast, the ties of electronic detonators (no delay) left out: one per product and delay
+    /// together ("Tie 1" 17 ms, "Tie 1" 24 ms and "Tie 2" 17 ms are three), by the delay, then by the product's name.
+    /// Their order is the number of the kind, told by its heads (<see cref="TieHeads"/>).
+    /// </summary>
+    public static List<TieKind> TieKinds(BlastProject project)
+    {
+        var kinds = new Dictionary<string, (Product? Product, double Delay, int Count)>();
+        foreach (var t in project.Ties)
+        {
+            var product = project.FindProduct(t.ProductId);
+            if (product?.Kind == ProductKind.ElectronicDetonator) continue;
+            var delay = Math.Round(Timing.TieDelay(project, t));
+            var key = TieKindKey(project, t);
+            kinds[key] = kinds.TryGetValue(key, out var k) ? (k.Product, k.Delay, k.Count + 1) : (product, delay, 1);
+        }
+        return kinds.Select(k => new TieKind(k.Key, k.Value.Product, k.Value.Delay, k.Value.Count))
+            .OrderBy(k => k.DelayMs).ThenBy(k => k.Product?.Name ?? "", StringComparer.CurrentCulture).ToList();
+    }
+
+    /// <summary>
+    /// The heads of the arrows of the kind number <paramref name="kind"/> (from 0): the first four kinds 1 to 4 filled
+    /// heads, the next four 1 to 4 hollow ones; further kinds 4 hollow heads.
+    /// </summary>
+    public static (int Count, bool Hollow) TieHeads(int kind) => kind < 4 ? (kind + 1, false) : (Math.Min(4, kind - 3), true);
+
+    /// <summary>
+    /// How much larger the heads of the tie arrows are drawn than <see cref="TieArrowHead"/>: when the labels scale with
+    /// the plan (<see cref="HoleLabelSize"/>), half as much as they do, 1 + (k − 1) / 2 for the labels' k, kept within
+    /// 0.5 and 3; with Do not scale and on a printed sheet, 1.
+    /// </summary>
+    public static float TieHeadScale(ViewState view, Camera cam, bool print = false)
+    {
+        if (view.HoleLabelsFixedSize || print || cam.Scale <= 0) return 1;
+        var k = cam.Scale / ViewState.HoleLabelScaleAt;
+        return (float)Math.Clamp(1 + (k - 1) / 2, 0.5, 3);
+    }
+
+    /// <summary>Space from one head to the next of an arrow with several, px: a head and a gap, so they stand apart.</summary>
+    public const float TieHeadStep = TieArrowHead + 2;
+
+    /// <summary>The heads of an arrow ending at (<paramref name="x"/>, <paramref name="y"/>) along (ux, uy): the first at the end, the others behind it.</summary>
+    private static void AddTieHeads(LineMesh mesh, SKColor col, float x, float y, float ux, float uy, int kind, float scale = 1)
+    {
+        var (count, hollow) = TieHeads(kind);
+        const float half = 0.4f;
+        float head = TieArrowHead * scale, step = TieHeadStep * scale;
+        float cos = MathF.Cos(half), sin = MathF.Sin(half);
+        for (int i = 0; i < count; i++)
+        {
+            float tx = x - ux * step * i, ty = y - uy * step * i;
+            // the two back corners: the direction turned by 0.4 rad either way, a head length behind the tip
+            var l = new SKPoint(tx - head * (ux * cos + uy * sin), ty - head * (uy * cos - ux * sin));
+            var r = new SKPoint(tx - head * (ux * cos - uy * sin), ty - head * (uy * cos + ux * sin));
+            var tip = new SKPoint(tx, ty);
+            if (!hollow) { mesh.Triangle(col, tip, l, r); continue; }
+            mesh.Line(col, 1.4f, tip.X, tip.Y, l.X, l.Y);
+            mesh.Line(col, 1.4f, l.X, l.Y, r.X, r.Y);
+            mesh.Line(col, 1.4f, r.X, r.Y, tip.X, tip.Y);
+        }
+    }
+
+    /// <summary>Width of the delay of a tie on the screen, px: digits are about 0.58 of the font size wide.</summary>
+    public static float TieDelayWidth(string delay, float size) => delay.Length * size * 0.58f;
+
+    /// <summary>
+    /// Where the delay of a tie is written, the left end of its baseline, for the middle of the tie at (<paramref name="x"/>,
+    /// <paramref name="y"/>) going (<paramref name="dx"/>, <paramref name="dy"/>) on the screen. Beside the line (the
+    /// default): moved off the middle across the tie, to the upper side (to the right of an upright tie), as far as half
+    /// the number and a gap, so the line shows whole. On the line (<paramref name="onLine"/>): centred on the middle, a
+    /// patch of the background under it.
+    /// </summary>
+    public static (float X, float Y) TieDelayAt(string delay, float size, float x, float y, float dx, float dy, bool onLine)
+    {
+        float w = TieDelayWidth(delay, size), cap = size * 0.72f;
+        if (onLine) return (x - w / 2, y + cap / 2);
+        var len = MathF.Sqrt(dx * dx + dy * dy);
+        float nx = 0, ny = -1;
+        if (len > 1e-3f)
+        {
+            nx = -dy / len; ny = dx / len;
+            // the upper side; an upright tie, the right
+            if (ny > 0.01f || (MathF.Abs(ny) <= 0.01f && nx < 0)) { nx = -nx; ny = -ny; }
+        }
+        var d = MathF.Abs(nx) * w / 2 + MathF.Abs(ny) * cap / 2 + 4;
+        float cx = x + nx * d, cy = y + ny * d;
+        return (cx - w / 2, cy + cap / 2);
+    }
+
     private static void DrawTies(SKCanvas c, Camera cam, BlastProject project, IEnumerable<TieEntity> ties, IReadOnlyDictionary<Guid, Entity> byId, SceneOptions opt, SKPaint text)
     {
         static Vec3? PositionOf(IReadOnlyDictionary<Guid, Entity> byId, Guid id) => byId.TryGetValue(id, out var e) ? e switch
@@ -1799,12 +1980,16 @@ public static class PlanRenderer
         var products = new Dictionary<string, Product>();
         foreach (var p in project.Products) products.TryAdd(p.Id, p);
         var arrows = new LineMesh(opt.UnitsPerMm != null ? c : null);
+        // the patches under the delays on the line (TieDelayOnLine): over every tie, under the numbers
+        var patches = new LineMesh(opt.UnitsPerMm != null ? c : null);
         var labels = new TextBatch();
+        // the delays off: the number of each kind of tie, by its product and delay
+        var kindIndex = opt.TieDelaysOff ? TieKinds(project).Select((k, i) => (k.Key, i)).ToDictionary(x => x.Key, x => x.i) : null;
         // the delays of the ties in the font size of the hole labels (Visibility ▸ Hole labels)
-        var size = Math.Clamp(project.View.HoleLabelFontSize, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize);
+        var size = HoleLabelSize(project.View, cam, opt.UnitsPerMm != null);
+        // the heads of the arrows grow and shrink with the plan as the labels do, half as much
+        var headScale = TieHeadScale(project.View, cam, opt.UnitsPerMm != null);
         float w = (float)cam.Width, h = (float)cam.Height;
-        // the head of the arrow, px: large enough to tell the way of a tie at a glance
-        const float head = TieArrowHead;
         {
             foreach (var t in ties)
             {
@@ -1824,18 +2009,26 @@ public static class PlanRenderer
                 if (!_dark && col.Red > 230 && col.Green > 230 && col.Blue > 230) col = new SKColor(0xFF374151);
                 col = Adapt(col);
                 arrows.Line(col, selected ? SelectedTieWidth : TieWidth, x0, y0, x1, y1);
-                var ang = Math.Atan2(y1 - y0, x1 - x0);
-                arrows.Triangle(col, new SKPoint(x1, y1),
-                    new SKPoint((float)(x1 - head * Math.Cos(ang - 0.4)), (float)(y1 - head * Math.Sin(ang - 0.4))),
-                    new SKPoint((float)(x1 - head * Math.Cos(ang + 0.4)), (float)(y1 - head * Math.Sin(ang + 0.4))));
+                var len = MathF.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+                // the delays off: the heads tell the kind of the tie; else, and for a tie of no kind, one head
+                var kind = kindIndex != null && kindIndex.TryGetValue(TieKindKey(project, t), out var ki) ? ki : 0;
+                if (len > 1e-3f) AddTieHeads(arrows, col, x1, y1, (x1 - x0) / len, (y1 - y0) / len, kind, headScale);
                 // the ties of electronic detonators (EBS) carry no delay: no number on them
-                if (cam.Scale > 4 && product?.Kind != ProductKind.ElectronicDetonator)
+                if (!opt.TieDelaysOff && cam.Scale > 4 && size >= MinScaledLabel && product?.Kind != ProductKind.ElectronicDetonator)
                 {
                     var (x, y) = cam.ToScreen(Vec3.Lerp(a, b, 0.5));
-                    labels.Add(Timing.TieDelay(project, t, a, b).ToString("0"), x + 2, y - 2, col, size);
+                    var delay = Timing.TieDelay(project, t, a, b).ToString("0");
+                    var (lx, ly) = TieDelayAt(delay, size, x, y, x1 - x0, y1 - y0, opt.TieDelayOnLine);
+                    if (opt.TieDelayOnLine)
+                    {
+                        var half = TieDelayWidth(delay, size) / 2 + 3;
+                        patches.Line(opt.Background, size * 0.72f + 6, x - half, y, x + half, y);
+                    }
+                    labels.Add(delay, lx, ly, col, size);
                 }
             }
             arrows.Flush(c);
+            patches.Flush(c);
             labels.Flush(c, text);
         }
     }
@@ -1995,7 +2188,9 @@ public static class PlanRenderer
         // the labels of a selected hole stand clear of its ring
         if (selected) r += SelectedRingGap + SelectedRingWidth / 2 + (h.Exceptions != HoleException.None ? 2.5f : 0);
         text.Color = selected ? opt.SelectionColor : Ink;
-        var size = Math.Clamp(view.HoleLabelFontSize, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize);
+        var size = HoleLabelSize(view, cam, opt.UnitsPerMm != null);
+        // scaled down out of reading, the labels go
+        if (size < MinScaledLabel) return;
         text.TextSize = size;
         // each side top to bottom in the order of its list, the column centred on the collar; a label with nothing to
         // say for this hole (no time yet, no detonator) leaves no gap
@@ -2352,8 +2547,31 @@ public static class PlanRenderer
         }
     }
 
-    private static void DrawTieLegend(SKCanvas c, Camera cam, BlastProject project, SKPaint fill, SKPaint text)
+    private static void DrawTieLegend(SKCanvas c, Camera cam, BlastProject project, SceneOptions opt, SKPaint fill, SKPaint text)
     {
+        if (opt.TieDelaysOff)
+        {
+            // each kind: a sample of its arrow with its heads, the product, the delay and how many ties
+            var kinds = TieKinds(project);
+            if (kinds.Count == 0) return;
+            float kx = 10, ky = (float)cam.Height - 80 - kinds.Count * 17;
+            var mesh = new LineMesh(opt.UnitsPerMm != null ? c : null);
+            var rows = new List<(string Text, float Y)>();
+            for (int i = 0; i < kinds.Count; i++)
+            {
+                var k = kinds[i];
+                var col = Adapt(k.Product != null ? new SKColor(k.Product.Color) : new SKColor(0xFF6B7280));
+                // long enough for four heads apart
+                mesh.Line(col, TieWidth, kx, ky - 5, kx + 62, ky - 5);
+                AddTieHeads(mesh, col, kx + 62, ky - 5, 1, 0, i);
+                rows.Add(($"{k.Product?.Name ?? T("0 ms connection")} · {F("{0} ms", k.DelayMs.ToString("0"))} ({k.Count})", ky));
+                ky += 17;
+            }
+            mesh.Flush(c);
+            text.Color = Ink;
+            foreach (var (row, rowY) in rows) c.DrawText(row, kx + 70, rowY, text);
+            return;
+        }
         var used = project.Ties.Select(t => project.FindProduct(t.ProductId)).Where(p => p != null).Distinct().ToList();
         float x = 10, y = (float)cam.Height - 60 - used.Count * 15;
         foreach (var p in used)

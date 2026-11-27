@@ -77,12 +77,107 @@ public sealed partial class MainViewModel
 
     // ---- drawing tools -----------------------------------------------------------------
 
-    public void DrawPolylineTool(bool closed, LineKind kind = LineKind.General) =>
-        SetTool(new PickPointsTool(this, closed ? "Polygon" : "Polyline", "Click points; a click on the last point, a double-click or Enter finishes, Backspace removes the last point.", closed ? 3 : 2, int.MaxValue, closed, pts =>
+    /// <summary>
+    /// Polyline (and Polygon, the same tool with Close on): points by clicks, built only on the surfaces, on the survey points
+    /// or on the vertices of lines as the panel says (<see cref="PolylineOnSurface"/>, <see cref="PolylineOnPoints"/>,
+    /// <see cref="PolylineOnLines"/>), closed by <see cref="PolylineClosed"/>; Esc finishes the entry. A baseline or a
+    /// boundary keeps its own closing and takes the points as they are.
+    /// </summary>
+    public void DrawPolylineTool(bool closed, LineKind kind = LineKind.General)
+    {
+        var general = kind == LineKind.General;
+        // the Polygon button: the same tool, closing; the Polyline button: not closing (the switch turns it over)
+        if (general) PolylineClosed = closed;
+        bool Closes() => general ? PolylineClosed : closed;
+        PickPointsTool? tool = null;
+        tool = new PickPointsTool(this, general ? "Polyline" : closed ? "Polygon" : "Polyline", general
+            ? "Click points; a click on the first point closes the line, a click on the last point, a double-click, Enter or Esc finishes, Backspace removes the last point."
+            : "Click points; a click on the last point, a double-click or Enter finishes, Backspace removes the last point.", 2, int.MaxValue, closed, pts =>
         {
+            // closed by the switch or by a click on its first point
+            var shut = Closes() || tool?.ClosedByClick == true;
             var layer = kind == LineKind.Boundary ? Project!.GetOrCreateLayer(StandardLayers.Boundary, 0xFF16A34A, "Design") : null;
-            Change(closed ? "Add polygon" : "Add polyline", p => p.Add(new PolylineEntity { Points = pts, Closed = closed, Kind = kind }, layer));
-        }) { Measure = DistLabel });
+            Change(shut ? "Add polygon" : "Add polyline", p => p.Add(new PolylineEntity { Points = pts, Closed = shut, Kind = kind }, layer));
+        })
+        {
+            Measure = DistLabel,
+            ClosedSource = Closes,
+            ClosedName = general ? "Polygon" : null,
+            Constrain = general ? PolylinePoint : null,
+            SnapOwnPoints = general,
+            EscFinishes = true
+        };
+        SetTool(tool);
+    }
+
+    /// <summary>Polyline ▸ Close: the last point joins the first (a polygon). Set by the button the tool came from (Polygon: on), turned by the switch.</summary>
+    public bool PolylineClosed { get; set; }
+    /// <summary>Polyline ▸ Build only on surface: the points lie on the surface under the cursor (no other snapping than the boxes ticked). On at the start.</summary>
+    public bool PolylineOnSurface { get; set; } = true;
+    /// <summary>Polyline ▸ Build only on points: a point goes only onto a survey point under the cursor.</summary>
+    public bool PolylineOnPoints { get; set; } = true;
+    /// <summary>Polyline ▸ Build only on lines: a point goes only onto a vertex of a line under the cursor.</summary>
+    public bool PolylineOnLines { get; set; } = true;
+
+    /// <summary>
+    /// Where a click of the Polyline tool puts its point, by the boxes ticked (any of them together). On points / on lines:
+    /// onto the survey point or line vertex nearest the cursor within the pick radius, at its own level. Else on surface:
+    /// under the cursor itself (no other snapping), at the level of the topmost visible surface there. Neither: no point
+    /// (the status bar says why). No box ticked: the point as the cursor snaps it. On surface with no surface shown at all
+    /// does not stop the drawing.
+    /// </summary>
+    private (Vec3? Point, string? Why) PolylinePoint(Controls.ToolPointer p) => PolylinePointCore(p);
+
+    /// <summary>The object is drawn on the plan: its layer shown, not hidden, its kind shown, inside the blocks shown.</summary>
+    private bool IsShown(Entity e) =>
+        Project!.FindLayer(e.LayerId) is { Visible: true } && !HiddenEntities.Contains(e.Id) && Rendering.PlanRenderer.EntityShown(Project.View, e)
+        && (Blocks is not { } blocks || blocks.Shows(e));
+
+    private (Vec3? Point, string? Why) PolylinePointCore(Controls.ToolPointer p)
+    {
+        var project = Project;
+        if (project == null) return (p.Snapped, null);
+        var surface = PolylineOnSurface && project.Entities.Any(e => e is SurfaceEntity && IsShown(e));
+        if (PolylineOnPoints || PolylineOnLines)
+        {
+            var cam = View.Camera;
+            Vec3? best = null;
+            var bestD = View.TargetRadius;
+            void Try(Vec3 at)
+            {
+                var (sx, sy) = cam.ToScreen(at);
+                var d = Math.Sqrt((sx - p.X) * (sx - p.X) + (sy - p.Y) * (sy - p.Y));
+                if (d <= bestD) { bestD = d; best = at; }
+            }
+            foreach (var e in project.Entities)
+            {
+                if (!IsShown(e)) continue;
+                if (PolylineOnPoints && e is PointEntity pt) Try(pt.Position);
+                else if (PolylineOnLines && e is PolylineEntity line) foreach (var at in line.Points) Try(at);
+            }
+            if (best is Vec3 found) return (found, null);
+        }
+        if (surface)
+        {
+            // the cursor itself, snapping to points, lines or anything else left out: where the line of sight through it
+            // meets a surface shown (in the plan straight down; in 3D at the angle of the view, not on a level plane)
+            // (a frozen or locked surface shown counts, a hidden one does not)
+            if (View.PointOnSurfaceAt(p.X, p.Y, project.Entities.OfType<SurfaceEntity>().Where(IsShown)) is Vec3 onGround) return (onGround, null);
+        }
+        if (!(PolylineOnPoints || PolylineOnLines || surface)) return (p.Snapped, null);
+        var what = new List<string>();
+        if (PolylineOnPoints) what.Add("a survey point");
+        if (PolylineOnLines) what.Add("a line vertex");
+        if (surface) what.Add("a surface");
+        return (null, what.Count switch
+        {
+            1 when surface => "Outside the surfaces",
+            1 when PolylineOnPoints => "No survey point under the cursor",
+            1 => "No line vertex under the cursor",
+            _ when !surface => "No survey point or line vertex under the cursor",
+            _ => "Nothing to build on under the cursor: no surface, survey point or line vertex ticked"
+        });
+    }
 
     /// <summary>A section line: a polyline of one segment, so the entry ends with its second point.</summary>
     public void DrawSectionLineTool() =>
@@ -508,7 +603,8 @@ public sealed partial class MainViewModel
 
     public async Task DrapeCollarsOnSurface()
     {
-        var s = await PickSurface("Move collars onto surface");
+        // the collars go onto the bench: the list opens on the first bench surface
+        var s = await PickSurface("Move collars onto surface", SurfaceKind.Bench);
         if (s == null) return;
         var keepToe = await Dialogs.Confirm(Loc.T("Keep the toe positions (lengths change)?"));
         var ids = SelectedOrAllHoles().Select(h => h.Id).ToHashSet();
@@ -529,14 +625,19 @@ public sealed partial class MainViewModel
         });
     }
 
-    public async Task<SurfaceEntity?> PickSurface(string title)
+    /// <summary>
+    /// The surface to work with: the selected one, the only one, or one chosen from the list, which opens on the first of
+    /// <paramref name="prefer"/> kind when there is one.
+    /// </summary>
+    public async Task<SurfaceEntity?> PickSurface(string title, SurfaceKind? prefer = null)
     {
         var sel = Doc?.SelectedEntities.OfType<SurfaceEntity>().FirstOrDefault();
         if (sel != null) return sel;
         var all = Project?.Entities.OfType<SurfaceEntity>().ToList() ?? new();
         if (all.Count == 0) { await Dialogs.Info(Loc.T("The project has no surfaces.")); return null; }
         if (all.Count == 1) return all[0];
-        var idx = await Dialogs.Choose(title, Loc.T("Surface"), all.Select(s => s.Name).ToList());
+        var first = prefer is { } kind ? all.FindIndex(s => s.Kind == kind) : -1;
+        var idx = await Dialogs.Choose(title, Loc.T("Surface"), all.Select(s => s.Name).ToList(), Math.Max(first, 0));
         return idx is int i ? all[i] : null;
     }
 
@@ -696,7 +797,7 @@ public sealed partial class MainViewModel
     // ---- timing -------------------------------------------------------------------------
 
     public void InitiationPointTool(bool electronic) =>
-        SetTool(new PickPointsTool(this, electronic ? "Opening point" : "Lead-in", electronic ? "Click the hole the electronic blast opens from." : "Click the hole the blast is initiated at; the ties then go on from it.", 1, 1, false, pts =>
+        SetTool(new PickPointsTool(this, electronic ? "Opening point" : "Lead-in", electronic ? "Click the hole the electronic blast opens from." : "Click the hole the blast is initiated at.", 1, 1, false, pts =>
         {
             // the point is placed on a hole and bound to it
             var (sx, sy) = View.Camera.ToScreen(pts[0]);
@@ -711,8 +812,7 @@ public sealed partial class MainViewModel
                 p.Add(new InitiationPoint { Position = hole.Collar, HoleId = holeId, Label = $"IP{n}", IsElectronic = electronic }, p.GetOrCreateLayer(StandardLayers.Ties, 0xFFDC2626, "Design"));
                 turned = Timing.OrientTiesFromInitiation(p);
             });
-            // on to the ties from its hole, with the catalogue of what they are made with, as the Ties button does
-            TieToolWithPalette(Project!.FindEntity(holeId));
+            // only the point: no tie is made and no tie entry started (the Ties button ties the holes)
             if (turned > 0) SetStatus(Loc.F("Ties turned to run from the initiation point: {0}", turned));
         }));
 

@@ -1,6 +1,7 @@
 using BlastDesigner.App.Controls;
 using BlastDesigner.App.ViewModels;
 using BlastDesigner.Domain;
+using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Rendering;
 
 namespace BlastDesigner.App.Tools;
@@ -40,6 +41,8 @@ public sealed class BoxSelect : ISelectGesture
         if (_down is not { } down) return;
         _down = null;
         var crossing = p.X < down.X;
+        // with a vertex selected, Shift adds the vertices in the box and Ctrl takes them off; the objects stay
+        if (_vm.SelectVerticesIn(Lasso.Rect(down.X, down.Y, p.X, p.Y), SelectTool.Mode(p))) return;
         _vm.Doc!.Select(_vm.View.InRect(down.X, down.Y, p.X, p.Y, crossing).Select(e => e.Id), SelectTool.Mode(p));
     }
 

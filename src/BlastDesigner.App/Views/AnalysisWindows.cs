@@ -677,7 +677,7 @@ public static partial class AnalysisWindows
     static double? _sectionHalfWidth;
     /// <summary>
     /// How much the top of the frame is raised and its bottom lowered, m, for a line only picked; a section line of the
-    /// blast keeps its own in the project (<see cref="PolylineEntity.SectionFrameTopShift"/>).
+    /// blast keeps its own in the project (<see cref="BlastProject.Sections"/>).
     /// </summary>
     static double _sectionTop, _sectionBottom;
     /// <summary>Turns the open section window to a line.</summary>
@@ -840,8 +840,9 @@ public static partial class AnalysisWindows
             try
             {
                 var frameOwner = vm.Project is { } frameProject ? SectionMarking.LineAt(frameProject, line.A, line.B) : null;
-                var up = frameOwner != null ? frameOwner.SectionFrameTopShift ?? 0 : _sectionTop;
-                var down = frameOwner != null ? frameOwner.SectionFrameBottomShift ?? 0 : _sectionBottom;
+                var kept = frameOwner != null ? vm.Project!.SectionOf(frameOwner.Id) : null;
+                var up = frameOwner != null ? kept?.FrameTopShift ?? 0 : _sectionTop;
+                var down = frameOwner != null ? kept?.FrameBottomShift ?? 0 : _sectionBottom;
                 if (above.Value != (decimal)up) above.Value = (decimal)up;
                 if (below.Value != (decimal)down) below.Value = (decimal)down;
             }
@@ -854,13 +855,12 @@ public static partial class AnalysisWindows
             var down = (double)(below.Value ?? 0);
             if (vm.Project is { } changedProject && SectionMarking.LineAt(changedProject, line.A, line.B) is { } changedOwner)
             {
-                if (changedOwner.SectionFrameTopShift != up || changedOwner.SectionFrameBottomShift != down)
+                var kept = changedProject.SectionOf(changedOwner.Id);
+                if ((kept?.FrameTopShift ?? 0) != up || (kept?.FrameBottomShift ?? 0) != down)
                 {
+                    // kept in the section (BlastProject.Sections), not on its line
                     var id = changedOwner.Id;
-                    vm.Doc!.Execute("Section frame", framed =>
-                    {
-                        if (framed.Entities.FirstOrDefault(x => x.Id == id) is PolylineEntity framedLine) { framedLine.SectionFrameTopShift = up; framedLine.SectionFrameBottomShift = down; }
-                    });
+                    vm.Doc!.Execute("Section frame", framed => framed.SetSectionFrame(id, up, down));
                 }
             }
             else { _sectionTop = up; _sectionBottom = down; }
@@ -1073,7 +1073,7 @@ public static partial class AnalysisWindows
         var view = SecondaryViewport(vm, () =>
         {
             var o = vm.BuildSceneOptions();
-            return new SceneOptions { Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = 0.5 };
+            return new SceneOptions { Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = 0.5, HiddenEntities = o.HiddenEntities, HiddenDepths = o.HiddenDepths };
         });
         view.Camera.Pitch = 90;
         void Update()

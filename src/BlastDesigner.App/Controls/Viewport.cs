@@ -44,6 +44,13 @@ public sealed class Viewport : Control
     public bool SnapEnabled { get; set; } = true;
     public double TargetRadius { get; set; } = 8;
     public bool LockPlan { get; set; }
+    /// <summary>
+    /// A drag with the left button turns the plan about the view centre, north going round (a view with no tool, as the
+    /// Blast analysis window). Only in the plan seen from above; in 3D the camera turns as elsewhere, with Alt.
+    /// </summary>
+    public bool DragTurnsPlan { get; set; }
+    /// <summary>The orbit under way turns about the vertical only: the plan stays seen from above.</summary>
+    private bool _turnOnly;
     /// <summary>When surface wireframes are drawn (<see cref="IO.ProgramSettings.SurfaceWireframe"/>).</summary>
     public string SurfaceWireframe { get; set; } = IO.ProgramSettings.WireframeWhileStill;
     /// <summary>Frames per second and the time of the last frame in the corner of the view.</summary>
@@ -125,6 +132,8 @@ public sealed class Viewport : Control
             SelectionHaloPx = opt.SelectionHaloPx,
             SelectionExtra = opt.SelectionExtra,
             CollarPixels = opt.CollarPixels,
+            TieDelayOnLine = opt.TieDelayOnLine,
+            TieDelaysOff = opt.TieDelaysOff,
             DrawSummaryBlock = opt.DrawSummaryBlock,
             DrawHoleLegend = opt.DrawHoleLegend,
             DrawTieLegend = opt.DrawTieLegend,
@@ -356,6 +365,33 @@ public sealed class Viewport : Control
         return best;
     }
 
+    /// <summary>
+    /// The point of the surfaces seen under a screen point: in the plan, the highest surface at the point; in a view at an
+    /// angle, where the line of sight through it first meets one. Null when it meets none.
+    /// </summary>
+    public Vec3? PointOnSurfaceAt(double sx, double sy, IEnumerable<SurfaceEntity> surfaces)
+    {
+        if (Camera.IsPlan)
+        {
+            var w = Camera.ToWorld(sx, sy);
+            double? top = null;
+            foreach (var s in surfaces)
+                if (s.ElevationAt(w.X, w.Y) is double z && (top == null || z > top)) top = z;
+            return top is double ground ? w.WithZ(ground) : null;
+        }
+        var o = Camera.Target + Camera.Right * ((sx - Camera.Width / 2) / Camera.Scale) + Camera.Up * ((Camera.Height / 2 - sy) / Camera.Scale);
+        var d = -Camera.ToViewer;
+        double nearest = double.PositiveInfinity;
+        foreach (var s in surfaces)
+        {
+            var v = s.Vertices;
+            var t = s.Triangles;
+            for (int i = 0; i + 2 < t.Count; i += 3)
+                if (Along(o, d, v[t[i]], v[t[i + 1]], v[t[i + 2]]) is double at && at < nearest) nearest = at;
+        }
+        return double.IsPositiveInfinity(nearest) ? null : o + d * nearest;
+    }
+
     /// <summary>Möller–Trumbore on the whole line: where along it (either way from <paramref name="o"/>) it crosses the triangle.</summary>
     private static double? Along(Vec3 o, Vec3 d, Vec3 a, Vec3 b, Vec3 c)
     {
@@ -435,11 +471,27 @@ public sealed class Viewport : Control
                 return SegmentsDistance(c.ToPolygon(36), true, sx, sy);
             case InitiationPoint ip:
             {
-                // The star picks it, ahead of the hole it sits on (drawn over it); its see-through middle picks the hole.
+                // The tag picks it where no hole is under the cursor; on the collar the hole it sits on is taken (a tool
+                // that asks for initiation points only, as the tie tool starting a tie, gets the point there).
                 var (x, y) = Camera.ToScreen(ip.Position);
                 var dist = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
-                var star = BlastDesigner.Rendering.PlanRenderer.InitiationStarRadius * 0.8;
-                return dist > star ? dist - star : dist < BlastDesigner.Rendering.PlanRenderer.InitiationStarHole ? 1 : -3;
+                var ring = BlastDesigner.Rendering.PlanRenderer.InitiationRing;
+                if (dist <= ring) return 1;
+                if (Project is not { } project) return dist - ring;
+                var tag = BlastDesigner.Rendering.PlanRenderer.InitiationTag(Camera, project, ip);
+                // on the tag, but a hole drawn under it is taken first (the tag of a small scale lies over the neighbours)
+                if (InPolygon(tag, sx, sy)) return 0.5;
+                var edge = double.MaxValue;
+                for (int i = 0; i < tag.Length; i++)
+                {
+                    var a = tag[i];
+                    var b = tag[(i + 1) % tag.Length];
+                    double dx = b.X - a.X, dy = b.Y - a.Y, len2 = dx * dx + dy * dy;
+                    var t = len2 > 0 ? Math.Clamp(((sx - a.X) * dx + (sy - a.Y) * dy) / len2, 0, 1) : 0;
+                    double cx = a.X + t * dx - sx, cy = a.Y + t * dy - sy;
+                    edge = Math.Min(edge, Math.Sqrt(cx * cx + cy * cy));
+                }
+                return Math.Min(edge, dist - ring);
             }
             case SurfaceEntity:
                 return double.MaxValue;
@@ -449,6 +501,16 @@ public sealed class Viewport : Control
     }
 
     /// <summary>Screen distance to a polyline; runs for every line on every pointer move, so it projects in place without allocating.</summary>
+    /// <summary>Whether a screen point is inside a polygon given in screen points (even-odd rule).</summary>
+    private static bool InPolygon(SkiaSharp.SKPoint[] poly, double sx, double sy)
+    {
+        var inside = false;
+        for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
+            if ((poly[i].Y > sy) != (poly[j].Y > sy) && sx < (poly[j].X - poly[i].X) * (sy - poly[i].Y) / (poly[j].Y - poly[i].Y) + poly[i].X)
+                inside = !inside;
+        return inside;
+    }
+
     private double SegmentsDistance(IReadOnlyList<Vec3> pts, bool closed, double sx, double sy)
     {
         if (pts.Count == 0) return double.MaxValue;
@@ -663,6 +725,14 @@ public sealed class Viewport : Control
             e.Pointer.Capture(this);
             return;
         }
+        // the plan from above turned by a plain drag (no tool to take it)
+        if (pt.Properties.IsLeftButtonPressed && DragTurnsPlan && Camera.IsPlan && ToolSource?.Invoke() == null)
+        {
+            BeginOrbit(pt.Position);
+            _turnOnly = true;
+            e.Pointer.Capture(this);
+            return;
+        }
         if (pt.Properties.IsRightButtonPressed) return; // context menu is opened on release
         ToolSource?.Invoke()?.PointerPressed(MakePointer(e, e.ClickCount));
         e.Pointer.Capture(this);
@@ -763,7 +833,7 @@ public sealed class Viewport : Control
         }
         if (_orbitStart != null)
         {
-            Camera.Orbit((p.X - _lastPointer.X) * 0.4, (p.Y - _lastPointer.Y) * 0.3);
+            Camera.Orbit((p.X - _lastPointer.X) * 0.4, _turnOnly ? 0 : (p.Y - _lastPointer.Y) * 0.3);
             _lastPointer = p;
             CameraMoving();
             CameraChanged?.Invoke();
@@ -802,6 +872,7 @@ public sealed class Viewport : Control
         if (_panStart != null || _orbitStart != null)
         {
             _panStart = _orbitStart = null;
+            _turnOnly = false;
             return;
         }
         var tp = MakePointer(e);
@@ -860,11 +931,17 @@ public sealed class Viewport : Control
         var hidden = options?.HiddenEntities;
         var clip = BlockClip.Of(project);
         var b = Bounds3.Empty;
-        // with blocks shown, what is shown is inside them
-        if (clip != null) foreach (var block in clip.Blocks) b.Add(block.GetBounds());
+        // with blocks shown, what is shown is inside them; with the geometry hidden (the analysis windows) the blocks are not
+        // drawn: the holes and initiation points drawn are what is fitted
+        if (clip != null && options?.HideGeometry != true) foreach (var block in clip.Blocks) b.Add(block.GetBounds());
         else
             foreach (var e in project.Entities)
-                if (e is not TieEntity && (options?.HideGeometry != true || e is Hole or InitiationPoint) && visibleLayers.Contains(e.LayerId) && Shown(project, e, hidden, clip)) b.Add(e.GetBounds());
+            {
+                if (e is TieEntity || (options?.HideGeometry == true && e is not (Hole or InitiationPoint)) || !visibleLayers.Contains(e.LayerId) || !Shown(project, e, hidden, clip)) continue;
+                // a hole where it is drawn: at the design collar or at the surveyed one (the stage buttons), the toe likewise
+                if (e is Hole h) { b.Add(h.DrawnCollar(project.View.HoleBasis)); b.Add(h.DrawnToe(project.View.HoleBasis)); }
+                else b.Add(e.GetBounds());
+            }
         if (b.IsEmpty) { Camera.Target = Vec3.Zero; Camera.Scale = 5; }
         else Camera.Fit(b);
         CameraChanged?.Invoke();

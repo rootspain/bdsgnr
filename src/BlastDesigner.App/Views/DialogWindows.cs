@@ -225,10 +225,123 @@ public static class TiePaletteWindow
         if (vm.Settings.Window.TryGetValue(PositionKey, out var saved) && saved.Split(',') is [var sx, var sy]
             && int.TryParse(sx, out var x) && int.TryParse(sy, out var y) && OnScreen(new PixelPoint(x + 40, y + 20)))
             at = new PixelPoint(x, y);
-        _open = Dialogs.ShowWindow(Title, new ScrollViewer { Content = _panel, Background = Look.Ground }, Width, 560, at: at);
+        Control content = new ScrollViewer { Content = _panel, Background = Look.Ground };
+        if (_pick != null)
+        {
+            // picking for the selected ties (Properties ▸ From the initiation catalogue): Cancel and OK at the bottom
+            var cancel = new Button { Content = Loc.T("Cancel"), Name = "tiePickCancel", MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center };
+            var ok = new Button { Content = Loc.T("OK"), Name = "tiePickOk", MinWidth = 80, HorizontalContentAlignment = HorizontalAlignment.Center, Classes = { "primary" } };
+            cancel.Click += (_, _) => _open?.Close();
+            ok.Click += (_, _) => Ui.Safe(() => { Commit(vm); _open?.Close(); });
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(10, 8, 10, 10), Children = { cancel, ok } };
+            var dock = new DockPanel { Background = Look.Ground };
+            DockPanel.SetDock(buttons, Dock.Bottom);
+            dock.Children.Add(new Border { [DockPanel.DockProperty] = Dock.Bottom, Height = 1, Background = Look.Line });
+            dock.Children.Add(buttons);
+            dock.Children.Add(content);
+            content = dock;
+        }
+        _open = Dialogs.ShowWindow(Title, content, Width, 560, at: at);
         _open.Background = Look.Ground;
         _open.PositionChanged += (_, e) => vm.Settings.Window[PositionKey] = $"{e.Point.X},{e.Point.Y}";
-        _open.Closed += (_, _) => { _open = null; _panel = null; vm.Settings.Save(); };
+        _open.Closed += (_, _) =>
+        {
+            // closed without OK: the ties go back to what they were, no undo step
+            if (_pick != null) Revert(vm);
+            _open = null; _panel = null; vm.Settings.Save();
+        };
+    }
+
+    /// <summary>
+    /// A choice in the catalogue for ties already drawn (<see cref="PickForTies"/>): the ties, what they had, and the choice of
+    /// the catalogue for new ties, given back when the window closes.
+    /// </summary>
+    private sealed record PickSession(List<Guid> Ids, Dictionary<Guid, (string? ProductId, double DelayMs)> Was,
+        Product? Connector, double? DelayMs, string? System, Dictionary<string, (string KindId, string Name)> Families);
+
+    private static PickSession? _pick;
+
+    /// <summary>Whether the catalogue is open to pick for the selected ties (Cancel and OK at its bottom).</summary>
+    public static bool IsPicking => _pick != null;
+
+    /// <summary>
+    /// Properties ▸ From the initiation catalogue: the catalogue opens on the type and family of the first of the ties, with
+    /// Cancel and OK. Every type, family or variant chosen goes on the ties at once and the plan shows it; Cancel (or the
+    /// window closed) gives them back what they had, with no undo step; OK keeps the choice as one undo step for all of them.
+    /// The catalogue's choice for new ties stays as it was.
+    /// </summary>
+    public static void PickForTies(MainViewModel vm, IReadOnlyList<TieEntity> ties)
+    {
+        if (vm.Project == null || ties.Count == 0) return;
+        Close();
+        _open = null; _panel = null;
+        _pick = new PickSession(ties.Select(t => t.Id).ToList(), ties.ToDictionary(t => t.Id, t => (t.ProductId, t.DelayMs)),
+            vm.ActiveConnector, vm.ActiveTieDelayMs, vm.TieSystem, new(vm.TieFamilyChoice));
+        // the catalogue on what the first tie is made with
+        var first = ties[0];
+        var types = Types(vm);
+        if (vm.Project.FindProduct(first.ProductId) is { } product)
+        {
+            vm.ActiveConnector = product;
+            vm.ActiveTieDelayMs = null;
+            vm.TieSystem = types.FirstOrDefault(t => t.KindIds.Contains(product.KindId))?.Id ?? vm.TieSystem;
+        }
+        else if (first.DelayMs != 0)
+        {
+            vm.ActiveConnector = null;
+            vm.ActiveTieDelayMs = first.DelayMs;
+            vm.TieSystem = types.FirstOrDefault(t => t.UserDelay)?.Id ?? vm.TieSystem;
+        }
+        else
+        {
+            vm.ActiveConnector = null;
+            vm.ActiveTieDelayMs = null;
+        }
+        Show(vm);
+    }
+
+    /// <summary>The choice of the catalogue on the ties being picked for, at once, without an undo step.</summary>
+    private static void Preview(MainViewModel vm)
+    {
+        if (_pick == null || vm.Project == null) return;
+        foreach (var id in _pick.Ids)
+            if (vm.Project.FindEntity(id) is TieEntity t)
+            {
+                t.ProductId = vm.ActiveTieDelayMs != null ? null : vm.ActiveConnector?.Id;
+                t.DelayMs = vm.ActiveTieDelayMs ?? 0;
+            }
+        vm.View.Redraw();
+    }
+
+    /// <summary>The ties back as they were and the catalogue's choice for new ties back; the picking ends.</summary>
+    private static void Revert(MainViewModel vm)
+    {
+        if (_pick is not { } pick) return;
+        _pick = null;
+        if (vm.Project != null)
+            foreach (var (id, (product, delay)) in pick.Was)
+                if (vm.Project.FindEntity(id) is TieEntity t) { t.ProductId = product; t.DelayMs = delay; }
+        vm.ActiveConnector = pick.Connector;
+        vm.ActiveTieDelayMs = pick.DelayMs;
+        vm.TieSystem = pick.System;
+        vm.TieFamilyChoice.Clear();
+        foreach (var (k, v) in pick.Families) vm.TieFamilyChoice[k] = v;
+        vm.View.Redraw();
+    }
+
+    /// <summary>OK: the choice on the ties as one undo step (the ties back first, so the step holds the change).</summary>
+    private static void Commit(MainViewModel vm)
+    {
+        if (_pick is not { } pick) return;
+        var product = vm.ActiveTieDelayMs != null ? null : vm.ActiveConnector?.Id;
+        var delay = vm.ActiveTieDelayMs ?? 0;
+        Revert(vm);
+        if (pick.Was.All(w => w.Value.ProductId == product && w.Value.DelayMs == delay)) return;
+        var ids = pick.Ids.ToHashSet();
+        vm.Change(pick.Ids.Count > 1 ? "Ties from the initiation catalogue" : "Tie from the initiation catalogue", p =>
+        {
+            foreach (var t in p.Ties.Where(t => ids.Contains(t.Id))) { t.ProductId = product; t.DelayMs = delay; }
+        });
     }
 
     /// <summary>The window's content, for the UI smoke test.</summary>
@@ -284,7 +397,9 @@ public static class TiePaletteWindow
         vm.TieSystem = type;
         if (p != null) vm.TieFamilyChoice[type] = (p.KindId, p.FamilyName);
         vm.SetStatus(Loc.F("Tie connector: {0}", delay is double ms ? Loc.F("{0} ms", ms.ToString("0.#")) : p?.Name ?? Loc.T("0 ms connection")));
-        if (vm.ActiveTool is not Tools.TieTool) vm.SetTool(new Tools.TieTool(vm));
+        // picking for ties already drawn: they take it at once; else on to the tie tool
+        if (_pick != null) Preview(vm);
+        else if (vm.ActiveTool is not Tools.TieTool) vm.SetTool(new Tools.TieTool(vm));
         Fill(vm);
     }
 

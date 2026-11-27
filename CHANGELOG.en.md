@@ -16,17 +16,81 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   their lengths, a primer stays at its distance from the bottom of its deck. In older files the longest explosive deck
   is marked; the program never marks the stemming itself, only the user does. "Save as rule" takes the marks into the
   rule, a column loaded by the rule gets them back.
+- **Hole labels scale with the plan:** the hole labels and the delays of the ties grow and shrink with the zoom (the
+  font size set is theirs at 10 px a metre), and too small to read they are not shown. The "Do not scale" box in the row
+  of the font, "Font [− 12 +]" (Visibility ▸ Hole labels) gives the fixed size back; kept in the project, a new blast takes the last
+  choice. The heads of the tie arrows grow and shrink with the plan half as much as the labels (from half to three
+  times their size). Printed sheets keep the font size.
+- **The delays of the ties are off the line:** the number stands beside the middle of the tie, across it (above the
+  line, to the right of an upright tie), and the line shows whole. The program settings (Viewport ▸ Delays of the ties)
+  offer "On the tie, over a patch": the number on the middle of the line, which is cut under it, or "Off": no numbers,
+  the kind of a tie (product and delay) is told by its heads, 1 to 4 filled then 1 to 4 hollow in the order of the
+  delays, and the tie legend comes on by itself when they are switched off, to tell them; the Tie legend box on the
+  Visibility tab shows or hides it in the main window whatever the setting. The printed sheets write the delays the same
+  way, by the setting.
+- **The product of ties from the initiation catalogue:** on the Properties tab, the selected ties show their product
+  and a From the initiation catalogue button in place of the Product list. It opens the Initiation catalogue on the
+  type and family of the first tie, with Cancel and OK at its bottom. A type, family or variant chosen goes on the ties
+  at once and shows on the plan; Cancel (or the window closed) gives back what they had with no undo step, OK keeps the
+  choice as one undo step for all of them. The catalogue's choice for new ties stays as it was.
+- **Polyline: Build only and Close:** the tool's panel has the chips "on surface", "on points" and "on lines", in any
+  set, all three on at first. A point goes onto the survey point or line vertex under the cursor (its chip on), else
+  under the cursor exactly on a surface shown (no snapping to other objects; in 3D where the
+  line of sight through the cursor meets the surface), else none is put and the status bar says
+  why. With no surface shown, "on surface" does not stop the drawing. The choice stays. The Close switch makes the
+  polyline a polygon: Polyline and Polygon are one tool, the Polygon button opens it with Close on. A point snaps to
+  the points of its own line already put, and a click on the first one closes the line and finishes it. Esc finishes
+  the entry (what is drawn stays) instead of giving it up; too few points, it is given up.
 - **Packaged explosive is drawn as cartridges:** on the column of the loading window, on the holes in the main window
   and in the hole's charge card, a stack of cartridges with gaps from the deck bottom up, the top one cut by the deck
   top. The products are no longer named on the column of the loading window, they are in the table.
 
+- **Selecting a vertex of a line or polygon:** a click on a vertex grip of the selected line selects the vertex — its grip
+  grows larger, with a light middle, and the Properties tab shows a card "Vertex 3 of 4" with its X, Y, Z above the line's
+  fields; a value typed in moves that vertex only, in one undo step. Shift+click on a grip adds its vertex to the
+  selected ones (a card "Vertices: 2", an axis they differ in left empty), a box or a lasso with Shift adds the vertices
+  of the selected lines inside it, with Ctrl takes them off; the tip of a grip gives the number of its vertex and its Z;
+  the arrows move the selected vertices, not the
+  line. Delete takes out the selected vertices only (as Ctrl+click on a grip), the line stays selected, and Ctrl+Z gives them
+  back selected. An end of an open line dragged onto its other end closes the line: the two ends become one vertex (shown
+  while dragging, one undo step). The context menu
+  item "Add vertex" of a line puts a vertex where it was right-clicked (a line not selected is selected). Dragging a grip with Shift raises or lowers that
+  vertex alone, the rest of the line stays (the whole line used to move).
+
 ### Changed
+- **The tool panel over the plan** sits lower, by the bottom edge of the plan, and is see-through (its ground at 72 %):
+  the plan shows under it, the text and buttons stay sharp. So for the panels of every tool.
+- **The initiation point is a tag, not a star:** a tag pointing at the collar from the side away from the neighbouring
+  holes; the hole itself is not highlighted and is picked by its collar. The tag
+  covers neither the neighbours nor the ties: neighbours on the right put the tag on the left, below it on top and so on;
+  neighbours on both sides of a row put it across the row, to the side with no hole; holes on all sides, to the south;
+  no hole near, on the right. No text on it; the colour as
+  before. The same in section, 3D and print; the Initiation point button shows
+  the tag.
 - **The column when the hole length changes:** a moved collar, a toe level, a dipped depth and a length typed in fit the
   column of hand-loaded holes too: the stemming keeps its length, the decks below the one that adapts go with the toe.
+- **Collars onto surface** opens the list of surfaces on the first surface of the Bench kind, not on the first in the
+  list (a survey surface, say).
 
 ### Fixed
+- **Dragging a vertex of a line** leaves no trace of where it was: the line is drawn with the vertex in its new place at
+  once, its selection halo and vertex grips with it, whichever vertex moves (a long line kept a trace at the vertices
+  between its ends and its middle).
+- **A selected line is drawn whole with a visible block:** a block cuts the lines at its walls, top and bottom, but not
+  a selected line or one being dragged; a vertex taken out of the block no longer hangs apart from its segments.
+- **The shifts of the top and the bottom of a section's frame** are kept by the section, not by its section line: the
+  line's Properties tab shows no "Section frame top shift" and "Section frame bottom shift" fields. Older files move
+  them on opening.
 - **The column checks** ("deck goes below the toe", "overlaps deck", "has no primer", "not water resistant") are shown in
   the language of the program, with the bottom of the deck and the depth of the hole.
+- **Placing an initiation point makes no tie:** a click on a hole places the point only; the Tie tool with an entry
+  started from it no longer comes on.
+- **Exact for ties:** on the Properties tab it selects the ties of the same product at the same delay, not every tie.
+- **Zoom all in the Blast analysis window** (and Zoom all on the plan) fits the holes where they are drawn: with the
+  actual data, by the surveyed collars and dipped toes, not the design ones; with the geometry hidden, by the holes, not
+  the outlines of the blocks. The analysis windows leave out the holes hidden on the plan.
+- **Turning the plan with the mouse in the Blast analysis window:** a drag with the left button turns the plan seen from
+  above; in 3D the camera turns, as before, with Alt.
 - **The Initiation catalogue closes with the Tie tool:** on Done, Esc or another tool; it used to stay open.
 
 ## 0.3.14 — 2026-11-24

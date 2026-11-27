@@ -65,7 +65,7 @@ public sealed class SelectTool : Tool
     public override string Hint => _lasso ? LassoHint : BoxHint;
 
     private const string LassoHint = "Hold the left button and draw a curve round the objects: let go, it closes and selects what it rings. The first move to the right selects what is fully inside (window), to the left what it touches too (crossing). A click selects, with Shift adds, with Ctrl toggles. Drag a selected object to move it; the grips work as in the Select tool.";
-    private const string BoxHint = "Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.";
+    private const string BoxHint = "Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex, with Shift up or down on its own; a click on it selects the vertex and shows its coordinates in the properties. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.";
 
     /// <summary>Fine drag step, the same as an arrow press with Ctrl.</summary>
     public const double FineStep = SelectionDrag.FineStep;
@@ -146,6 +146,12 @@ public sealed class SelectTool : Tool
             // a block under the cursor shows all its edges, and is named by its layer
             var hot = p.Hit is BlockEntity ? p.Hit.Id : (Guid?)null;
             if (View.HotBlock != hot) { View.HotBlock = hot; View.Redraw(); }
+            // a grip of a line under the cursor: its vertex, which one and its level
+            if (_vertices.Overlay.Hot is { Line: PolylineEntity gripped, Vertex: var at } && at < gripped.Points.Count)
+            {
+                Preview.Labels.Add((gripped.Points[at], Loc.F("Vertex {0} of {1}, Z {2:0.00} m", at + 1, gripped.Points.Count, gripped.Points[at].Z)));
+                return;
+            }
             if (p.Hit != null && !_pattern.Hot && _segments.Hot == null && _polygons.Hot == null) Preview.Labels.Add((p.World, p.Hit is Hole h ? $"{h.Label}  {h.EffectiveLength:0.0} m"
                 : p.Hit is BlockEntity b ? Vm.Project?.FindLayer(b.LayerId)?.Name ?? Loc.T(b.KindName) : Loc.T(p.Hit.KindName)));
             return;
@@ -183,6 +189,7 @@ public sealed class SelectTool : Tool
             return;
         }
         var mode = Mode(p);
+        Vm.ClearSelectedVertex();
         Vm.Doc!.Select(p.Hit != null ? new[] { p.Hit.Id } : Array.Empty<Guid>(), p.Hit == null && mode != SelectionMode.Replace ? SelectionMode.Add : mode);
         ShowProperties();
     }
@@ -221,7 +228,24 @@ public sealed class SelectTool : Tool
             if (g.ContextMenu(p) is { } menu) return menu;
         // The menu follows the object under the cursor: right-clicking an unselected object selects it first.
         if (p.Hit != null && !Vm.Doc!.Selection.Contains(p.Hit.Id)) Vm.Doc.Select(new[] { p.Hit.Id });
-        return Vm.ObjectContextMenu();
+        var entries = Vm.ObjectContextMenu();
+        // on a line or a polygon: a vertex added where it was clicked, the line selected with it
+        if (p.Hit is PolylineEntity { Points.Count: >= 2 } line && Vm.Doc is { } doc && VertexGrips.Spot(View.Camera, line, p.X, p.Y) is { } spot)
+        {
+            var id = line.Id;
+            var locked = doc.Project.FindLayer(line.LayerId) is { Locked: true };
+            entries = new[]
+            {
+                MenuEntry.Item("Add vertex", () =>
+                {
+                    Vm.AddVertex(id, spot.At, spot.Point);
+                    if (!doc.Selection.Contains(id)) doc.Select(new[] { id });
+                    Vm.SelectVertex(id, spot.At);
+                }, () => !doc.IsReadOnly && !locked),
+                MenuEntry.Separator
+            }.Concat(entries);
+        }
+        return entries;
     }
 }
 

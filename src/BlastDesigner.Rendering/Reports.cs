@@ -314,8 +314,8 @@ public static class Reports
         // a section line keeps the top and the bottom of its frame; a line only picked takes those given
         if (SectionMarking.LineAt(project, a, b) is { } framed)
         {
-            frameTop = framed.SectionFrameTopShift ?? 0;
-            frameBottom = framed.SectionFrameBottomShift ?? 0;
+            frameTop = project.SectionOf(framed.Id)?.FrameTopShift ?? 0;
+            frameBottom = project.SectionOf(framed.Id)?.FrameBottomShift ?? 0;
         }
         var mid = Vec3.Lerp(a, b, 0.5);
         var depth = project.Holes.Any() ? project.Holes.Average(h => h.Collar.Z - h.Length / 2) : mid.Z;
@@ -494,13 +494,19 @@ public static class Reports
     /// <summary>Points of a page (1/72 inch) in a millimetre of the sheet.</summary>
     public const double PointsPerMm = 72 / 25.4;
 
+    /// <summary>
+    /// Where the delays of the ties go on the sheets, as on the screen (the program settings, Viewport ▸ Delays of the
+    /// ties): <see cref="SceneOptions.TieDelayOnLine"/>, <see cref="SceneOptions.TieDelaysOff"/>. Beside the line by default.
+    /// </summary>
+    public static (bool OnLine, bool Off) TieDelays { get; set; }
+
     private static void DrawScene(SKCanvas c, SKRect rect, BlastProject project, Camera cam, SceneOptions options)
     {
         c.Save();
         c.ClipRect(rect);
         c.Translate(rect.Left, rect.Top);
-        // on the sheet a line weight is its millimetres, as AutoCAD plots it
-        PlanRenderer.Render(c, cam, project, options with { UnitsPerMm = PointsPerMm });
+        // on the sheet a line weight is its millimetres, as AutoCAD plots it; the delays of the ties as on the screen
+        PlanRenderer.Render(c, cam, project, options with { UnitsPerMm = PointsPerMm, TieDelayOnLine = TieDelays.OnLine, TieDelaysOff = TieDelays.Off });
         c.Restore();
         using var border = new SKPaint { Style = SKPaintStyle.Stroke, Color = SKColors.Gray, StrokeWidth = 0.5f };
         c.DrawRect(rect, border);

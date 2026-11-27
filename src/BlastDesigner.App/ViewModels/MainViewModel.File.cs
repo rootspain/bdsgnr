@@ -50,6 +50,7 @@ public sealed partial class MainViewModel
         {
             project = BlastProject.CreateNew();
             project.View.HoleLabelFontSize = Settings.HoleLabelFontSize;
+            project.View.HoleLabelsFixedSize = Settings.HoleLabelsFixedSize;
             project.View.LabelColors = new(Settings.HoleLabelColors);
         }
         header.Created = DateTime.Now;
@@ -68,6 +69,7 @@ public sealed partial class MainViewModel
     {
         var p = BlastProject.CreateNew(Loc.T("New blast"));
         p.View.HoleLabelFontSize = Settings.HoleLabelFontSize;
+        p.View.HoleLabelsFixedSize = Settings.HoleLabelsFixedSize;
         p.View.LabelColors = new(Settings.HoleLabelColors);
         p.Header.Author = Settings.Author;
         p.Header.ShotDate = DateTime.Today;

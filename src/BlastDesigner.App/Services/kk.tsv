@@ -2353,7 +2353,6 @@ ui:Drawing: {0} (others in the list)	Сызу: {0} (қалғаны тізімд�
 Click points; a click on the last point, a double-click or Enter finishes, Backspace removes the last point.	Нүктелерді басыңыз; соңғы нүктені басу, қос басу немесе Enter — аяқтау, Backspace — соңғысын жою.
 Click two points to dimension. Left to right: the brackets go down; right to left: up.	Өлшем үшін екі нүктені басыңыз. Солдан оңға — жақшалар төмен, оңнан солға — жоғары.
 Click the hole the electronic blast opens from.	Электронды жару ашылатын ұңғыманы басыңыз.
-Click the hole the blast is initiated at; the ties then go on from it.	Жарылыс қоздырылатын ұңғыманы басыңыз; байланыстар одан жүреді.
 Place the initiation point on a hole	Қоздыру нүктесін ұңғымаға қою керек
 Hole {0} already has initiation point {1}	{0} ұңғымасында {1} қоздыру нүктесі бар
 Ties turned to run from the initiation point: {0}	Байланыстар қоздыру нүктесінен бұрылды: {0}
@@ -2819,7 +2818,7 @@ ui:Burden azimuth, °	ЕҚКС азимуты, °
 ui:Direction of the burden, degrees from north; a new value turns the grid about its centre	ЕҚКС бағыты, солтүстіктен градус; жаңа мән торды орталығы айналасында бұрады
 ui:Turned since made	Бастапқыдан бұру
 ui:Off its node	Түйіннен ығысу
-Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.	Басу — таңдау, рамка — бірнеше нысан (оңнан солға — қиылысумен). Таңдалғанды көлденеңінен жылжыту үшін сүйреңіз немесе көрсеткілерді басыңыз (бір басуға 1 м), Shift басулы — жоғары не төмен (Z бойынша), Ctrl басулы — 0,1 м қадаммен. Таңдалған сызықтың дөңгелек тұтқасы төбесін жылжытады. Shift-пен басу қосады, Ctrl-мен ауыстырады. Таңдалған сызықта Shift төбе қосады, тұтқадағы Ctrl оны жояды. Таңдалған ЭҚЖ қопару шебінде төбенің шеңбері (акцент түсі) оны бұрады, негіз шеңберлері бұрышы мен ұзындығын өзгертеді. Ұңғымасы таңдалған тор нұсқарының ұшындағы шеңбер торды бұрады (Shift-пен — 5° қадаммен, Ctrl-мен — 0,1°), оның мәтінмәндік мәзірі ширек айналымға, берілген бұрышқа немесе сызық бойынша бұрады. Таңдалған блоктың дөңгелек тұтқалары оның өлшемін өзгертеді: төбе — ұзындығы мен енін (Shift-пен — жоғарғы не төменгі жағын), жақ ортасы — тек сол жағын.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex, with Shift up or down on its own; a click on it selects the vertex and shows its coordinates in the properties. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.	Басу — таңдау, рамка — бірнеше нысан (оңнан солға — қиылысумен). Таңдалғанды көлденеңінен жылжыту үшін сүйреңіз немесе көрсеткілерді басыңыз (бір басуға 1 м), Shift басулы — жоғары не төмен (Z бойынша), Ctrl басулы — 0,1 м қадаммен. Таңдалған сызықтың дөңгелек тұтқасы төбесін жылжытады, Shift арқылы тек оны жоғары не төмен; тұтқаны шерту төбені таңдап, оның координаттарын қасиеттерде көрсетеді. Shift-пен басу қосады, Ctrl-мен ауыстырады. Таңдалған сызықта Shift төбе қосады, тұтқадағы Ctrl оны жояды. Таңдалған ЭҚЖ қопару шебінде төбенің шеңбері (акцент түсі) оны бұрады, негіз шеңберлері бұрышы мен ұзындығын өзгертеді. Ұңғымасы таңдалған тор нұсқарының ұшындағы шеңбер торды бұрады (Shift-пен — 5° қадаммен, Ctrl-мен — 0,1°), оның мәтінмәндік мәзірі ширек айналымға, берілген бұрышқа немесе сызық бойынша бұрады. Таңдалған блоктың дөңгелек тұтқалары оның өлшемін өзгертеді: төбе — ұзындығы мен енін (Shift-пен — жоғарғы не төменгі жағын), жақ ортасы — тек сол жағын.
 Turn the pattern	Торды бұру
 Turn by…	Мынаған бұру…
 ui:Burden, m: the distance between the rows; a new value lays the grid out again	ЕҚКС, м: қатарлар арасындағы қашықтық; жаңа мән торды қайта құрады
@@ -3967,3 +3966,39 @@ Copy all	Барлығын көшіру
 The section is copied	Қима көшірілді
 The section could not be put on the clipboard	Қиманы алмасу буферіне салу мүмкін болмады
 Section line length	Қима сызығының ұзындығы
+Click the hole the blast is initiated at.	Жарылыс қоздырылатын ұңғыманы басыңыз.
+ui:Do not scale	Масштабтамау
+ui:On: the hole labels and the delays of the ties keep their font size at any zoom. Off: they grow and shrink with the plan, and too small to read they are not shown. Printed sheets keep the font size.	Қосулы: ұңғыма жазулары мен байланыс баяулатулары кез келген масштабта қаріп өлшемін сақтайды. Өшірулі: олар жоспармен бірге үлкейіп-кішірейеді, тым кішкентайлары көрсетілмейді. Басылатын парақтарда қаріп өлшемі тұрақты.
+ui:Font	Қаріп
+ui:Smaller	Кішірек
+ui:Larger	Үлкенірек
+ui:Delays of the ties	Байланыстардағы баяулатулар
+ui:Beside the tie	Байланыстың жанында
+ui:On the tie, over a patch	Байланыстың үстінде, астарлы
+ui:From the initiation catalogue	ҚҚ каталогынан
+ui:Opens the initiation catalogue on the product of the selected ties: a type or family chosen goes on them at once; OK keeps it, Cancel gives back what they had	Таңдалған байланыстардың бұйымында «ҚҚ каталогын» ашады: таңдалған түр немесе отбасы оларға бірден қолданылады; OK таңдауды сақтайды, «Болдырмау» бұрынғыны қайтарады
+Ties from the initiation catalogue	ҚҚ каталогынан байланыстар
+Tie from the initiation catalogue	ҚҚ каталогынан байланыс
+ui:Switched off	Өшірулі
+ui:The number stands off the line, across it, and the line shows whole	Сан сызықтан көлденең ығыстырылған, сызық толық көрінеді
+ui:The number stands on the middle of the line, which is cut under it	Сан сызықтың ортасында тұрады, оның астында сызық үзіледі
+ui:No numbers: each kind of tie (product and delay) has its own heads, up to four, then hollow ones, and the tie legend tells them	Сандар жоқ: әр байланыс түрінің (бұйым мен баяулату) өз ұштары бар — төртке дейін, одан кейін қуыс, — түсіндірмесі байланыстар аңызында
+ui:Build only	Тек салу
+ui:on surface	бет бойынша
+ui:on points	нүктелер бойынша
+ui:on lines	сызықтар бойынша
+ui:Close the line	Тұйықтау
+ui:The points lie on the surface under the cursor, no snapping to other objects (but the survey points and line vertices ticked here); outside the surfaces no point is put	Нүктелер курсор астындағы бетке түседі, басқа нысандарға байланусыз (мұнда белгіленген түсіру нүктелері мен сызық төбелерінен басқа); беттерден тыс нүкте қойылмайды
+ui:A point goes onto a survey point under the cursor	Нүкте курсор астындағы түсіру нүктесіне қойылады
+ui:A point goes onto a vertex of a line under the cursor	Нүкте курсор астындағы сызық төбесіне қойылады
+ui:The last point joins the first: a closed outline (a polygon)	Соңғы нүкте біріншімен қосылады: тұйық контур (көпбұрыш)
+No survey point or line vertex under the cursor	Курсор астында түсіру нүктесі немесе сызық төбесі жоқ
+No survey point under the cursor	Курсор астында түсіру нүктесі жоқ
+No line vertex under the cursor	Курсор астында сызық төбесі жоқ
+Outside the surfaces	Беттерден тыс
+Click points; a click on the first point closes the line, a click on the last point, a double-click, Enter or Esc finishes, Backspace removes the last point.	Нүктелерді басыңыз; бірінші нүктені басу сызықты тұйықтайды, соңғы нүктені басу, қос шерту, Enter немесе Esc — аяқтау, Backspace — соңғысын жою.
+Nothing to build on under the cursor: no surface, survey point or line vertex ticked	Курсор астында салатын ештеңе жоқ: бет те, белгіленген түсіру нүктелері мен сызық төбелері де жоқ
+Vertex {0} of {1}	{1} төбенің {0}-сі
+Vertices: {0}	Төбелер: {0}
+Vertex {0} of {1}, Z {2:0.00} m	{1} төбенің {0}-сі, Z {2:0.00} м
+Close line	Сызықты тұйықтау

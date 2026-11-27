@@ -50,6 +50,33 @@ public sealed class BlastProject
     public List<VibrationRecord> VibrationRecords { get; set; } = new();
     /// <summary>The dimensions, angles, levels, lines and texts drawn by hand on the sections, each of its section line.</summary>
     public List<SectionMark> SectionMarks { get; set; } = new();
+    /// <summary>What each section keeps of its own, by its section line (<see cref="SectionSettings"/>): the shifts of its frame.</summary>
+    public List<SectionSettings> Sections { get; set; } = new();
+
+    /// <summary>The settings of the section of a section line, null when it has none.</summary>
+    public SectionSettings? SectionOf(Guid sectionLineId) => Sections.FirstOrDefault(s => s.SectionLineId == sectionLineId);
+
+    /// <summary>The shifts of the top and the bottom of the frame of the section of a section line, m.</summary>
+    public void SetSectionFrame(Guid sectionLineId, double top, double bottom)
+    {
+        if (SectionOf(sectionLineId) is not { } s) Sections.Add(s = new SectionSettings { SectionLineId = sectionLineId });
+        s.FrameTopShift = top;
+        s.FrameBottomShift = bottom;
+    }
+
+    /// <summary>
+    /// A file of before the sections kept their frame: the shifts its section lines carried go to their sections, the
+    /// lines keep none.
+    /// </summary>
+    public void TakeLegacySectionFrames()
+    {
+        foreach (var line in Entities.OfType<PolylineEntity>())
+        {
+            if (line.LegacyFrameTop is null && line.LegacyFrameBottom is null) continue;
+            if (SectionOf(line.Id) == null) SetSectionFrame(line.Id, line.LegacyFrameTop ?? 0, line.LegacyFrameBottom ?? 0);
+            line.LegacyFrameTop = line.LegacyFrameBottom = null;
+        }
+    }
     /// <summary>
     /// The section lines whose automatic dimensions (length, spacing, subdrill) were made marks of their own to be edited:
     /// the section draws them no more, the marks stand in their place.
@@ -563,6 +590,14 @@ public sealed class ViewState
     /// <summary>Font size of the hole labels on the plan and in 3D, px; a file before it reads the default.</summary>
     public int HoleLabelFontSize { get; set; } = DefaultHoleLabelFontSize;
     public const int DefaultHoleLabelFontSize = 12, MinHoleLabelFontSize = 6, MaxHoleLabelFontSize = 40;
+    /// <summary>
+    /// The hole labels and the delays of the ties keep <see cref="HoleLabelFontSize"/> on the screen whatever the zoom
+    /// (Visibility ▸ Hole labels ▸ Do not scale). Off (the default), they grow and shrink with the plan, the font size
+    /// being theirs at <see cref="HoleLabelScaleAt"/> pixels per metre; too small to read, they are not drawn.
+    /// </summary>
+    public bool HoleLabelsFixedSize { get; set; }
+    /// <summary>The zoom, pixels per metre, at which scaled hole labels have <see cref="HoleLabelFontSize"/> (5 m between holes: 50 px).</summary>
+    public const double HoleLabelScaleAt = 10;
     public TimingLabelMode TimingLabels { get; set; } = TimingLabelMode.None;
     public bool ShowSurfaceTimeLabel { get; set; }
     public bool ShowInholeDelayLabel { get; set; }

@@ -10,6 +10,8 @@ namespace BlastDesigner.Tests;
 /// Names of the section lines: a Latin letter in turn, the first free one; the section called A–A; no two lines with one
 /// name; lines from before the names take letters in their order.
 /// </summary>
+/// <remarks>In the "Sheets" collection: the sheets read <see cref="Reports.TieDelays"/>, which a test sets.</remarks>
+[Collection("Sheets")]
 public class SectionNamesTests
 {
     static PolylineEntity Section(double y) => new() { Kind = LineKind.CrossSection, Points = { new Vec3(0, y, 100), new Vec3(50, y, 100) } };

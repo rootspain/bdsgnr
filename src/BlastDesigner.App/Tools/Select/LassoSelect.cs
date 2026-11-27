@@ -56,6 +56,8 @@ public sealed class LassoSelect : ISelectGesture
         var crossing = Lasso.IsCrossing(_points);
         var shape = new Lasso(_points);
         _points.Clear();
+        // with a vertex selected, Shift adds the vertices it rings and Ctrl takes them off; the objects stay
+        if (_vm.SelectVerticesIn(shape, SelectTool.Mode(p))) return;
         _vm.Doc!.Select(_vm.View.InShape(shape, crossing).Select(e => e.Id), SelectTool.Mode(p));
     }
 

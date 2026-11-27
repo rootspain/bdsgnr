@@ -615,19 +615,24 @@ public sealed class ToolPanel : Border
     private readonly StackPanel _fields = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
     private readonly ScrollViewer _fieldsScroll;
 
+    /// <summary>How opaque the ground of the panel is: the plan shows through it, the text and buttons stay solid.</summary>
+    public const double GroundOpacity = 0.72;
+
+    /// <summary>The ground of the panel, in the ribbon's colour at <see cref="GroundOpacity"/> (it follows the theme).</summary>
+    public Border Ground { get; } = new() { Background = Look.Ribbon, Opacity = GroundOpacity, CornerRadius = new CornerRadius(9) };
+
     public ToolPanel(MainViewModel vm)
     {
         _vm = vm;
-        Background = Look.Ribbon;
+        // see-through: the ground is a layer of its own under the content (the border stays solid)
         BorderBrush = Look.LineStrong;
         BorderThickness = new Thickness(1);
         CornerRadius = new CornerRadius(10);
-        Padding = new Thickness(14, 8, 10, 8);
         HorizontalAlignment = HorizontalAlignment.Center;
         VerticalAlignment = VerticalAlignment.Bottom;
-        // as wide as its fields need, up to the width of the viewport; beyond that the fields scroll
-        Margin = new Thickness(16, 0, 16, 16);
-        BoxShadow = BoxShadows.Parse("0 8 24 0 #73000000");
+        // as wide as its fields need, up to the width of the viewport; beyond that the fields scroll; low over the plan
+        Margin = new Thickness(16, 0, 16, 6);
+        BoxShadow = BoxShadows.Parse("0 6 18 0 #52000000");
         var done = new Button
         {
             Content = Ui.Row(6, new TextBlock { Text = Loc.Ui("Done"), FontWeight = FontWeight.SemiBold, Foreground = Look.OnAccent }, Look.Kbd("Enter")),
@@ -652,7 +657,8 @@ public sealed class ToolPanel : Border
         body.Children.Add(new StackPanel { Children = { _title, _hint } });
         body.Children.Add(_fieldsScroll);
         body.Children.Add(Ui.Row(6, coords, cancel, done));
-        Child = body;
+        body.Margin = new Thickness(14, 8, 10, 8);
+        Child = new Panel { Children = { Ground, body } };
         IsVisible = false;
     }
 
@@ -739,11 +745,58 @@ public sealed class ToolPanel : Border
             capture.IsCheckedChanged += (_, _) => { _vm.TieCaptureShown = capture.IsChecked == true; _vm.View.Redraw(); };
             _fields.Children.Add(capture);
         }
+        if (tool is PickPointsTool { ClosedName: not null }) PolylineFields();
         if (tool is PatternRotateTool rotate) RotateFields(rotate);
         if (tool is TransformTool transform) TransformFields(transform);
         if (tool.Name is "Set" or "Row set")
             _fields.Children.Add(Field("Step, ms", _vm.Project.Electronic.HoleIntervalMs, v => _vm.Change("Electronic settings", p => p.Electronic.HoleIntervalMs = v)));
         _fieldsScroll.IsVisible = _fields.Children.Count > 0;
+    }
+
+    /// <summary>
+    /// Panel of the Polyline tool: Build only on surface, on points, on lines (any of them; none: anywhere) and Close, which
+    /// makes it the Polygon tool. The choice stays for the next time.
+    /// </summary>
+    private void PolylineFields()
+    {
+        // a chip each, on or off by a click (any of them together)
+        Button Box(string text, string name, bool on, Action<bool> set, string tip)
+        {
+            Button? b = null;
+            b = Ui.Chip(Loc.Ui(text), () =>
+            {
+                var now = !b!.Classes.Contains("on");
+                set(now);
+                Ui.SetChip(b, now);
+                _vm.View.Redraw();
+            }, on, Loc.Ui(tip));
+            b.Name = name;
+            b.VerticalAlignment = VerticalAlignment.Center;
+            return b;
+        }
+        var only = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        only.Children.Add(new TextBlock { Text = Loc.Ui("Build only"), Foreground = Look.Muted, VerticalAlignment = VerticalAlignment.Center });
+        // any of them together: a survey point or a line vertex under the cursor first, else the surface under it
+        var surface = Box("on surface", "polylineOnSurface", _vm.PolylineOnSurface, v => _vm.PolylineOnSurface = v,
+            "The points lie on the surface under the cursor, no snapping to other objects (but the survey points and line vertices ticked here); outside the surfaces no point is put");
+        var points = Box("on points", "polylineOnPoints", _vm.PolylineOnPoints, v => _vm.PolylineOnPoints = v,
+            "A point goes onto a survey point under the cursor");
+        var lines = Box("on lines", "polylineOnLines", _vm.PolylineOnLines, v => _vm.PolylineOnLines = v,
+            "A point goes onto a vertex of a line under the cursor");
+        only.Children.Add(surface);
+        only.Children.Add(points);
+        only.Children.Add(lines);
+        _fields.Children.Add(only);
+        var close = new ToggleSwitch { IsChecked = _vm.PolylineClosed, Name = "polylineClosed", OnContent = Loc.Ui("Close the line"), OffContent = Loc.Ui("Close the line"), VerticalAlignment = VerticalAlignment.Center };
+        ToolTip.SetTip(close, Loc.Ui("The last point joins the first: a closed outline (a polygon)"));
+        close.IsCheckedChanged += (_, _) =>
+        {
+            _vm.PolylineClosed = close.IsChecked == true;
+            // the title says Polygon or Polyline
+            _title.Text = Loc.T(_vm.ActiveTool?.Name ?? "");
+            _vm.View.Redraw();
+        };
+        _fields.Children.Add(close);
     }
 
     /// <summary>
@@ -1324,20 +1377,72 @@ public sealed class Inspector : DockPanel
         // written as the section names of the tab, in blue
         if (title is Border { Child: CheckBox { Content: TextBlock name } }) { name.Foreground = Look.Blue; name.FontSize = 11; }
         top.Children.Add(title);
-        var size = new NumericUpDown
+        // one row: Font [− 12 +] on the left, Do not scale on the right
+        var sizeBox = new TextBox
         {
             Name = "holeLabelFontSize",
-            Value = _vm.Project?.View.HoleLabelFontSize ?? ViewState.DefaultHoleLabelFontSize,
-            Minimum = ViewState.MinHoleLabelFontSize, Maximum = ViewState.MaxHoleLabelFontSize, Increment = 1, FormatString = "0",
-            ParsingNumberStyle = System.Globalization.NumberStyles.Integer,
-            Width = 100, Height = 24, MinHeight = 24, FontSize = 11.5
+            Text = (_vm.Project?.View.HoleLabelFontSize ?? ViewState.DefaultHoleLabelFontSize).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            Width = 30, Height = 24, MinHeight = 24, MinWidth = 0, Padding = new Thickness(0), FontSize = 11.5, FontFamily = Look.Mono,
+            TextAlignment = TextAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+            BorderThickness = new Thickness(0), Background = Brushes.Transparent
         };
-        ToolTip.SetTip(size, Loc.Ui("Font size of the hole labels and of the delays of the ties on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen."));
-        size.ValueChanged += (_, _) => { if (size.Value is { } v) _vm.SetHoleLabelFontSize((int)Math.Round(v)); };
+        int Current() => _vm.Project?.View.HoleLabelFontSize ?? ViewState.DefaultHoleLabelFontSize;
+        void SetSize(int v)
+        {
+            _vm.SetHoleLabelFontSize(Math.Clamp(v, ViewState.MinHoleLabelFontSize, ViewState.MaxHoleLabelFontSize));
+            sizeBox.Text = Current().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        void TakeTyped()
+        {
+            if (int.TryParse((sizeBox.Text ?? "").Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var v)) SetSize(v);
+            else sizeBox.Text = Current().ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        sizeBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { TakeTyped(); e.Handled = true; } };
+        sizeBox.LostFocus += (_, _) => TakeTyped();
+        Button SizeStep(string text, string name, int delta, string tip)
+        {
+            var b = new Button
+            {
+                Name = name, Content = text, Width = 22, Height = 24, MinHeight = 24, Padding = new Thickness(0), FontSize = 13,
+                HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center,
+                CornerRadius = new CornerRadius(0), BorderThickness = new Thickness(0), Background = Look.Ribbon, Foreground = Look.TextSoft
+            };
+            ToolTip.SetTip(b, Loc.Ui(tip));
+            b.Click += (_, _) => SetSize(Current() + delta);
+            return b;
+        }
+        var stepper = new Border
+        {
+            BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), ClipToBounds = true,
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Children =
+                {
+                    SizeStep("−", "holeLabelFontSmaller", -1, "Smaller"),
+                    new Border { Width = 1, Background = Look.LineStrong },
+                    sizeBox,
+                    new Border { Width = 1, Background = Look.LineStrong },
+                    SizeStep("+", "holeLabelFontLarger", 1, "Larger")
+                }
+            }
+        };
+        ToolTip.SetTip(stepper, Loc.Ui("Font size of the hole labels and of the delays of the ties on the plan and in 3D, px. Kept in the project; a new blast starts with the last size chosen."));
+        // off: the labels grow and shrink with the plan, too small they are not drawn
+        var fixedSize = new CheckBox
+        {
+            Name = "holeLabelsFixedSize",
+            IsChecked = _vm.Project?.View.HoleLabelsFixedSize ?? false,
+            Content = new TextBlock { Text = Loc.Ui("Do not scale"), FontSize = 11.5, Foreground = Look.Muted },
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        ToolTip.SetTip(fixedSize, Loc.Ui("On: the hole labels and the delays of the ties keep their font size at any zoom. Off: they grow and shrink with the plan, and too small to read they are not shown. Printed sheets keep the font size."));
+        fixedSize.IsCheckedChanged += (_, _) => _vm.SetHoleLabelsFixedSize(fixedSize.IsChecked == true);
         var sizeRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        DockPanel.SetDock(size, Dock.Right);
-        sizeRow.Children.Add(size);
-        sizeRow.Children.Add(new TextBlock { Text = Loc.Ui("Font size"), Foreground = Look.Muted, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center });
+        DockPanel.SetDock(fixedSize, Dock.Right);
+        sizeRow.Children.Add(fixedSize);
+        sizeRow.Children.Add(Ui.Row(6, new TextBlock { Text = Loc.Ui("Font"), Foreground = Look.Muted, FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center }, stepper));
         return new StackPanel { Children = { top, hint, sizeRow } };
     }
 

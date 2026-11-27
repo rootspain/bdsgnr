@@ -322,6 +322,8 @@ public sealed partial class PropertiesPanel : DockPanel
         if (template is Hole th && first is Hole fh) { th.FiringTimeMs = fh.FiringTimeMs; th.SurfaceTimeMs = fh.SurfaceTimeMs; th.FiringSequence = fh.FiringSequence; }
         var grid = new PropertyGrid { Exclude = new() { "Id", "LayerId", "GroupId", "Decks", "BoreTrack", "RowId", "FromId", "ToId", "HoleId", "Triangles", "Vertices", "Points", "SourceIds", "SourceBreaklines", "FromPos", "ToPos", "Direction", "DesignToe", "GradePoint", "Front", "IsChevron", "HasHandles", "HoleIds", "BurdenDir", "SpacingDir", "PatternId", "GridI", "GridJ", "GridOffset", "U", "V", "Center", "Current", "KindName" }, ReadOnly = doc.IsReadOnly };
         _vm.AddProductChoices(grid, first is TieEntity ? sel.OfType<TieEntity>().ToList() : null);
+        // the product of ties is chosen in the initiation catalogue (TieProductRow), not in a list
+        if (first is TieEntity) grid.Exclude.Add(nameof(TieEntity.ProductId));
         if (sel.All(e => e is PolylineEntity { Kind: LineKind.CrossSection }))
         {
             // a section line: its name has a card of its own (SectionNameCard); a section goes along an open segment
@@ -516,8 +518,93 @@ public sealed partial class PropertiesPanel : DockPanel
                 panel.Children.Insert(1, open);
             }
         }
+        if (first is TieEntity) panel.Children.Add(TieProductRow(doc, sel.OfType<TieEntity>().ToList()));
+        // vertices of the lines selected (a click on a grip): their fields first, the lines' after them
+        if (first is PolylineEntity && _vm.SelectedLineVertices is { Count: > 0 } vertices) panel.Children.Insert(0, VertexCard(doc, vertices));
         panel.Children.Add(grid);
         _content.Content = panel;
+    }
+
+    /// <summary>The fields of a vertex in the properties panel: where it is (<see cref="Position"/>).</summary>
+    public sealed class VertexFields
+    {
+        public Vec3 Position { get; set; }
+    }
+
+    /// <summary>
+    /// The selected vertices of the lines: which one it is (or how many) and their X, Y and Z, an axis they differ in left
+    /// empty. Typed in, they go there, one undo step; an axis not typed keeps each its own; the rest of the lines stays.
+    /// </summary>
+    private Control VertexCard(Document doc, List<(PolylineEntity Line, int Vertex)> vertices)
+    {
+        var (line, index) = vertices[0];
+        var template = new VertexFields { Position = line.Points[index] };
+        var grid = new PropertyGrid { ReadOnly = doc.IsReadOnly };
+        grid.Measure(nameof(VertexFields.Position), Quantity.Length);
+        grid.SetTargets(template, vertices.Select(v => (object)new VertexFields { Position = v.Line.Points[v.Vertex] }).ToList());
+        grid.PropertyEdited += _ =>
+        {
+            var moves = new List<(Guid, int, Vec3)>();
+            foreach (var (l, i) in vertices)
+            {
+                var target = new VertexFields { Position = l.Points[i] };
+                grid.ApplyTo(template, target);
+                moves.Add((l.Id, i, target.Position));
+            }
+            _vm.MoveVertices(moves);
+        };
+        return new Border
+        {
+            Name = "vertexCard",
+            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(4, 8, 4, 4), Margin = new Thickness(6, 6, 6, 8),
+            Child = new StackPanel
+            {
+                Spacing = 4,
+                Children =
+                {
+                    new TextBlock { Text = vertices.Count == 1 ? Loc.F("Vertex {0} of {1}", index + 1, line.Points.Count) : Loc.F("Vertices: {0}", vertices.Count), FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, Margin = new Thickness(6, 0), Name = "vertexCaption" },
+                    grid
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// The product of the selected ties, laid out like a row of the property grid: what they are made with (or mixed) and
+    /// the button From the initiation catalogue, which opens the catalogue on it with Cancel and OK
+    /// (<see cref="TiePaletteWindow.PickForTies"/>).
+    /// </summary>
+    private Control TieProductRow(Document doc, List<TieEntity> ties)
+    {
+        string Of(TieEntity t) => doc.Project.FindProduct(t.ProductId) is { } p ? p.Name
+            : t.DelayMs != 0 ? Loc.F("{0} ms", t.DelayMs.ToString("0.#")) : Loc.T("0 ms connection");
+        var names = ties.Select(Of).Distinct().ToList();
+        var current = new TextBlock
+        {
+            Name = "tieProductName",
+            Text = names.Count == 1 ? names[0] : Loc.T("(mixed)"),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = Look.Text,
+            Margin = new Thickness(0, 0, 0, 4)
+        };
+        ToolTip.SetTip(current, string.Join("\n", names));
+        var pick = new Button
+        {
+            Name = "tieProductFromCatalogue",
+            Content = Loc.Ui("From the initiation catalogue"),
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            // in the accent colour, as the main button of a panel (Edit loading)
+            Classes = { "primary" },
+            IsEnabled = !doc.IsReadOnly
+        };
+        ToolTip.SetTip(pick, Loc.Ui("Opens the initiation catalogue on the product of the selected ties: a type or family chosen goes on them at once; OK keeps it, Cancel gives back what they had"));
+        pick.Click += (_, _) => Ui.Safe(() => TiePaletteWindow.PickForTies(_vm, ties.Select(t => doc.Project.FindEntity(t.Id)).OfType<TieEntity>().ToList()));
+        var label = new TextBlock { Text = Loc.Property(nameof(TieEntity.ProductId)), VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 8, 2) };
+        var right = new StackPanel { Children = { current, pick }, [Grid.ColumnProperty] = 1 };
+        // the columns and margin of the property grid under it, as the layer row has them
+        return new Grid { ColumnDefinitions = new ColumnDefinitions("2*,3*"), Margin = new Thickness(4, 6, 4, 2), Children = { label, right } };
     }
 
     /// <summary>

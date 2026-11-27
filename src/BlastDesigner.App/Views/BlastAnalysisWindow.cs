@@ -131,10 +131,14 @@ public static partial class AnalysisWindows
             {
                 Selection = _analysisTab == BlastAnalysis.Unconnected ? unconnectedIds : o.Selection, Background = o.Background, SelectionColor = o.SelectionColor, CollarPixels = o.CollarPixels, DrawSummaryBlock = false,
                 Overlays = new[] { Layer(_analysisTab) }, HideGeometry = _analysisHideGeometry,
+                // what the plan hides (the holes of other segments, the objects hidden) is neither drawn nor fitted here
+                HiddenEntities = o.HiddenEntities, HiddenDepths = o.HiddenDepths,
                 MovedEntities = drag.Moving is { Count: > 0 } moving ? new HashSet<Guid>(moving) : null, MoveOffset = drag.MoveOffset
             };
         });
         vm.DragPreview += view.Redraw;
+        // a drag turns the plan from above (in 3D, Alt and the drag as on the main plan)
+        view.DragTurnsPlan = true;
 
         static TextBlock Caption(string text) => new() { Text = Loc.T(text).ToUpper(CultureInfo.CurrentCulture), FontSize = 10.5, FontWeight = FontWeight.SemiBold, LetterSpacing = 0.6, Foreground = Look.Faint, Margin = new Thickness(2, 0, 0, 5) };
         static Control Group(string caption, Control content) => new StackPanel { Margin = new Thickness(0, 0, 22, 6), Children = { Caption(caption), content } };

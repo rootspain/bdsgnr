@@ -237,6 +237,8 @@ public static class Look
         ["tie"] = "M5 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 3a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M19 17a2 2 0 1 0 0 4a2 2 0 1 0 0-4 M6.5 17.5L17.5 6.5 M7 19h10",
         ["pin"] = "M9 4h6 M10 4v5l-3 4h10l-3-4V4 M12 13v7",
         ["star"] = "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z",
+        // the initiation point: a ring at the collar and the tag pointing at it
+        ["ipTag"] = "M19 12a2 2 0 1 0 4 0a2 2 0 1 0-4 0 M16 12l-4-4.5H2v9h10z",
         ["leadin"] = "M3 12h10 M10 8l4 4-4 4 M18 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6",
         ["dummy"] = "M12 6a6 6 0 1 0 0 12a6 6 0 1 0 0-12 M8 8l8 8",
         ["clock"] = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M12 7v5l3 2",

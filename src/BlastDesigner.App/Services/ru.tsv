@@ -2612,7 +2612,6 @@ ui:Drawing: {0} (others in the list)	Рисование: {0} (остальное
 Click points; a click on the last point, a double-click or Enter finishes, Backspace removes the last point.	Щёлкайте точки; щелчок по последней точке, двойной щелчок или Enter — завершить, Backspace — удалить последнюю.
 Click two points to dimension. Left to right: the brackets go down; right to left: up.	Щёлкните две точки для размера. Слева направо — скобки вниз, справа налево — скобки вверх.
 Click the hole the electronic blast opens from.	Щёлкните скважину, с которой открывается электронное взрывание.
-Click the hole the blast is initiated at; the ties then go on from it.	Щёлкните скважину, в которой инициируется взрыв; связи пойдут от неё.
 Place the initiation point on a hole	Точку инициирования нужно поставить на скважину
 Hole {0} already has initiation point {1}	На скважине {0} уже стоит точка инициирования {1}
 Ties turned to run from the initiation point: {0}	Связи развёрнуты от точки инициирования: {0}
@@ -3082,7 +3081,7 @@ ui:Burden azimuth, °	Азимут ЛНС, °
 ui:Direction of the burden, degrees from north; a new value turns the grid about its centre	Направление ЛНС, градусы от севера; новое значение поворачивает сетку вокруг её центра
 ui:Turned since made	Поворот от исходного
 ui:Off its node	Смещение от узла
-Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное или нажимайте стрелки (1 м за нажатие), чтобы сдвинуть его по горизонтали, с зажатым Shift — вверх или вниз (по Z), с зажатым Ctrl — шагом 0,1 м. Круглая ручка выделенной линии перемещает её вершину. Щелчок с Shift добавляет, с Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину. Кружок на конце стрелки сетки, у которой выделена скважина, поворачивает сетку (с Shift — шагом 5°, с Ctrl — 0,1°), его контекстное меню поворачивает на четверть оборота, на заданный угол или по линии. Круглые ручки выделенного блока меняют его размер: вершина — длину и ширину (с Shift — верх или низ), середина грани — только эту сторону.
+Click to select, drag a box to select several (right to left = crossing). Drag a selected object or press the arrows (1 m a press) to move it on the ground, with Shift up or down (Z), with Ctrl in 0.1 m steps. A round grip of a selected line moves its vertex, with Shift up or down on its own; a click on it selects the vertex and shows its coordinates in the properties. A click with Shift adds, with Ctrl toggles. On a selected line Shift adds a vertex, Ctrl on a grip deletes it. On a selected timing front the accent circle at the vertex turns it, a circle at the base changes its angle and length. The circle at the tip of the arrow of a pattern with a selected hole turns its grid (Shift 5°, Ctrl 0.1° steps), its right-click menu turns by a quarter, by an angle or along a line. The round grips of a selected block change its size: a corner the length and width (with Shift its top or bottom), the middle of a face that side only.	Щелчок — выбор, рамка — несколько объектов (справа налево — пересечением). Перетащите выбранное или нажимайте стрелки (1 м за нажатие), чтобы сдвинуть его по горизонтали, с зажатым Shift — вверх или вниз (по Z), с зажатым Ctrl — шагом 0,1 м. Круглая ручка выделенной линии перемещает её вершину, с Shift — только её вверх или вниз; щелчок по ручке выделяет вершину и показывает её координаты в свойствах. Щелчок с Shift добавляет, с Ctrl переключает. На выделенной линии Shift добавляет вершину, Ctrl на ручке удаляет её. У выделенного фронта отбойки ЭСИ кружок вершины (цвет акцента) поворачивает его, кружки основания меняют угол и длину. Кружок на конце стрелки сетки, у которой выделена скважина, поворачивает сетку (с Shift — шагом 5°, с Ctrl — 0,1°), его контекстное меню поворачивает на четверть оборота, на заданный угол или по линии. Круглые ручки выделенного блока меняют его размер: вершина — длину и ширину (с Shift — верх или низ), середина грани — только эту сторону.
 Turn the pattern	Повернуть сетку
 Turn by…	Повернуть на…
 ui:Burden, m: the distance between the rows; a new value lays the grid out again	ЛНС, м: расстояние между рядами; новое значение перестраивает сетку
@@ -4234,3 +4233,39 @@ Copy all	Копировать всё
 The section is copied	Разрез скопирован
 The section could not be put on the clipboard	Не удалось поместить разрез в буфер обмена
 Section line length	Длина линии разреза
+Click the hole the blast is initiated at.	Щёлкните скважину, в которой инициируется взрыв.
+ui:Do not scale	Не масштабировать
+ui:On: the hole labels and the delays of the ties keep their font size at any zoom. Off: they grow and shrink with the plan, and too small to read they are not shown. Printed sheets keep the font size.	Включено: подписи скважин и замедления связей сохраняют размер шрифта при любом масштабе. Выключено: они увеличиваются и уменьшаются вместе с планом, а слишком мелкие не показываются. На печатных листах размер шрифта постоянный.
+ui:Font	Шрифт
+ui:Smaller	Меньше
+ui:Larger	Больше
+ui:Delays of the ties	Замедления на связях
+ui:Beside the tie	Сбоку от связи
+ui:On the tie, over a patch	На связи, с подложкой
+ui:From the initiation catalogue	Из каталога СИ
+ui:Opens the initiation catalogue on the product of the selected ties: a type or family chosen goes on them at once; OK keeps it, Cancel gives back what they had	Открывает «Каталог СИ» на изделии выделенных связей: выбранный тип или семейство сразу применяется к ним; OK сохраняет выбор, «Отмена» возвращает прежнее
+Ties from the initiation catalogue	Связи из каталога СИ
+Tie from the initiation catalogue	Связь из каталога СИ
+ui:Switched off	Выкл
+ui:The number stands off the line, across it, and the line shows whole	Цифра отодвинута от линии поперёк неё, линия видна целиком
+ui:The number stands on the middle of the line, which is cut under it	Цифра стоит на середине линии, линия под ней прерывается
+ui:No numbers: each kind of tie (product and delay) has its own heads, up to four, then hollow ones, and the tie legend tells them	Цифр нет: у каждого вида связи (изделие и замедление) свои наконечники — до четырёх, затем полые, — расшифровка в легенде связей
+ui:Build only	Строить только
+ui:on surface	по поверхности
+ui:on points	по точкам
+ui:on lines	по линиям
+ui:Close the line	Замыкать
+ui:The points lie on the surface under the cursor, no snapping to other objects (but the survey points and line vertices ticked here); outside the surfaces no point is put	Точки ложатся на поверхность под курсором, без привязки к другим объектам (кроме точек съёмки и вершин линий, если они отмечены здесь); вне поверхностей точка не ставится
+ui:A point goes onto a survey point under the cursor	Точка ставится на точку съёмки под курсором
+ui:A point goes onto a vertex of a line under the cursor	Точка ставится на вершину линии под курсором
+ui:The last point joins the first: a closed outline (a polygon)	Последняя точка соединяется с первой: замкнутый контур (полигон)
+No survey point or line vertex under the cursor	Под курсором нет точки съёмки или вершины линии
+No survey point under the cursor	Под курсором нет точки съёмки
+No line vertex under the cursor	Под курсором нет вершины линии
+Outside the surfaces	Вне поверхностей
+Click points; a click on the first point closes the line, a click on the last point, a double-click, Enter or Esc finishes, Backspace removes the last point.	Щёлкайте точки; щелчок по первой точке замыкает линию, щелчок по последней точке, двойной щелчок, Enter или Esc — завершить, Backspace — удалить последнюю.
+Nothing to build on under the cursor: no surface, survey point or line vertex ticked	Под курсором не на что строить: нет ни поверхности, ни отмеченных точек съёмки или вершин линий
+Vertex {0} of {1}	Вершина {0} из {1}
+Vertices: {0}	Вершины: {0}
+Vertex {0} of {1}, Z {2:0.00} m	Вершина {0} из {1}, Z {2:0.00} м
+Close line	Замкнуть линию

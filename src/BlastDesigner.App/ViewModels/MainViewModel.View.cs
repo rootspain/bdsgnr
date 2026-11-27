@@ -37,6 +37,20 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
+    /// "Do not scale" of the hole labels: on, they keep their font size on the screen at any zoom; off, they grow and
+    /// shrink with the plan. Kept in the project and, for the next new blast, in the settings.
+    /// </summary>
+    public void SetHoleLabelsFixedSize(bool on)
+    {
+        if (Doc == null) return;
+        if (ViewSettings.HoleLabelsFixedSize == on && Settings.HoleLabelsFixedSize == on) return;
+        ViewSettings.HoleLabelsFixedSize = on;
+        Settings.HoleLabelsFixedSize = on;
+        Settings.Save();
+        Doc.NotifyViewChanged();
+    }
+
+    /// <summary>
     /// Colour of a hole label (null: its own colour back): kept in the project and, for the next new blast, in the
     /// settings.
     /// </summary>

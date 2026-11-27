@@ -171,6 +171,8 @@ public abstract class Tool
     public virtual IReadOnlyList<AnchorAction> AnchorActions => Array.Empty<AnchorAction>();
 
     internal static SKColor PreviewColor => new(0xFF2563EB);
+    internal static SKColor SnapColor => new(0xFF22C55E);
+    internal static SKColor RefusedColor => new(0xFFEF4444);
 }
 
 /// <summary>Collects clicked points; finishes on a count, double-click or Enter.</summary>
@@ -190,9 +192,49 @@ public sealed class PickPointsTool : Tool
         _name = name; _hint = hint; _min = min; _max = max; _closed = closed; _finish = finish;
     }
 
-    public override string Name => _name;
+    public override string Name => ClosedSource?.Invoke() == true && ClosedName != null ? ClosedName : _name;
     public override string Hint => _hint;
     public Func<IReadOnlyList<Vec3>, Vec3, string?>? Measure { get; init; }
+    /// <summary>
+    /// Where a click puts its point, from the pointer: the point (snapped, on a surface…) or none with why (the status bar
+    /// says it); null: the snapped point as it is.
+    /// </summary>
+    public Func<ToolPointer, (Vec3? Point, string? Why)>? Constrain { get; init; }
+    /// <summary>Whether the entry closes, asked as it goes (the Close switch of the panel): the line back to the first point, three points at least.</summary>
+    public Func<bool>? ClosedSource { get; init; }
+    /// <summary>The name of the tool while it closes (Polygon for the Polyline tool).</summary>
+    public string? ClosedName { get; init; }
+    /// <summary>Esc finishes the entry (too few points: it is given up) instead of giving it up.</summary>
+    public bool EscFinishes { get; init; }
+    /// <summary>
+    /// The points of the entry itself are snapped to (within the pick radius, before anything else), and a click on the
+    /// first one, with three points or more, closes the entry and finishes it (<see cref="ClosedByClick"/>).
+    /// </summary>
+    public bool SnapOwnPoints { get; init; }
+    /// <summary>The entry being finished was closed by a click on its first point.</summary>
+    public bool ClosedByClick { get; private set; }
+
+    /// <summary>The point of the entry under the pointer (within the pick radius), its index; -1 when none.</summary>
+    private int OwnPointAt(ToolPointer p)
+    {
+        if (!SnapOwnPoints) return -1;
+        var best = -1;
+        var bestD = View.TargetRadius;
+        for (int i = 0; i < _points.Count; i++)
+        {
+            var (x, y) = View.Camera.ToScreen(_points[i]);
+            var d = Math.Sqrt((x - p.X) * (x - p.X) + (y - p.Y) * (y - p.Y));
+            if (d <= bestD) { bestD = d; best = i; }
+        }
+        return best;
+    }
+
+    private bool Closed => ClosedSource?.Invoke() ?? _closed;
+    private int Min => ClosedSource?.Invoke() == true ? Math.Max(_min, 3) : _min;
+
+    /// <summary>The point a pointer gives (a point of the entry itself first), or null with why.</summary>
+    private (Vec3? Point, string? Why) PointOf(ToolPointer p) =>
+        OwnPointAt(p) is var own and >= 0 ? (_points[own], null) : Constrain?.Invoke(p) ?? (p.Snapped, null);
     public bool Repeat { get; init; } = true;
     /// <summary>Extra context-menu items for this tool.</summary>
     public List<MenuEntry> Extra { get; } = new();
@@ -200,7 +242,9 @@ public sealed class PickPointsTool : Tool
     public override void PointerPressed(ToolPointer p)
     {
         if (!p.Left) return;
-        if (p.ClickCount >= 2 && _points.Count >= _min) { Finish(); return; }
+        if (p.ClickCount >= 2 && _points.Count >= Min) { Finish(); return; }
+        // a click on the first point closes the entry, three points or more
+        if (SnapOwnPoints && _points.Count >= 3 && OwnPointAt(p) == 0) { ClosedByClick = true; Finish(); return; }
         // a click on the last point (within the pick radius on screen) finishes, as a double click does;
         // with too few points yet it adds nothing rather than the same point twice
         if (_points.Count > 0)
@@ -208,26 +252,38 @@ public sealed class PickPointsTool : Tool
             var (lx, ly) = View.Camera.ToScreen(_points[^1]);
             if (Math.Sqrt((lx - p.X) * (lx - p.X) + (ly - p.Y) * (ly - p.Y)) <= View.TargetRadius)
             {
-                if (_points.Count >= _min) Finish();
+                if (_points.Count >= Min) Finish();
                 return;
             }
         }
-        _points.Add(p.Snapped);
+        var (point, why) = PointOf(p);
+        if (point is not Vec3 at) { if (why != null) Vm.SetStatus(Loc.T(why)); return; }
+        _points.Add(at);
         if (_points.Count >= _max) Finish();
         UpdatePreview();
     }
 
     public override void PointerMoved(ToolPointer p)
     {
-        _hover = p.Snapped;
+        (_hover, _hoverWhy) = PointOf(p);
+        _cursor = p.Snapped;
         UpdatePreview();
     }
+
+    private string? _hoverWhy;
+    private Vec3? _cursor;
 
     public override bool KeyDown(Key key, KeyModifiers mods)
     {
         // Enter with nothing to finish is left to the window, which closes the tool.
         if (key is Key.Enter or Key.Return) return FinishEntry();
         if (key == Key.Back && _points.Count > 0) { _points.RemoveAt(_points.Count - 1); UpdatePreview(); return true; }
+        // Esc keeps what was drawn: the entry is finished (too few points for one: it is given up)
+        if (key == Key.Escape && EscFinishes && _points.Count > 0)
+        {
+            if (_points.Count >= Min) Finish(); else Cancel();
+            return true;
+        }
         return base.KeyDown(key, mods);
     }
 
@@ -236,6 +292,7 @@ public sealed class PickPointsTool : Tool
     public override void Cancel()
     {
         _points.Clear();
+        ClosedByClick = false;
         base.Cancel();
     }
 
@@ -243,7 +300,7 @@ public sealed class PickPointsTool : Tool
     {
         if (_points.Count == 0) return false;
         // Too few points: keep the entry and say what is missing instead of closing the tool and losing it.
-        if (_points.Count < _min) { Vm.SetStatus(Loc.F("At least {0} points are needed", _min)); return true; }
+        if (_points.Count < Min) { Vm.SetStatus(Loc.F("At least {0} points are needed", Min)); return true; }
         Finish();
         return true;
     }
@@ -251,19 +308,20 @@ public sealed class PickPointsTool : Tool
     public override IEnumerable<MenuEntry> ContextMenu(ToolPointer p)
     {
         foreach (var e in Extra) yield return e;
-        yield return MenuEntry.Item("Finish entry", Finish, () => _points.Count >= _min);
+        yield return MenuEntry.Item("Finish entry", Finish, () => _points.Count >= Min);
         yield return MenuEntry.Item("Cancel entry", Cancel, () => _points.Count > 0);
         foreach (var e in base.ContextMenu(p)) yield return e;
     }
 
     private void Finish()
     {
-        if (_points.Count < _min) return;
+        if (_points.Count < Min && !ClosedByClick) return;
         var pts = _points.ToList();
         _points.Clear();
         Preview.Clear();
         try { _finish(pts); }
         catch (Exception ex) { Dialogs.ShowError(ex); }
+        finally { ClosedByClick = false; }
         if (!Repeat) Vm.SelectTool();
         View.Redraw();
     }
@@ -274,9 +332,14 @@ public sealed class PickPointsTool : Tool
         Preview.Points.Clear();
         Preview.Labels.Clear();
         var pts = _points.ToList();
-        if (_hover is Vec3 h && _points.Count < _max) pts.Add(h);
-        if (pts.Count > 1) Preview.Lines.Add((pts, _closed && pts.Count > 2, PreviewColor));
+        // the cursor on the first point (three points or more): the entry shown closed, as the click will close it
+        var closing = SnapOwnPoints && _points.Count >= 3 && _hover is Vec3 first && Vec3.Distance(first, _points[0]) < 1e-9;
+        if (_hover is Vec3 h && _points.Count < _max && !closing) pts.Add(h);
+        if (pts.Count > 1) Preview.Lines.Add((pts, (Closed || closing) && pts.Count > 2, PreviewColor));
         foreach (var p in _points) Preview.Points.Add((p, PreviewColor));
+        // where the next point goes when it is taken off the cursor (a survey point, a vertex), or the cursor in red where none can go
+        if (Constrain != null && _hover is Vec3 to && _cursor is Vec3 c && Vec3.Distance(to, c) > 1e-6) Preview.Points.Add((to, SnapColor));
+        if (_hover == null && _hoverWhy != null && _cursor is Vec3 refused) Preview.Points.Add((refused, RefusedColor));
         if (_hover is Vec3 hv && Measure?.Invoke(_points, hv) is string text) Preview.Labels.Add((hv, text));
     }
 }

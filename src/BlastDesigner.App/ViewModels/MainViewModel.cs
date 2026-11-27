@@ -126,6 +126,7 @@ public sealed partial class MainViewModel : ObservableObject
         ForgetBlocks();
         doc.Changed += OnDocChanged;
         doc.SelectionChanged += OnSelectionChanged;
+        KeepVerticesInUndo(doc);
         var mine = UserCatalogue.Load();
         ProductCatalogue.Attach(doc.Project, mine.Tables, mine.Products);
         ActiveConnector = doc.Project.ActiveProducts.FirstOrDefault(p => p.Kind == ProductKind.SurfaceConnector);
@@ -169,6 +170,7 @@ public sealed partial class MainViewModel : ObservableObject
             ForgetBlocks();
             Doc.Changed += OnDocChanged;
             Doc.SelectionChanged += OnSelectionChanged;
+            KeepVerticesInUndo(Doc);
         }
         SelectTool();
         RefreshAll();
@@ -212,6 +214,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void OnSelectionChanged(object? sender, EventArgs e)
     {
+        // a vertex stays selected only with its line selected
+        KeepSelectedVerticesOfSelection();
         SelectionRefreshed?.Invoke();
         SelectionChanged?.Invoke();
         var sel = Doc?.SelectedEntities.ToList() ?? new();
@@ -278,6 +282,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     public SceneOptions BuildSceneOptions()
     {
+        // the sheets write the delays of the ties as the screen does (asked here each frame, so always the settings of the moment)
+        BlastDesigner.Rendering.Reports.TieDelays = (Settings.TieDelayPlace == ProgramSettings.TieDelayOnLine, Settings.TieDelayPlace == ProgramSettings.TieDelayOff);
         var overlays = new List<IOverlay> { Highlight, PatternGrid };
         return new SceneOptions
         {
@@ -288,6 +294,8 @@ public sealed partial class MainViewModel : ObservableObject
             SelectionHaloPx = Math.Clamp(Settings.SelectionHaloPx, 0, 2),
             SelectionExtra = Settings.SelectionThick ? 2 : 0,
             CollarPixels = (float)Settings.CollarSizePixels,
+            TieDelayOnLine = Settings.TieDelayPlace == ProgramSettings.TieDelayOnLine,
+            TieDelaysOff = Settings.TieDelayPlace == ProgramSettings.TieDelayOff,
             Overlays = overlays,
             // cut to the visible blocks with the blast
             AnalysisOverlays = AnalysisOverlays.ToList(),
@@ -298,8 +306,8 @@ public sealed partial class MainViewModel : ObservableObject
             DrawSummaryBlock = false,
             // the hole type legend matters while laying out holes; on the other stages it only covers the plan
             DrawHoleLegend = ActiveStage == "Layout",
-            // the connectors are listed in the tie palette; on screen the legend only covers the plan (printed plans keep it)
-            DrawTieLegend = false,
+            // as its switch on the Visibility tab says (with the delays off it tells the kinds of the ties by their heads)
+            DrawTieLegend = true,
             DrawElevationScale = !Settings.SurfacesByType,
             GeometryColor = Settings.GeometryColor is uint g ? new SKColor(g) : null,
             SectionLineColor = new SKColor(Settings.SectionLineColor),
@@ -421,6 +429,8 @@ public sealed partial class MainViewModel : ObservableObject
         var lift = vertical || Math.Abs(cam.Up.Z) > Math.Sqrt(cam.Up.X * cam.Up.X + cam.Up.Y * cam.Up.Y);
         var delta = (lift ? new Vec3(0, 0, up) + screenRight * right : screenRight * right + screenUp * up) * (fine ? 0.1 : 1);
         if (delta.Length2D < 1e-12 && Math.Abs(delta.Z) < 1e-12) return;
+        // vertices selected on the lines: they move, the lines stay
+        if (NudgeSelectedVertices(delta)) return;
         MoveSelection(delta);
     }
 

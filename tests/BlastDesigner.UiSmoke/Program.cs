@@ -626,27 +626,62 @@ Step("hole labels in two columns", () =>
     vm.ToggleView(HoleLabelLayout.Reset); Pump();
     Named("labelsLeft").BringIntoView(); Pump();
 });
-Step("font size of the hole labels: whole steps by the arrows, in the project and in the settings", () =>
+Step("font size of the hole labels: Font [− 12 +] in one row with Do not scale, whole steps by − and +, typed, in the project and in the settings", () =>
 {
     var saved = File.Exists(ProgramSettings.SettingsPath) ? File.ReadAllBytes(ProgramSettings.SettingsPath) : null;
     var p = vm.Project!;
     var was = p.View.HoleLabelFontSize;
     try
     {
-        var box = window.GetLogicalDescendants().OfType<NumericUpDown>().FirstOrDefault(c => c.Name == "holeLabelFontSize" && c.IsEffectivelyVisible) ?? throw new Exception("no font size under Hole labels");
-        if (box.Value != was) throw new Exception($"the field shows {box.Value}, the project has {was}");
-        box.Value = box.Value + box.Increment; Pump();
-        if (box.Increment != 1 || p.View.HoleLabelFontSize != was + 1) throw new Exception("the arrow up did not take the size one up: " + p.View.HoleLabelFontSize);
+        var box = window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(c => c.Name == "holeLabelFontSize" && c.IsEffectivelyVisible) ?? throw new Exception("no font size under Hole labels");
+        Button Step(string name) => window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == name && b.IsEffectivelyVisible) ?? throw new Exception("no " + name + " by the font size");
+        void Type(string text) { box.Text = text; box.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Input.InputElement.LostFocusEvent)); Pump(); }
+        if (box.Text != was.ToString()) throw new Exception($"the field shows {box.Text}, the project has {was}");
+        // Font [− 12 +] and Do not scale in one row
+        var check = window.GetLogicalDescendants().OfType<CheckBox>().First(c => c.Name == "holeLabelsFixedSize" && c.IsEffectivelyVisible);
+        if (Math.Abs(check.TranslatePoint(new Point(0, check.Bounds.Height / 2), window)!.Value.Y - box.TranslatePoint(new Point(0, box.Bounds.Height / 2), window)!.Value.Y) > 3)
+            throw new Exception("the font size and Do not scale should be in one row");
+        Step("holeLabelFontLarger").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (p.View.HoleLabelFontSize != was + 1 || box.Text != (was + 1).ToString()) throw new Exception("+ did not take the size one up: " + p.View.HoleLabelFontSize);
         if (vm.Settings.HoleLabelFontSize != was + 1 || ProgramSettings.Load().HoleLabelFontSize != was + 1) throw new Exception("the size did not reach the settings file");
-        box.Value = 1000; Pump();
-        if (p.View.HoleLabelFontSize != ViewState.MaxHoleLabelFontSize) throw new Exception("the size went past its largest: " + p.View.HoleLabelFontSize);
-        box.Value = 14; Pump();
+        Step("holeLabelFontSmaller").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+        if (p.View.HoleLabelFontSize != was) throw new Exception("− did not take the size one down: " + p.View.HoleLabelFontSize);
+        Type("1000");
+        if (p.View.HoleLabelFontSize != ViewState.MaxHoleLabelFontSize || box.Text != ViewState.MaxHoleLabelFontSize.ToString()) throw new Exception("the size went past its largest: " + p.View.HoleLabelFontSize);
+        Type("abc");
+        if (box.Text != ViewState.MaxHoleLabelFontSize.ToString()) throw new Exception("text that is no number should give the size back: " + box.Text);
+        Type("14");
         Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
         window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "02d_hole_label_font.png"));
     }
     finally
     {
         vm.SetHoleLabelFontSize(was); Pump();
+        if (saved != null) File.WriteAllBytes(ProgramSettings.SettingsPath, saved);
+        else File.Delete(ProgramSettings.SettingsPath);
+    }
+});
+Step("hole labels: Do not scale beside the font size, off by default; off the labels follow the zoom, on they keep their size", () =>
+{
+    var saved = File.Exists(ProgramSettings.SettingsPath) ? File.ReadAllBytes(ProgramSettings.SettingsPath) : null;
+    var p = vm.Project!;
+    var was = p.View.HoleLabelsFixedSize;
+    try
+    {
+        var box = window.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.Name == "holeLabelsFixedSize" && c.IsEffectivelyVisible) ?? throw new Exception("no Do not scale beside the font size");
+        if (box.IsChecked != was) throw new Exception($"the box shows {box.IsChecked}, the project has {was}");
+        if (new ViewState().HoleLabelsFixedSize) throw new Exception("Do not scale should be off in a new view");
+        box.IsChecked = false; Pump();
+        var cam = new BlastDesigner.Rendering.Camera { Width = 400, Height = 300, Pitch = 90, Scale = ViewState.HoleLabelScaleAt / 4 };
+        var size = BlastDesigner.Rendering.PlanRenderer.HoleLabelSize(p.View, cam);
+        if (Math.Abs(size - p.View.HoleLabelFontSize / 4f) > 1e-3) throw new Exception("off, the labels should shrink with the plan: " + size);
+        box.IsChecked = true; Pump();
+        if (!p.View.HoleLabelsFixedSize || !vm.Settings.HoleLabelsFixedSize || !ProgramSettings.Load().HoleLabelsFixedSize) throw new Exception("Do not scale did not reach the project and the settings file");
+        if (BlastDesigner.Rendering.PlanRenderer.HoleLabelSize(p.View, cam) != p.View.HoleLabelFontSize) throw new Exception("on, the labels should keep their size");
+    }
+    finally
+    {
+        vm.SetHoleLabelsFixedSize(was); Pump();
         if (saved != null) File.WriteAllBytes(ProgramSettings.SettingsPath, saved);
         else File.Delete(ProgramSettings.SettingsPath);
     }
@@ -2161,18 +2196,24 @@ Step("vertices of a selected line are dragged by their grips", () =>
     if (vm.EditableLines().Single().Id != id) throw new Exception("the selected line has no grips");
     vm.ActiveTool!.PointerMoved(At(301, 201));
     if (grips.Hot?.Vertex != 1) throw new Exception("the grip under the cursor is not lit");
+    // its tip: which vertex and its level
+    var gripTip = BlastDesigner.App.Services.Loc.F("Vertex {0} of {1}, Z {2:0.00} m", 2, 3, Line().Points[1].Z);
+    if (!vm.View.Preview.Labels.Any(l => l.Text == gripTip)) throw new Exception($"the tip of a grip should say '{gripTip}', not '{string.Join(" | ", vm.View.Preview.Labels.Select(l => l.Text))}'");
     vm.View.Redraw(); Pump(); Shot("81_line_grips");
     var before = Line().Points.ToList();
     vm.ActiveTool.PointerPressed(At(301, 201));
     vm.ActiveTool.PointerMoved(At(341, 241));
-    if (vm.View.Preview.Lines.Count != 1 || vm.View.Preview.Moving != null) throw new Exception("a dragged vertex should show the new line and leave the object where it is");
+    // the line drawn with the vertex where it goes, in place of the line as it was (no trace of its old place)
+    if (vm.View.Preview.Replaced?.TryGetValue(id, out var dragged) != true || dragged is not PolylineEntity draggedLine || vm.View.Preview.Moving != null)
+        throw new Exception("a dragged vertex should draw the line with the vertex moved in place of the old one, and leave the object where it is");
+    if ((draggedLine.Points[1] - (before[1] + cam.ToWorld(341, 241) - cam.ToWorld(301, 201))).Length2D > 1e-6) throw new Exception("the line drawn while dragging does not follow the cursor");
     if (!Line().Points.SequenceEqual(before)) throw new Exception("the line changed before the release");
     vm.View.Redraw(); Pump(); Shot("81_line_grip_drag");
     vm.ActiveTool.PointerReleased(At(341, 241));
     var moved = Line().Points;
     if ((moved[1] - (before[1] + cam.ToWorld(341, 241) - cam.ToWorld(301, 201))).Length2D > 1e-6) throw new Exception("the vertex did not go to the cursor");
     if (!moved[0].Equals(before[0]) || !moved[2].Equals(before[2])) throw new Exception("the other vertices moved");
-    if (vm.View.Preview.Lines.Count != 0) throw new Exception("the preview stayed after the release");
+    if (vm.View.Preview.Lines.Count != 0 || vm.View.Preview.Replaced != null) throw new Exception("the preview stayed after the release");
     vm.Undo();
     if (!Line().Points.SequenceEqual(before)) throw new Exception("undo did not bring the vertex back");
     // Esc drops the drag; a press on the line between the vertices moves all of it; Shift selects
@@ -2185,11 +2226,17 @@ Step("vertices of a selected line are dragged by their grips", () =>
     vm.ActiveTool.PointerMoved(At(290, 240));
     if (vm.View.Preview.Moving == null) throw new Exception("a press between the vertices should move the line");
     vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
-    var shift = At(300, 200);
-    vm.ActiveTool.PointerPressed(new ToolPointer { X = shift.X, Y = shift.Y, World = shift.World, Snapped = shift.Snapped, Hit = shift.Hit, Left = true, ClickCount = 1, Modifiers = Avalonia.Input.KeyModifiers.Shift });
-    vm.ActiveTool.PointerMoved(At(340, 240));
-    if (vm.View.Preview.Lines.Count != 0) throw new Exception("with Shift a press on a grip should not take it");
-    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+    // with Shift a grip takes its vertex up or down on its own: the rest of the line stays where it is
+    ToolPointer Shifted(double x, double y) { var a = At(x, y); return new ToolPointer { X = a.X, Y = a.Y, World = a.World, Snapped = a.Snapped, Hit = a.Hit, Left = true, ClickCount = 1, Modifiers = Avalonia.Input.KeyModifiers.Shift }; }
+    vm.ActiveTool.PointerPressed(Shifted(300, 200));
+    vm.ActiveTool.PointerMoved(Shifted(300, 170));
+    if (vm.View.Preview.Moving != null) throw new Exception("with Shift a press on a grip should take the vertex, not move the line");
+    vm.ActiveTool.PointerReleased(Shifted(300, 170));
+    var raised = Line().Points;
+    if (raised[1].Z <= before[1].Z + 1e-6 || (raised[1] - before[1]).Length2D > 1e-6) throw new Exception("a Shift drag of a grip should raise its vertex only, straight up");
+    if (!raised[0].Equals(before[0]) || !raised[2].Equals(before[2])) throw new Exception("a Shift drag of a grip moved the other vertices");
+    vm.Undo();
+    if (!Line().Points.SequenceEqual(before)) throw new Exception("undo did not bring the raised vertex back");
     // a locked layer keeps its lines, and another tool has no grips
     var layer = vm.Project!.FindLayer(Line().LayerId)!;
     layer.Locked = true;
@@ -2199,6 +2246,303 @@ Step("vertices of a selected line are dragged by their grips", () =>
     if (vm.View.Overlays.OfType<BlastDesigner.Rendering.VertexGripsOverlay>().Any()) throw new Exception("the grips stayed with another tool");
     vm.SelectTool(); Pump();
     vm.View.SnapEnabled = snapping;
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id); i++) vm.Undo();
+    Pump();
+});
+Step("a dragged inner vertex of a long line leaves no trace", () =>
+{
+    // the order the lines are drawn in is kept between frames: a vertex that is neither an end nor the middle changed it
+    // not, and the line was drawn where it was under the one being dragged
+    vm.SelectTool(); Pump();
+    var cam = vm.View.Camera;
+    var snapping = vm.View.SnapEnabled;
+    vm.View.SnapEnabled = false;
+    PolylineEntity line = null!;
+    vm.Change("Line", p => line = p.Add(new PolylineEntity { Points = { cam.ToWorld(150, 200), cam.ToWorld(200, 200), cam.ToWorld(250, 200), cam.ToWorld(300, 200), cam.ToWorld(350, 200), cam.ToWorld(400, 200) } }));
+    var id = line.Id;
+    PolylineEntity Line() => vm.Project!.Entities.OfType<PolylineEntity>().Single(l => l.Id == id);
+    ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = Line(), Left = true, ClickCount = 1 };
+    vm.Doc!.Select(new[] { id }); Pump();
+    vm.View.Redraw(); Pump();
+    vm.ActiveTool!.PointerMoved(At(200, 200));
+    vm.ActiveTool.PointerPressed(At(200, 200));
+    vm.ActiveTool.PointerMoved(At(200, 260));
+    vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+    Shot("81_line_inner_grip_drag");
+    var order = typeof(BlastDesigner.Rendering.PlanRenderer).GetField("_order", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)
+        ?? throw new Exception("no order of the lines was drawn");
+    var items = (System.Collections.IEnumerable)order.GetType().GetField("Items")!.GetValue(order)!;
+    var drawn = items.Cast<(float Key, Entity E, int Seg)>().Where(i => i.E.Id == id).Select(i => i.E).Distinct().ToList();
+    if (drawn.Count != 1 || ReferenceEquals(drawn[0], Line()) || ((PolylineEntity)drawn[0]).Points[1].Equals(Line().Points[1]))
+        throw new Exception($"the line being dragged should be drawn with its vertex moved, not where it was (drawn {drawn.Count}, replaced {vm.View.Preview.Replaced?.Count}, same {drawn.Count > 0 && ReferenceEquals(drawn[0], Line())})");
+    vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+    vm.ActiveTool.PointerReleased(At(200, 260));
+    vm.View.SnapEnabled = snapping;
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id); i++) vm.Undo();
+    Pump();
+});
+Step("a dragged vertex in 3D out of a block keeps its segments whole", () =>
+{
+    vm.SelectTool(); Pump();
+    var snapping = vm.View.SnapEnabled;
+    vm.View.SnapEnabled = false;
+    var (pitch, yaw, scale, target) = (vm.View.Camera.Pitch, vm.View.Camera.Yaw, vm.View.Camera.Scale, vm.View.Camera.Target);
+    SurfaceEntity ground = null!;
+    BlockEntity block = null!;
+    PolylineEntity line = null!;
+    // a visible block shows only what is inside it: the line is in it, its vertex is dragged out over its top
+    vm.Change("Block", p => block = p.Add(new BlockEntity { Origin = new Vec3(-50, -50, 0), Length = 100, Width = 100, Height = 15 }));
+    vm.Change("Ground", p => ground = p.Add(new SurfaceEntity { Name = "Smoke slope", Vertices = { new(-60, -60, 0), new(60, -60, 0), new(60, 60, 30), new(-60, 60, 30) }, Triangles = { 0, 1, 2, 0, 2, 3 } }));
+    vm.Change("Line", p => line = p.Add(new PolylineEntity { Points = { new Vec3(-30, -30, 10), new Vec3(-10, -10, 10), new Vec3(20, 30, 10), new Vec3(30, -20, 10) } }));
+    var id = line.Id;
+    PolylineEntity Line() => vm.Project!.Entities.OfType<PolylineEntity>().Single(l => l.Id == id);
+    try
+    {
+        vm.View3D(); Pump();
+        var cam = vm.View.Camera;
+        ToolPointer At(double x, double y, bool shift = false) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = Line(), Left = true, ClickCount = 1, Modifiers = shift ? Avalonia.Input.KeyModifiers.Shift : Avalonia.Input.KeyModifiers.None };
+        vm.Doc!.Select(new[] { id }); Pump();
+        var (gx, gy) = cam.ToScreen(Line().Points[2]);
+        vm.ActiveTool!.PointerMoved(At(gx, gy));
+        vm.ActiveTool.PointerPressed(At(gx, gy, true));
+        vm.ActiveTool.PointerMoved(At(gx, gy - 60, true));
+        vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        Shot("81_line_grip_drag_3d");
+        IEnumerable<Entity> Drawn()
+        {
+            var order = typeof(BlastDesigner.Rendering.PlanRenderer).GetField("_order", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.GetValue(null)!;
+            return ((System.Collections.IEnumerable)order.GetType().GetField("Items")!.GetValue(order)!).Cast<(float Key, Entity E, int Seg)>().Where(i => i.E.Id == id).Select(i => i.E).Distinct();
+        }
+        if (vm.View.Preview.Replaced?.TryGetValue(id, out var copy) != true || copy is not PolylineEntity raised || raised.Points[2].Z <= 15)
+            throw new Exception("the vertex should be dragged up out of the block");
+        if (Drawn().SingleOrDefault() is not PolylineEntity whole || whole.Points.Count != 4 || !whole.Points[2].Equals(raised.Points[2]))
+            throw new Exception("a line being dragged out of a block should be drawn whole, up to its vertex");
+        vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+        vm.ActiveTool.PointerReleased(At(gx, gy - 60, true));
+        // the selected line stays whole with its grips; let go, another line is cut at the block again
+        vm.Change("Raise", p => ((PolylineEntity)p.FindEntity(id)!).Points[2] = new Vec3(20, 30, 25));
+        vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        if (Drawn().Count() != 1 || ((PolylineEntity)Drawn().Single()).Points.Count != 4) throw new Exception("a selected line should be drawn whole, also outside the blocks");
+        vm.Doc.ClearSelection();
+        vm.View.Redraw(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
+        if (Drawn().Any(e => e is PolylineEntity { Points: var pts } && pts.Any(v => v.Z > 15 + 1e-6))) throw new Exception("a line not selected should be cut at the top of the block");
+    }
+    finally
+    {
+        (vm.View.Camera.Pitch, vm.View.Camera.Yaw, vm.View.Camera.Scale, vm.View.Camera.Target) = (pitch, yaw, scale, target);
+        vm.View.SnapEnabled = snapping;
+        vm.Doc!.ClearSelection();
+        for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id || e.Id == ground.Id || e.Id == block.Id); i++) vm.Undo();
+        Pump();
+    }
+});
+Step("a click on a grip selects its vertex and shows its coordinates", () =>
+{
+    vm.SelectTool(); Pump();
+    var cam = vm.View.Camera;
+    var snapping = vm.View.SnapEnabled;
+    vm.View.SnapEnabled = false;
+    PolylineEntity line = null!;
+    vm.Change("Line", p => line = p.Add(new PolylineEntity { Points = { cam.ToWorld(200, 200), cam.ToWorld(300, 200), cam.ToWorld(300, 300), cam.ToWorld(200, 300) }, Closed = true }));
+    var id = line.Id;
+    PolylineEntity Line() => vm.Project!.Entities.OfType<PolylineEntity>().Single(l => l.Id == id);
+    ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = Line(), Left = true, ClickCount = 1 };
+    vm.Doc!.Select(new[] { id }); Pump();
+    // at the corner of the green snap square drawn round the vertex (6 px each way): still on the vertex
+    vm.ActiveTool!.PointerMoved(At(306, 306));
+    vm.ActiveTool.PointerPressed(At(306, 306));
+    vm.ActiveTool.PointerReleased(At(306, 306));
+    Pump();
+    if (vm.SelectedLineVertex is not { } chosen || chosen.Line.Id != id || chosen.Vertex != 2) throw new Exception("a click on the grip of a selected polygon (at the corner of its snap square) should select its vertex");
+    if (!vm.Doc.Selection.SequenceEqual(new[] { id })) throw new Exception("selecting a vertex should keep its line selected");
+    var card = window.GetLogicalDescendants().OfType<Border>().FirstOrDefault(b => b.Name == "vertexCard" && b.IsEffectivelyVisible)
+        ?? throw new Exception("the properties panel shows no card of the selected vertex");
+    var caption = card.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "vertexCaption").Text;
+    if (caption != BlastDesigner.App.Services.Loc.F("Vertex {0} of {1}", 3, 4)) throw new Exception($"the card of the vertex is called '{caption}'");
+    vm.View.Redraw(); Pump(); Shot("81_line_vertex_selected");
+    // its Z typed in: that vertex goes up, the others stay
+    var before = Line().Points.ToList();
+    var zBox = card.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(b => b.Name == "propPositionZ")
+        ?? throw new Exception("the card of the vertex has no field Z");
+    zBox.Focus();
+    zBox.Text = (before[2].Z + 5).ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+    zBox.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter });
+    Pump();
+    var typed = Line().Points;
+    if (Math.Abs(typed[2].Z - (before[2].Z + 5)) > 1e-6 || (typed[2] - before[2]).Length2D > 1e-6) throw new Exception($"the Z typed in did not go to the vertex ({typed[2].Z} for {before[2].Z + 5})");
+    if (!typed[0].Equals(before[0]) || !typed[1].Equals(before[1]) || !typed[3].Equals(before[3])) throw new Exception("typing the Z of a vertex moved the others");
+    vm.Undo();
+    if (!Line().Points.SequenceEqual(before)) throw new Exception("undo did not take the typed Z back");
+    // Delete with a vertex selected takes that vertex out, the line stays, selected
+    vm.ActiveTool.PointerPressed(At(300, 300));
+    vm.ActiveTool.PointerReleased(At(300, 300));
+    vm.DeleteSelected(); Pump();
+    if (!vm.Project!.Entities.Any(e => e.Id == id) || Line().Points.Count != 3 || Line().Points.Any(v => v.Equals(before[2])))
+        throw new Exception("Delete with a vertex selected should take out that vertex only");
+    if (!vm.Doc.Selection.Contains(id) || vm.SelectedLineVertex != null) throw new Exception("after its vertex is deleted the line should stay selected, with no vertex");
+    // a polygon keeps three points: refused, the vertex stays selected
+    vm.ActiveTool.PointerPressed(At(300, 200));
+    vm.ActiveTool.PointerReleased(At(300, 200));
+    vm.DeleteSelected(); Pump();
+    if (Line().Points.Count != 3 || vm.SelectedLineVertex is not { Vertex: 1 }) throw new Exception("a polygon of three points should keep its vertex, still selected");
+    vm.Undo(); Pump();
+    if (!Line().Points.SequenceEqual(before)) throw new Exception("undo did not bring the deleted vertex back");
+    if (!vm.SelectedLineVertices.Select(v => v.Vertex).SequenceEqual(new[] { 2 })) throw new Exception("undo of a deletion should give the vertex back selected");
+    vm.Redo(); Pump();
+    // redo gives back the vertices selected when the undo was made, as it does the objects
+    if (Line().Points.Count != 3 || !vm.SelectedLineVertices.Select(v => v.Vertex).SequenceEqual(new[] { 1 })) throw new Exception("redo should take the vertex out again, with the vertex selected before the undo");
+    vm.Undo(); Pump();
+    vm.ActiveTool.PointerPressed(At(300, 300));
+    vm.ActiveTool.PointerReleased(At(300, 300));
+    // with Shift a click on another grip adds its vertex; the arrows move the vertices selected, not the line
+    var shifted = At(200, 200);
+    var withShift = new ToolPointer { X = shifted.X, Y = shifted.Y, World = shifted.World, Snapped = shifted.Snapped, Hit = shifted.Hit, Left = true, ClickCount = 1, Modifiers = Avalonia.Input.KeyModifiers.Shift };
+    vm.ActiveTool.PointerPressed(withShift);
+    vm.ActiveTool.PointerReleased(withShift);
+    Pump();
+    var two = vm.SelectedLineVertices.Select(v => v.Vertex).OrderBy(i => i).ToList();
+    if (!two.SequenceEqual(new[] { 0, 2 })) throw new Exception($"Shift and a click on a grip should add its vertex to the selected ones ({string.Join(",", two)})");
+    var cardOfTwo = window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Name == "vertexCaption" && t.IsEffectivelyVisible)?.Text;
+    if (cardOfTwo != BlastDesigner.App.Services.Loc.F("Vertices: {0}", 2)) throw new Exception($"the card of two vertices is called '{cardOfTwo}'");
+    vm.NudgeSelection(1, 0, false, false); Pump();
+    var nudged = Line().Points;
+    var right = cam.Right * 1;
+    if ((nudged[0] - (before[0] + right)).Length > 1e-6 || (nudged[2] - (before[2] + right)).Length > 1e-6) throw new Exception("an arrow should move the selected vertices a metre");
+    if (!nudged[1].Equals(before[1]) || !nudged[3].Equals(before[3])) throw new Exception("an arrow moved vertices that are not selected");
+    vm.Undo(); Pump();
+    if (!Line().Points.SequenceEqual(before)) throw new Exception("undo did not take the nudge of the vertices back");
+    // two of the four of a polygon: it would keep two, refused, both stay selected
+    vm.DeleteSelected(); Pump();
+    if (Line().Points.Count != 4 || vm.SelectedLineVertices.Count != 2) throw new Exception("a polygon should keep three points, its selected vertices too");
+    // a box with Shift adds the vertices in it, with Ctrl takes them off; the line stays the one selected
+    void Box(double x0, double y0, double x1, double y1, Avalonia.Input.KeyModifiers mods)
+    {
+        ToolPointer P(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Left = true, ClickCount = 1, Modifiers = mods };
+        vm.ActiveTool!.PointerPressed(P(x0, y0));
+        vm.ActiveTool.PointerMoved(P((x0 + x1) / 2, (y0 + y1) / 2));
+        vm.ActiveTool.PointerMoved(P(x1, y1));
+        vm.ActiveTool.PointerReleased(P(x1, y1));
+        Pump();
+    }
+    Box(285, 185, 315, 215, Avalonia.Input.KeyModifiers.Shift);
+    if (!vm.SelectedLineVertices.Select(v => v.Vertex).OrderBy(i => i).SequenceEqual(new[] { 0, 1, 2 })) throw new Exception("a box with Shift should add the vertices in it to the selected ones");
+    Box(185, 185, 215, 215, Avalonia.Input.KeyModifiers.Control);
+    if (!vm.SelectedLineVertices.Select(v => v.Vertex).OrderBy(i => i).SequenceEqual(new[] { 1, 2 })) throw new Exception("a box with Ctrl should take the vertices in it off the selected ones");
+    if (!vm.Doc.Selection.SequenceEqual(new[] { id })) throw new Exception("a box over vertices should leave the objects selected as they were");
+    // a click on the line away from its grips selects the line alone, the vertex goes
+    vm.ActiveTool.PointerPressed(At(250, 200));
+    vm.ActiveTool.PointerReleased(At(250, 200));
+    Pump();
+    if (vm.SelectedLineVertex != null) throw new Exception("a click on the line away from its grips should take the vertex off");
+    vm.View.SnapEnabled = snapping;
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id); i++) vm.Undo();
+    Pump();
+});
+Step("Collars onto surface opens its list on the bench surface", () =>
+{
+    SurfaceEntity survey = null!, bench = null!;
+    vm.Change("Surfaces", p =>
+    {
+        survey = p.Add(new SurfaceEntity { Name = "Smoke survey", Kind = SurfaceKind.Topography, Vertices = { new(0, 0, 0), new(10, 0, 0), new(0, 10, 0) }, Triangles = { 0, 1, 2 } });
+        bench = p.Add(new SurfaceEntity { Name = "Smoke bench", Kind = SurfaceKind.Bench, Vertices = { new(0, 0, 5), new(10, 0, 5), new(0, 10, 5) }, Triangles = { 0, 1, 2 } });
+    });
+    try
+    {
+        vm.Doc!.ClearSelection();
+        var task = vm.DrapeCollarsOnSurface(); Pump();
+        var w = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("no list of surfaces opened");
+        var combo = w.GetLogicalDescendants().OfType<ComboBox>().Single();
+        var names = combo.ItemsSource!.Cast<object>().Select(o => o.ToString()).ToList();
+        if (combo.SelectedItem?.ToString() != "Smoke bench" || names.IndexOf("Smoke survey") > names.IndexOf("Smoke bench"))
+            throw new Exception($"the list should open on the bench surface, not on '{combo.SelectedItem}'");
+        var cancel = w.GetLogicalDescendants().OfType<Button>().First(b => b.IsCancel);
+        cancel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Pump();
+        if (!task.IsCompleted) throw new Exception("the list of surfaces did not close");
+    }
+    finally
+    {
+        var ids = new[] { survey.Id, bench.Id };
+        for (int i = 0; i < 5 && vm.Project!.Entities.Any(e => ids.Contains(e.Id)); i++) vm.Undo();
+        Pump();
+    }
+});
+Step("an end of a line dragged onto its other end closes the line", () =>
+{
+    vm.SelectTool(); Pump();
+    var cam = vm.View.Camera;
+    var snapping = vm.View.SnapEnabled;
+    vm.View.SnapEnabled = false;
+    PolylineEntity line = null!;
+    vm.Change("Line", p => line = p.Add(new PolylineEntity { Points = { cam.ToWorld(200, 200), cam.ToWorld(300, 200), cam.ToWorld(300, 300), cam.ToWorld(200, 300) } }));
+    var id = line.Id;
+    PolylineEntity Line() => vm.Project!.Entities.OfType<PolylineEntity>().Single(l => l.Id == id);
+    ToolPointer At(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Hit = Line(), Left = true, ClickCount = 1 };
+    var before = Line().Points.ToList();
+    vm.Doc!.Select(new[] { id }); Pump();
+    vm.ActiveTool!.PointerMoved(At(200, 200));
+    vm.ActiveTool.PointerPressed(At(200, 200));
+    vm.ActiveTool.PointerMoved(At(201, 250));
+    vm.ActiveTool.PointerMoved(At(204, 296));
+    // on the screen already: the line closed, the two ends one vertex
+    if (vm.View.Preview.Replaced?.TryGetValue(id, out var shown) != true || shown is not PolylineEntity { Closed: true, Points.Count: 3 })
+        throw new Exception("the first vertex dragged onto the last should show the line closed");
+    vm.View.Redraw(); Pump(); Shot("81_line_closed_by_drag");
+    vm.ActiveTool.PointerReleased(At(204, 296));
+    Pump();
+    var closed = Line();
+    if (!closed.Closed || closed.Points.Count != 3 || !closed.Points.SequenceEqual(before.Skip(1))) throw new Exception("letting go on the other end should close the line, the dragged end gone");
+    if (vm.SelectedLineVertex is not { Vertex: 2 }) throw new Exception("the vertex the ends joined at should be the one selected");
+    vm.Undo(); Pump();
+    if (Line().Closed || !Line().Points.SequenceEqual(before)) throw new Exception("undo did not open the line again");
+    // the last vertex onto the first closes it too; away from it the end only moves
+    vm.ActiveTool.PointerMoved(At(200, 300));
+    vm.ActiveTool.PointerPressed(At(200, 300));
+    vm.ActiveTool.PointerMoved(At(201, 250));
+    vm.ActiveTool.PointerMoved(At(202, 203));
+    vm.ActiveTool.PointerReleased(At(202, 203));
+    Pump();
+    if (!Line().Closed || Line().Points.Count != 3 || !Line().Points.SequenceEqual(before.Take(3))) throw new Exception("the last vertex dragged onto the first should close the line");
+    vm.Undo(); Pump();
+    vm.ActiveTool.PointerMoved(At(200, 300));
+    vm.ActiveTool.PointerPressed(At(200, 300));
+    vm.ActiveTool.PointerMoved(At(201, 250));
+    vm.ActiveTool.PointerMoved(At(200, 230));
+    vm.ActiveTool.PointerReleased(At(200, 230));
+    Pump();
+    if (Line().Closed || Line().Points.Count != 4) throw new Exception("an end let go away from the other end should only move");
+    vm.View.SnapEnabled = snapping;
+    vm.Doc.ClearSelection();
+    for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id); i++) vm.Undo();
+    Pump();
+});
+Step("Add vertex in the context menu of a line adds one where it was right-clicked", () =>
+{
+    vm.SelectTool(); Pump();
+    var cam = vm.View.Camera;
+    PolylineEntity line = null!;
+    vm.Change("Line", p => line = p.Add(new PolylineEntity { Points = { cam.ToWorld(200, 200), cam.ToWorld(300, 200), cam.ToWorld(300, 300) } }));
+    var id = line.Id;
+    PolylineEntity Line() => vm.Project!.Entities.OfType<PolylineEntity>().Single(l => l.Id == id);
+    vm.Doc!.ClearSelection(); Pump();
+    // a right click on the line not selected: it is selected, the first item adds a vertex there
+    var at = new ToolPointer { X = 250, Y = 201, World = cam.ToWorld(250, 201), Snapped = cam.ToWorld(250, 201), Hit = Line(), Right = true, ClickCount = 1 };
+    var menu = vm.ActiveTool!.ContextMenu(at).ToList();
+    if (!vm.Doc.Selection.SequenceEqual(new[] { id })) throw new Exception("a right click on a line not selected should select it");
+    var add = menu.FirstOrDefault(m => m.Header == "Add vertex") ?? throw new Exception("the context menu of a line has no Add vertex");
+    if (menu.IndexOf(add) != 0 || add.IsEnabled?.Invoke() == false) throw new Exception("Add vertex should come first in the menu of a line, enabled");
+    add.Action!(); Pump();
+    var pts = Line().Points;
+    if (pts.Count != 4 || (pts[1] - cam.ToWorld(250, 200)).Length2D > 1e-6) throw new Exception("Add vertex should put a vertex on the line where it was right-clicked");
+    if (vm.SelectedLineVertex is not { Vertex: 1 }) throw new Exception("the vertex added should be the one selected");
+    vm.Undo(); Pump();
+    if (Line().Points.Count != 3) throw new Exception("undo did not take the added vertex out");
+    // a right click away from any line has no Add vertex
+    var empty = vm.ActiveTool.ContextMenu(new ToolPointer { X = 600, Y = 600, World = cam.ToWorld(600, 600), Snapped = cam.ToWorld(600, 600), Right = true, ClickCount = 1 }).ToList();
+    if (empty.Any(m => m.Header == "Add vertex")) throw new Exception("Add vertex is only for a line under the cursor");
     vm.Doc.ClearSelection();
     for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id); i++) vm.Undo();
     Pump();
@@ -3836,6 +4180,36 @@ Step("settings: surface colours", () =>
     sv.Offset = new Vector(0, heading.TranslatePoint(new Point(0, 0), (Visual)sv.Content!)!.Value.Y - 20); Pump();
 });
 WindowShot("41c_settings_surfaces");
+Step("settings: the delays of the ties beside the tie by default, on the tie over a patch as the other choice; the plan takes it", () =>
+{
+    if (new ProgramSettings().TieDelayPlace != ProgramSettings.TieDelayBeside) throw new Exception("the delays should be beside the tie by default");
+    var edited = new ProgramSettings { Language = settings.Language };
+    var task = SettingsWindow.Show(edited); Pump();
+    var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+    Button Chip(string key) => dlg.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Tag as string == "tieDelay:" + key) ?? throw new Exception("no choice " + key + " for the delays of the ties");
+    // each choice has its own tip; no common text under the name
+    foreach (var key in new[] { ProgramSettings.TieDelayBeside, ProgramSettings.TieDelayOnLine, ProgramSettings.TieDelayOff })
+        if (ToolTip.GetTip(Chip(key)) is not string { Length: > 0 }) throw new Exception("no tip on the choice " + key);
+    if (ToolTip.GetTip(Chip(ProgramSettings.TieDelayBeside)) as string == ToolTip.GetTip(Chip(ProgramSettings.TieDelayOff)) as string) throw new Exception("the choices should say each what it does");
+    if (dlg.GetLogicalDescendants().OfType<TextBlock>().Any(b => b.Text?.Contains(BlastDesigner.App.Services.Loc.Ui("The number stands off the line, across it, and the line shows whole")) == true && b.IsEffectivelyVisible))
+        throw new Exception("the tips should not stand under the name of the setting");
+    Chip(ProgramSettings.TieDelayOnLine).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Tag is "ok").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+    if (task.Result?.TieDelayPlace != ProgramSettings.TieDelayOnLine) throw new Exception("the choice did not reach the settings: " + task.Result?.TieDelayPlace);
+    // the plan draws by the program's settings, taken from the window as Apply and OK take them
+    var was = vm.Settings.TieDelayPlace;
+    try
+    {
+        var applied = ProgramSettings.Load();
+        applied.TieDelayPlace = ProgramSettings.TieDelayOnLine;
+        vm.ApplyProgramSettings(applied); Pump();
+        if (vm.Settings.TieDelayPlace != ProgramSettings.TieDelayOnLine) throw new Exception("Apply / OK did not take the place of the delays");
+        if (!vm.BuildSceneOptions().TieDelayOnLine) throw new Exception("on the tie: the plan should put the delays on the line");
+        vm.Settings.TieDelayPlace = ProgramSettings.TieDelayBeside;
+        if (vm.BuildSceneOptions().TieDelayOnLine) throw new Exception("beside the tie: the plan should put the delays off the line");
+    }
+    finally { vm.Settings.TieDelayPlace = was; }
+});
 Step("settings: Apply applies and keeps the window, OK applies and closes, buttons Apply, Cancel, OK", () =>
 {
     var applied = 0;
@@ -5036,6 +5410,8 @@ Step("done button and Enter on tools", () =>
     window.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Enter, null); Pump();
     if (vm.ActiveTool is not SelectTool) throw new Exception("Enter did not close the rotate tool");
     var countBefore = vm.Project!.Entities.Count;
+    // points off the bench surface: drawn freely (Build only is all on at first)
+    vm.PolylineOnSurface = vm.PolylineOnPoints = vm.PolylineOnLines = false;
     vm.DrawPolylineTool(true); Pump();
     void Click(double x, double y) { var w = new BlastDesigner.Domain.Geometry.Vec3(x, y, 300); var (sx, sy) = vm.View.Camera.ToScreen(w); vm.ActiveTool!.PointerPressed(new ToolPointer { X = sx, Y = sy, World = w, Snapped = w, Left = true, ClickCount = 1 }); }
     Click(1100, 2100);
@@ -5048,6 +5424,148 @@ Step("done button and Enter on tools", () =>
     Done();
     if (vm.ActiveTool is not SelectTool) throw new Exception("second Done did not close the polygon tool");
     vm.Undo();
+    vm.PolylineOnSurface = vm.PolylineOnPoints = vm.PolylineOnLines = true;
+});
+Step("polyline: build only on surface (shown ones), on points, on lines, any of them together, all on at first; Close makes a polygon; its own points snapped, the first closes it; Esc finishes the entry", () =>
+{
+    // a surface of its own, a survey point and a line beside the blast
+    var x0 = 5000.0; var y0 = 5000.0;
+    var pointId = Guid.Empty; var lineId = Guid.Empty; var surfaceId = Guid.Empty;
+    vm.Change("Smoke polyline ground", p =>
+    {
+        var pts = new List<Vec3>();
+        for (int x = 0; x <= 60; x += 10) for (int y = 0; y <= 40; y += 10) pts.Add(new Vec3(x0 + x, y0 + y, 200 + 0.1 * x));
+        var s = Surfaces.Triangulate(pts); s.Name = "Polyline ground";
+        p.Add(s, p.GetOrCreateLayer(StandardLayers.Surfaces)); surfaceId = s.Id;
+        var pt = new PointEntity { Position = new Vec3(x0 + 15, y0 + 15, 250), Kind = PointKind.Survey, Label = "S1" };
+        p.Add(pt); pointId = pt.Id;
+        var l = new PolylineEntity { Points = { new Vec3(x0 + 30, y0 + 5, 260), new Vec3(x0 + 45, y0 + 25, 261) } };
+        p.Add(l); lineId = l.Id;
+    });
+    var steps = vm.Doc!.UndoNames.Count;
+    var was = (vm.PolylineOnSurface, vm.PolylineOnPoints, vm.PolylineOnLines);
+    var cam = vm.View.Camera;
+    var camWas = (cam.Target, cam.Scale, cam.Pitch, cam.Yaw);
+    try
+    {
+        vm.View.Camera.Target = new Vec3(x0 + 30, y0 + 20, 220); vm.View.Camera.Scale = 8; vm.View.Camera.Pitch = 90; vm.View.Camera.Yaw = 0; Pump();
+        vm.DrawPolylineTool(false); Pump();
+        // the chips of Build only: on is the class "on"; IsChecked sets them by a click, as the user does
+        Chip Box(string name) => new Chip(window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(c => c.Name == name && c.IsEffectivelyVisible) ?? throw new Exception("no chip " + name + " on the polyline panel"));
+        var close = window.GetLogicalDescendants().OfType<ToggleSwitch>().FirstOrDefault(c => c.Name == "polylineClosed" && c.IsEffectivelyVisible) ?? throw new Exception("no Close on the polyline panel");
+        if (close.IsChecked == true) throw new Exception("the Polyline button should start with Close off");
+        if (was != (true, true, true) || Box("polylineOnSurface").IsChecked != true || Box("polylineOnPoints").IsChecked != true || Box("polylineOnLines").IsChecked != true)
+            throw new Exception("on surface, on points and on lines should all be on at first");
+        // the panel of every tool: low over the plan, its ground see-through, the text on it solid
+        var panel = window.GetLogicalDescendants().OfType<BlastDesigner.App.Views.ToolPanel>().First(t => t.IsVisible);
+        if (panel.Margin.Bottom > 6 || panel.Background != null || Math.Abs(panel.Ground.Opacity - 0.72) > 1e-6 || panel.Opacity < 1)
+            throw new Exception($"the tool panel should sit 6 px over the bottom with a ground at 72 %: bottom {panel.Margin.Bottom}, ground {panel.Ground.Opacity}, panel {panel.Opacity}");
+        Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); window.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "65_polyline_panel.png"));
+        // the click: the pointer where it is, its snapping to the object given as the viewport would
+        void Click(Vec3 w, Vec3? snapped = null) { var (sx, sy) = vm.View.Camera.ToScreen(w); vm.ActiveTool!.PointerPressed(new ToolPointer { X = sx, Y = sy, World = w, Snapped = snapped ?? w, IsSnapped = snapped != null, Left = true, ClickCount = 1 }); Pump(); }
+        void Esc() { vm.View.Focus(); window.KeyPress(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null); Pump(); }
+        PolylineEntity Last() => vm.Project!.Entities.OfType<PolylineEntity>().Last();
+        // on surface alone: the point where the cursor is (the snapping to the survey point left out), at the surface's level
+        Box("polylineOnPoints").IsChecked = false; Box("polylineOnLines").IsChecked = false; Pump();
+        if (Box("polylineOnSurface").IsChecked != true) throw new Exception("the boxes should not take each other off");
+        var survey = ((PointEntity)vm.Project!.FindEntity(pointId)!).Position;
+        Click(new Vec3(x0 + 12, y0 + 12, 0), survey);
+        Click(new Vec3(x0 + 40, y0 + 10, 0));
+        // outside the surface: no point
+        Click(new Vec3(x0 + 500, y0 + 10, 0));
+        Esc();
+        var onSurface = Last();
+        if (onSurface.Points.Count != 2) throw new Exception("on surface: a click outside it should put no point, " + onSurface.Points.Count + " points");
+        if (Math.Abs(onSurface.Points[0].X - (x0 + 12)) > 1e-6 || Math.Abs(onSurface.Points[0].Z - (200 + 0.1 * 12)) > 1e-6) throw new Exception($"on surface: the point should be under the cursor on the surface, not snapped: {onSurface.Points[0]}");
+        if (vm.ActiveTool is SelectTool) throw new Exception("Esc should finish the entry and keep the tool");
+        // in 3D the point goes where the line of sight through the cursor meets the surface: under the cursor on the screen
+        cam.Pitch = 40; cam.Yaw = 30; Pump();
+        var aim = new Vec3(x0 + 20, y0 + 20, 200 + 0.1 * 20);
+        var (ax3, ay3) = cam.ToScreen(aim);
+        vm.ActiveTool!.PointerPressed(new ToolPointer { X = ax3, Y = ay3, World = cam.ToWorld(ax3, ay3), Snapped = cam.ToWorld(ax3, ay3), Left = true, ClickCount = 1 }); Pump();
+        var aim2 = new Vec3(x0 + 45, y0 + 10, 200 + 0.1 * 45);
+        var (bx3, by3) = cam.ToScreen(aim2);
+        vm.ActiveTool!.PointerPressed(new ToolPointer { X = bx3, Y = by3, World = cam.ToWorld(bx3, by3), Snapped = cam.ToWorld(bx3, by3), Left = true, ClickCount = 1 }); Pump();
+        Esc();
+        var in3d = Last();
+        foreach (var (got, want) in new[] { (in3d.Points[0], aim), (in3d.Points[1], aim2) })
+        {
+            var (gx, gy) = cam.ToScreen(got);
+            var (wx, wy) = cam.ToScreen(want);
+            if (Math.Abs(gx - wx) > 1 || Math.Abs(gy - wy) > 1 || Vec3.Distance(got, want) > 0.05)
+                throw new Exception($"in 3D the point should be on the surface under the cursor: {got} for {want}");
+        }
+        cam.Pitch = 90; cam.Yaw = 0; Pump();
+        // all three together: a survey point or a line vertex under the cursor first, else the surface
+        Box("polylineOnPoints").IsChecked = true; Box("polylineOnLines").IsChecked = true; Pump();
+        if (Box("polylineOnSurface").IsChecked != true) throw new Exception("on points should leave on surface on");
+        Click(survey + new Vec3(0.2, 0.1, 0));
+        Click(new Vec3(x0 + 50, y0 + 30, 0));
+        Click(new Vec3(x0 + 500, y0 + 30, 0));  // none of them: no point
+        Esc();
+        var mixed = Last();
+        if (mixed.Points.Count != 2 || Vec3.Distance(mixed.Points[0], survey) > 1e-6 || Math.Abs(mixed.Points[1].Z - (200 + 0.1 * 50)) > 1e-6)
+            throw new Exception($"all three: the survey point, then the surface, then nothing expected: {string.Join("; ", mixed.Points)}");
+        // on points and on lines without the surface
+        Box("polylineOnSurface").IsChecked = false; Pump();
+        var vertex = ((PolylineEntity)vm.Project.FindEntity(lineId)!).Points[1];
+        Click(survey + new Vec3(0.2, 0.1, 0));
+        Click(new Vec3(x0 + 20, y0 + 30, 0));   // nothing under it: no point
+        Click(vertex + new Vec3(-0.1, 0.2, 0));
+        // Close: a polygon of three points; Esc finishes it
+        close.IsChecked = true; Pump();
+        Click(((PolylineEntity)vm.Project.FindEntity(lineId)!).Points[0]);
+        Esc();
+        var polygon = Last();
+        if (!polygon.Closed || polygon.Points.Count != 3) throw new Exception($"Close: a polygon of the three points expected, {polygon.Points.Count} points, closed {polygon.Closed}");
+        if (Vec3.Distance(polygon.Points[0], survey) > 1e-6 || Vec3.Distance(polygon.Points[1], vertex) > 1e-6) throw new Exception("on points and lines: the points should be the survey point and the vertex");
+        if (vm.Doc.UndoNames.Count != steps + 4) throw new Exception("each entry finished by Esc should be one undo step");
+        steps += 0;
+        // its own points: snapped to, and a click on the first one closes the line
+        Box("polylineOnPoints").IsChecked = false; Box("polylineOnLines").IsChecked = false; close.IsChecked = false; Pump();
+        var a = new Vec3(x0 + 5, y0 + 5, 0); var b = new Vec3(x0 + 25, y0 + 5, 0); var c = new Vec3(x0 + 25, y0 + 25, 0);
+        Click(a); Click(b); Click(c);
+        Click(b + new Vec3(0.2, -0.2, 0));   // onto its own point b
+        Click(new Vec3(x0 + 5, y0 + 30, 0));
+        Click(a + new Vec3(0.2, 0.2, 0));    // the first point: closes and finishes
+        var ring = Last();
+        if (!ring.Closed || ring.Points.Count != 5) throw new Exception($"a click on the first point should close the line: {ring.Points.Count} points, closed {ring.Closed}");
+        if (Vec3.Distance(ring.Points[3], ring.Points[1]) > 1e-6) throw new Exception("a click near its own point should put the point on it: " + ring.Points[3]);
+        if (close.IsChecked == true) throw new Exception("closing by a click should not turn the Close switch on");
+        // on surface: only a surface shown counts
+        Box("polylineOnSurface").IsChecked = true; Pump();
+        // this surface hidden, another shown: no point on it
+        var otherShown = vm.Project.Entities.OfType<SurfaceEntity>().Any(x => x.Id != surfaceId);
+        if (!otherShown) vm.Change("Smoke other surface", p2 =>
+        {
+            var far = new List<Vec3> { new(x0 + 900, y0, 100), new(x0 + 950, y0, 100), new(x0 + 900, y0 + 50, 100) };
+            var o = Surfaces.Triangulate(far); o.Name = "Far"; p2.Add(o, p2.GetOrCreateLayer(StandardLayers.Surfaces));
+        });
+        vm.HiddenEntities.Add(surfaceId);
+        try
+        {
+            Click(new Vec3(x0 + 12, y0 + 12, 0));
+            Click(new Vec3(x0 + 30, y0 + 12, 0));
+            vm.CompleteTool(); Pump();
+            if (Last().Id != ring.Id) throw new Exception("on surface: a hidden surface should not take a point");
+            vm.DrawPolylineTool(false); Pump();
+        }
+        finally { vm.HiddenEntities.Remove(surfaceId); }
+        // the choice stays for the next time
+        Box("polylineOnSurface").IsChecked = false; Box("polylineOnPoints").IsChecked = true; Box("polylineOnLines").IsChecked = false; Pump();
+        vm.SelectTool(); Pump();
+        vm.DrawPolylineTool(false); Pump();
+        if (Box("polylineOnSurface").IsChecked != false || Box("polylineOnPoints").IsChecked != true || Box("polylineOnLines").IsChecked != false) throw new Exception("the choice of Build only should stay for the next time");
+        vm.SelectTool(); Pump();
+    }
+    finally
+    {
+        (vm.PolylineOnSurface, vm.PolylineOnPoints, vm.PolylineOnLines) = was;
+        (cam.Target, cam.Scale, cam.Pitch, cam.Yaw) = camWas;
+        vm.SelectTool();
+        while (vm.Doc!.UndoNames.Count >= steps) vm.Undo();
+        Pump();
+    }
 });
 Step("Esc closes a tool and its floating panel; two-stage for drawing tools", () =>
 {
@@ -5060,6 +5578,7 @@ Step("Esc closes a tool and its floating panel; two-stage for drawing tools", ()
         if (vm.ActiveTool is not SelectTool) throw new Exception($"Esc did not close the {name} tool");
     }
     // Drawing tool: the first Esc drops the pending points but keeps the tool, the second closes it.
+    vm.PolylineOnSurface = vm.PolylineOnPoints = vm.PolylineOnLines = false;
     vm.DrawPolylineTool(true); Pump();
     var drawing = vm.ActiveTool;
     void Click(double x, double y) { var w = new BlastDesigner.Domain.Geometry.Vec3(x, y, 300); var (sx, sy) = vm.View.Camera.ToScreen(w); vm.ActiveTool!.PointerPressed(new ToolPointer { X = sx, Y = sy, World = w, Snapped = w, Left = true, ClickCount = 1 }); }
@@ -5068,6 +5587,7 @@ Step("Esc closes a tool and its floating panel; two-stage for drawing tools", ()
     if (vm.ActiveTool != drawing) throw new Exception("first Esc should keep the drawing tool and only cancel the entry");
     Esc();
     if (vm.ActiveTool is not SelectTool) throw new Exception("second Esc should close the drawing tool");
+    vm.PolylineOnSurface = vm.PolylineOnPoints = vm.PolylineOnLines = true;
 });
 Step("row tool: live holes and anchored buttons", () =>
 {
@@ -5193,6 +5713,182 @@ Step("tie tool: ties joined to the initiation point run away from it, at 0 ms to
     if (vm.Project.Ties.Count() != tiesBefore) throw new Exception("the ties were not undone");
     vm.ActiveConnector = connector; vm.ActiveTieDelayMs = delay;
     vm.SelectTool();
+});
+Step("blast analysis: Zoom all fits the holes where they are drawn (surveyed collars far from the design ones)", () =>
+{
+    var p0 = vm.Project!;
+    var x0 = p0.Holes.Select(h => h.Collar.X).DefaultIfEmpty(0).Average();
+    var y0 = p0.Holes.Select(h => h.Collar.Y).DefaultIfEmpty(0).Average();
+    var ids = new List<Guid>();
+    var basis = p0.View.HoleBasis;
+    // design collars 5 km away, surveyed ones among the others
+    vm.Change("Smoke surveyed holes", p =>
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            var h = new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + 5000 + i * 5, y0 + 5000, 100), Length = 10, ActualCollar = new BlastDesigner.Domain.Geometry.Vec3(x0 + i * 5, y0, 100) };
+            p.Add(h); ids.Add(h.Id);
+        }
+    });
+    try
+    {
+        p0.View.HoleBasis = HoleBasis.Actual;
+        AnalysisWindows.BlastAnalysisWindow(vm, BlastDesigner.Rendering.BlastAnalysis.FirstMovement); Pump();
+        var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var fit = dlg.GetLogicalDescendants().OfType<Button>().First(b => b.Name == "fit");
+        foreach (var tab in new[] { BlastDesigner.Rendering.BlastAnalysis.FirstMovement, BlastDesigner.Rendering.BlastAnalysis.InitiationAngle, BlastDesigner.Rendering.BlastAnalysis.BurdenRelief, BlastDesigner.Rendering.BlastAnalysis.Isolines, BlastDesigner.Rendering.BlastAnalysis.Unconnected })
+        {
+            AnalysisWindows.BlastAnalysisWindow(vm, tab); Pump();
+            fit.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+            var view = dlg.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.Viewport>().First();
+            var a = ((Hole)vm.Project!.FindEntity(ids[0])!).ActualCollar!.Value;
+            var b = ((Hole)vm.Project.FindEntity(ids[1])!).ActualCollar!.Value;
+            var (ax, ay) = view.Camera.ToScreen(a);
+            var (bx, by) = view.Camera.ToScreen(b);
+            // 5 m apart: more than a few pixels unless the far design collars were taken into the fit
+            if (Math.Sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by)) < 4) throw new Exception($"{tab}: Zoom all took the design collars 5 km away, not the holes drawn");
+            if (ax < 0 || ay < 0 || ax > view.Bounds.Width || ay > view.Bounds.Height) throw new Exception($"{tab}: the holes drawn are out of the view after Zoom all");
+        }
+        // a block much larger than the holes: drawn with the geometry, but with the geometry hidden the fit is the holes'
+        var big = new BlockEntity { Origin = new Vec3(x0 - 4000, y0 - 4000, 0), Length = 8000, Width = 8000, Height = 200 };
+        vm.Change("Smoke big block", p => p.Add(big)); Pump();
+        try
+        {
+            var hideGeometry = dlg.GetLogicalDescendants().OfType<CheckBox>().FirstOrDefault(c => c.IsChecked == true && c.IsEffectivelyVisible);
+            var vg = dlg.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.Viewport>().First();
+            if (vg.OptionsSource?.Invoke().HideGeometry != true) throw new Exception("the analysis window should open with the geometry hidden");
+            {
+                fit.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
+                var p1 = ((Hole)vm.Project!.FindEntity(ids[0])!).ActualCollar!.Value;
+                var p2 = ((Hole)vm.Project.FindEntity(ids[1])!).ActualCollar!.Value;
+                var (s1x, s1y) = vg.Camera.ToScreen(p1);
+                var (s2x, s2y) = vg.Camera.ToScreen(p2);
+                if (Math.Sqrt((s1x - s2x) * (s1x - s2x) + (s1y - s2y) * (s1y - s2y)) < 4) throw new Exception("with the geometry hidden Zoom all took the block, not the holes drawn");
+            }
+        }
+        finally { vm.Undo(); Pump(); }
+        // a plain drag turns the plan seen from above; in 3D it does not (Alt turns it there)
+        var v = dlg.GetLogicalDescendants().OfType<BlastDesigner.App.Controls.Viewport>().First();
+        void Drag(double dx, double dy)
+        {
+            var c = v.TranslatePoint(new Point(v.Bounds.Width / 2, v.Bounds.Height / 2), dlg)!.Value;
+            dlg.MouseDown(c, Avalonia.Input.MouseButton.Left); Pump();
+            dlg.MouseMove(c + new Point(dx / 2, dy / 2)); Pump();
+            dlg.MouseMove(c + new Point(dx, dy)); Pump();
+            dlg.MouseUp(c + new Point(dx, dy), Avalonia.Input.MouseButton.Left); Pump();
+        }
+        v.Camera.Pitch = 90;
+        var yaw = v.Camera.Yaw;
+        Drag(120, 40);
+        if (Math.Abs(v.Camera.Yaw - yaw) < 1 || !v.Camera.IsPlan) throw new Exception($"a drag should turn the plan and keep it seen from above: yaw {yaw} → {v.Camera.Yaw}, pitch {v.Camera.Pitch}");
+        v.Camera.Pitch = 45;
+        yaw = v.Camera.Yaw;
+        Drag(120, 40);
+        if (Math.Abs(v.Camera.Yaw - yaw) > 1e-6 || Math.Abs(v.Camera.Pitch - 45) > 1e-6) throw new Exception("in 3D a plain drag should not turn the camera");
+        dlg.Close(); Pump();
+    }
+    finally
+    {
+        p0.View.HoleBasis = basis;
+        vm.Undo(); Pump();
+    }
+});
+Step("delays of the ties: beside the tie, on the tie, or off with the kinds told by the heads and the tie legend", () =>
+{
+    // a blast of its own beside the others: rows of 5, the front row "Tie 1" at its delay, the next "Tie 1" at 60 ms,
+    // the columns "Tie 2"
+    var p0 = vm.Project!;
+    var x0 = p0.Holes.Select(h => h.Collar.X).DefaultIfEmpty(0).Max() + 200;
+    var y0 = p0.Holes.Select(h => h.Collar.Y).DefaultIfEmpty(0).Min();
+    var connectors = p0.Products.Where(x => x.Kind == ProductKind.SurfaceConnector && !x.Deleted).Take(2).ToList();
+    var ids = new List<Guid>();
+    var was = vm.Settings.TieDelayPlace;
+    vm.Change("Smoke tie kinds", p =>
+    {
+        var g = new Hole[3, 5];
+        for (int r = 0; r < 3; r++) for (int c = 0; c < 5; c++) { g[r, c] = new Hole { Collar = new BlastDesigner.Domain.Geometry.Vec3(x0 + c * 5, y0 + r * 4, 100), Label = "K" + (r * 5 + c + 1) }; p.Add(g[r, c]); ids.Add(g[r, c].Id); }
+        for (int c = 0; c < 4; c++) p.Add(new TieEntity { FromId = g[0, c].Id, ToId = g[0, c + 1].Id, ProductId = connectors[0].Id });
+        for (int c = 0; c < 4; c++) p.Add(new TieEntity { FromId = g[1, c].Id, ToId = g[1, c + 1].Id, ProductId = connectors[0].Id, DelayMs = 60 });
+        for (int c = 0; c < 5; c += 2) for (int r = 0; r < 2; r++) p.Add(new TieEntity { FromId = g[r, c].Id, ToId = g[r + 1, c].Id, ProductId = connectors[1].Id });
+    });
+    // a frame drawn with the settings of the moment
+    void Frame(string name) { vm.View.Redraw(); Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); var path = Path.Combine(outDir, name + ".png"); window.CaptureRenderedFrame()?.Save(path); Console.WriteLine($"     screenshot {path}"); }
+    try
+    {
+        vm.Doc!.Select(ids); vm.ZoomSelection(); vm.Doc.ClearSelection(); Pump();
+        // switched off through Apply / OK: the tie legend comes on
+        var legendWas = vm.Project!.View.ShowTieLegend;
+        vm.ToggleView(v => v.ShowTieLegend = false);
+        var off = ProgramSettings.Load();
+        off.TieDelayPlace = ProgramSettings.TieDelayOff;
+        vm.ApplyProgramSettings(off); Pump();
+        if (!vm.Project.View.ShowTieLegend) throw new Exception("switching the delays off should turn the tie legend on");
+        var opt = vm.BuildSceneOptions();
+        if (!opt.TieDelaysOff || opt.TieDelayOnLine || !opt.DrawTieLegend) throw new Exception("Off: the plan should leave the delays out and show the tie legend");
+        // the sheets as the screen
+        if (BlastDesigner.Rendering.Reports.TieDelays != (false, true)) throw new Exception("Off: the printed sheets should leave the delays out too");
+        var kinds = BlastDesigner.Rendering.PlanRenderer.TieKinds(vm.Project!);
+        // the ties of this blast are of three kinds (other ties of the run may share some of them)
+        var mineKinds = vm.Project!.Ties.Where(t => ids.Contains(t.FromId)).Select(t => (t.ProductId ?? "") + "|" + Math.Round(BlastDesigner.Engine.Timing.TieDelay(vm.Project, t))).Distinct().ToList();
+        if (mineKinds.Count != 3 || mineKinds.Any(k => kinds.All(x => x.Key != k))) throw new Exception("the smoke blast should have three kinds of tie: " + string.Join(", ", mineKinds));
+        Frame("64a_tie_delays_off_heads");
+        // its switch on the Visibility tab takes it off the plan
+        vm.ToggleView(v => v.ShowTieLegend = false);
+        Frame("64f_tie_legend_switched_off");
+        vm.ToggleView(v => v.ShowTieLegend = legendWas);
+        vm.Settings.TieDelayPlace = ProgramSettings.TieDelayBeside;
+        Frame("64b_tie_delays_beside");
+        vm.Settings.TieDelayPlace = ProgramSettings.TieDelayOnLine;
+        Frame("64c_tie_delays_on_line");
+        // Properties ▸ Exact on a tie: the ties of its product at its delay, not every tie
+        var mine = vm.Project!.Ties.Where(t => ids.Contains(t.FromId)).ToList();
+        string Kind(TieEntity t) => (t.ProductId ?? "") + "|" + Math.Round(BlastDesigner.Engine.Timing.TieDelay(vm.Project!, t));
+        var front = mine.First(t => t.DelayMs == 0 && t.ProductId == connectors[0].Id);
+        vm.Doc!.Select(new[] { front.Id }); vm.SelectExact(); Pump();
+        var picked = vm.Project.Ties.Where(t => vm.Doc.Selection.Contains(t.Id)).ToList();
+        if (picked.Count != vm.Doc.Selection.Count || picked.Any(t => Kind(t) != Kind(front))) throw new Exception("Exact on a tie took other things than the ties of its product and delay");
+        if (mine.Count(t => Kind(t) == Kind(front)) != picked.Count(t => ids.Contains(t.FromId)) || picked.Count(t => ids.Contains(t.FromId)) != 4)
+            throw new Exception("Exact on a tie should take the 4 ties of the front row: " + picked.Count);
+        // Properties ▸ From the initiation catalogue: no product list; the catalogue with Cancel and OK on the selected ties
+        Pump();
+        if (window.GetLogicalDescendants().OfType<ComboBox>().Any(c => c.IsEffectivelyVisible && c.ItemsSource is System.Collections.IEnumerable items && items.Cast<object>().Any(i => i?.ToString()?.Contains(connectors[0].Name) == true)))
+            throw new Exception("the ties' product should not be a list on the Properties tab");
+        Button FromCatalogue() => window.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == "tieProductFromCatalogue" && b.IsEffectivelyVisible) ?? throw new Exception("no From the initiation catalogue for the ties");
+        void Press(Button b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump(); }
+        var steps = vm.Doc.UndoNames.Count;
+        var chosenBefore = vm.ActiveConnector;
+        Press(FromCatalogue());
+        var cat = BlastDesigner.App.Services.Dialogs.LastShown!;
+        if (!TiePaletteWindow.IsPicking) throw new Exception("the catalogue should open to pick for the ties");
+        Button Named(string name) => cat.GetLogicalDescendants().OfType<Button>().FirstOrDefault(b => b.Name == name) ?? throw new Exception("no " + name + " in the catalogue");
+        Named("tiePickCancel"); Named("tiePickOk");
+        Frame("64d_ties_properties_from_catalogue");
+        Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); cat.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "64e_catalogue_picking_for_ties.png"));
+        var other = cat.GetLogicalDescendants().OfType<Button>().First(b => b.Tag is string tag && tag.StartsWith("variant:") && tag != "variant:" + connectors[0].Id);
+        var otherId = ((string)other.Tag!)["variant:".Length..];
+        Press(other);
+        if (picked.Any(t => t.ProductId != otherId)) throw new Exception("a variant chosen should go on the ties at once");
+        if (vm.Doc.UndoNames.Count != steps) throw new Exception("choosing in the catalogue should make no undo step");
+        Press(Named("tiePickCancel"));
+        if (picked.Any(t => t.ProductId != connectors[0].Id) || vm.Doc.UndoNames.Count != steps) throw new Exception("Cancel should give the ties back, with no undo step");
+        if (vm.ActiveConnector != chosenBefore || TiePaletteWindow.IsOpen) throw new Exception("Cancel should close the catalogue and keep its choice for new ties");
+        // OK: the new product on the ties, one undo step for all of them
+        Press(FromCatalogue());
+        cat = BlastDesigner.App.Services.Dialogs.LastShown!;
+        Press(cat.GetLogicalDescendants().OfType<Button>().First(b => b.Tag as string == "variant:" + otherId));
+        Press(Named("tiePickOk"));
+        var now = vm.Project.Ties.Where(t => picked.Any(x => x.Id == t.Id)).ToList();
+        if (now.Any(t => t.ProductId != otherId) || vm.Doc.UndoNames.Count != steps + 1) throw new Exception("OK should keep the product on the ties as one undo step");
+        if (TiePaletteWindow.IsOpen || vm.ActiveConnector != chosenBefore) throw new Exception("OK should close the catalogue and keep its choice for new ties");
+        vm.Undo(); Pump();
+        if (vm.Project.Ties.Where(t => picked.Any(x => x.Id == t.Id)).Any(t => t.ProductId != connectors[0].Id)) throw new Exception("undo should give all the ties their product back");
+        vm.Doc.ClearSelection();
+    }
+    finally
+    {
+        vm.Settings.TieDelayPlace = was;
+        vm.Undo(); vm.View.Redraw(); Pump();
+    }
 });
 Step("tie tool: a line from one hole to another ties every hole on the way, in order, in one undo step", () =>
 {
@@ -5647,6 +6343,7 @@ Step("select tool: a selected row of holes is dragged with the mouse on the plan
 });
 Step("polyline tool: no label by the cursor before the first point, the distance after it", () =>
 {
+    vm.PolylineOnSurface = vm.PolylineOnPoints = vm.PolylineOnLines = false;
     vm.DrawPolylineTool(false); Pump();
     var at = vm.Project!.Holes.First().Collar + new Vec3(5, 5, 0);
     vm.ActiveTool!.PointerMoved(new ToolPointer { World = at, Snapped = at });
@@ -5664,6 +6361,7 @@ Step("polyline tool: no label by the cursor before the first point, the distance
     if (made.Count != 1 || made[0].Points.Count != 2) throw new Exception($"a click on the last point should finish the line: {made.Count} lines, {made.FirstOrDefault()?.Points.Count} points");
     vm.Undo();
     vm.ActiveTool?.Cancel(); vm.SelectTool();
+    vm.PolylineOnSurface = vm.PolylineOnPoints = vm.PolylineOnLines = true;
 });
 Step("a block of three clicks shows only what is inside it, has a layer of its own and is sized by its grips", () =>
 {
@@ -5772,7 +6470,7 @@ Step("a block of three clicks shows only what is inside it, has a layer of its o
     vm.Doc.ClearSelection(); vm.SelectTool(); Pump();
     if (vm.Project.Entities.OfType<BlockEntity>().Any() || vm.Project.Layers.Any(l => l.Group == BlockLayers.Group)) throw new Exception("the smoke blocks were not taken away");
 });
-Step("an initiation point on a hole is picked by its star's rays, the hole by its middle", () =>
+Step("an initiation point on a hole is picked by its tag, the hole by its collar; the tag turns away from the holes around", () =>
 {
     // a hole on no tie yet: a chain of holes with an electronic detonator does not branch, so the chain from the point
     // starts on a hole of its own
@@ -5782,9 +6480,18 @@ Step("an initiation point on a hole is picked by its star's rays, the hole by it
     vm.Doc!.Select(new[] { hole.Id }); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); Pump();
     var (x, y) = vm.View.Camera.ToScreen(hole.Collar);
     if (vm.View.HitTest(x, y)?.Id != hole.Id) throw new Exception("the middle should pick the hole");
-    var onRay = vm.View.HitTest(x, y - BlastDesigner.Rendering.PlanRenderer.InitiationStarRadius * 0.7);
-    if (onRay?.Id != ip.Id) throw new Exception("a ray of the star should pick the initiation point, picked " + onRay?.KindName);
-    // the tie tool starts at the point from anywhere on the star, its middle too
+    // the tag turns away from the holes around: towards neither of the two nearest (inside a pattern: to the south)
+    var (ux, uy) = BlastDesigner.Rendering.PlanRenderer.InitiationTagSide(vm.View.Camera, vm.Project, ip);
+    if ((ux, uy) != (0f, 1f)) foreach (var n in vm.Project.Holes.Where(h => !h.IsDummy && h.Id != hole.Id).OrderBy(h => Vec3.Distance2D(h.Collar, hole.Collar)).Take(2))
+    {
+        var (nx2, ny2) = vm.View.Camera.ToScreen(n.Collar);
+        if (ux * (nx2 - x) + uy * (ny2 - y) > 1e-3) throw new Exception($"the tag ({ux}, {uy}) points towards the neighbour hole {n.Label}");
+    }
+    var tag =BlastDesigner.Rendering.PlanRenderer.InitiationTag(vm.View.Camera, vm.Project, ip);
+    var onTag = vm.View.HitTest(tag.Average(q => q.X), tag.Average(q => q.Y));
+    if (onTag?.Id != ip.Id) throw new Exception("the tag should pick the initiation point, picked " + onTag?.KindName);
+    Shot("63_initiation_point_tag");
+    // the tie tool starts at the point from anywhere on it, the middle of the ring too
     var tiedIds = vm.Project.Ties.SelectMany(t => new[] { t.FromId, t.ToId }).ToHashSet();
     var other = vm.Project.Holes.Where(h => !h.IsDummy && h.Id != hole.Id && !tiedIds.Contains(h.Id)).OrderBy(h => Vec3.Distance(h.Collar, hole.Collar)).First();
     vm.SetTool(new TieTool(vm)); Pump();
@@ -5792,7 +6499,7 @@ Step("an initiation point on a hole is picked by its star's rays, the hole by it
     vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = hole.Collar, Snapped = hole.Collar, Left = true, ClickCount = 1 });
     vm.ActiveTool.PointerPressed(new ToolPointer { X = ox, Y = oy, World = other.Collar, Snapped = other.Collar, Left = true, ClickCount = 1 }); Pump();
     var fromStar = vm.Project.Ties.FirstOrDefault(t => t.ToId == other.Id);
-    if (fromStar?.FromId != ip.Id) throw new Exception("a tie started on the star's middle should come from the initiation point, not " + (fromStar == null ? "nothing" : vm.Project.FindEntity(fromStar.FromId)?.KindName));
+    if (fromStar?.FromId != ip.Id) throw new Exception("a tie started on the collar of the point's hole should come from the initiation point, not " + (fromStar == null ? "nothing" : vm.Project.FindEntity(fromStar.FromId)?.KindName));
     vm.ActiveTool?.Cancel(); vm.SelectTool();
     vm.Undo();
     vm.Undo();
@@ -5802,18 +6509,20 @@ Step("an initiation point on a hole is picked by its star's rays, the hole by it
     var at = hole.Collar + new Vec3(3, 3, 0);
     vm.ActiveTool!.PointerPressed(new ToolPointer { World = at, Snapped = at, Left = true, ClickCount = 1 }); Pump();
     if (vm.Project.Entities.OfType<InitiationPoint>().Count() != points) throw new Exception("an initiation point placed off the holes");
-    // on a hole it is bound to it and goes on to the tie tool, chained from that hole, with the initiation catalogue
+    // on a hole it is bound to it, and that is all: no tie made, no tie entry started, no catalogue
+    var ties = vm.Project.Ties.Count();
     vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = hole.Collar, Snapped = hole.Collar, Left = true, ClickCount = 1 }); Pump();
     var placed = vm.Project.Entities.OfType<InitiationPoint>().LastOrDefault();
     if (placed?.HoleId != hole.Id) throw new Exception("the initiation point should be bound to the hole it was placed on");
-    var catalogue = BlastDesigner.App.Services.Dialogs.LastShown;
-    if (vm.ActiveTool is not TieTool || catalogue?.Title != BlastDesigner.App.Services.Loc.T(TiePaletteWindow.Title) || !catalogue.IsVisible) throw new Exception("after the initiation point: the tie tool and the catalogue");
-    var next = vm.Project.Holes.Where(h => !h.IsDummy && h.Id != hole.Id && !vm.Project.Ties.Any(t => t.FromId == h.Id || t.ToId == h.Id)).OrderBy(h => Vec3.Distance(h.Collar, hole.Collar)).First();
+    if (vm.Project.Ties.Count() != ties) throw new Exception("placing the initiation point made a tie");
+    if (vm.ActiveTool is TieTool || TiePaletteWindow.IsOpen) throw new Exception("placing the initiation point should not go on to the tie tool");
+    // a click on the next hole afterwards ties nothing either
+    var next = vm.Project.Holes.Where(h => !h.IsDummy && h.Id != hole.Id).OrderBy(h => Vec3.Distance(h.Collar, hole.Collar)).First();
     var (nx, ny) = vm.View.Camera.ToScreen(next.Collar);
-    vm.ActiveTool.PointerPressed(new ToolPointer { X = nx, Y = ny, World = next.Collar, Snapped = next.Collar, Left = true, ClickCount = 1 }); Pump();
-    if (vm.Project.Ties.FirstOrDefault(t => t.ToId == next.Id)?.FromId != hole.Id) throw new Exception("the first tie after placing the point should go from its hole");
-    if (next.FiringTimeMs == null) throw new Exception("the hole tied from the point's hole is not initiated");
-    catalogue.Close(); vm.SelectTool(); vm.Undo(); vm.Undo();
+    vm.ActiveTool?.PointerPressed(new ToolPointer { X = nx, Y = ny, World = next.Collar, Snapped = next.Collar, Left = true, ClickCount = 1 }); Pump();
+    vm.ActiveTool?.PointerReleased(new ToolPointer { X = nx, Y = ny, World = next.Collar, Snapped = next.Collar, Left = true, ClickCount = 1 }); Pump();
+    if (vm.Project.Ties.Count() != ties) throw new Exception("a click after placing the initiation point made a tie");
+    vm.SelectTool(); vm.Undo();
 });
 Step("the initiation catalogue opens on ESI when the blast has holes with electronic detonators and nothing is chosen in it", () =>
 {
@@ -7521,7 +8230,19 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
     (SectionButton() ?? throw new Exception("no section button on a section line")).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Pump();
     sectionWindow = BlastDesigner.App.Services.Dialogs.LastShown!;
     if (SectionNumber() != "B–B · 2 / 2") throw new Exception("the button opened the section of " + SectionNumber());
+    // the shift of the top of the frame is kept by the section, not by its line
+    var frameTop = sectionWindow.GetLogicalDescendants().OfType<NumericUpDown>().First(n => n.Name == "sectionFrameTop");
+    var stepsBeforeFrame = vm.Doc.UndoNames.Count;
+    frameTop.Value = 3; Pump();
+    if (vm.Project!.SectionOf(secondLine)?.FrameTopShift != 3) throw new Exception("the shift of the top of the frame should be kept by the section of the line");
+    if (System.Text.Encoding.UTF8.GetString(BlastDesigner.Domain.ProjectJson.Serialize(vm.Project)).Contains("sectionFrameTopShift")) throw new Exception("the section line should keep no shift of the frame");
+    while (vm.Doc.UndoNames.Count > stepsBeforeFrame) vm.Undo();
+    Pump();
     sectionWindow.Close(); Pump();
+    // the shifts of the frame are named in the language of the program, in metres (not "Section frame top shift")
+    if (BlastDesigner.App.Services.Loc.Language != "en")
+        foreach (var english in new[] { "Section frame top shift", "Section frame bottom shift" })
+            if (window.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.IsEffectivelyVisible && t.Text == english)) throw new Exception("not translated on the Properties tab: " + english);
     // the name in the properties: a card with the letter, the section as it is called, the line with its letters
     TextBox NameBox() => window.GetLogicalDescendants().OfType<TextBox>().FirstOrDefault(t => t.Name == "sectionName") ?? throw new Exception("no section name field on a section line");
     TextBlock NamePart(string name) => window.GetLogicalDescendants().OfType<TextBlock>().First(t => t.Name == name);
@@ -8061,3 +8782,13 @@ RestoreSettings();
 
 Console.WriteLine(failures == 0 ? "SMOKE PASSED" : $"SMOKE FAILED ({failures})");
 return failures == 0 ? 0 : 1;
+
+/// <summary>A chip of a tool panel seen as a box: on is its class "on", setting it clicks it when it differs.</summary>
+sealed class Chip(Button b)
+{
+    public bool? IsChecked
+    {
+        get => b.Classes.Contains("on");
+        set { if (value != b.Classes.Contains("on")) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent)); Avalonia.Threading.Dispatcher.UIThread.RunJobs(); } }
+    }
+}

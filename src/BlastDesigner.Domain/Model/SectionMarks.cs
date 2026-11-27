@@ -140,6 +140,19 @@ public sealed class SectionMarkPreset
 }
 
 /// <summary>
+/// What a section keeps of its own (the section of a section line, <see cref="SectionLineId"/>): the shifts of the top and
+/// the bottom of its frame set in the section window. One for a section line that has any; kept in the project file.
+/// </summary>
+public sealed class SectionSettings
+{
+    public Guid SectionLineId { get; set; }
+    /// <summary>Added to the height of the top of the frame, m (up positive, down negative).</summary>
+    public double FrameTopShift { get; set; }
+    /// <summary>Added to the height of the bottom of the frame (the lowest toe), m (up positive).</summary>
+    public double FrameBottomShift { get; set; }
+}
+
+/// <summary>
 /// A dimension, an angle, a level, a line or a text drawn by hand on a section. It belongs to a section line
 /// (<see cref="SectionLineId"/>), is kept in the project file and printed with the sheet of that section. Its points are
 /// in the plane of the section, so it goes with the line when the line is moved or turned.

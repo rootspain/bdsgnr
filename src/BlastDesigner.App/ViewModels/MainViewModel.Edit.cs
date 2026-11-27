@@ -90,6 +90,9 @@ public sealed partial class MainViewModel
     public async void DeleteSelected()
     {
         if (Doc == null || Doc.Selection.Count == 0) return;
+        // vertices selected on the lines (a click on a grip): only they go, as with Ctrl and a click on a grip; the lines
+        // stay selected
+        if (DeleteSelectedVertices()) return;
         var ids = Doc.Selection.ToHashSet();
         var locked = Doc.SelectedEntities.Count(e => e is Hole { Locked: true } || Project!.FindLayer(e.LayerId) is { Locked: true });
         if (locked > 0 && !await Dialogs.Confirm(Loc.F("{0} selected objects are locked and will be kept. Delete the rest?", locked))) return;
@@ -186,6 +189,166 @@ public sealed partial class MainViewModel
         return result;
     }
 
+    /// <summary>
+    /// The vertices selected on the selected lines (a click on a grip, with Shift added): their grips are marked, their
+    /// fields are in the properties panel, the arrows move them and Delete takes them out. A vertex goes when its line is no
+    /// longer selected.
+    /// </summary>
+    private readonly List<(Guid Line, int Vertex)> _selectedVertices = new();
+
+    /// <summary>The selected vertices whose line is selected and has them still.</summary>
+    public List<(PolylineEntity Line, int Vertex)> SelectedLineVertices
+    {
+        get
+        {
+            var result = new List<(PolylineEntity, int)>();
+            if (Doc is not { } doc) return result;
+            foreach (var (id, i) in _selectedVertices)
+                if (doc.Selection.Contains(id) && doc.Project.FindEntity(id) is PolylineEntity line && i < line.Points.Count) result.Add((line, i));
+            return result;
+        }
+    }
+
+    /// <summary>The selected vertex when it is the only one.</summary>
+    public (PolylineEntity Line, int Vertex)? SelectedLineVertex => SelectedLineVertices is { Count: 1 } one ? one[0] : null;
+
+    /// <summary>The selected vertices of the selected lines that can be edited (not on a locked layer).</summary>
+    private List<(PolylineEntity Line, int Vertex)> EditableSelectedVertices()
+    {
+        var lines = EditableLines().Select(l => l.Id).ToHashSet();
+        return SelectedLineVertices.Where(v => lines.Contains(v.Line.Id)).ToList();
+    }
+
+    /// <summary>
+    /// Selects a vertex of a selected line, in place of the vertices selected before or, with <paramref name="add"/>, with
+    /// them: its grip marked, its fields shown in the properties panel.
+    /// </summary>
+    public void SelectVertex(Guid line, int vertex, bool add = false)
+    {
+        if (!add) _selectedVertices.Clear();
+        if (!_selectedVertices.Contains((line, vertex))) _selectedVertices.Add((line, vertex));
+        SelectionRefreshed?.Invoke();
+        View.Redraw();
+        Window.ShowPropertiesTab();
+    }
+
+    /// <summary>
+    /// A box or a lasso with Shift (<see cref="SelectionMode.Add"/>) or Ctrl (<see cref="SelectionMode.Toggle"/>) while a
+    /// vertex is selected: the vertices of the selected lines inside it are added to the selected ones, with Ctrl taken off
+    /// them; the objects selected stay. False when no vertex is selected or the mode is neither, and the box selects objects.
+    /// </summary>
+    public bool SelectVerticesIn(Lasso shape, SelectionMode mode)
+    {
+        if (mode is not (SelectionMode.Add or SelectionMode.Toggle) || SelectedLineVertices.Count == 0) return false;
+        var cam = View.Camera;
+        foreach (var line in EditableLines())
+            for (int i = 0; i < line.Points.Count; i++)
+            {
+                var (x, y) = cam.ToScreen(line.Points[i]);
+                if (!shape.Contains(x, y)) continue;
+                if (mode == SelectionMode.Add) { if (!_selectedVertices.Contains((line.Id, i))) _selectedVertices.Add((line.Id, i)); }
+                else _selectedVertices.Remove((line.Id, i));
+            }
+        SelectionRefreshed?.Invoke();
+        View.Redraw();
+        return true;
+    }
+
+    /// <summary>No vertex is selected any more.</summary>
+    public void ClearSelectedVertex()
+    {
+        if (_selectedVertices.Count == 0) return;
+        _selectedVertices.Clear();
+        SelectionRefreshed?.Invoke();
+        View.Redraw();
+    }
+
+    /// <summary>
+    /// The undo steps of the document take the selected vertices with them: an undo of a deletion of vertices gives them
+    /// back selected, as the objects of an undone deletion are.
+    /// </summary>
+    private void KeepVerticesInUndo(Document doc)
+    {
+        doc.SaveSubSelection = () => _selectedVertices.ToArray();
+        doc.RestoreSubSelection = saved =>
+        {
+            _selectedVertices.Clear();
+            if (saved is (Guid, int)[] vertices) _selectedVertices.AddRange(vertices);
+        };
+    }
+
+    /// <summary>The selected vertices whose line is no longer selected are let go.</summary>
+    private void KeepSelectedVerticesOfSelection()
+    {
+        if (Doc is not { } doc) { _selectedVertices.Clear(); return; }
+        _selectedVertices.RemoveAll(v => !doc.Selection.Contains(v.Line));
+    }
+
+    /// <summary>Vertices moved to where they go, in one undo step; the rest of their lines stays.</summary>
+    public void MoveVertices(IReadOnlyList<(Guid Line, int Vertex, Vec3 To)> moves)
+    {
+        if (moves.Count == 0) return;
+        Change("Move vertex", p =>
+        {
+            foreach (var (line, vertex, to) in moves)
+                if (p.FindEntity(line) is PolylineEntity l && vertex < l.Points.Count) l.Points[vertex] = to;
+        });
+    }
+
+    /// <summary>
+    /// The selected vertices moved by an offset (the arrows): true when there were any to move, and the lines stay.
+    /// </summary>
+    public bool NudgeSelectedVertices(Vec3 delta)
+    {
+        var chosen = EditableSelectedVertices();
+        if (chosen.Count == 0) return false;
+        MoveVertices(chosen.Select(v => (v.Line.Id, v.Vertex, v.Line.Points[v.Vertex] + delta)).ToList());
+        return true;
+    }
+
+    /// <summary>
+    /// The selected vertices taken out of their lines, in one undo step: a line keeps two points and a polygon three, so
+    /// a line that would keep fewer keeps its vertices, still selected. True when there were any selected.
+    /// </summary>
+    private bool DeleteSelectedVertices()
+    {
+        var chosen = EditableSelectedVertices();
+        if (chosen.Count == 0) return false;
+        var taken = new Dictionary<Guid, List<int>>();
+        var refused = 0;
+        foreach (var g in chosen.GroupBy(v => v.Line.Id))
+        {
+            var line = g.First().Line;
+            var least = line.Closed ? 3 : 2;
+            var indices = g.Select(v => v.Vertex).Distinct().OrderByDescending(i => i).ToList();
+            if (line.Points.Count - indices.Count < least) { refused = least; continue; }
+            taken[g.Key] = indices;
+        }
+        if (taken.Count > 0)
+        {
+            // the undo step takes them selected (an undo gives them back so), then they go
+            Change("Delete vertex", p =>
+            {
+                foreach (var (id, indices) in taken)
+                    if (p.FindEntity(id) is PolylineEntity l)
+                        foreach (var i in indices) if (i < l.Points.Count) l.Points.RemoveAt(i);
+            });
+            _selectedVertices.RemoveAll(v => taken.ContainsKey(v.Line));
+            SelectionRefreshed?.Invoke();
+            View.Redraw();
+        }
+        if (refused > 0) SetStatus(Loc.F("At least {0} points are needed", refused));
+        return true;
+    }
+
+    /// <summary>An end of an open line brought onto its other end: the end goes and the line is closed, one undo step.</summary>
+    public void CloseLineAtEnd(Guid line, int end) => Change("Close line", p =>
+    {
+        if (p.FindEntity(line) is not PolylineEntity { Closed: false } l || l.Points.Count < 4 || (end != 0 && end != l.Points.Count - 1)) return;
+        l.Points.RemoveAt(end);
+        l.Closed = true;
+    });
+
     public void AddVertex(Guid line, int at, Vec3 point) => Change("Add vertex", p =>
     {
         if (p.FindEntity(line) is PolylineEntity l && at <= l.Points.Count) l.Points.Insert(at, point);
@@ -211,15 +374,23 @@ public sealed partial class MainViewModel
         Doc.Select(Project!.Entities.Where(e => IsSelectable(e) && keys.Contains((e.GetType(), e.LayerId, (e as Hole)?.HoleType))).Select(e => e.Id));
     }
 
-    /// <summary>Select exact: holes with the same diameter, length, angle and charge as the selection.</summary>
+    /// <summary>
+    /// Select exact: holes with the same diameter, length, angle and charge as the selected ones; ties of the same product
+    /// at the same delay as the selected ones.
+    /// </summary>
     public void SelectExact()
     {
         if (Doc == null) return;
         var sel = Doc.SelectedHoles.ToList();
-        if (sel.Count == 0) { SelectLike(); return; }
+        // ties: the same product at the same delay ("Tie 1" 17 ms is not "Tie 1" 24 ms nor "Tie 2" 17 ms)
+        var ties = Doc.Selection.Select(id => Project!.FindEntity(id)).OfType<TieEntity>().ToList();
+        if (sel.Count == 0 && ties.Count == 0) { SelectLike(); return; }
         string Key(Hole h) => $"{h.HoleType}|{h.Diameter:0.#}|{h.EffectiveLength:0.0}|{h.Angle:0}|{Charging.ExplosiveMass(Project!, h):0}";
+        string TieKey(TieEntity t) => (t.ProductId ?? "") + "|" + Math.Round(Timing.TieDelay(Project!, t)).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var keys = sel.Select(Key).ToHashSet();
-        Doc.Select(Project!.Holes.Where(h => IsSelectable(h) && keys.Contains(Key(h))).Select(h => h.Id));
+        var tieKeys = ties.Select(TieKey).ToHashSet();
+        Doc.Select(Project!.Holes.Where(h => keys.Count > 0 && IsSelectable(h) && keys.Contains(Key(h))).Select(h => h.Id)
+            .Concat(Project.Ties.Where(t => tieKeys.Count > 0 && IsSelectable(t) && tieKeys.Contains(TieKey(t))).Select(t => t.Id)));
     }
 
     /// <summary>
@@ -457,6 +628,10 @@ public sealed partial class MainViewModel
         s.PatternTurnColor = edited.PatternTurnColor;
         s.PatternTurnRefusedColor = edited.PatternTurnRefusedColor;
         s.CollarSizePixels = edited.CollarSizePixels;
+        // the delays switched off: the tie legend comes on, to tell the kinds of the ties; its switch takes it off again
+        if (s.TieDelayPlace != ProgramSettings.TieDelayOff && edited.TieDelayPlace == ProgramSettings.TieDelayOff && Project is { View.ShowTieLegend: false })
+            ToggleView(v => v.ShowTieLegend = true);
+        s.TieDelayPlace = edited.TieDelayPlace;
         s.ShowCoordinatesBox = edited.ShowCoordinatesBox;
         s.UsageLogging = edited.UsageLogging;
         if (s.UsageLogging) IO.UsageLog.Start(IO.Changelog.Current.ToString());

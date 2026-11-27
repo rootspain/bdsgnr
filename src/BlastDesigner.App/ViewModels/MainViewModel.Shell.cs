@@ -143,7 +143,7 @@ public sealed partial class MainViewModel
         }),
         new Stage("Initiation", new()
         {
-            G("Tie-up", Tb("Ties", "tie", "Tie", "T", true), Tb("Initiation point", "star", "Lead-in", "I", true),
+            G("Tie-up", Tb("Ties", "tie", "Tie", "T", true), Tb("Initiation point", "ipTag", "Lead-in", "I", true),
                 Tb("Dummy hole", "dummy", "Dummy hole"), M("Initiation catalogue", "palette", "Tools/Ties/Show palette"), M("Automatic tie-up", "auto", "Tools/Ties/Automatic tie-up…"),
                 M("Connect in order", "tie", "Tools/Ties/Connect selected holes in order"), M("Flip ties", "flip", "Tools/Ties/Flip selected ties"), M("Delete ties", "close", "Tools/Ties/Delete tie up")),
             G("Electronic", Tb("Time by click", "clock", "Set hole time", "E", true), Tb("Along row", "row", "Row set", big: true),

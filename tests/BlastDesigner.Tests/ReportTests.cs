@@ -10,6 +10,8 @@ using Xunit;
 namespace BlastDesigner.Tests;
 
 /// <summary>A report built once as pages: the same on the screen, in the file and on the printer, with the frame and stamps of its design.</summary>
+/// <remarks>In the "Sheets" collection: the sheets read <see cref="Reports.TieDelays"/>, which a test sets.</remarks>
+[Collection("Sheets")]
 public class ReportTests
 {
     private static readonly DateTime Now = new(2026, 11, 6, 14, 7, 0);

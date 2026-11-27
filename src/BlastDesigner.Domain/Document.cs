@@ -41,6 +41,14 @@ public sealed class Document
     public HashSet<Guid> Selection { get; } = new();
 
     /// <summary>
+    /// What else the view selects (the vertices of the lines), taken with each undo step and given back with it, as the
+    /// selection: <see cref="SaveSubSelection"/> takes it, <see cref="RestoreSubSelection"/> gives it back. Not in the model,
+    /// not in the file.
+    /// </summary>
+    public Func<object?>? SaveSubSelection { get; set; }
+    public Action<object?>? RestoreSubSelection { get; set; }
+
+    /// <summary>
     /// A change of <see cref="Execute"/> is running: the model is half changed and <see cref="Changed"/> has not been
     /// raised yet, so whatever keeps values worked out from it (the calculation session) must not answer from them.
     /// </summary>
@@ -69,6 +77,7 @@ public sealed class Document
     {
         var before = TakeSnapshot();
         var selectionBefore = Selection.ToArray();
+        var subBefore = SaveSubSelection?.Invoke();
         var links = InitiationLinks.Capture(Project);
         IsChanging = true;
         try
@@ -89,7 +98,7 @@ public sealed class Document
             throw;
         }
         IsChanging = false;
-        Push(new UndoEntry(name, before, selectionBefore));
+        Push(new UndoEntry(name, before, selectionBefore, subBefore));
         _redo.Clear();
         RememberAttachmentData();
         MarkModified();
@@ -131,10 +140,11 @@ public sealed class Document
     /// <summary>Restores an entry and returns the entry that reverses it.</summary>
     private UndoEntry Apply(UndoEntry e)
     {
-        var back = new UndoEntry(e.Name, e.State != null ? TakeSnapshot() : null, Selection.ToArray());
+        var back = new UndoEntry(e.Name, e.State != null ? TakeSnapshot() : null, Selection.ToArray(), SaveSubSelection?.Invoke());
         if (e.State != null) Restore(e.State);
         Selection.Clear();
         foreach (var id in e.Selection) Selection.Add(id);
+        RestoreSubSelection?.Invoke(e.SubSelection);
         return back;
     }
 
@@ -191,6 +201,7 @@ public sealed class Document
     {
         var set = ids.ToList();
         var before = Selection.ToArray();
+        var subBefore = SaveSubSelection?.Invoke();
         switch (mode)
         {
             case SelectionMode.Replace:
@@ -209,7 +220,7 @@ public sealed class Document
         }
         if (record && !Selection.SetEquals(before))
         {
-            Push(new UndoEntry(SelectionStepName, null, before));
+            Push(new UndoEntry(SelectionStepName, null, before, subBefore));
             _redo.Clear();
         }
         SelectionChanged?.Invoke(this, EventArgs.Empty);
@@ -302,7 +313,7 @@ public sealed class Document
     }
 
     /// <summary>One undo step: a model snapshot (null for a selection-only step) and the selection to restore.</summary>
-    private sealed record UndoEntry(string Name, Snapshot? State, Guid[] Selection);
+    private sealed record UndoEntry(string Name, Snapshot? State, Guid[] Selection, object? SubSelection = null);
 
     /// <summary>The project without the meshes of its surfaces, and the meshes in the order of the surfaces.</summary>
     private sealed record Snapshot(byte[] Json, Mesh[] Meshes);

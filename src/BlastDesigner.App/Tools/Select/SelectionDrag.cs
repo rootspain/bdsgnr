@@ -140,10 +140,12 @@ public sealed class SelectionDrag : ISelectGesture
     /// is foreshortened, so the way is read along it; in the plan, where the vertical points at the viewer, a pixel up is
     /// a pixel's worth of metres up.
     /// </summary>
-    private Vec3 VerticalDelta(ToolPointer p)
+    private Vec3 VerticalDelta(ToolPointer p) => new(0, 0, VerticalWay(View.Camera, _way.From.Y, p.Y));
+
+    /// <summary>Metres up a drag from one screen height to another goes (<see cref="VerticalDelta"/>).</summary>
+    public static double VerticalWay(Camera cam, double fromY, double toY)
     {
-        var cam = View.Camera;
         var upward = cam.IsPlan ? 1 : Math.Max(cam.Up.Z, 0.25);
-        return new Vec3(0, 0, (_way.From.Y - p.Y) / (cam.Scale * upward));
+        return (fromY - toY) / (cam.Scale * upward);
     }
 }

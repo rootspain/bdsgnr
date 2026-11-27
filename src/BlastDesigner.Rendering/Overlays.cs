@@ -177,6 +177,9 @@ public sealed class VertexGripsOverlay : IOverlay
     /// <summary>The grip under the cursor, drawn larger.</summary>
     public (Entity Line, int Vertex)? Hot { get; set; }
 
+    /// <summary>The selected vertices (by the id of their line): drawn larger, with a light middle.</summary>
+    public Func<IReadOnlyCollection<(Guid Line, int Vertex)>>? Selected { get; set; }
+
     /// <summary>The points an object has grips on: the vertices of a line, the two measured ends of a dimension.</summary>
     public static IReadOnlyList<Vec3> GripPoints(Entity e) => e switch
     {
@@ -188,7 +191,9 @@ public sealed class VertexGripsOverlay : IOverlay
     public void Draw(SKCanvas c, Camera cam, BlastProject project)
     {
         using var fill = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = _color() };
+        using var middle = new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill, Color = SKColors.White };
         float w = (float)cam.Width, h = (float)cam.Height;
+        var selected = Selected?.Invoke();
         foreach (var line in _lines())
         {
             var points = GripPoints(line);
@@ -196,7 +201,9 @@ public sealed class VertexGripsOverlay : IOverlay
             {
                 var (x, y) = cam.ToScreen(points[i]);
                 if (x < -Radius || y < -Radius || x > w + Radius || y > h + Radius) continue;
-                c.DrawCircle(x, y, Hot is { } hot && hot.Line == line && hot.Vertex == i ? Radius + 2 : Radius, fill);
+                var chosen = selected?.Contains((line.Id, i)) == true;
+                c.DrawCircle(x, y, chosen || Hot is { } hot && hot.Line == line && hot.Vertex == i ? Radius + 2 : Radius, fill);
+                if (chosen) c.DrawCircle(x, y, Radius - 1.5f, middle);
             }
         }
     }
