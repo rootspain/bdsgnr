@@ -1409,36 +1409,61 @@ public static class PlanRenderer
         return Math.Abs(sx) >= Math.Abs(sy) ? (sx > 0 ? -1 : 1, 0) : (0, sy > 0 ? -1 : 1);
     }
 
+    /// <summary>Font size of the start time written on the tag of an initiation point, px.</summary>
+    public const float InitiationTagTextSize = 9.5f;
+
+    /// <summary>The start time of an initiation point as its tag writes it: ms, without the unit (0, 17, 12.5).</summary>
+    public static string InitiationTagText(InitiationPoint ip) => ip.StartTimeMs.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>How wide the time of an initiation point is written on its tag, px.</summary>
+    private static float InitiationTagTextWidth(InitiationPoint ip)
+    {
+        using var paint = new SKPaint { TextSize = InitiationTagTextSize, FakeBoldText = true, Typeface = SKTypeface.Default };
+        return paint.MeasureText(InitiationTagText(ip));
+    }
+
     /// <summary>
     /// The tag of an initiation point on the screen, its point first: a pentagon whose point is turned to the collar from
-    /// the side of <see cref="InitiationTagSide"/>, the base of the point as wide as the body.
+    /// the side of <see cref="InitiationTagSide"/>, the base of the point as wide as the body. The body holds the start time
+    /// written across the screen: going left or right it is made longer for a long time, going up or down wider.
     /// </summary>
     public static SKPoint[] InitiationTag(Camera cam, BlastProject project, InitiationPoint ip)
     {
         var (x, y) = cam.ToScreen(ip.Position);
         var (ux, uy) = InitiationTagSide(cam, project, ip);
-        float px = -uy, py = ux, h = InitiationTagWidth / 2;
+        var written = InitiationTagTextWidth(ip) + 6;
+        var across = Math.Abs(ux) > Math.Abs(uy);
+        var length = across ? Math.Max(InitiationTagLength, written) : InitiationTagLength;
+        float px = -uy, py = ux, h = (across ? InitiationTagWidth : Math.Max(InitiationTagWidth, written)) / 2;
         // close in, the hole is drawn wider: the point stays clear of its circle
         var hole = ip.HoleId is Guid hid ? project.FindEntity(hid) as Hole : project.Holes.FirstOrDefault(o => Vec3.Distance2D(o.Collar, ip.Position) < 1e-3);
         var gap = Math.Max(InitiationTagGap, hole == null ? 0 : (float)(hole.RadiusM * cam.Scale) + 5);
         var tip = new SKPoint(x + ux * gap, y + uy * gap);
         var b = new SKPoint(tip.X + ux * InitiationTagPoint, tip.Y + uy * InitiationTagPoint);
-        var e = new SKPoint(b.X + ux * InitiationTagLength, b.Y + uy * InitiationTagLength);
+        var e = new SKPoint(b.X + ux * length, b.Y + uy * length);
         return new[] { tip, new SKPoint(b.X + px * h, b.Y + py * h), new SKPoint(e.X + px * h, e.Y + py * h), new SKPoint(e.X - px * h, e.Y - py * h), new SKPoint(b.X - px * h, b.Y - py * h) };
     }
 
     /// <summary>
     /// An initiation point: a tag pointing at the collar from the side away from the holes around it, so it covers none of
-    /// them; the hole itself is drawn as it is. No text on it.
+    /// them; the hole itself is drawn as it is. On its body the time it starts at, ms (<see cref="InitiationTagText"/>).
     /// </summary>
     private static void DrawInitiationPoint(SKCanvas c, Camera cam, BlastProject project, InitiationPoint ip, SKColor color, bool selected = false)
     {
-        var colour = selected ? color : Adapt(ip.IsElectronic ? new SKColor(0xFF00897B) : new SKColor(0xFFDC2626));
+        // a colour of its own (the properties panel) or the selection; by layer, red, or teal for an electronic one
+        var colour = selected || ip.Color != null ? color : Adapt(ip.IsElectronic ? new SKColor(0xFF00897B) : new SKColor(0xFFDC2626));
         // the tag alone: the hole under the point is drawn as it is, nothing over it
         using var fill = new SKPaint { IsAntialias = true, Color = colour, Style = SKPaintStyle.Fill };
         using var path = new SKPath();
-        path.AddPoly(InitiationTag(cam, project, ip), close: true);
+        var tag = InitiationTag(cam, project, ip);
+        path.AddPoly(tag, close: true);
         c.DrawPath(path, fill);
+        // the start time in the middle of the body (the points 1–4 are its corners), across the screen
+        float cx = (tag[1].X + tag[2].X + tag[3].X + tag[4].X) / 4, cy = (tag[1].Y + tag[2].Y + tag[3].Y + tag[4].Y) / 4;
+        using var text = new SKPaint { IsAntialias = true, TextSize = InitiationTagTextSize, FakeBoldText = true, Color = SKColors.White, TextAlign = SKTextAlign.Center, Typeface = SKTypeface.Default };
+        var bounds = new SKRect();
+        text.MeasureText("0", ref bounds);
+        c.DrawText(InitiationTagText(ip), cx, cy - bounds.MidY, text);
     }
 
     /// <summary>Per-surface render cache: shaded colours (geometry + theme only) and reusable per-frame buffers.</summary>

@@ -1,3 +1,4 @@
+using SkiaSharp;
 using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Rendering;
@@ -12,6 +13,46 @@ namespace BlastDesigner.Tests;
 /// </summary>
 public class InitiationTagTests
 {
+    [Fact]
+    public void TheTagIsDrawnInTheColourOfThePoint_ByLayerRedOrTeal()
+    {
+        var p = BlastProject.CreateNew();
+        var ip = p.Add(new InitiationPoint { Position = new Vec3(0, 0, 0), StartTimeMs = 1 });
+        var cam = new Camera { Width = 200, Height = 100, Pitch = 90, Scale = 10, Target = new Vec3(0, 0, 0) };
+        SKColor Body()
+        {
+            using var bitmap = new SKBitmap(200, 100);
+            using var canvas = new SKCanvas(bitmap);
+            canvas.Clear(SKColors.White);
+            PlanRenderer.Render(canvas, cam, p, new SceneOptions());
+            // the body of the tag, beside its time (no hole near: the tag goes right)
+            var tag = PlanRenderer.InitiationTag(cam, p, ip);
+            return bitmap.GetPixel((int)Math.Round(tag[1].X + 2), (int)Math.Round((tag[1].Y + tag[0].Y) / 2 + 1));
+        }
+        var byLayer = Body();
+        Assert.True(byLayer.Red > 150 && byLayer.Green < 100, $"by layer the tag is red: {byLayer}");
+        ip.Color = 0xFF1D4ED8;
+        var own = Body();
+        Assert.True(own.Blue > 150 && own.Red < 100, $"with a colour of its own the tag takes it: {own}");
+    }
+
+    [Fact]
+    public void TheTagWritesTheStartTime_AndALongOneMakesItLonger()
+    {
+        var p = BlastProject.CreateNew();
+        var ip = p.Add(new InitiationPoint { Position = new Vec3(0, 0, 0), StartTimeMs = 0 });
+        var cam = new Camera { Width = 800, Height = 600, Pitch = 90, Scale = 10, Target = new Vec3(0, 0, 0) };
+        Assert.Equal("0", PlanRenderer.InitiationTagText(ip));
+        var shortTag = PlanRenderer.InitiationTag(cam, p, ip);
+        ip.StartTimeMs = 12.5;
+        Assert.Equal("12.5", PlanRenderer.InitiationTagText(ip));
+        ip.StartTimeMs = 123456;
+        var longTag = PlanRenderer.InitiationTag(cam, p, ip);
+        // no hole near: the tag goes right, the body longer for the long time
+        float Length(SKPoint[] t) => Math.Abs(t[2].X - t[1].X);
+        Assert.True(Length(longTag) > Length(shortTag));
+    }
+
     /// <summary>A 3 × 3 pattern, 5 m apart, from (0, 0) (south-west) to (10, 10); a plan camera, north up.</summary>
     private static (BlastProject P, Camera Cam, Hole[,] Holes) Pattern()
     {

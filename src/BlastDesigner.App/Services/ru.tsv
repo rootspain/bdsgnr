@@ -4298,3 +4298,13 @@ ui:Row spacing	Шаг
 ui:The burden and the spacing the row was laid with	ЛНС и шаг, с которыми построен ряд
 Row {0} ({1})	Ряд {0} ({1})
 Depth manual	Глубина вручную
+Click a hole to give it the number of the counter, drag across holes to number them in order. With no prefix each hole keeps its own (the name of its row); a number another hole has is swapped with it.	Щелчок по скважине даёт ей номер из счётчика, протяжка по скважинам — номера по порядку. Без префикса у скважины остаётся свой (имя ряда); номер, который уже есть у другой скважины, меняется с ней местами.
+Reset the counter to 1	Сбросить счётчик на 1
+Renumber the selected holes by rows	Перенумеровать выделенные по рядам
+{0} holes numbered, next number {1}	Пронумеровано скважин: {0}, следующий номер {1}
+swapped: {0}	обмен: {0}
+ui:Put before the number of each hole numbered. Empty: each hole keeps its own prefix (the name of its row), even none	Ставится перед номером каждой нумеруемой скважины. Пусто: у скважины остаётся свой префикс (имя ряда), даже если его нет
+ui:The number the next hole clicked takes; a drag goes on from it, one a hole	Номер, который получит следующая скважина; протяжка продолжает с него, по одному на скважину
+ui:Counter	Счётчик
+ui:One less (−)	На один меньше (−)
+ui:One more (+)	На один больше (+)

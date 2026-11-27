@@ -724,6 +724,34 @@ public sealed class ToolPanel : Border
                 _fields.Children.Add(PatternLevel());
             }
         }
+        if (tool is RenumberTool)
+        {
+            // the prefix (empty: each hole keeps its own) and the counter with its steps
+            var prefix = TextField("Number prefix", _vm.RenumberPrefix, v => _vm.RenumberPrefix = v, "renumberPrefix");
+            ToolTip.SetTip(prefix, Loc.Ui("Put before the number of each hole numbered. Empty: each hole keeps its own prefix (the name of its row), even none"));
+            _fields.Children.Add(prefix);
+            var counter = new TextBox
+            {
+                Name = "renumberCounter", Text = _vm.RenumberCounter.ToString(System.Globalization.CultureInfo.CurrentCulture), Width = 56, Height = 26, MinHeight = 26,
+                Padding = new Thickness(8, 2), FontFamily = Look.Mono, FontSize = 12, Background = Look.Field, HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            ToolTip.SetTip(counter, Loc.Ui("The number the next hole clicked takes; a drag goes on from it, one a hole"));
+            void Commit()
+            {
+                if (int.TryParse(counter.Text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.CurrentCulture, out var v) && v != _vm.RenumberCounter) Ui.Safe(() => _vm.SetRenumberCounter(v));
+                else counter.Text = _vm.RenumberCounter.ToString(System.Globalization.CultureInfo.CurrentCulture);
+            }
+            counter.LostFocus += (_, _) => Commit();
+            counter.KeyDown += (_, e) => { if (e.Key == Key.Enter) { Commit(); e.Handled = true; } };
+            Button Step(string text, int by, string name, string tip)
+            {
+                var b = new Button { Content = text, Name = name, Width = 26, Height = 26, MinWidth = 0, MinHeight = 0, Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center };
+                ToolTip.SetTip(b, Loc.Ui(tip));
+                b.Click += (_, _) => Ui.Safe(() => _vm.StepRenumberCounter(by));
+                return b;
+            }
+            _fields.Children.Add(Labelled("Counter", new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Children = { Step("−", -1, "renumberLess", "One less (−)"), counter, Step("+", 1, "renumberMore", "One more (+)") } }));
+        }
         if (tool.Name == "Tie")
         {
             var chain = new CheckBox { Content = Loc.Ui("Tie chain"), IsChecked = _vm.TieChain, Name = "tieChain", VerticalAlignment = VerticalAlignment.Center };

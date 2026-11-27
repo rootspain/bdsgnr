@@ -4031,3 +4031,13 @@ ui:Row spacing	Pas
 ui:The burden and the spacing the row was laid with	Banquette et pas avec lesquels la rangée a été posée
 Row {0} ({1})	Rangée {0} ({1})
 Depth manual	Profondeur manuelle
+Click a hole to give it the number of the counter, drag across holes to number them in order. With no prefix each hole keeps its own (the name of its row); a number another hole has is swapped with it.	Un clic sur un trou lui donne le numéro du compteur, un glisser sur les trous les numérote dans l’ordre. Sans préfixe, chaque trou garde le sien (le nom de sa rangée) ; un numéro déjà porté par un autre trou est échangé avec lui.
+Reset the counter to 1	Remettre le compteur à 1
+Renumber the selected holes by rows	Renuméroter les trous sélectionnés par rangées
+{0} holes numbered, next number {1}	{0} trous numérotés, numéro suivant {1}
+swapped: {0}	échangés : {0}
+ui:Put before the number of each hole numbered. Empty: each hole keeps its own prefix (the name of its row), even none	Placé devant le numéro de chaque trou numéroté. Vide : chaque trou garde son préfixe (le nom de sa rangée), même s’il n’en a pas
+ui:The number the next hole clicked takes; a drag goes on from it, one a hole	Le numéro que prend le prochain trou cliqué ; un glisser continue à partir de lui, un par trou
+ui:Counter	Compteur
+ui:One less (−)	Un de moins (−)
+ui:One more (+)	Un de plus (+)

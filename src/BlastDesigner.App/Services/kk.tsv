@@ -4031,3 +4031,13 @@ ui:Row spacing	Қадам
 ui:The burden and the spacing the row was laid with	Қатар салынған ЕҚКС пен қадам
 Row {0} ({1})	{0} қатары ({1})
 Depth manual	Тереңдік қолмен
+Click a hole to give it the number of the counter, drag across holes to number them in order. With no prefix each hole keeps its own (the name of its row); a number another hole has is swapped with it.	Ұңғыманы шерту оған санауыштағы нөмірді береді, ұңғымалар бойымен сүйреу — ретімен нөмірлер. Префикссіз ұңғыма өз префиксін сақтайды (қатар аты); басқа ұңғымада бар нөмір онымен орын ауыстырады.
+Reset the counter to 1	Санауышты 1-ге қайтару
+Renumber the selected holes by rows	Таңдалғандарды қатарлар бойынша қайта нөмірлеу
+{0} holes numbered, next number {1}	Нөмірленген ұңғымалар: {0}, келесі нөмір {1}
+swapped: {0}	алмасу: {0}
+ui:Put before the number of each hole numbered. Empty: each hole keeps its own prefix (the name of its row), even none	Нөмірленетін әр ұңғыманың нөмірінің алдына қойылады. Бос: ұңғыма өз префиксін сақтайды (қатар аты), тіпті ол жоқ болса да
+ui:The number the next hole clicked takes; a drag goes on from it, one a hole	Келесі шертілген ұңғыма алатын нөмір; сүйреу одан бастап жалғасады, әр ұңғымаға біреу
+ui:Counter	Санауыш
+ui:One less (−)	Біреуге кем (−)
+ui:One more (+)	Біреуге көп (+)

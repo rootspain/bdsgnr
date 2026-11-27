@@ -75,6 +75,13 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   B12-A1); so number the Row tool, Between lines and the curved layout too. A row named anew gives its holes the new name
   (A3 → D3; numbers of before, without the name of the row, are given anew: "57, 58" → D1, D2), a pattern laid out again numbers them after the new places of the rows. The card and the Attach holes to
   row list read "Row A (13)", an old "Row 8" "Row 8 (3)". The hole field Depth manual is translated.
+- **Renumber by clicks and drags:** the button starts a tool (in place of the two windows and the former Hole label).
+  Its panel has Prefix and Counter [− 1 +] (from 1, the +/− keys). A click on a hole gives it the number of the counter,
+  a drag numbers the holes in the order it passes them, into the next row too (A5, A6, B7); the numbers to come show
+  while dragging, Esc drops it. An empty prefix leaves each hole its own (the name of its row), one typed in goes to all.
+  A number another hole has is swapped with it ("A3 ↔ A7" on the status bar). One undo step a click or a drag, and
+  Ctrl+Z takes the counter back too. In the menu: Start at…, Reset the counter to 1, Renumber the selected holes by
+  rows.
 
 ### Changed
 - **A copy of a hole of a pattern stays in the pattern:** a hole copied and pasted (Ctrl+C/Ctrl+V, Move/copy) stays in
@@ -88,7 +95,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   holes; the hole itself is not highlighted and is picked by its collar. The tag
   covers neither the neighbours nor the ties: neighbours on the right put the tag on the left, below it on top and so on;
   neighbours on both sides of a row put it across the row, to the side with no hole; holes on all sides, to the south;
-  no hole near, on the right. No text on it; the colour as
+  no hole near, on the right. On it the start time, ms (the tag grows
+  longer or wider for a long one); a colour chosen in the properties of the point (Colour) now goes to the tag; else the colour as
   before. The same in section, 3D and print; the Initiation point button shows
   the tag.
 - **The column when the hole length changes:** a moved collar, a toe level, a dipped depth and a length typed in fit the

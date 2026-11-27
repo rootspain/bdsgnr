@@ -559,27 +559,59 @@ public sealed partial class MainViewModel
         SetStatus(Loc.F("{0} holes re-labelled", n));
     }
 
-    public async Task Renumber()
+    /// <summary>Renumber: the tool that numbers holes by clicks and drags from a counter (<see cref="Tools.RenumberTool"/>).</summary>
+    public Task Renumber()
     {
-        var prefix = await Dialogs.Prompt("Renumber holes", Loc.T("Label prefix"), "");
-        if (prefix == null) return;
-        var start = await Dialogs.PromptNumber("Renumber holes", Loc.T("First number"), 1);
-        if (start is not double s) return;
-        var ids = SelectedOrAllHoles().Select(h => h.Id).ToHashSet();
-        Change("Renumber holes", p => HoleDesign.Renumber(p, HolesById(p, ids), prefix, (int)s));
+        RenumberTool();
+        return Task.CompletedTask;
     }
 
-    public void HoleLabelTool()
+    /// <summary>The hole label tool of before is the Renumber tool now.</summary>
+    public void HoleLabelTool() => RenumberTool();
+
+    public void RenumberTool() => SetTool(new Tools.RenumberTool(this));
+
+    /// <summary>The number the next hole the Renumber tool takes gets; kept with each undo step, so an undo takes it back.</summary>
+    public int RenumberCounter { get; set; } = 1;
+
+    /// <summary>The prefix the Renumber tool puts before the number; empty: each hole keeps its own.</summary>
+    public string RenumberPrefix { get; set; } = "";
+
+    public void SetRenumberCounter(int value)
     {
-        int next = int.TryParse(NextHoleLabel(), out var n) ? n : 1;
-        var t = new PickEntityTool<Hole>(this, "Hole label", "Click holes in order to number them.", (h, _) =>
-        {
-            var label = (next++).ToString();
-            Change("Label hole", _ => h.Label = label);
-            SetStatus(Loc.F("Next label: {0}", next));
-        });
-        t.ExtraMenu.Add(MenuEntry.Item("Start at…", async () => { if (await Dialogs.PromptNumber("Hole label", Loc.T("Next number"), next) is double v) next = (int)v; }));
-        SetTool(t);
+        RenumberCounter = Math.Max(0, value);
+        RefreshToolPanel();
+    }
+
+    public void StepRenumberCounter(int by) => SetRenumberCounter(RenumberCounter + by);
+
+    /// <summary>
+    /// Holes numbered in the order given from the counter, one undo step; the counter goes on by as many. A number another
+    /// hole had is swapped with it, and the status says which.
+    /// </summary>
+    public void RenumberHoles(IReadOnlyList<Guid> ids)
+    {
+        if (ids.Count == 0 || Doc == null || Doc.IsReadOnly) return;
+        var start = RenumberCounter;
+        var prefix = RenumberPrefix.Trim();
+        var swaps = new List<(string Given, string Back)>();
+        Change("Renumber holes", p => swaps = HoleNumbering.Apply(p, ids, prefix, start));
+        RenumberCounter = start + ids.Count;
+        RefreshToolPanel();
+        var said = Loc.F("{0} holes numbered, next number {1}", ids.Count, RenumberCounter);
+        if (swaps.Count > 0) said += "; " + Loc.F("swapped: {0}", string.Join(", ", swaps.Select(s => $"{s.Given} ↔ {s.Back}")));
+        SetStatus(said);
+    }
+
+    /// <summary>The selected holes numbered from the counter by their rows: the rows in their order, along each row; the holes in no row after them.</summary>
+    public void RenumberSelectedByRows()
+    {
+        if (Doc == null) return;
+        var chosen = Doc.SelectedHoles.Select(h => h.Id).ToHashSet();
+        var ordered = Project!.Rows.SelectMany(r => r.HoleIds).Where(chosen.Contains).Distinct().ToList();
+        var inRows = ordered.ToHashSet();
+        ordered.AddRange(Doc.SelectedHoles.Where(h => !inRows.Contains(h.Id)).OrderByDescending(h => h.Collar.Y).ThenBy(h => h.Collar.X).Select(h => h.Id));
+        RenumberHoles(ordered);
     }
 
     public async Task FindHole(string mode)

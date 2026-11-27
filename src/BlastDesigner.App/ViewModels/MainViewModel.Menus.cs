@@ -303,7 +303,7 @@ public sealed partial class MainViewModel
             ("⎯", "Baseline", () => DrawPolylineTool(false, LineKind.Baseline), "Polyline"), ("●", "Hole", () => HoleTool(), "Hole"), ("⋯", "Row", RowTool, "Row"),
             ("⁘", "Pattern", PatternTool, "Pattern"), ("▣", "Fill polygon", Run(FillSelectedPolygon), null), ("⬚", "Boundary", () => DrawPolylineTool(true, LineKind.Boundary), "Polygon"),
             ("≡", "Optimize rows", OptimizeRows, null), ("📐", "Hole measure", HoleMeasureTool, "Hole measure"), ("V", "Volume", Run(VolumeTool), null),
-            ("#", "Hole label", HoleLabelTool, "Hole label"), ("◢", "Batter", Run(BatterTool), null), ("⊟", "Cross-section", () => AnalysisWindows.SectionTool(this), null)
+            ("#", "Hole label", HoleLabelTool, "Renumber holes"), ("◢", "Batter", Run(BatterTool), null), ("⊟", "Cross-section", () => AnalysisWindows.SectionTool(this), null)
         }),
         ("Loading tools", new()
         {

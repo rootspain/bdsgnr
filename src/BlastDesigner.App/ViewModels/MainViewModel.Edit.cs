@@ -279,16 +279,23 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>
-    /// The undo steps of the document take the selected vertices with them: an undo of a deletion of vertices gives them
-    /// back selected, as the objects of an undone deletion are.
+    /// The undo steps of the document take the selected vertices with them, and the counter of the Renumber tool: an undo
+    /// of a deletion of vertices gives them back selected, as the objects of an undone deletion are, and an undo of a
+    /// numbering takes the counter back to where it was.
     /// </summary>
     private void KeepVerticesInUndo(Document doc)
     {
-        doc.SaveSubSelection = () => _selectedVertices.ToArray();
+        doc.SaveSubSelection = () => (_selectedVertices.ToArray(), RenumberCounter);
         doc.RestoreSubSelection = saved =>
         {
+            if (saved is not ValueTuple<(Guid, int)[], int> kept) return;
             _selectedVertices.Clear();
-            if (saved is (Guid, int)[] vertices) _selectedVertices.AddRange(vertices);
+            _selectedVertices.AddRange(kept.Item1);
+            if (RenumberCounter != kept.Item2)
+            {
+                RenumberCounter = kept.Item2;
+                if (ActiveTool is Tools.RenumberTool) RefreshToolPanel();
+            }
         };
     }
 

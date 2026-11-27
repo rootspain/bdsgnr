@@ -2483,6 +2483,73 @@ Step("Collars onto surface opens its list on the bench surface, of the surfaces 
         Pump();
     }
 });
+Step("Renumber: a click gives the counter, a drag numbers in order and swaps a number taken, the prefix kept or typed, undo takes the counter back", () =>
+{
+    vm.SelectTool(); Pump();
+    var cam = vm.View.Camera;
+    var made = new List<Hole>();
+    // four holes along the screen (two rows), and one away holding A3
+    vm.Change("Smoke holes", p =>
+    {
+        var layer = p.GetOrCreateLayer(StandardLayers.Holes);
+        foreach (var (label, x) in new[] { ("A7", 200.0), ("A8", 260.0), ("A9", 320.0), ("B1", 380.0) })
+            made.Add(p.Add(new Hole { Label = label, Collar = cam.ToWorld(x, 300), Length = 10 }, layer));
+        made.Add(p.Add(new Hole { Label = "A3", Collar = cam.ToWorld(600, 520), Length = 10 }, layer));
+    });
+    Hole H(int i) => (Hole)vm.Project!.FindEntity(made[i].Id)!;
+    ToolPointer P(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Left = true, ClickCount = 1 };
+    try
+    {
+        _ = vm.Renumber(); Pump();
+        if (vm.ActiveTool is not BlastDesigner.App.Tools.RenumberTool) throw new Exception("Renumber should start its tool, not ask in windows");
+        foreach (var name in new[] { "renumberPrefix", "renumberCounter", "renumberLess", "renumberMore" })
+            if (!window.GetLogicalDescendants().OfType<Control>().Any(c => c.Name == name && c.IsEffectivelyVisible)) throw new Exception($"the panel of the tool has no {name}");
+        if (vm.RenumberCounter != 1) throw new Exception("the counter should start at 1");
+        // a click: the counter, the prefix of the hole kept
+        vm.ActiveTool!.PointerPressed(P(201, 301));
+        vm.ActiveTool.PointerReleased(P(201, 301));
+        Pump();
+        if (H(0).Label != "A1" || vm.RenumberCounter != 2) throw new Exception($"a click should give A1 and move the counter to 2: {H(0).Label}, {vm.RenumberCounter}");
+        // a drag over the other three, into the next row: on in order, A3 swapped with the hole that had it
+        vm.ActiveTool.PointerPressed(P(250, 300));
+        vm.ActiveTool.PointerMoved(P(300, 300));
+        vm.ActiveTool.PointerMoved(P(390, 302));
+        if (vm.View.Preview.Labels.Select(l => l.Text).ToList() is var shown && !shown.SequenceEqual(new[] { "A2", "A3", "B4" })) throw new Exception("while dragging the holes should show the numbers they take: " + string.Join(",", shown));
+        vm.View.Redraw(); Pump(); Shot("83_renumber_drag");
+        vm.ActiveTool.PointerReleased(P(390, 302));
+        Pump();
+        var labels = Enumerable.Range(0, 5).Select(i => H(i).Label).ToList();
+        if (!labels.SequenceEqual(new[] { "A1", "A2", "A3", "B4", "A9" })) throw new Exception("the drag should number on in order and swap A3: " + string.Join(",", labels));
+        if (vm.RenumberCounter != 5) throw new Exception($"the counter should go on by the holes of the drag: {vm.RenumberCounter}");
+        // undo: the labels and the counter back
+        vm.Undo(); Pump();
+        if (vm.RenumberCounter != 2 || H(2).Label != "A9" || H(4).Label != "A3") throw new Exception($"undo should take the labels and the counter back: {vm.RenumberCounter}");
+        // Esc drops a drag
+        vm.ActiveTool.PointerPressed(P(250, 300));
+        vm.ActiveTool.PointerMoved(P(330, 300));
+        vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
+        vm.ActiveTool.PointerReleased(P(330, 300));
+        if (H(1).Label != "A8" || vm.RenumberCounter != 2) throw new Exception("Esc should drop the drag");
+        // a prefix typed in: every hole numbered takes it
+        vm.RenumberPrefix = "C";
+        vm.ActiveTool.PointerPressed(P(380, 300));
+        vm.ActiveTool.PointerReleased(P(380, 300));
+        if (H(3).Label != "C2") throw new Exception($"with a prefix typed in the hole should take it: {H(3).Label}");
+        // + and − step the counter
+        vm.ActiveTool.KeyDown(Avalonia.Input.Key.Add, Avalonia.Input.KeyModifiers.None);
+        vm.ActiveTool.KeyDown(Avalonia.Input.Key.Add, Avalonia.Input.KeyModifiers.None);
+        vm.ActiveTool.KeyDown(Avalonia.Input.Key.Subtract, Avalonia.Input.KeyModifiers.None);
+        if (vm.RenumberCounter != 4) throw new Exception($"+ + − should step the counter to 4: {vm.RenumberCounter}");
+    }
+    finally
+    {
+        vm.RenumberPrefix = "";
+        vm.SelectTool();
+        var ids = made.Select(h => h.Id).ToHashSet();
+        for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => ids.Contains(e.Id)); i++) vm.Undo();
+        Pump();
+    }
+});
 Step("an end of a line dragged onto its other end closes the line", () =>
 {
     vm.SelectTool(); Pump();
@@ -6508,7 +6575,7 @@ Step("an initiation point on a hole is picked by its tag, the hole by its collar
     // a hole on no tie yet: a chain of holes with an electronic detonator does not branch, so the chain from the point
     // starts on a hole of its own
     var hole = vm.Project!.Holes.First(h => !h.IsDummy && !vm.Project.Ties.Any(t => t.FromId == h.Id || t.ToId == h.Id));
-    var ip = new InitiationPoint { Position = hole.Collar, Label = "IPX" };
+    var ip = new InitiationPoint { Position = hole.Collar, Label = "IPX", StartTimeMs = 125 };
     vm.Change("Smoke initiation point on a hole", p => p.Add(ip));
     vm.Doc!.Select(new[] { hole.Id }); vm.ZoomSelection(); vm.Doc.ClearSelection(); vm.PlanView(); Pump();
     var (x, y) = vm.View.Camera.ToScreen(hole.Collar);
