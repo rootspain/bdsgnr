@@ -48,6 +48,38 @@ public sealed class SectionSession
     /// <summary>While the selected marks are dragged: how far, along the line and up, m.</summary>
     public (double S, double Z)? MoveBy { get; set; }
 
+    /// <summary>What is added to the heights of the top and the bottom of the frame now, m (up positive).</summary>
+    public Func<(double Top, double Bottom)>? FrameShifts { get; set; }
+    /// <summary>Shows the frame with these shifts while its top or bottom line is dragged, nothing kept yet.</summary>
+    public Action<double, double>? PreviewFrameShifts { get; set; }
+    /// <summary>Keeps the shifts shown, in one step, once the line of the frame is let go.</summary>
+    public Action? CommitFrameShifts { get; set; }
+
+    /// <summary>The top (true) or the bottom (false) line of the frame under the screen point, within so many px; null off them.</summary>
+    public bool? FrameEdgeAt(double x, double y, double radius = 4)
+    {
+        if (FrameShifts == null || Project is not { } project || Box?.Invoke(View.Camera, project) is not { } box) return null;
+        if (x < box.Left - radius || x > box.Right + radius) return null;
+        if (Math.Abs(y - box.Top) <= radius) return true;
+        if (Math.Abs(y - box.Bottom) <= radius) return false;
+        return null;
+    }
+
+    /// <summary>Shows the section along this line while an end of the frame is dragged, nothing kept yet.</summary>
+    public Action<Vec3, Vec3>? PreviewLine { get; set; }
+    /// <summary>Keeps the line shown, in one step, once the end of the frame is let go (the line as it was: nothing).</summary>
+    public Action? CommitLine { get; set; }
+
+    /// <summary>The left (true) or the right (false) line of the frame under the screen point, within so many px; null off them.</summary>
+    public bool? FrameSideAt(double x, double y, double radius = 4)
+    {
+        if (PreviewLine == null || Project is not { } project || Box?.Invoke(View.Camera, project) is not { } box) return null;
+        if (y < box.Top - radius || y > box.Bottom + radius) return null;
+        if (Math.Abs(x - box.Left) <= radius) return true;
+        if (Math.Abs(x - box.Right) <= radius) return false;
+        return null;
+    }
+
     /// <summary>
     /// Moves the selected marks by so much along the line and up, in one step. Their points go free where they are put:
     /// a point held on a hole or a surface lets go of it.

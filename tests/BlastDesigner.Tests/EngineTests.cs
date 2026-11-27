@@ -156,7 +156,12 @@ public class ChargingTests
         // The rule goes through the project's JSON like the rules reference does.
         var rule = ProjectJson.DeepClone(Charging.RuleFromColumn(p, column, "Saved"));
         Assert.Equal(2.5, rule.StemmingLength, 6);
-        Assert.Equal(0, rule.Decks.Single(t => t.ProductId == Id("ANFO")).Length);
+        // the deck that takes the change (the longest explosive, the column has no marks) keeps its length as its share
+        var anfo = rule.Decks.Single(t => t.ProductId == Id("ANFO"));
+        Assert.True(anfo.Fits);
+        Assert.Equal(4.5, anfo.Length, 6);
+        Assert.False(rule.StemmingFits);
+        Assert.All(rule.Decks.Where(t => t != anfo), t => Assert.False(t.Fits));
 
         foreach (var length in new[] { 11.0, 14.0, 9.5 })
         {

@@ -247,6 +247,12 @@ public sealed class Deck
     public double Bottom { get; set; }
     public string? ProductId { get; set; }
     public List<Primer> Primers { get; set; } = new();
+    /// <summary>
+    /// The deck lengthens or shortens when the hole's length changes (the others keep theirs). Null in columns that have no
+    /// marks yet (files before it, a column just built): there the longest explosive deck takes the change
+    /// (<c>Charging.FitDecks</c>); once one deck of a column has a mark, a deck with none is fixed.
+    /// </summary>
+    public bool? Fits { get; set; }
 
     [JsonIgnore] public double Length => Math.Max(0, Bottom - Top);
 
@@ -255,6 +261,7 @@ public sealed class Deck
         Top = Top,
         Bottom = Bottom,
         ProductId = ProductId,
+        Fits = Fits,
         Primers = Primers.Select(p => p.Clone()).ToList()
     };
 }

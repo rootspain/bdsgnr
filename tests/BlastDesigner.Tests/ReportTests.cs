@@ -976,9 +976,11 @@ public class ReportTests
     {
         var p = WithSections(1);
         var hole = new Hole().KindName;
-        var open = new ReportDesign { Section = { HiddenKinds = { hole } } };
-        var held = new ReportDesign { Section = { HiddenKinds = { hole }, View = { Locked = true } } };
-        var fitted = new ReportDesign { Section = { HiddenKinds = { hole }, View = { Locked = true, LockedHiddenKinds = { hole } } } };
+        // the frame spans the whole line either way, so the scale is the same: the grid shows where the frame stands up and
+        // down, fitted to the holes (kept by the lock though hidden) or to the line alone
+        var open = new ReportDesign { Section = { HiddenKinds = { hole }, ShowGrid = true } };
+        var held = new ReportDesign { Section = { HiddenKinds = { hole }, ShowGrid = true, View = { Locked = true } } };
+        var fitted = new ReportDesign { Section = { HiddenKinds = { hole }, ShowGrid = true, View = { Locked = true, LockedHiddenKinds = { hole } } } };
         Assert.NotEqual(SectionPixels(p, open), SectionPixels(p, held));
         Assert.Equal(SectionPixels(p, open), SectionPixels(p, fitted));
     }

@@ -186,9 +186,9 @@ public static class FormLayouts
         [typeof(ReportStamp)] = Of("", S("Stamp", "Name Place Attach Pages")),
         [typeof(TypeDefinition)] = Of("Diameter: Diameter", S("Type", "Name Color Diameter Density")),
         [typeof(LoadingRule)] = Of("Length: MinLength, MaxLength, StemmingLength, SoftCollarExtraStemming; Diameter: MinDiameter, MaxDiameter",
-            S("Rule", "Name Priority"), S("Applies to", "HoleType MinLength MaxLength MinDiameter MaxDiameter Wet"), S("Stemming", "StemmingLength StemmingProductId MinStemmingDiameters SoftCollarExtraStemming"),
+            S("Rule", "Name Priority"), S("Applies to", "HoleType MinLength MaxLength MinDiameter MaxDiameter Wet"), S("Stemming", "StemmingLength StemmingProductId StemmingFits MinStemmingDiameters SoftCollarExtraStemming"),
             S("Alternates", "WetAlternateProductId HardAlternateProductId HardnessThreshold SoftAlternateProductId SoftnessThreshold")),
-        [typeof(DeckTemplate)] = Of("Length: Length, PrimerOffset", S("Deck", "ProductId Length PrimerCount PrimerOffset BoosterId DetonatorId")),
+        [typeof(DeckTemplate)] = Of("Length: Length, PrimerOffset", S("Deck", "ProductId Length Fits PrimerCount PrimerOffset BoosterId DetonatorId")),
         [typeof(InitiationRule)] = Of("Length: MinLength, MaxLength, PrimerOffset",
             S("Rule", "Name Priority"), S("Applies to", "HoleType RowFilter Horizon MinLength MaxLength"), S("Primers", "DetonatorId BoosterId PrimersPerDeck DelayMs PrimerOffset"))
     };

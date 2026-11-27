@@ -1714,7 +1714,6 @@ ui:g/cm³	g/cm³
 ui:The column will be applied to	La colonne sera appliquée à
 {0} selected hole	{0} trou sélectionné
 {0} selected holes	{0} trous sélectionnés
-If a hole is longer or shorter, the main explosive deck adapts and the stemming stays {0} m.	Si un trou est plus long ou plus court, la charge principale d'explosif s'adapte et le bourrage reste de {0} m.
 ui:— not selected —	— non sélectionné —
 ui:Apply	Appliquer
 Apply to {0} hole	Appliquer à {0} trou
@@ -3944,3 +3943,27 @@ Deck {0} goes below the toe: its bottom is at {1:0.##} m, the hole is {2:0.##} m
 Deck {0} overlaps deck {1}	La charge {0} chevauche la charge {1}
 Explosive deck {0} has no primer	La charge d'explosif {0} n'a pas d'amorce
 Deck {0}: {1} is not water resistant	Charge {0} : {1} ne résiste pas à l'eau
+ui:adapts to the hole length	s'adapte à la longueur du trou
+ui:Adapts to the hole length	S'adapte à la longueur du trou
+ui:Adapts to the hole length: click to keep its length	S'adapte à la longueur du trou : cliquez pour garder sa longueur
+ui:Keeps its length: click to let it adapt to the hole length	Garde sa longueur : cliquez pour qu'elle s'adapte à la longueur du trou
+ui:When the hole length changes, this deck lengthens or shortens (not below 0.1 m); the decks below go with the toe.	Quand la longueur du trou change, cette charge s'allonge ou se raccourcit (pas sous 0,1 m) ; les charges dessous suivent le fond.
+ui:The deck keeps its length. Mark it to let it take the change of the hole length.	La charge garde sa longueur. Cochez-la pour qu'elle prenne le changement de longueur du trou.
+ui:No deck adapts to the hole length: a longer hole is left with an empty part at the bottom	Aucune charge ne s'adapte à la longueur du trou : un trou plus long garde une partie vide au fond
+ui:No deck adapts: on holes of another length the column stays as it is.	Aucune charge ne s'adapte : sur les trous d'une autre longueur la colonne reste telle quelle.
+When the hole length changes, it is taken by: {0}	Quand la longueur du trou change, s'adapte : {0}
+deck {0} ({1})	charge {0} ({1})
+If a hole is longer or shorter, the difference is taken by {0}	Si un trou est plus long ou plus court, la différence est prise par {0}
+If a hole is longer or shorter, the difference is shared by {0}	Si un trou est plus long ou plus court, la différence est partagée par {0}
+, the stemming stays {0} m.	, le bourrage reste de {0} m.
+Fits	S'adapte à la longueur
+Stemming fits	Le bourrage s'adapte à la longueur
+Frame top (m)	Haut du cadre (m)
+Frame bottom (m)	Bas du cadre (m)
+Section frame	Cadre de la coupe
+Added to the height of the top of the frame, m; drag the top line of the frame with the mouse	Ajouté à la cote du haut du cadre, m ; la ligne du haut se tire à la souris
+Added to the height of the bottom of the frame, m; drag the bottom line of the frame with the mouse	Ajouté à la cote du bas du cadre, m ; la ligne du bas se tire à la souris
+Copy all	Tout copier
+The section is copied	La coupe est copiée
+The section could not be put on the clipboard	La coupe n’a pas pu être mise dans le presse-papiers
+Section line length	Longueur de la ligne de coupe

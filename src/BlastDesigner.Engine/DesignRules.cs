@@ -98,7 +98,7 @@ public static class LoadingAlternates
             var pieces = new List<Deck>();
             for (int i = 0; i < 3; i++)
                 if (cuts[i + 1] - cuts[i] >= 1e-6)
-                    pieces.Add(new Deck { Top = cuts[i], Bottom = cuts[i + 1], ProductId = i == 1 ? productId : d.ProductId });
+                    pieces.Add(new Deck { Top = cuts[i], Bottom = cuts[i + 1], ProductId = i == 1 ? productId : d.ProductId, Fits = d.Fits });
             // Each primer stays in the piece that contains its depth; the deepest piece also takes primers at the bottom.
             foreach (var pr in d.Primers)
                 (pieces.FirstOrDefault(x => pr.Depth >= x.Top - 1e-9 && pr.Depth < x.Bottom) ?? pieces[^1]).Primers.Add(pr);

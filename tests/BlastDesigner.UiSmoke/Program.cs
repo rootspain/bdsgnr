@@ -3278,6 +3278,55 @@ Step("loading dialog: a deck below the toe is told in the language of the progra
     }
     finally { hole.Decks = was; }
 });
+Step("loading dialog: a deck adapts to the hole length by its mark in the table and its properties; after Apply only the marked decks take a change of length", () =>
+{
+    var p0 = vm.Project!;
+    var hole = p0.Holes.First(h => h.Decks.Count > 1 && h.ToLevel == null && h.ActualLength == null && h.Decks.Any(d => p0.FindProduct(d.ProductId)?.IsExplosive == true));
+    var id = hole.Id;
+    Hole H(BlastProject p) => p.Holes.First(x => x.Id == id);
+    void Click(Avalonia.Controls.Button b) { b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent)); Pump(); }
+    void Capture(Avalonia.Controls.Window w, string name) { Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); var path = Path.Combine(outDir, name + ".png"); w.CaptureRenderedFrame()?.Save(path); Console.WriteLine($"     screenshot {path}"); }
+    string Deck(HoleLoadingEditor e, Deck d) => BlastDesigner.App.Services.Loc.F("deck {0} ({1})", e.Decks.IndexOf(d) + 1, p0.FindProduct(d.ProductId)?.Name ?? "?");
+    var changes = 0;
+    try
+    {
+        var result = HoleLoadingWindow.Show(vm, hole); Pump();
+        var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var editor = dlg.GetLogicalDescendants().OfType<HoleLoadingEditor>().First();
+        // the column of the hole as it comes: one deck takes the change
+        var main = editor.Decks[editor.Selected];
+        if (!Charging.FitDecks(p0, editor.Decks).SequenceEqual(new[] { main })) throw new Exception("the explosive deck opened with should be the one that adapts");
+        // a deck split off keeps its length: only the upper half stays marked
+        editor.SplitDeck(SplitMode.Split); Pump();
+        var lower = editor.Decks[editor.Selected + 1];
+        if (!Charging.FitDecks(p0, editor.Decks).SequenceEqual(new[] { main })) throw new Exception("the new half should not adapt");
+        // the ↕ cell of the lower half marks it too
+        Click(dlg.GetLogicalDescendants().OfType<Avalonia.Controls.Button>().First(b => b.Tag as string == "fit" + editor.Decks.IndexOf(lower)));
+        if (!Charging.FitDecks(p0, editor.Decks).SequenceEqual(new[] { main, lower })) throw new Exception("the ↕ cell did not mark the deck");
+        var summary = editor.Checks.FirstOrDefault(c => c.Ok && c.Text.Contains(Deck(editor, main)) && c.Text.Contains(Deck(editor, lower)));
+        if (summary.Text == null) throw new Exception("no check names the decks that adapt: " + string.Join(" | ", editor.Checks.Select(c => c.Text)));
+        if (BlastDesigner.App.Services.Loc.Language == "ru" && !summary.Text.StartsWith("При изменении длины скважины подстраивается: интервал")) throw new Exception("not translated: " + summary.Text);
+        // the box in the properties of the selected deck (the upper half) takes its mark off
+        var box = dlg.GetLogicalDescendants().OfType<Avalonia.Controls.CheckBox>().First(c => c.Name == "fits");
+        if (box.IsChecked != true) throw new Exception("the box of a deck that adapts is not checked");
+        box.IsChecked = false; Pump();
+        if (!Charging.FitDecks(p0, editor.Decks).SequenceEqual(new[] { lower })) throw new Exception("the box did not take the mark off");
+        Capture(dlg, "37f_loading_dialog_fits");
+        dlg.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.Enter, null); Pump();
+        if (!result.IsCompleted) { dlg.Close(); Pump(); throw new Exception("Ctrl+Enter did not close the window"); }
+        if (result.Result is not { } decks) throw new Exception("Ctrl+Enter did not apply");
+        if (decks.Any(d => d.Fits == null)) throw new Exception("a deck went out of the window with no mark");
+        vm.Change("Smoke loading", p => { H(p).Decks = decks.Select(d => d.Clone()).ToList(); H(p).ManualLoading = true; }); changes++;
+        var before = H(vm.Project!).Decks.Select(d => d.Length).ToList();
+        vm.Change("Smoke longer", p => H(p).Length += 2); changes++;
+        var after = H(vm.Project!).Decks;
+        var k = decks.FindIndex(d => d.Fits == true);
+        for (int i = 0; i < after.Count; i++)
+            if (Math.Abs(after[i].Length - before[i] - (i == k ? 2 : 0)) > 1e-6)
+                throw new Exception($"deck {i + 1}: {before[i]} → {after[i].Length} m, only deck {k + 1} should take the 2 m");
+    }
+    finally { while (changes-- > 0) vm.Undo(); Pump(); }
+});
 Step("loading dialog: primer cards are always open", () =>
 {
     var hole = vm.Project!.Holes.First(h => h.Decks.Count > 1);
@@ -5809,6 +5858,25 @@ Step("the Ties button opens the initiation catalogue, whose position goes to the
     var byKey = BlastDesigner.App.Services.Dialogs.LastShown;
     if (vm.ActiveTool is not TieTool || byKey == null || !byKey.IsVisible || byKey.Title != BlastDesigner.App.Services.Loc.T(TiePaletteWindow.Title)) throw new Exception("the key T should give the tie tool and the catalogue, as the button does");
     byKey.Close(); vm.SelectTool();
+});
+Step("the initiation catalogue closes with the tie tool: Done, Esc, another tool", () =>
+{
+    void Esc() { vm.View.Focus(); Pump(); window.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape }); Pump(); }
+    void Open(Entity? start = null)
+    {
+        vm.TieToolWithPalette(start); Pump();
+        if (vm.ActiveTool is not TieTool || !TiePaletteWindow.IsOpen) throw new Exception("the Ties button should give the tie tool and the catalogue");
+    }
+    void Closed(string how)
+    {
+        if (vm.ActiveTool is TieTool) throw new Exception(how + ": the tie tool is still on");
+        if (TiePaletteWindow.IsOpen) throw new Exception(how + ": the initiation catalogue stayed open");
+    }
+    Open(); vm.CompleteTool(); Pump(); Closed("Done");
+    Open(); Esc(); if (vm.ActiveTool is TieTool) Esc(); Closed("Esc");
+    Open(); vm.SelectTool(); Pump(); Closed("another tool");
+    // an entry started from a hole: Done closes the tool with it
+    Open(vm.Project!.Holes.First(h => !h.IsDummy)); vm.CompleteTool(); Pump(); Closed("Done on an entry");
 });
 Step("initiation catalogue: Type → Family → Variant, user-defined delay, the window stays put", () =>
 {

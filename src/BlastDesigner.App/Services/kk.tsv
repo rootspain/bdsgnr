@@ -1714,7 +1714,6 @@ ui:g/cm³	г/см³
 ui:The column will be applied to	Құрылма қолданылатын:
 {0} selected hole	{0} таңдалған ұңғыма
 {0} selected holes	{0} таңдалған ұңғыма
-If a hole is longer or shorter, the main explosive deck adapts and the stemming stays {0} m.	Ұңғыма ұзынырақ немесе қысқарақ болса, негізгі ЖЗ бағаншасы бейімделеді, тығындама {0} м болып қалады.
 ui:— not selected —	— таңдалмаған —
 ui:Apply	Қолдану
 Apply to {0} hole	{0} ұңғымаға қолдану
@@ -3944,3 +3943,27 @@ Deck {0} goes below the toe: its bottom is at {1:0.##} m, the hole is {2:0.##} m
 Deck {0} overlaps deck {1}	{0}-аралық {1}-аралықпен қабаттасады
 Explosive deck {0} has no primer	{0}-ЖЗ аралығында оталдырғыш жоқ
 Deck {0}: {1} is not water resistant	{0}-аралық: {1} суға төзімсіз
+ui:adapts to the hole length	ұңғыма ұзындығына бейімделеді
+ui:Adapts to the hole length	Ұңғыма ұзындығына бейімделеді
+ui:Adapts to the hole length: click to keep its length	Ұңғыма ұзындығына бейімделеді: аралық ұзындығы өзгермеуі үшін басыңыз
+ui:Keeps its length: click to let it adapt to the hole length	Ұзындығын сақтайды: аралық ұңғыма ұзындығына бейімделуі үшін басыңыз
+ui:When the hole length changes, this deck lengthens or shortens (not below 0.1 m); the decks below go with the toe.	Ұңғыма ұзындығы өзгергенде бұл аралық ұзарады немесе қысқарады (0,1 м-ден қысқа емес); төмендегі аралықтар түбімен бірге жылжиды.
+ui:The deck keeps its length. Mark it to let it take the change of the hole length.	Аралық ұзындығын сақтайды. Ұңғыма ұзындығының өзгерісін алуы үшін оны белгілеңіз.
+ui:No deck adapts to the hole length: a longer hole is left with an empty part at the bottom	Бірде-бір аралық ұңғыма ұзындығына бейімделмейді: ұңғыма ұзарса, төменде зарядталмаған бөлік қалады
+ui:No deck adapts: on holes of another length the column stays as it is.	Бірде-бір аралық бейімделмейді: басқа ұзындықтағы ұңғымаларда құрылма өзгермейді.
+When the hole length changes, it is taken by: {0}	Ұңғыма ұзындығы өзгергенде бейімделеді: {0}
+deck {0} ({1})	{0}-аралық ({1})
+If a hole is longer or shorter, the difference is taken by {0}	Ұңғыма ұзынырақ немесе қысқарақ болса, айырманы {0} алады
+If a hole is longer or shorter, the difference is shared by {0}	Ұңғыма ұзынырақ немесе қысқарақ болса, айырманы {0} бөліседі
+, the stemming stays {0} m.	, тығындама {0} м болып қалады.
+Fits	Ұзындыққа бейімделеді
+Stemming fits	Тығындама ұзындыққа бейімделеді
+Frame top (m)	Жақтаудың үсті (м)
+Frame bottom (m)	Жақтаудың асты (м)
+Section frame	Қима жақтауы
+Added to the height of the top of the frame, m; drag the top line of the frame with the mouse	Жақтау үстінің биіктігіне қосылады, м; жоғарғы сызықты тышқанмен сүйреуге болады
+Added to the height of the bottom of the frame, m; drag the bottom line of the frame with the mouse	Жақтау астының биіктігіне қосылады, м; төменгі сызықты тышқанмен сүйреуге болады
+Copy all	Барлығын көшіру
+The section is copied	Қима көшірілді
+The section could not be put on the clipboard	Қиманы алмасу буферіне салу мүмкін болмады
+Section line length	Қима сызығының ұзындығы

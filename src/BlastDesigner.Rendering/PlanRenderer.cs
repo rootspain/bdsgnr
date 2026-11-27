@@ -275,7 +275,10 @@ public static class PlanRenderer
         var shownSurfaces = view.ShowSurfaces && !opt.HaloPass ? entities.OfType<SurfaceEntity>().ToList() : new List<SurfaceEntity>();
         var hiddenAlpha = (byte)((opt.SurfaceAlpha ?? (byte)(_dark ? 70 : 150)) / 4);
         // while the camera turns or zooms the map is coarser (quicker), and fine again once it stops
-        var depth = (view.FadeHidden || !cam.IsPlan || shownSurfaces.Count > 1) && shownSurfaces.Count > 0
+        // A section draws every surface where its plane cuts it, all at depth 0: a surface before the plane hides nothing
+        // there (it hid pieces of the cuts of the others and broke their lines), so a section has no depth map.
+        var sectionCut = opt.SectionCut && opt.SliceHalfWidth != null;
+        var depth = !sectionCut && (view.FadeHidden || !cam.IsPlan || shownSurfaces.Count > 1) && shownSurfaces.Count > 0
             ? DepthMap.Of(cam, shownSurfaces, GeometryFingerprint, opt.CameraMoving ? DepthMap.MovingCell : DepthMap.Cell) : null;
         var lineDepth = cam.IsPlan ? null : depth;
         var paleLines = view.FadeHidden;
@@ -1875,7 +1878,22 @@ public static class PlanRenderer
                 if (p == null) continue;
                 var (ax, ay) = cam.ToScreen(h.DrawnPointAtDepth(_basis, d.Top));
                 var (bx, by) = cam.ToScreen(h.DrawnPointAtDepth(_basis, d.Bottom));
-                lines.Line(new SKColor(p.Color), Math.Max(3, r), ax, ay, bx, by);
+                var width = Math.Max(3, r);
+                // cartridges: a stack from the deck bottom up with a gap between them, as long as one is 4 px or more
+                var perMetre = d.Length > 1e-9 ? Math.Sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) / d.Length : 0;
+                if (p is { Kind: ProductKind.PackagedExplosive, UnitLength: > 0 } && p.UnitLength * perMetre >= 4)
+                {
+                    var gap = Math.Min(p.UnitLength * 0.3, 2 / perMetre);
+                    for (var bottom = d.Bottom; bottom > d.Top + 1e-6; bottom -= p.UnitLength)
+                    {
+                        var top = Math.Max(d.Top, bottom - p.UnitLength + gap);
+                        if (bottom - top < 1e-6) continue;
+                        var (sx, sy) = cam.ToScreen(h.DrawnPointAtDepth(_basis, top));
+                        var (ex, ey) = cam.ToScreen(h.DrawnPointAtDepth(_basis, bottom));
+                        lines.Line(new SKColor(p.Color), width, sx, sy, ex, ey);
+                    }
+                }
+                else lines.Line(new SKColor(p.Color), width, ax, ay, bx, by);
             }
         if (!charged)
         {

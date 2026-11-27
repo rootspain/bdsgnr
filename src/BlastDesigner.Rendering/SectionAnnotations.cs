@@ -41,8 +41,9 @@ public sealed class SectionAnnotations : IOverlay
     public static string Metres(double v) => BlastDesigner.Domain.Measure.Show(BlastDesigner.Domain.Quantity.Length, v).ToString("0.0", CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// The frame of the section on the screen: from the top of the frame to the lowest toe, a little out of the outer holes
-    /// (more on the right for a length dimension there); null with no hole in the section. The scene is drawn inside it only.
+    /// The frame of the section on the screen: from the top of the frame to the lowest toe, across the whole length of the
+    /// line and a little out of the outer holes and their toes (more on the right for a length dimension there); null with
+    /// no hole in the section. The scene is drawn inside it only.
     /// </summary>
     public SKRect? Frame(Camera cam, BlastProject project)
     {
@@ -57,16 +58,28 @@ public sealed class SectionAnnotations : IOverlay
     {
         float Y(double z) => cam.ToScreen(cam.Target.WithZ(z)).Y;
         double highest = holes.Max(h => h.H.Collar.Z), lowest = holes.Min(h => h.H.Toe.Z);
-        var top = SectionProfile.FrameTop(highest, _font * 1.7 / cam.Scale);
+        var top = SectionProfile.FrameTop(highest, _font * 1.7 / cam.Scale) + FrameTopShift;
         var xs = holes.Select(h => h.X).ToList();
         var (lengths, _) = LayoutDimensions(xs, holes.Select(h => h.H.Hole.Length).ToList(), _font);
         // a little out of the outer holes: room for the subdrill, and for a length right of the last hole
         var pad = _font * 3;
         float left = (float)(holes[0].X - pad), right = (float)(holes[^1].X + pad);
+        // the whole length of the line, from its start to its end, and the toes of slanted holes beyond the outer collars
+        foreach (var x in new[] { cam.ToScreen(_a.WithZ(cam.Target.Z)).X, cam.ToScreen(_b.WithZ(cam.Target.Z)).X }.Concat(holes.Select(h => cam.ToScreen(h.H.Toe).X)))
+        {
+            left = Math.Min(left, x);
+            right = Math.Max(right, x);
+        }
         if (_show.Dimensions && lengths.Contains(xs.Count - 1))
             right = Math.Max(right, DimensionX(xs, xs.Count - 1, _font) + text.MeasureText(Metres(holes[^1].H.Hole.Length)) + _font);
-        return new SKRect(left, Y(top), right, Y(lowest));
+        return new SKRect(left, Y(top), right, Y(Math.Min(lowest + FrameBottomShift, top - 0.1)));
     }
+
+    /// <summary>Added to the height of the top of the frame, m: up for a positive value, down for a negative one.</summary>
+    public double FrameTopShift { get; init; }
+
+    /// <summary>Added to the height of the bottom of the frame (the lowest toe), m: up for a positive value, down for a negative one.</summary>
+    public double FrameBottomShift { get; init; }
 
     /// <summary>The holes a sheet leaves out: no number, level or dimension of theirs either.</summary>
     public ISet<Guid>? HiddenHoles { get; init; }
@@ -99,26 +112,28 @@ public sealed class SectionAnnotations : IOverlay
         double highest = holes.Max(h => h.H.Collar.Z), lowest = holes.Min(h => h.H.Toe.Z);
         // the band of the numbers over the collars, in metres at this scale
         var band = _font * 1.7 / cam.Scale;
-        var top = SectionProfile.FrameTop(highest, band);
+        var top = SectionProfile.FrameTop(highest, band) + FrameTopShift;
         // where the dimensions go: the lengths (one, or the shortest and the longest), the spacing between two neighbours
         var xs = holes.Select(h => h.X).ToList();
         var (lengths, spacingAt) = LayoutDimensions(xs, holes.Select(h => h.H.Hole.Length).ToList(), _font);
         var frame = Frame(cam, holes, text);
         float left = frame.Left, right = frame.Right, topY = frame.Top, bottomY = frame.Bottom;
+        // the collars joined and the grade reach a little out of the outer holes, as before; the frame runs the whole line
+        float nearLeft = Math.Max(left, holes[0].X - _font * 3), nearRight = Math.Min(right, holes[^1].X + _font * 3);
 
         // the frame, the collars joined and the grade drawn double
         canvas.DrawRect(new SKRect(left, topY, right, bottomY), line);
         using (var path = new SKPath())
         {
-            path.MoveTo(left, cam.ToScreen(first.Collar).Y);
+            path.MoveTo(nearLeft, cam.ToScreen(first.Collar).Y);
             foreach (var (h, x) in holes) path.LineTo(x, cam.ToScreen(h.Collar).Y);
-            path.LineTo(right, cam.ToScreen(holes[^1].H.Collar).Y);
+            path.LineTo(nearRight, cam.ToScreen(holes[^1].H.Collar).Y);
             canvas.DrawPath(path, line);
         }
         var gradeY = Y(first.GradeZ);
         var subdrill = first.GradeZ - first.Toe.Z > 0.05;
         // the grade, one line across
-        if (subdrill) canvas.DrawLine(left, gradeY, right, gradeY, line);
+        if (subdrill) canvas.DrawLine(nearLeft, gradeY, nearRight, gradeY, line);
 
         if (_title.Length > 0) Title(canvas, text, (left + right) / 2, topY - _font * 0.9f);
 
@@ -129,6 +144,8 @@ public sealed class SectionAnnotations : IOverlay
             levels.AddRange(profile.CollarLevels());
             if (subdrill) levels.Add(first.GradeZ);
             levels.Add(lowest);
+            // the bottom of the frame when it is moved off the lowest toe
+            if (Math.Abs(FrameBottomShift) > 1e-9) levels.Add(Math.Min(lowest + FrameBottomShift, top - 0.1));
             text.TextAlign = SKTextAlign.Right;
             var drawn = new List<float>();
             foreach (var z in SectionProfile.Distinct(levels))

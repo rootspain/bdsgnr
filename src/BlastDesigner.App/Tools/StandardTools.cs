@@ -333,6 +333,9 @@ public sealed class TieTool : Tool
     public override void Deactivate()
     {
         View.Rendering -= UpdateCapture;
+        // the Initiation catalogue goes with the tool: cancelled, done or another tool taken, it closes (the Ties button
+        // opens it again after a new tie tool)
+        BlastDesigner.App.Views.TiePaletteWindow.Close();
         base.Deactivate();
     }
 

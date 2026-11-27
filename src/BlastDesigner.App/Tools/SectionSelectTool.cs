@@ -4,6 +4,7 @@ using BlastDesigner.App.Controls;
 using BlastDesigner.App.Tools.Section;
 using BlastDesigner.App.ViewModels;
 using BlastDesigner.Domain;
+using BlastDesigner.Domain.Geometry;
 using BlastDesigner.Domain.Model;
 using BlastDesigner.Engine;
 using SkiaSharp;
@@ -28,8 +29,23 @@ public sealed class SectionSelectTool : Tool
     private (Guid Mark, int Index)? _grip;
     /// <summary>The press is on a selected mark: a drag moves the selected marks.</summary>
     private bool _moving;
+    /// <summary>The press is on the top (true) or the bottom (false) line of the frame: a drag moves it up or down; with the shifts at the press.</summary>
+    private (bool Top, double TopShift, double BottomShift)? _edge;
+    /// <summary>
+    /// The press is on the left (true) or the right (false) line of the frame: a drag moves that end of the section line
+    /// along the line; with the line at the press and whether its end A is on the left of the screen.
+    /// </summary>
+    private (bool Left, Vec3 A, Vec3 B, bool ALeft)? _side;
     /// <summary>The marks copied with Ctrl+C.</summary>
     private static List<SectionMark> _copied = new();
+
+    /// <summary>The cursor over a line of the frame, which moves up and down.</summary>
+    private static readonly Cursor UpDown = new(StandardCursorType.SizeNorthSouth);
+    /// <summary>The cursor over a side of the frame, which moves left and right.</summary>
+    private static readonly Cursor LeftRight = new(StandardCursorType.SizeWestEast);
+
+    /// <summary>The section line is kept at least this long, m, when an end of the frame is dragged.</summary>
+    private const double MinLineLength = 1;
 
     /// <summary>A drag shorter than this, px, is a click.</summary>
     private const double DragStart = 4;
@@ -48,6 +64,11 @@ public sealed class SectionSelectTool : Tool
         _dragging = false;
         _grip = _s?.Marks?.GripAt(p.X, p.Y, 6) is { } g ? (g.Mark.Id, g.Index) : null;
         _moving = _grip == null && _s?.Marks?.HitTest(p.X, p.Y, _view.TargetRadius) is { } under && _s.SelectedMarks.Contains(under.Id);
+        // on the top or the bottom line of the frame: a drag moves it (a click without a drag still picks what is there)
+        _edge = _grip == null && !_moving && _s?.FrameEdgeAt(p.X, p.Y) is { } top && _s.FrameShifts?.Invoke() is { } shifts ? (top, shifts.Top, shifts.Bottom) : null;
+        // on the left or the right line of the frame: a drag moves that end of the section line along it
+        _side = _grip == null && !_moving && _edge == null && _s?.FrameSideAt(p.X, p.Y) is { } left
+            ? (left, _s.Line.A, _s.Line.B, _s.ToScreen(_s.Line.A).X <= _s.ToScreen(_s.Line.B).X) : null;
         if (p.ClickCount >= 2 && _s?.Marks?.HitTest(p.X, p.Y, _view.TargetRadius) is { } mark)
         {
             _down = null;
@@ -58,9 +79,24 @@ public sealed class SectionSelectTool : Tool
     public override void PointerMoved(ToolPointer p)
     {
         if (_s != null) _s.LastPointer = new SKPoint((float)p.X, (float)p.Y);
+        // over a line of the frame: the cursor tells it moves up and down (the top and the bottom) or left and right (the sides)
+        if (_down == null && _s != null) _view.Cursor = _s.FrameEdgeAt(p.X, p.Y) != null ? UpDown : _s.FrameSideAt(p.X, p.Y) != null ? LeftRight : null;
         if (_down is not { } down) return;
         if (!_dragging && Math.Abs(p.X - down.X) + Math.Abs(p.Y - down.Y) < DragStart) return;
         _dragging = true;
+        if (_edge is { } edge && _s != null)
+        {
+            // up the screen is up: what the cursor went up, m, to a tenth, added to the height of the line
+            var dz = Math.Round((down.Y - p.Y) / _view.Camera.Scale, 1);
+            _s.PreviewFrameShifts?.Invoke(edge.Top ? edge.TopShift + dz : edge.TopShift, edge.Top ? edge.BottomShift : edge.BottomShift + dz);
+            return;
+        }
+        if (_side is { } side && _s != null)
+        {
+            var moved = SideMoved(side, p.X - down.X);
+            _s.PreviewLine?.Invoke(moved.A, moved.B);
+            return;
+        }
         if (_grip is { } grip && _s != null)
         {
             // the point of the mark follows the cursor, snapped: shown as the preview until it is let go
@@ -93,6 +129,16 @@ public sealed class SectionSelectTool : Tool
         if (_down is not { } down || Vm.Doc is not { } doc) return;
         _down = null;
         var mode = SelectTool.Mode(p);
+        if (_edge != null && _s != null)
+        {
+            _edge = null;
+            if (_dragging) { _dragging = false; _s.CommitFrameShifts?.Invoke(); return; }
+        }
+        if (_side != null && _s != null)
+        {
+            _side = null;
+            if (_dragging) { _dragging = false; _s.CommitLine?.Invoke(); return; }
+        }
         if (_moving && _s != null)
         {
             _moving = false;
@@ -150,6 +196,26 @@ public sealed class SectionSelectTool : Tool
         }
         if (under is { } hit) doc.Select(new[] { hit.Id }, mode);
         else if (mode == SelectionMode.Replace) doc.Select(Array.Empty<Guid>());
+    }
+
+    /// <summary>
+    /// The section line with the end on the dragged side moved along the line as far as the cursor went across the screen,
+    /// px (right positive), to a tenth of a metre; the other end stays, the line no shorter than <see cref="MinLineLength"/>.
+    /// </summary>
+    private (Vec3 A, Vec3 B) SideMoved((bool Left, Vec3 A, Vec3 B, bool ALeft) side, double dx)
+    {
+        var (left, right) = side.ALeft ? (side.A, side.B) : (side.B, side.A);
+        double ux = right.X - left.X, uy = right.Y - left.Y;
+        var length = Math.Sqrt(ux * ux + uy * uy);
+        if (length < 1e-9) return (side.A, side.B);
+        ux /= length; uy /= length;
+        // along the line, left to right on the screen
+        var d = Math.Round(dx / _view.Camera.Scale, 1);
+        var room = Math.Max(0, length - MinLineLength);
+        d = side.Left ? Math.Min(d, room) : Math.Max(d, -room);
+        if (side.Left) left = new Vec3(left.X + ux * d, left.Y + uy * d, left.Z);
+        else right = new Vec3(right.X + ux * d, right.Y + uy * d, right.Z);
+        return side.ALeft ? (left, right) : (right, left);
     }
 
     private void SelectMarks(IEnumerable<Guid> ids, SelectionMode mode)
@@ -244,6 +310,10 @@ public sealed class SectionSelectTool : Tool
         _dragging = false;
         _grip = null;
         _moving = false;
+        // a line of the frame dragged goes back where it was
+        if (_edge is { } edge) { _edge = null; _s?.PreviewFrameShifts?.Invoke(edge.TopShift, edge.BottomShift); }
+        // so does an end of the section line
+        if (_side is { } side) { _side = null; _s?.PreviewLine?.Invoke(side.A, side.B); _s?.CommitLine?.Invoke(); }
         if (_s != null) { _s.Preview = null; _s.MoveBy = null; }
         _view.Preview.ScreenRect = null;
         _view.Preview.Crossing = null;

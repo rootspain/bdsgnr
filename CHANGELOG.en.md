@@ -6,6 +6,29 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.15 — 2026-11-27
+
+### New
+- **Which deck adapts to the hole length:** in the Hole loading window every deck has a ↕ mark: a column in the table (a
+  click switches it), the "Adapts to the hole length" box in the deck's properties, a mark on the column and a line in
+  the checks. When the hole's length changes (by hand, by its toe level, by a move, when the column is copied to other
+  holes) the marked decks share the difference in proportion to their lengths, none shorter than 0.1 m; the others keep
+  their lengths, a primer stays at its distance from the bottom of its deck. In older files the longest explosive deck
+  is marked; the program never marks the stemming itself, only the user does. "Save as rule" takes the marks into the
+  rule, a column loaded by the rule gets them back.
+- **Packaged explosive is drawn as cartridges:** on the column of the loading window, on the holes in the main window
+  and in the hole's charge card, a stack of cartridges with gaps from the deck bottom up, the top one cut by the deck
+  top. The products are no longer named on the column of the loading window, they are in the table.
+
+### Changed
+- **The column when the hole length changes:** a moved collar, a toe level, a dipped depth and a length typed in fit the
+  column of hand-loaded holes too: the stemming keeps its length, the decks below the one that adapts go with the toe.
+
+### Fixed
+- **The column checks** ("deck goes below the toe", "overlaps deck", "has no primer", "not water resistant") are shown in
+  the language of the program, with the bottom of the deck and the depth of the hole.
+- **The Initiation catalogue closes with the Tie tool:** on Done, Esc or another tool; it used to stay open.
+
 ## 0.3.14 — 2026-11-24
 
 ### New

@@ -68,7 +68,7 @@ public static class LoadingRulesWindow
             if (r == null) { deckHost.Content = null; return; }
             var dg = new PropertyGrid { Exclude = new() };
             vm.AddProductChoices(dg);
-            var de = new ListEditor<DeckTemplate>(r.Decks, d => $"{vm.Project!.FindProduct(d.ProductId)?.Name ?? "?"} {(d.Length > 0 ? Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, d.Length, "0.0") : Loc.T("fill"))}",
+            var de = new ListEditor<DeckTemplate>(r.Decks, d => $"{vm.Project!.FindProduct(d.ProductId)?.Name ?? "?"} {(d.Length > 0 ? Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, d.Length, "0.0") + (d.Fits ? " ↕" : "") : Loc.T("fill"))}",
                 () => new DeckTemplate { ProductId = vm.Project!.Products.FirstOrDefault(p => p.IsExplosive)?.Id },
                 d => ProjectJson.DeepClone(d), dg);
             de.Reload(r.Decks.Count > 0 ? 0 : -1);
@@ -233,6 +233,12 @@ public static class TiePaletteWindow
 
     /// <summary>The window's content, for the UI smoke test.</summary>
     public static Control? Content => _panel;
+
+    /// <summary>Whether the catalogue is open.</summary>
+    public static bool IsOpen => _open != null;
+
+    /// <summary>Closes the catalogue when it is open: the tie tool it goes with is cancelled or done.</summary>
+    public static void Close() => _open?.Close();
 
     /// <summary>Whether the point is on one of the screens (true when the screens are not known, as without a display).</summary>
     private static bool OnScreen(PixelPoint p) =>

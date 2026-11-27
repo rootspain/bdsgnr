@@ -186,24 +186,36 @@ public static class Charging
         return loaded;
     }
 
-    /// <summary>Builds the charge column of one hole from a rule: decks from the bottom up, then top stemming.</summary>
+    /// <summary>
+    /// Builds the charge column of one hole from a rule: decks from the bottom up, then top stemming. Fills (length 0) share
+    /// equally what the stemming and the other decks leave; with no fill, the decks that fit (<see cref="DeckTemplate.Fits"/>,
+    /// and the stemming with <see cref="LoadingRule.StemmingFits"/>) share it in proportion to their saved lengths. The decks
+    /// of the column are marked as they take the change (<see cref="Deck.Fits"/>); a rule with nothing to take it leaves the
+    /// marks unset.
+    /// </summary>
     public static void ApplyRule(BlastProject project, Hole h, LoadingRule rule)
     {
         h.Decks.Clear();
         h.ManualLoading = false;
         var length = h.EffectiveLength;
-        var stemTop = Math.Min(rule.StemmingLength, length);
-        double bottom = length;
         var fills = rule.Decks.Count(d => d.Length <= 0);
-        var fixedTotal = rule.Decks.Where(d => d.Length > 0).Sum(d => d.Length);
+        // the decks that fit share the change only in a rule with no fill
+        bool Shares(DeckTemplate t) => fills == 0 && t.Fits && t.Length > 0;
+        var fitTotal = rule.Decks.Where(Shares).Sum(d => d.Length) + (fills == 0 && rule.StemmingFits ? rule.StemmingLength : 0);
+        var fixedTotal = rule.Decks.Where(d => d.Length > 0 && !Shares(d)).Sum(d => d.Length);
+        var stemShares = fills == 0 && rule.StemmingFits && fitTotal > 1e-9;
+        var scale = fitTotal > 1e-9 ? Math.Max(0, (length - fixedTotal - (stemShares ? 0 : rule.StemmingLength)) / fitTotal) : 1;
+        var stemTop = Math.Min(stemShares ? rule.StemmingLength * scale : rule.StemmingLength, length);
+        double bottom = length;
         var fillLength = fills > 0 ? Math.Max(0, (length - stemTop - fixedTotal) / fills) : 0;
+        var marked = fills > 0 || fitTotal > 1e-9;
 
         foreach (var t in rule.Decks)
         {
-            var len = t.Length > 0 ? t.Length : fillLength;
+            var len = t.Length <= 0 ? fillLength : Shares(t) ? t.Length * scale : t.Length;
             var top = Math.Max(stemTop, bottom - len);
             if (bottom - top < 1e-6) continue;
-            var deck = new Deck { Top = top, Bottom = bottom, ProductId = t.ProductId };
+            var deck = new Deck { Top = top, Bottom = bottom, ProductId = t.ProductId, Fits = marked ? t.Length <= 0 || t.Fits : null };
             var count = t.Primers.Count;
             for (int i = 0; i < count; i++)
             {
@@ -217,31 +229,53 @@ public static class Charging
             if (bottom <= stemTop) break;
         }
         if (stemTop > 0)
-            h.Decks.Add(new Deck { Top = 0, Bottom = bottom > stemTop ? bottom : stemTop, ProductId = rule.StemmingProductId });
+            h.Decks.Add(new Deck { Top = 0, Bottom = bottom > stemTop ? bottom : stemTop, ProductId = rule.StemmingProductId, Fits = marked ? rule.StemmingFits : null });
         h.Decks.Sort((a, b) => a.Top.CompareTo(b.Top));
         LoadingAlternates.Apply(project, h, rule);
         h.Decks.Sort((a, b) => a.Top.CompareTo(b.Top));
     }
 
     /// <summary>
-    /// Builds a loading rule from a designed column: the top stemming keeps its length, the longest explosive deck becomes the
-    /// "fill" deck (so on other hole lengths it lengthens or shortens like <see cref="AdaptColumn"/>), the other decks keep their
-    /// lengths and the primers keep their distance above the bottom of their deck. Applicability filters are left open.
+    /// The decks of a column that take a change of the hole's length: those marked (<see cref="Deck.Fits"/>); in a column with
+    /// no marks yet, the longest explosive deck (none when there is no explosive). The stemming is never chosen here: only the
+    /// user marks it.
+    /// </summary>
+    public static List<Deck> FitDecks(BlastProject project, IEnumerable<Deck> decks)
+    {
+        var list = decks as IReadOnlyCollection<Deck> ?? decks.ToList();
+        if (list.Any(d => d.Fits != null)) return list.Where(d => d.Fits == true).ToList();
+        var main = list.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).OrderByDescending(d => d.Length).FirstOrDefault();
+        return main == null ? new() : new() { main };
+    }
+
+    /// <summary>Writes down the marks of a column as <see cref="FitDecks"/> takes them: every deck gets one.</summary>
+    public static void MarkFits(BlastProject project, IReadOnlyList<Deck> decks)
+    {
+        var fits = FitDecks(project, decks);
+        foreach (var d in decks) d.Fits = fits.Contains(d);
+    }
+
+    /// <summary>
+    /// Builds a loading rule from a designed column: the top stemming and the decks keep their lengths, the decks that fit
+    /// (<see cref="FitDecks"/>, the stemming too when it is marked) take the change of length on other holes in proportion to
+    /// them, as <see cref="AdaptColumn"/> does, and the primers keep their distance above the bottom of their deck.
+    /// Applicability filters are left open.
     /// </summary>
     public static LoadingRule RuleFromColumn(BlastProject project, IReadOnlyList<Deck> decks, string name)
     {
         var sorted = decks.Where(d => d.Length > 1e-6).OrderBy(d => d.Top).ToList();
+        var fits = FitDecks(project, sorted);
         var rule = new LoadingRule { Name = name, StemmingLength = 0, StemmingProductId = null };
         var start = 0;
         if (sorted.Count > 0 && project.FindProduct(sorted[0].ProductId)?.Kind == ProductKind.Stemming && sorted[0].Top < 1e-6)
         {
             rule.StemmingLength = sorted[0].Bottom;
             rule.StemmingProductId = sorted[0].ProductId;
+            rule.StemmingFits = fits.Contains(sorted[0]);
             start = 1;
         }
         else if (sorted.Count > 0) rule.StemmingLength = sorted[0].Top;
         var body = sorted.Skip(start).ToList();
-        var fill = body.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).OrderByDescending(d => d.Length).FirstOrDefault();
         for (int i = body.Count - 1; i >= 0; i--)
         {
             var d = body[i];
@@ -249,7 +283,8 @@ public static class Charging
             rule.Decks.Add(new DeckTemplate
             {
                 ProductId = d.ProductId,
-                Length = d == fill ? 0 : Math.Round(d.Length, 3),
+                Length = Math.Round(d.Length, 3),
+                Fits = fits.Contains(d),
                 // every primer as it is: its height, booster, detonator, delay and offset
                 Primers = primers.Select(p => new PrimerTemplate
                 {
@@ -292,39 +327,39 @@ public static class Charging
 
     /// <summary>
     /// Copies a charge column designed for a hole of length <paramref name="fromLength"/> to a hole of length <paramref name="toLength"/>:
-    /// the top stemming keeps its length, the longest explosive deck absorbs the difference and decks below it move with the toe.
+    /// the decks that fit (<see cref="FitDecks"/>) share the difference in proportion to their lengths, none getting shorter
+    /// than 0.1 m, their primers keep their distance from the deck bottom; the other decks keep their lengths, those below a
+    /// deck that fits move with it. What the toe no longer reaches is cut; with no deck that fits the column only moves as far
+    /// as the toe cuts it.
     /// </summary>
     public static List<Deck> AdaptColumn(BlastProject project, IReadOnlyList<Deck> decks, double fromLength, double toLength)
     {
         var result = decks.Select(d => d.Clone()).OrderBy(d => d.Top).ToList();
         var delta = toLength - fromLength;
         if (Math.Abs(delta) < 1e-9 || result.Count == 0) return result;
-        var stretch = result.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).OrderByDescending(d => d.Length).FirstOrDefault()
-                      ?? result[^1];
-        var stretchBottom = stretch.Bottom;
-        // as far as the deck can give: shorter than 0.1 m it does not get, the decks below move only as far as its bottom
-        var shift = Math.Max(stretch.Top + 0.1, stretchBottom + delta) - stretchBottom;
+        var fits = FitDecks(project, result);
+        var total = fits.Sum(d => d.Length);
+        var shift = 0.0;
         foreach (var d in result)
         {
-            if (d == stretch)
-            {
-                d.Bottom = stretchBottom + shift;
-                foreach (var p in d.Primers) p.Depth = Math.Clamp(p.Depth + shift, d.Top, d.Bottom);
-            }
-            else if (d.Top >= stretchBottom - 1e-9)
-            {
-                d.Top += shift;
-                d.Bottom += shift;
-                foreach (var p in d.Primers) p.Depth += shift;
-            }
+            d.Top += shift;
+            d.Bottom += shift;
+            foreach (var p in d.Primers) p.Depth += shift;
+            if (total < 1e-9 || !fits.Contains(d)) continue;
+            // as far as the deck can give: shorter than 0.1 m it does not get (one shorter already keeps its length)
+            var length = Math.Max(Math.Min(0.1, d.Length), d.Length + delta * d.Length / total);
+            var change = length - d.Length;
+            d.Bottom = d.Top + length;
+            foreach (var p in d.Primers) p.Depth = Math.Clamp(p.Depth + change, d.Top, d.Bottom);
+            shift += change;
         }
         return result.Where(d => d.Bottom > d.Top + 1e-6 && d.Top < toLength).Select(d => { d.Bottom = Math.Min(d.Bottom, toLength); return d; }).ToList();
     }
 
     /// <summary>
     /// The column of a hole whose length changed from <paramref name="wasLength"/>: a hole loaded by its rules is loaded by
-    /// them again; one loaded by hand keeps its top stemming, its longest explosive deck takes the difference and the decks
-    /// below it go along with the toe (<see cref="AdaptColumn"/>); decks the toe no longer reaches go.
+    /// them again; in one loaded by hand the decks that fit take the difference and the decks below them go along with the
+    /// toe (<see cref="AdaptColumn"/>); decks the toe no longer reaches go.
     /// </summary>
     public static void ColumnToLength(BlastProject project, Hole h, double wasLength)
     {

@@ -256,6 +256,19 @@ public sealed class Viewport : Control
         PlanRenderer.EntityShown(project.View, e) && hidden?.Contains(e.Id) != true && (clip == null || clip.Shows(e));
 
     /// <summary>
+    /// The frame the scene is drawn in (a section draws nothing beyond its frame), as the renderer clips it; null when the
+    /// whole view is drawn. What is outside it is neither hovered, snapped to, picked nor taken by a box.
+    /// </summary>
+    private SKRect? SceneFrame(SceneOptions? options)
+    {
+        if (Project is not { } project || options?.ClipScene?.Invoke(Camera, project) is not { } frame) return null;
+        frame.Inflate(2, 2);
+        return frame;
+    }
+
+    private static bool InFrame(SKRect? frame, double sx, double sy) => frame is not { } f || f.Contains((float)sx, (float)sy);
+
+    /// <summary>
     /// Entity nearest to a screen point within the target radius, preferring holes and editable layers. With
     /// <paramref name="accept"/> only those entities count, so a tool is not blocked by another object on the same spot.
     /// </summary>
@@ -272,6 +285,8 @@ public sealed class Viewport : Control
         Entity? block = null;
         double blockD = TargetRadius;
         var options = OptionsSource?.Invoke();
+        // beyond the frame of a section nothing is drawn, so nothing is picked
+        if (!InFrame(SceneFrame(options), sx, sy)) return null;
         var selection = options?.Selection;
         // a section picks what it draws: holes in the half width by their shaft, the rest on the line, surfaces by their cut
         var section = options is { SectionCut: true, SliceHalfWidth: not null } ? options : null;
@@ -474,6 +489,9 @@ public sealed class Viewport : Control
         var clip = BlockClip.Of(project);
         // a section: what it draws, a hole by its shaft, a surface by its cut
         var section = options is { SectionCut: true, SliceHalfWidth: not null } ? options : null;
+        // and only inside its frame: the box counts as cut to it
+        var frame = SceneFrame(options);
+        bool Contains(double x, double y) => shape.Contains(x, y) && InFrame(frame, x, y);
         foreach (var e in project.Entities)
         {
             if (!layers.TryGetValue(e.LayerId, out var layer) || !layer.Visible || layer.Frozen) continue;
@@ -486,7 +504,7 @@ public sealed class Viewport : Control
                 // a crossing also takes it by its toe or its shaft running through the box
                 var (cx, cy) = Camera.ToScreen(sh.DrawnCollar(project.View.HoleBasis));
                 var (tx, ty) = Camera.ToScreen(sh.DrawnToe(project.View.HoleBasis));
-                if (shape.Contains(cx, cy) || (crossing && (shape.Contains(tx, ty) || shape.CutsEdge(cx, cy, tx, ty)))) yield return e;
+                if (Contains(cx, cy) || (crossing && (Contains(tx, ty) || (frame == null && shape.CutsEdge(cx, cy, tx, ty))))) yield return e;
                 continue;
             }
             var verts = section != null && e is SurfaceEntity ss ? PlanRenderer.SurfaceCut(Camera, ss).SelectMany(c => new[] { c.A, c.B }).ToArray()
@@ -497,9 +515,9 @@ public sealed class Viewport : Control
                 : e is DimensionEntity dim ? dim.Drawn().SelectMany(x => x).ToArray()
                 : e.GetVertices().ToArray();
             if (verts.Length == 0) continue;
-            bool Inside(Vec3 v) { var (x, y) = Camera.ToScreen(v); return shape.Contains(x, y); }
+            bool Inside(Vec3 v) { var (x, y) = Camera.ToScreen(v); return Contains(x, y); }
             var lines = Segments(e, clip);
-            bool Cuts(Vec3 a, Vec3 b) { var (ax, ay) = Camera.ToScreen(a); var (bx, by) = Camera.ToScreen(b); return shape.CutsEdge(ax, ay, bx, by); }
+            bool Cuts(Vec3 a, Vec3 b) { var (ax, ay) = Camera.ToScreen(a); var (bx, by) = Camera.ToScreen(b); return frame == null && shape.CutsEdge(ax, ay, bx, by); }
             if (crossing ? verts.Any(Inside) || lines.Any(s => Cuts(s.A, s.B)) : verts.All(Inside) && !lines.Any(s => Cuts(s.A, s.B))) yield return e;
         }
     }
@@ -531,13 +549,19 @@ public sealed class Viewport : Control
         var project = Project;
         if (!SnapEnabled || project == null) return (world, false);
         var layers = project.Layers.ToDictionary(l => l.Id);
-        var hidden = OptionsSource?.Invoke().HiddenEntities;
+        var options = OptionsSource?.Invoke();
+        var hidden = options?.HiddenEntities;
         // the visible blocks: what is outside them is not drawn, nor picked
         var clip = BlockClip.Of(project);
+        // a section snaps to what it draws: in its slice and inside its frame
+        var section = options is { SectionCut: true, SliceHalfWidth: not null } ? options : null;
+        var frame = SceneFrame(options);
+        if (!InFrame(frame, sx, sy)) return (world, false);
         Vec3? best = null;
         double bestD = TargetRadius * 1.5;
         foreach (var e in project.Entities)
         {
+            if (section != null && !PlanRenderer.InSlice(section, Camera, e)) continue;
             if (e is SurfaceEntity or TieEntity) continue;
             // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
             if (e is Hole && !project.View.ShowCollars) continue;
@@ -546,6 +570,7 @@ public sealed class Viewport : Control
             foreach (var v in verts)
             {
                 var (x, y) = Camera.ToScreen(v);
+                if (!InFrame(frame, x, y)) continue;
                 var d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
                 if (d < bestD) { bestD = d; best = v; }
             }
@@ -562,13 +587,19 @@ public sealed class Viewport : Control
         var project = Project;
         if (!SnapEnabled || project == null) return null;
         var layers = project.Layers.ToDictionary(l => l.Id);
-        var hidden = OptionsSource?.Invoke().HiddenEntities;
+        var options = OptionsSource?.Invoke();
+        var hidden = options?.HiddenEntities;
         // the visible blocks: what is outside them is not drawn, nor picked
         var clip = BlockClip.Of(project);
+        // a section snaps to what it draws: in its slice and inside its frame
+        var section = options is { SectionCut: true, SliceHalfWidth: not null } ? options : null;
+        var frame = SceneFrame(options);
+        if (!InFrame(frame, sx, sy)) return null;
         Vec3? best = null;
         double bestD = TargetRadius * 1.5;
         foreach (var e in project.Entities)
         {
+            if (section != null && !PlanRenderer.InSlice(section, Camera, e)) continue;
             if (e is SurfaceEntity or TieEntity || dragged.Contains(e.Id)) continue;
             // a hole snaps by its collar: with the collars switched off there is nothing shown to snap to
             if (e is Hole && !project.View.ShowCollars) continue;
@@ -577,6 +608,7 @@ public sealed class Viewport : Control
             foreach (var v in verts)
             {
                 var (x, y) = Camera.ToScreen(v);
+                if (!InFrame(frame, x, y)) continue;
                 var d = Math.Sqrt((x - sx) * (x - sx) + (y - sy) * (y - sy));
                 if (d < bestD) { bestD = d; best = v; }
             }

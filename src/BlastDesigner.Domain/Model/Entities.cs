@@ -154,6 +154,15 @@ public sealed class PolylineEntity : Entity, ILineStyled
     /// </summary>
     public List<ZoneArrow>? ZoneArrows { get; set; }
 
+    /// <summary>
+    /// Of a section line: added to the height of the top of the frame of its section, m (up positive, down negative).
+    /// Null on every other line, and on a section line whose frame was never moved.
+    /// </summary>
+    public double? SectionFrameTopShift { get; set; }
+
+    /// <summary>Of a section line: added to the height of the bottom of the frame of its section (the lowest toe), m (up positive).</summary>
+    public double? SectionFrameBottomShift { get; set; }
+
     public override string KindName => Closed ? "Polygon" : "Polyline";
     public override IEnumerable<Vec3> GetVertices() => Points;
     public override void Translate(Vec3 d)

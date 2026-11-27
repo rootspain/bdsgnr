@@ -161,6 +161,12 @@ public sealed class DeckTemplate
     public string? ProductId { get; set; }
     /// <summary>Deck length in metres. Zero means "fill the remaining column below the top stemming".</summary>
     public double Length { get; set; }
+    /// <summary>
+    /// The deck takes the change of the hole's length: <see cref="Length"/> is its length in the column it was saved from, and
+    /// the decks that fit share what the fixed ones and the stemming leave in proportion to it (a deck of length 0 is a fill
+    /// whatever this says).
+    /// </summary>
+    public bool Fits { get; set; }
 
     private List<PrimerTemplate>? _primers;
     /// <summary>The primers of the deck, deepest first.</summary>
@@ -245,6 +251,11 @@ public sealed class LoadingRule
     public bool? Wet { get; set; }
     public double StemmingLength { get; set; } = 3;
     public string? StemmingProductId { get; set; }
+    /// <summary>
+    /// The top stemming takes the change of the hole's length with the decks that fit (<see cref="DeckTemplate.Fits"/>),
+    /// <see cref="StemmingLength"/> being its share; set only when the user marked the stemming of the column saved as the rule.
+    /// </summary>
+    public bool StemmingFits { get; set; }
     public List<DeckTemplate> Decks { get; set; } = new();
     /// <summary>Alternate explosive for the wet part of the column when the designed product is not water resistant.</summary>
     public string? WetAlternateProductId { get; set; }

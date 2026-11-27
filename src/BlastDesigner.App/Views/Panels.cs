@@ -896,12 +896,24 @@ public sealed partial class PropertiesPanel : DockPanel
         var scale = new Grid();
         var rows = new StackPanel { Spacing = 2 };
         var depth = 0.0;
-        void Part(double length, IBrush? colour)
+        void Part(double length, IBrush? colour, double cartridge = 0)
         {
             if (length <= 0) return;
             scale.ColumnDefinitions.Add(new ColumnDefinition(length, GridUnitType.Star));
             if (colour == null) return;
-            var part = new Border { Background = colour };
+            Control part = new Border { Background = colour };
+            // cartridges: one beside the other with a gap, from the deck bottom (right) up, the top one cut by the deck top
+            if (cartridge > 0 && length / cartridge <= 60)
+            {
+                var stack = new Grid();
+                var n = (int)Math.Ceiling(length / cartridge - 1e-6);
+                for (int i = 0; i < n; i++)
+                {
+                    stack.ColumnDefinitions.Add(new ColumnDefinition(i == 0 ? length - (n - 1) * cartridge : cartridge, GridUnitType.Star));
+                    stack.Children.Add(new Border { Background = colour, Margin = new Thickness(0, 0, 1, 0), [Grid.ColumnProperty] = stack.ColumnDefinitions.Count - 1 });
+                }
+                part = stack;
+            }
             Grid.SetColumn(part, scale.ColumnDefinitions.Count - 1);
             scale.Children.Add(part);
         }
@@ -910,7 +922,7 @@ public sealed partial class PropertiesPanel : DockPanel
             var product = p.FindProduct(d.ProductId);
             IBrush colour = product == null ? Look.Faint : new SolidColorBrush(Color.FromUInt32(product.Color));
             Part(d.Top - depth, null);
-            Part(d.Bottom - d.Top, colour);
+            Part(d.Bottom - d.Top, colour, product is { Kind: ProductKind.PackagedExplosive, UnitLength: > 0 } ? product.UnitLength : 0);
             depth = Math.Max(depth, d.Bottom);
             var text = $"{Qty.Text(BlastDesigner.Domain.Quantity.Length, d.Top, "0.0")}–{Qty.Text(BlastDesigner.Domain.Quantity.Length, d.Bottom, "0.0")} {Qty.Sym(BlastDesigner.Domain.Quantity.Length)}  {product?.Name}" + (d.Primers.Count > 0 ? $"  ({d.Primers.Count} pr.)" : "");
             var kg = new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = Qty.WithUnit(BlastDesigner.Domain.Quantity.Mass, Charging.DeckMass(p, h, d), "0.0"), FontFamily = Look.Mono, FontSize = 11, Foreground = Look.Muted, Margin = new Thickness(8, 0, 0, 0) };

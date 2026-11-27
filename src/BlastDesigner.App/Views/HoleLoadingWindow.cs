@@ -351,7 +351,17 @@ public sealed class ChargeColumn : Control
                 var d = _decks[i];
                 var prod = _project.FindProduct(d.ProductId);
                 var r = new Rect(TubeLeft, Y(d.Top), TubeWidth, Math.Max(1, Y(d.Bottom) - Y(d.Top)));
-                ctx.FillRectangle(new SolidColorBrush(Color.FromUInt32(prod?.Color ?? 0xFFCCCCCC)), r);
+                var fill = new SolidColorBrush(Color.FromUInt32(prod?.Color ?? 0xFFCCCCCC));
+                // cartridges: a stack from the deck bottom up, narrower than the hole, the top one cut by the deck top
+                var unit = prod is { Kind: ProductKind.PackagedExplosive, UnitLength: > 0 } ? Y(prod.UnitLength) - Y(0) : 0;
+                if (unit >= 4)
+                    using (ctx.PushClip(r))
+                        for (var b = r.Bottom; b > r.Top + 0.5; b -= unit)
+                        {
+                            var top = Math.Max(r.Top, b - unit);
+                            ctx.DrawRectangle(fill, CartridgeEdge, new Rect(TubeLeft + 5, top + 1, TubeWidth - 10, Math.Max(1, b - top - 2)), 2, 2);
+                        }
+                else ctx.FillRectangle(fill, r);
                 if (prod?.Kind == ProductKind.Stemming)
                     using (ctx.PushClip(r))
                         for (var x = r.Left - r.Height; x < r.Right; x += 8)
@@ -380,17 +390,41 @@ public sealed class ChargeColumn : Control
                 ctx.DrawEllipse(PrimerFill, new Pen(Brushes.White, 2), c, 7, 7);
             }
 
-        // Product and length to the right of the tube when the deck is tall enough.
-        var lx = TubeLeft + TubeWidth + 8;
+        // Right of the tube: the mark of a deck that adapts to the hole length, and the length when the deck is tall enough
+        // (the products are named in the table).
+        var fits = Charging.FitDecks(_project, _decks);
+        var mx = TubeLeft + TubeWidth + 5;
+        var lx = mx + FitMarkSize + 6;
         foreach (var d in _decks)
         {
-            if (Y(d.Bottom) - Y(d.Top) < 28) continue;
             var cy = (Y(d.Top) + Y(d.Bottom)) / 2;
-            var name = Text(_project.FindProduct(d.ProductId)?.Name ?? "?", SansBold, 11.5, Look.Text, Math.Max(10, w - lx - 2));
-            var size = Text(Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, d.Length, "0.0"), Mono, 11, Look.TextSoft);
-            ctx.DrawText(name, new Point(lx, cy - name.Height));
-            ctx.DrawText(size, new Point(lx, cy));
+            if (fits.Contains(d)) DrawFitMark(ctx, new Point(mx + FitMarkSize / 2, cy));
+            if (Y(d.Bottom) - Y(d.Top) < 16) continue;
+            var size = Text(Qty.WithUnit(BlastDesigner.Domain.Quantity.Length, d.Length, "0.0"), Mono, 11, Look.TextSoft, Math.Max(10, w - lx - 2));
+            ctx.DrawText(size, new Point(lx, cy - size.Height / 2));
         }
+    }
+
+    /// <summary>Side of the ↕ mark of a deck that adapts to the hole length.</summary>
+    public const double FitMarkSize = 16;
+
+    private static readonly IPen CartridgeEdge = new Pen(new SolidColorBrush(Color.FromUInt32(0x4D000000)), 1);
+
+    /// <summary>Colour of the marks of the decks that adapt to the hole length.</summary>
+    public static readonly IBrush FitBlue = new SolidColorBrush(Color.FromUInt32(0xFF6AA8FF));
+    private static readonly IBrush FitSoft = new SolidColorBrush(Color.FromUInt32(0x296AA8FF));
+
+    /// <summary>The ↕ mark: a two-headed arrow in a small box, centred on <paramref name="c"/>.</summary>
+    public static void DrawFitMark(DrawingContext ctx, Point c)
+    {
+        var h = FitMarkSize / 2;
+        ctx.DrawRectangle(FitSoft, new Pen(FitBlue, 1), new Rect(c.X - h, c.Y - h, FitMarkSize, FitMarkSize), 3, 3);
+        var pen = new Pen(FitBlue, 1.5) { LineCap = PenLineCap.Round, LineJoin = PenLineJoin.Round };
+        ctx.DrawLine(pen, new Point(c.X, c.Y - 5), new Point(c.X, c.Y + 5));
+        ctx.DrawLine(pen, new Point(c.X - 3, c.Y - 2.5), new Point(c.X, c.Y - 5.5));
+        ctx.DrawLine(pen, new Point(c.X + 3, c.Y - 2.5), new Point(c.X, c.Y - 5.5));
+        ctx.DrawLine(pen, new Point(c.X - 3, c.Y + 2.5), new Point(c.X, c.Y + 5.5));
+        ctx.DrawLine(pen, new Point(c.X + 3, c.Y + 2.5), new Point(c.X, c.Y + 5.5));
     }
 
     private static void DrawRight(DrawingContext ctx, string s, double right, double y)
@@ -398,6 +432,14 @@ public sealed class ChargeColumn : Control
         var t = Text(s, Mono, 10.5, Look.Faint);
         ctx.DrawText(t, new Point(right - t.Width, y - t.Height / 2));
     }
+}
+
+/// <summary>The ↕ mark of <see cref="ChargeColumn.DrawFitMark"/> as a control, for the table, the legend and the properties.</summary>
+public sealed class FitMark : Control
+{
+    public FitMark() { Width = Height = ChargeColumn.FitMarkSize; VerticalAlignment = VerticalAlignment.Center; }
+
+    public override void Render(DrawingContext ctx) => ChargeColumn.DrawFitMark(ctx, new Point(Bounds.Width / 2, Bounds.Height / 2));
 }
 
 /// <summary>
@@ -429,7 +471,10 @@ public static class HoleLoadingWindow
             if (i >= 0) p.LoadingRules[i] = rule; else p.LoadingRules.Add(rule);
         });
         await Dialogs.ShowModal(w, owner);
-        return editor.Applied ? editor.Decks.OrderBy(d => d.Top).ToList() : null;
+        if (!editor.Applied) return null;
+        // a column built from nothing gets its mark on the longest explosive deck; every deck is written with its mark
+        Charging.MarkFits(vm.Project!, editor.Decks);
+        return editor.Decks.OrderBy(d => d.Top).ToList();
     }
 }
 
@@ -463,6 +508,8 @@ public sealed class HoleLoadingEditor : DockPanel
         _hole = hole;
         _holeCount = holeCount;
         Decks = hole.Decks.Select(d => d.Clone()).OrderBy(d => d.Top).ToList();
+        // the marks as the column takes them now (a column with none: its longest explosive deck), so an edit does not move them
+        if (Decks.Count > 0) Charging.MarkFits(project, Decks);
         Column = new ChargeColumn(project, hole, Decks);
         Column.DeckPicked += i => { Selected = i; Refresh(); };
         Column.DeckHovered += i => { _hovered = i; BuildTable(); };
@@ -564,13 +611,14 @@ public sealed class HoleLoadingEditor : DockPanel
         return new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(14, 10), Child = row };
     }
 
+    private readonly Run _scopeFit = new();
+
     private Control Scope()
     {
-        var stem = Charging.TopStemming(_p, _hole);
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Look.TextSoft, VerticalAlignment = VerticalAlignment.Center };
         text.Inlines!.Add(new Run(L("The column will be applied to") + " "));
         text.Inlines.Add(new Run(Loc.F(One(_holeCount) ? "{0} selected hole" : "{0} selected holes", _holeCount)) { FontWeight = FontWeight.SemiBold, Foreground = Look.Text });
-        text.Inlines.Add(new Run(". " + Loc.F("If a hole is longer or shorter, the main explosive deck adapts and the stemming stays {0} m.", N(stem))));
+        text.Inlines.Add(_scopeFit);
         var g = new DockPanel();
         var icon = Look.Icon("info", 16, InfoIcon);
         icon.Margin = new Thickness(0, 1, 10, 0);
@@ -642,6 +690,7 @@ public sealed class HoleLoadingEditor : DockPanel
             Charging.ApplyRule(_p, tmp, rule);
             Decks.Clear();
             Decks.AddRange(tmp.Decks.OrderBy(d => d.Top));
+            if (Decks.Count > 0) Charging.MarkFits(_p, Decks);
             Selected = Decks.Count > 0 ? 0 : -1;
             Column.ActiveBoundary = -1;
             Column.ActivePrimer = (-1, -1);
@@ -712,12 +761,31 @@ public sealed class HoleLoadingEditor : DockPanel
         return new Border { Background = Look.Field, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 1, 0), Padding = new Thickness(14, 14, 10, 14), Child = g };
     }
 
-    private void BuildLegend()
+    private void BuildLegend(List<Deck> fits)
     {
         _legend.Children.Clear();
         foreach (var prod in Decks.Select(d => _p.FindProduct(d.ProductId)).OfType<Product>().Distinct())
-            _legend.Children.Add(Ui.Row(6, Swatch(prod.Color), new TextBlock { Text = prod.Name, FontSize = 11.5, Foreground = Look.Muted, TextTrimming = TextTrimming.CharacterEllipsis }));
+            _legend.Children.Add(Ui.Row(6, Swatch(prod), new TextBlock { Text = prod.Name, FontSize = 11.5, Foreground = Look.Muted, TextTrimming = TextTrimming.CharacterEllipsis }));
         _legend.Children.Add(Ui.Row(6, Dot(10), new TextBlock { Text = Loc.T("Booster"), FontSize = 11.5, Foreground = Look.Muted }));
+        if (fits.Count > 0)
+            _legend.Children.Add(Ui.Row(6, new FitMark { Margin = new Thickness(-3, 0) }, new TextBlock { Text = L("adapts to the hole length"), FontSize = 11.5, Foreground = Look.Muted, TextTrimming = TextTrimming.CharacterEllipsis }));
+    }
+
+    /// <summary>Colour of a product: a cartridged one as a stack of cartridges, as it is drawn on the column.</summary>
+    private static Control Swatch(Product? prod, double size = 10)
+    {
+        var color = prod?.Color ?? 0xFFCCCCCC;
+        if (prod?.Kind != ProductKind.PackagedExplosive) return Swatch(color, size);
+        var brush = new SolidColorBrush(Color.FromUInt32(color));
+        var half = (size - 2) / 2;
+        return new StackPanel
+        {
+            Width = size,
+            Height = size,
+            Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { new Border { Height = half, CornerRadius = new CornerRadius(1), Background = brush }, new Border { Height = half, CornerRadius = new CornerRadius(1), Background = brush } }
+        };
     }
 
     private static Control Swatch(uint color, double size = 10) => new Border
@@ -742,7 +810,7 @@ public sealed class HoleLoadingEditor : DockPanel
 
     // ---------- middle: deck table ----------
 
-    private const string TableColumns = "*,62,62,66,74,74";
+    private const string TableColumns = "36,*,62,62,66,74,74";
 
     private Control ListPane()
     {
@@ -759,18 +827,22 @@ public sealed class HoleLoadingEditor : DockPanel
         head.Children.Add(PaneHead(L("Decks from top to bottom")));
 
         var cols = new Grid { ColumnDefinitions = new ColumnDefinitions(TableColumns) };
-        string[] titles = { L("Product"), L("Top, m"), L("Bottom, m"), L("Length, m"), L("Mass, kg"), L("Primers") };
+        string[] titles = { "↕", L("Product"), L("Top, m"), L("Bottom, m"), L("Length, m"), L("Mass, kg"), L("Primers") };
         for (int i = 0; i < titles.Length; i++)
-            cols.Children.Add(new TextBlock
+        {
+            var title = new TextBlock
             {
                 Text = titles[i],
                 FontSize = 11,
                 FontWeight = FontWeight.SemiBold,
                 Foreground = Look.Faint,
-                TextAlignment = i is >= 1 and <= 4 ? TextAlignment.Right : TextAlignment.Left,
-                Margin = new Thickness(10, 7),
+                TextAlignment = i is >= 2 and <= 5 ? TextAlignment.Right : i == 0 ? TextAlignment.Center : TextAlignment.Left,
+                Margin = i == 0 ? new Thickness(0, 7) : new Thickness(10, 7),
                 [Grid.ColumnProperty] = i
-            });
+            };
+            if (i == 0) ToolTip.SetTip(title, L("Adapts to the hole length"));
+            cols.Children.Add(title);
+        }
         var tableHead = new Border { Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(0, 0, 0, 1), Child = cols };
         var tableDock = new DockPanel();
         DockPanel.SetDock(tableHead, Dock.Top);
@@ -824,32 +896,38 @@ public sealed class HoleLoadingEditor : DockPanel
             return;
         }
         var hole = Snapshot();
+        var fits = Charging.FitDecks(_p, Decks);
         for (int i = 0; i < Decks.Count; i++)
         {
             var d = Decks[i];
             var idx = i;
             var prod = _p.FindProduct(d.ProductId);
             var expl = prod?.IsExplosive == true;
+            var fit = fits.Contains(d);
             var g = new Grid { ColumnDefinitions = new ColumnDefinitions(TableColumns), Height = 38 };
+            g.Children.Add(FitToggle(idx, fit));
             g.Children.Add(new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 8,
-                Margin = new Thickness(10, 0, 4, 0),
+                Margin = new Thickness(4, 0, 4, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-                Children = { Swatch(prod?.Color ?? 0xFFCCCCCC), new TextBlock { Text = prod?.Name ?? "?", Foreground = Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center } }
+                Children = { Swatch(prod), new TextBlock { Text = prod?.Name ?? "?", Foreground = Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center } },
+                [Grid.ColumnProperty] = 1
             });
-            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Top)), 1));
-            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Bottom)), 2));
-            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Length)), 3));
-            g.Children.Add(expl ? NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Mass, Charging.DeckMass(_p, hole, d))), 4) : NumCell("—", 4, Look.Faint));
+            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Top)), 2));
+            g.Children.Add(NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Bottom)), 3));
+            var lenCell = NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Length, d.Length)), 4, fit ? ChargeColumn.FitBlue : null);
+            if (fit) lenCell.FontWeight = FontWeight.SemiBold;
+            g.Children.Add(lenCell);
+            g.Children.Add(expl ? NumCell(N(Qty.Show(BlastDesigner.Domain.Quantity.Mass, Charging.DeckMass(_p, hole, d))), 5) : NumCell("—", 5, Look.Faint));
             Control primers = !expl
                 ? new TextBlock { Text = "—", Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center }
                 : d.Primers.Count > 0
                     ? Badge(Ui.Row(4, Dot(8), new TextBlock { Text = d.Primers.Count.ToString(CultureInfo.CurrentCulture), FontSize = 11, Foreground = Look.TextSoft }), Look.Ribbon, Look.Line)
                     : Badge(new TextBlock { Text = L("none"), FontSize = 11, Foreground = Red }, RedSoft, RedLine);
             primers.Margin = new Thickness(10, 0);
-            Grid.SetColumn(primers, 5);
+            Grid.SetColumn(primers, 6);
             g.Children.Add(primers);
             var sel = i == Selected;
             var row = new Border
@@ -865,6 +943,42 @@ public sealed class HoleLoadingEditor : DockPanel
             row.PointerPressed += (_, _) => { Selected = idx; Column.ActiveBoundary = -1; Column.ActivePrimer = (-1, -1); Refresh(); };
             _rows.Children.Add(row);
         }
+    }
+
+    /// <summary>The ↕ cell of a table row: shows whether the deck adapts to the hole length, a click switches it.</summary>
+    private Control FitToggle(int i, bool fit)
+    {
+        var b = new Button
+        {
+            Width = 26,
+            Height = 26,
+            Padding = new Thickness(0),
+            CornerRadius = new CornerRadius(4),
+            Background = Brushes.Transparent,
+            BorderBrush = fit ? Brushes.Transparent : Look.Line,
+            BorderThickness = new Thickness(1),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Content = fit ? new FitMark() : new TextBlock { Text = "↕", FontSize = 12, Foreground = Look.Faint, HorizontalAlignment = HorizontalAlignment.Center },
+            Tag = "fit" + i
+        };
+        b.Classes.Add("flat");
+        ToolTip.SetTip(b, fit ? L("Adapts to the hole length: click to keep its length") : L("Keeps its length: click to let it adapt to the hole length"));
+        b.Click += (_, e) => { e.Handled = true; Ui.Safe(() => ToggleFits(i)); };
+        return b;
+    }
+
+    /// <summary>Switches whether deck <paramref name="i"/> adapts to the hole length; the other decks keep their marks.</summary>
+    public void ToggleFits(int i)
+    {
+        if (i < 0 || i >= Decks.Count) return;
+        Charging.MarkFits(_p, Decks);
+        Decks[i].Fits = Decks[i].Fits != true;
+        Refresh();
+        // the box or the cell clicked is built anew: the keys (Ctrl+Enter, the deck commands) stay with the window
+        Column.Focus();
     }
 
     private static TextBlock NumCell(string text, int column, IBrush? brush = null) => new()
@@ -987,7 +1101,7 @@ public sealed class HoleLoadingEditor : DockPanel
         }
         var prod = _p.FindProduct(d.ProductId);
         var expl = prod?.IsExplosive == true;
-        _props.Children.Add(Ui.Row(8, Swatch(prod?.Color ?? 0xFFCCCCCC, 12),
+        _props.Children.Add(Ui.Row(8, Swatch(prod, 12),
             new TextBlock { Text = Loc.F("Deck {0} of {1}", Selected + 1, Decks.Count), FontSize = 14, FontWeight = FontWeight.SemiBold, Foreground = Look.Text }));
 
         var choices = _p.Products.Where(x => (x.IsColumnProduct && !x.Deleted) || x.Id == d.ProductId).ToList();
@@ -1009,6 +1123,26 @@ public sealed class HoleLoadingEditor : DockPanel
         Put(Field(L("Length"), NumberBox("length", d.Length, v => ColumnEdit.SetBottom(Decks, Selected, d.Top + Math.Max(ColumnEdit.MinLength, v), len))), 2, 0);
         Put(Field(L("Density"), ReadOnly(prod != null && prod.Density > 0 ? N(prod.Density, "0.00") : "—", L("g/cm³"))), 2, 2);
         _props.Children.Add(grid);
+
+        // whether the deck takes the change of the hole length
+        var fit = Charging.FitDecks(_p, Decks).Contains(d);
+        var fitBox = new CheckBox { Name = "fits", IsChecked = fit, Content = L("Adapts to the hole length") };
+        fitBox.IsCheckedChanged += (_, _) => { if ((fitBox.IsChecked == true) != (Charging.FitDecks(_p, Decks).Contains(d))) ToggleFits(Selected); };
+        _props.Children.Add(new StackPanel
+        {
+            Spacing = 2,
+            Margin = new Thickness(0, -6, 0, 0),
+            Children =
+            {
+                fitBox,
+                new TextBlock
+                {
+                    Text = fit ? L("When the hole length changes, this deck lengthens or shortens (not below 0.1 m); the decks below go with the toe.")
+                        : L("The deck keeps its length. Mark it to let it take the change of the hole length."),
+                    FontSize = 11.5, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(28, 0, 0, 0)
+                }
+            }
+        });
 
         var hole = Snapshot();
         var mass = Charging.DeckMass(_p, hole, d);
@@ -1319,6 +1453,12 @@ public sealed class HoleLoadingEditor : DockPanel
         var gap = Charging.ColumnGap(hole);
         Check(gap < 0.05, gap < 0.05 ? Loc.F("The column covers the whole depth {0} m", N(len))
             : Loc.F("The column does not cover {0} m of {1} m", N(gap), N(len)));
+        if (Decks.Count > 0)
+        {
+            var fits = Charging.FitDecks(_p, Decks);
+            Check(fits.Count > 0, fits.Count > 0 ? Loc.F("When the hole length changes, it is taken by: {0}", FitList(fits))
+                : L("No deck adapts to the hole length: a longer hole is left with an empty part at the bottom"));
+        }
         var minStem = Charging.MinStemming(hole);
         var stemLen = Decks.Count > 0 ? stem : 0;
         var diameters = N(Charging.MinStemmingDiameters, "0.#");
@@ -1374,15 +1514,33 @@ public sealed class HoleLoadingEditor : DockPanel
         return box;
     }
 
+    /// <summary>"deck 2 (ANFO), deck 3 (…)": the decks named by their place from the top and their product.</summary>
+    private string FitList(List<Deck> fits) =>
+        string.Join(", ", fits.Select(d => Loc.F("deck {0} ({1})", Decks.IndexOf(d) + 1, _p.FindProduct(d.ProductId)?.Name ?? "?")));
+
+    /// <summary>The part of the note over the window (several holes) that says which decks take a change of length.</summary>
+    private void BuildScope(List<Deck> fits)
+    {
+        if (_holeCount <= 1) return;
+        var stem = Decks.Count > 0 ? Charging.TopStemming(_p, Snapshot()) : 0;
+        var stemFits = fits.Any(d => d.Top < 1e-6 && _p.FindProduct(d.ProductId)?.Kind == ProductKind.Stemming);
+        _scopeFit.Text = ". " + Qty.InText(fits.Count == 0
+            ? L("No deck adapts: on holes of another length the column stays as it is.")
+            : Loc.F(fits.Count == 1 ? "If a hole is longer or shorter, the difference is taken by {0}" : "If a hole is longer or shorter, the difference is shared by {0}", FitList(fits))
+              + (stemFits ? "." : Loc.F(", the stemming stays {0} m.", N(stem))));
+    }
+
     public void Refresh()
     {
         if (Selected >= Decks.Count) Selected = Decks.Count - 1;
         Column.SelectedDeck = Selected;
         Column.InvalidateVisual();
+        var fits = Charging.FitDecks(_p, Decks);
         BuildTable();
         BuildProps();
         BuildTotals();
-        BuildLegend();
+        BuildLegend(fits);
+        BuildScope(fits);
         var n = Decks.Count;
         _deckButtons["split"].IsEnabled = _deckButtons["dup"].IsEnabled = Sel?.Length >= 2 * ColumnEdit.MinLength;
         _deckButtons["add"].IsEnabled = n == 0 || Sel?.Length >= 2 * ColumnEdit.MinLength;

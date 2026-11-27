@@ -33,6 +33,10 @@ public sealed class CrossSectionSheet
     public bool Landscape { get; set; } = true;
     /// <summary>How far from the line objects are shown, m; null takes <see cref="Reports.SectionHalfWidth"/>.</summary>
     public double? HalfWidth { get; set; }
+    /// <summary>Added to the height of the top of the frame, m, for a line only picked (a section line keeps its own).</summary>
+    public double FrameTopShift { get; set; }
+    /// <summary>Added to the height of the bottom of the frame (the lowest toe), m.</summary>
+    public double FrameBottomShift { get; set; }
     /// <summary>A line that is not in the blast, in place of those that are.</summary>
     public (Vec3 A, Vec3 B)? Line { get; set; }
 }
@@ -289,7 +293,7 @@ public static class Reports
         for (int i = 0; i < lines.Count; i++)
         {
             var (a, b, caption, id) = lines[i];
-            pages.Add(SheetPage(project, layout, i, $"{opt.Title} {caption}".Trim(), w, h, null, now, false, (c, rect) => DrawSection(c, rect, project, a, b, half, design.SectionOf(id), SectionTitle(caption)), new PageSection(id, caption)));
+            pages.Add(SheetPage(project, layout, i, $"{opt.Title} {caption}".Trim(), w, h, null, now, false, (c, rect) => DrawSection(c, rect, project, a, b, half, design.SectionOf(id), SectionTitle(caption), opt.FrameTopShift, opt.FrameBottomShift), new PageSection(id, caption)));
         }
         // no line yet: an empty sheet, not a document with no pages
         if (pages.Count == 0) pages.Add(SheetPage(project, layout, 0, opt.Title, w, h, null, now, false, (_, _) => { }));
@@ -303,10 +307,16 @@ public static class Reports
     /// What the objects look like across a line, seen square on to it and fitted to the holes near it, with the labels of
     /// the section (<see cref="SectionAnnotations"/>) the visibility asks for, in black.
     /// </summary>
-    public static void DrawSection(SKCanvas c, SKRect rect, BlastProject project, Vec3 a, Vec3 b, double halfWidth, SectionVisibility shown, string title = "")
+    public static void DrawSection(SKCanvas c, SKRect rect, BlastProject project, Vec3 a, Vec3 b, double halfWidth, SectionVisibility shown, string title = "", double frameTop = 0, double frameBottom = 0, bool scaleBar = true)
     {
         var hidden = Hidden(project, shown.HiddenKinds);
         var unframed = Unframed(project, shown.View, hidden);
+        // a section line keeps the top and the bottom of its frame; a line only picked takes those given
+        if (SectionMarking.LineAt(project, a, b) is { } framed)
+        {
+            frameTop = framed.SectionFrameTopShift ?? 0;
+            frameBottom = framed.SectionFrameBottomShift ?? 0;
+        }
         var mid = Vec3.Lerp(a, b, 0.5);
         var depth = project.Holes.Any() ? project.Holes.Average(h => h.Collar.Z - h.Length / 2) : mid.Z;
         var cam = new Camera { Width = rect.Width, Height = rect.Height, Pitch = 0, Yaw = GeoMath.Bearing(a, b) - 90, Target = mid.WithZ(depth) };
@@ -314,8 +324,17 @@ public static class Reports
         var fit = Bounds3.Empty;
         foreach (var hole in SectionProfile.Build(project, a, b, halfWidth, unframed).Holes) { fit.Add(hole.Collar); fit.Add(hole.Toe); }
         if (fit.IsEmpty) { fit.Add(a.WithZ(depth)); fit.Add(b.WithZ(depth)); }
-        // room over the collars for the numbers of the holes and the title of the section
-        else fit.Add(fit.Max.WithZ(fit.Max.Z + fit.Size.Z * 0.3));
+        else
+        {
+            // the whole length of the line, as the frame takes it
+            fit.Add(a.WithZ(fit.Min.Z));
+            fit.Add(b.WithZ(fit.Min.Z));
+            // the top and the bottom of the frame moved as asked
+            fit.Add(fit.Max.WithZ(fit.Max.Z + Math.Max(0, frameTop)));
+            fit.Add(fit.Min.WithZ(fit.Min.Z + Math.Min(0, frameBottom)));
+            // room over the collars for the numbers of the holes and the title of the section
+            fit.Add(fit.Max.WithZ(fit.Max.Z + fit.Size.Z * 0.3));
+        }
         cam.Fit(fit, 0.1);
         // the fit goes to the middle of what it found: the slice stays on the line
         cam.MoveTargetToDepth(cam.Depth(mid.WithZ(cam.Target.Z)));
@@ -323,13 +342,78 @@ public static class Reports
         Pan(cam, shown.View);
         var labels = new SectionLabels(shown.ShowNumbers, shown.ShowLevels, shown.ShowDimensions);
         var own = SectionMarking.LineAt(project, a, b) is { } owner && project.SectionOwnDimensions.Contains(owner.Id);
-        var annotations = new SectionAnnotations(a, b, halfWidth, title, labels, SKColors.Black, 8) { SkipDimensions = own, HiddenHoles = hidden };
+        var annotations = new SectionAnnotations(a, b, halfWidth, title, labels, SKColors.Black, 8) { SkipDimensions = own, HiddenHoles = hidden, FrameTopShift = frameTop, FrameBottomShift = frameBottom };
         var overlays = new List<IOverlay>();
         if (labels.Any || title.Length > 0) overlays.Add(annotations);
         // the marks drawn by hand on the section of its line, in black where they have no colour of their own
         if (shown.ShowMarks && SectionMarking.LineAt(project, a, b) is { } line)
             overlays.Add(new SectionMarksOverlay(line.Id, a, b, SKColors.Black, 8, annotations.Frame, PointsPerMm));
-        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth, SectionCut = true, Overlays = overlays, HideHoleLabels = labels.Numbers, HideTies = true, HideRows = true, HideAxes = true, ClipScene = annotations.Frame });
+        DrawScene(c, rect, project, cam, new SceneOptions { DrawSummaryBlock = false, HideWireframes = true, HiddenEntities = hidden, ShowGrid = shown.ShowGrid, SliceHalfWidth = halfWidth, SectionCut = true, Overlays = overlays, HideHoleLabels = true, DrawScaleBar = scaleBar, HideTies = true, HideRows = true, HideAxes = true, ClipScene = annotations.Frame });
+    }
+
+    /// <summary>
+    /// A section as <see cref="DrawSection"/> draws it on a sheet (white, black ink), recorded on a drawing of so many
+    /// points, and the part of it that shows something (the frame with its labels and title), a little margin around: what
+    /// is copied to put in another program.
+    /// </summary>
+    public static (SKPicture Picture, SKRect Bounds) SectionPicture(BlastProject project, Vec3 a, Vec3 b, double halfWidth, SectionVisibility shown, string title, double frameTop, double frameBottom, float width, float height)
+    {
+        var rect = new SKRect(0, 0, width, height);
+        using var recorder = new SKPictureRecorder();
+        var c = recorder.BeginRecording(rect);
+        // without the scale bar in the corner of the sheet: what is copied is the frame with its labels
+        DrawSection(c, rect, project, a, b, halfWidth, shown, title, frameTop, frameBottom, scaleBar: false);
+        var picture = recorder.EndRecording();
+        // what is not white, looked for on a small copy, inside the grey border the sheet draws round the drawing
+        var w = Math.Max(1, (int)Math.Ceiling(width));
+        var h = Math.Max(1, (int)Math.Ceiling(height));
+        using var bitmap = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using (var canvas = new SKCanvas(bitmap)) { canvas.Clear(SKColors.White); canvas.DrawPicture(picture); }
+        int left = w, top = h, right = -1, bottom = -1;
+        const int inset = 3;
+        for (int y = inset; y < h - inset; y++)
+            for (int x = inset; x < w - inset; x++)
+            {
+                var px = bitmap.GetPixel(x, y);
+                if (px.Red > 245 && px.Green > 245 && px.Blue > 245) continue;
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+        const float margin = 6;
+        var bounds = right < 0 ? rect : new SKRect(Math.Max(0, left - margin), Math.Max(0, top - margin), Math.Min(width, right + 1 + margin), Math.Min(height, bottom + 1 + margin));
+        return (picture, bounds);
+    }
+
+    /// <summary>The part of a drawing as a PNG picture on white, so many pixels a point.</summary>
+    public static byte[] PictureToPng(SKPicture picture, SKRect bounds, float scale)
+    {
+        var w = Math.Max(1, (int)Math.Round(bounds.Width * scale));
+        var h = Math.Max(1, (int)Math.Round(bounds.Height * scale));
+        using var bitmap = new SKBitmap(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(SKColors.White);
+            canvas.Scale(scale);
+            canvas.Translate(-bounds.Left, -bounds.Top);
+            canvas.DrawPicture(picture);
+        }
+        using var data = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
+    /// <summary>The part of a drawing as SVG, a unit a point.</summary>
+    public static byte[] PictureToSvg(SKPicture picture, SKRect bounds)
+    {
+        using var stream = new MemoryStream();
+        using (var managed = new SKManagedWStream(stream))
+        {
+            using var canvas = SKSvgCanvas.Create(new SKRect(0, 0, bounds.Width, bounds.Height), managed);
+            canvas.Translate(-bounds.Left, -bounds.Top);
+            canvas.DrawPicture(picture);
+        }
+        return stream.ToArray();
     }
 
     /// <summary>One sheet: a drawing over the title block.</summary>

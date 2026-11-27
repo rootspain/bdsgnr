@@ -675,20 +675,40 @@ public static partial class AnalysisWindows
     }
 
     static double? _sectionHalfWidth;
+    /// <summary>
+    /// How much the top of the frame is raised and its bottom lowered, m, for a line only picked; a section line of the
+    /// blast keeps its own in the project (<see cref="PolylineEntity.SectionFrameTopShift"/>).
+    /// </summary>
+    static double _sectionTop, _sectionBottom;
     /// <summary>Turns the open section window to a line.</summary>
     static Action<Vec3, Vec3>? _sectionAim;
 
     /// <summary>The sheets of the sections with the width last set in their window, of the lines of the blast or of one that was only picked.</summary>
-    public static CrossSectionSheet SectionPage((Vec3 A, Vec3 B)? line = null) => new() { Title = Loc.T("Section view"), HalfWidth = _sectionHalfWidth, Line = line };
+    public static CrossSectionSheet SectionPage((Vec3 A, Vec3 B)? line = null) => new() { Title = Loc.T("Section view"), HalfWidth = _sectionHalfWidth, FrameTopShift = _sectionTop, FrameBottomShift = _sectionBottom, Line = line };
 
     public static void ShowSection(MainViewModel vm, Vec3 a, Vec3 b)
     {
         if (_sectionAim is { } aim && Dialogs.ActivateExisting("Section view")) { aim(a, b); return; }
         var width = new NumericUpDown { Value = (decimal)(_sectionHalfWidth ?? Reports.DefaultSectionHalfWidth), Minimum = 0.5m, Maximum = 500, Width = 120, FormatString = "0.#" };
+        // the top and the bottom of the frame: added to their heights (up positive), as the holes put them
+        NumericUpDown Offset(double value, string name, string tip)
+        {
+            var box = new NumericUpDown { Value = (decimal)value, Minimum = -50, Maximum = 500, Increment = 0.5m, Width = 120, FormatString = "0.#", Name = name, Height = 24, MinHeight = 24 };
+            ToolTip.SetTip(box, Loc.T(tip));
+            return box;
+        }
+        var above = Offset(_sectionTop, "sectionFrameTop", "Added to the height of the top of the frame, m; drag the top line of the frame with the mouse");
+        var below = Offset(_sectionBottom, "sectionFrameBottom", "Added to the height of the bottom of the frame, m; drag the bottom line of the frame with the mouse");
         Viewport? view = null;
         var line = (A: a, B: b);
+        // while an end of the frame is dragged: the line as it was at the press, as the project still has it (its marks,
+        // its own dimensions and its name are found by it); null otherwise
+        (Vec3 A, Vec3 B)? dragFrom = null;
+        (Vec3 A, Vec3 B) Known() => dragFrom ?? line;
+        // the section line of the project the window shows, to follow it when it changes (an undo); empty for a line only picked
+        var lineEntity = Guid.Empty;
         // the name of the line of the window, A–A; empty for a line only picked
-        string Caption() => vm.Project is { } pr && Reports.SectionLines(pr).FirstOrDefault(l => l.Points[0].Equals(line.A) && l.Points[1].Equals(line.B)) is { } named ? SectionNames.Caption(named.Label) : "";
+        string Caption() => vm.Project is { } pr && Reports.SectionLines(pr).FirstOrDefault(l => l.Points[0].Equals(Known().A) && l.Points[1].Equals(Known().B)) is { } named ? SectionNames.Caption(named.Label) : "";
         var settings = vm.Settings;
         SectionSession session = null!;
         var takeOverPosted = false;
@@ -698,12 +718,13 @@ public static partial class AnalysisWindows
             var half = (double)(width.Value ?? 5);
             var labels = new SectionLabels(settings.SectionNumbers, settings.SectionLevels, settings.SectionDimensions);
             var ink = new SkiaSharp.SKColor(Look.Text.Color.R, Look.Text.Color.G, Look.Text.Color.B);
-            var own = vm.Project is { } owning && SectionMarking.LineAt(owning, line.A, line.B) is { } owner && owning.SectionOwnDimensions.Contains(owner.Id);
+            var known = Known();
+            var own = vm.Project is { } owning && SectionMarking.LineAt(owning, known.A, known.B) is { } owner && owning.SectionOwnDimensions.Contains(owner.Id);
             // the automatic dimensions recorded as drawn: a click on one makes them marks of their own
-            var annotations = new SectionAnnotations(line.A, line.B, half, Reports.SectionTitle(Caption()), labels, ink, 12) { SkipDimensions = own, Recorded = session.AutoDimensions };
+            var annotations = new SectionAnnotations(line.A, line.B, half, Reports.SectionTitle(Caption()), labels, ink, 12) { SkipDimensions = own, Recorded = session.AutoDimensions, FrameTopShift = (double)(above.Value ?? 0), FrameBottomShift = (double)(below.Value ?? 0) };
             // the dimensions of a section line are marks like those drawn by hand: made so as soon as it is shown (after
             // this frame, which records them), to be selected, moved, edited and deleted
-            if (!own && labels.Dimensions && vm.Project is { } shownProject && SectionMarking.LineAt(shownProject, line.A, line.B) != null && !takeOverPosted)
+            if (!own && dragFrom == null && labels.Dimensions && vm.Project is { } shownProject && SectionMarking.LineAt(shownProject, line.A, line.B) != null && !takeOverPosted)
             {
                 takeOverPosted = true;
                 Dispatcher.UIThread.Post(() =>
@@ -716,12 +737,13 @@ public static partial class AnalysisWindows
             var overlays = new List<IOverlay> { annotations };
             session.Box = annotations.Frame;
             // the marks drawn by hand on the section of its line, with those selected and the one being drawn
-            var lineId = vm.Project is { } project && SectionMarking.LineAt(project, line.A, line.B) is { } entity ? entity.Id : Guid.Empty;
+            // (while an end of the frame is dragged, on the line as it was: its direction is the same, so they stay put)
+            var lineId = vm.Project is { } project && SectionMarking.LineAt(project, known.A, known.B) is { } entity ? entity.Id : Guid.Empty;
             // one overlay while the line and the look stay: what it drew last is what a click picks, and the view asks for
             // its options again for every pick
             var marks = session.Marks;
-            if (marks == null || marks.LineId != lineId || !marks.Frame.A.Equals(line.A) || !marks.Frame.B.Equals(line.B) || marks.Ink != ink)
-                session.Marks = marks = new SectionMarksOverlay(lineId, line.A, line.B, ink, 12)
+            if (marks == null || marks.LineId != lineId || !marks.Frame.A.Equals(known.A) || !marks.Frame.B.Equals(known.B) || marks.Ink != ink)
+                session.Marks = marks = new SectionMarksOverlay(lineId, known.A, known.B, ink, 12)
                 {
                     Selected = session.SelectedMarks,
                     SelectionColor = new SkiaSharp.SKColor(Look.Accent.Color.R, Look.Accent.Color.G, Look.Accent.Color.B)
@@ -731,10 +753,10 @@ public static partial class AnalysisWindows
             marks.MoveBy = session.MoveBy;
             // with the marks hidden the one being drawn still shows
             if (settings.SectionMarks) overlays.Add(marks);
-            else if (session.Preview != null) overlays.Add(new SectionMarksOverlay(Guid.Empty, line.A, line.B, ink, 12, annotations.Frame) { Preview = session.Preview });
+            else if (session.Preview != null) overlays.Add(new SectionMarksOverlay(Guid.Empty, known.A, known.B, ink, 12, annotations.Frame) { Preview = session.Preview });
             return new SceneOptions
             {
-                Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = half, SectionCut = true, HideHoleLabels = labels.Numbers, HideTies = true, HideRows = true, HideAxes = true,
+                Selection = o.Selection, Background = o.Background, CollarPixels = o.CollarPixels, DrawSummaryBlock = false, SliceHalfWidth = half, SectionCut = true, HideHoleLabels = true, HideTies = true, HideRows = true, HideAxes = true,
                 Overlays = overlays,
                 // nothing of the plan beyond the frame
                 ClipScene = annotations.Frame
@@ -769,6 +791,12 @@ public static partial class AnalysisWindows
             foreach (var h in SectionProfile.Build(project, line.A, line.B, (double)(width.Value ?? 5)).Holes) { bb.Add(h.Collar); bb.Add(h.Toe); }
             if (!bb.IsEmpty)
             {
+                // the whole length of the line, as the frame takes it
+                bb.Add(line.A.WithZ(bb.Min.Z));
+                bb.Add(line.B.WithZ(bb.Min.Z));
+                // the top and the bottom of the frame moved as set
+                bb.Add(bb.Max.WithZ(bb.Max.Z + Math.Max(0, (double)(above.Value ?? 0))));
+                bb.Add(bb.Min.WithZ(bb.Min.Z + Math.Min(0, (double)(below.Value ?? 0))));
                 // room over the collars for the numbers of the holes and the title of the section
                 bb.Add(bb.Max.WithZ(bb.Max.Z + bb.Size.Z * 0.3));
                 view.Camera.Fit(bb, 0.1);
@@ -777,9 +805,115 @@ public static partial class AnalysisWindows
             }
             view.Redraw();
         }
+        // the whole section with all it shows, in the look of a sheet (white, black ink), put on the clipboard for Word or
+        // AutoCAD: as a metafile of lines, as SVG, and as a picture three times the size of the screen
+        void CopyAll()
+        {
+            if (vm.Project is not { } project || !OperatingSystem.IsWindows()) return;
+            var shown = new SectionVisibility { ShowNumbers = settings.SectionNumbers, ShowLevels = settings.SectionLevels, ShowDimensions = settings.SectionDimensions, ShowMarks = settings.SectionMarks };
+            var (picture, bounds) = Reports.SectionPicture(project, line.A, line.B, (double)(width.Value ?? 5), shown, Reports.SectionTitle(Caption()),
+                (double)(above.Value ?? 0), (double)(below.Value ?? 0), (float)Math.Max(400, view.Bounds.Width), (float)Math.Max(300, view.Bounds.Height));
+            using (picture)
+            {
+                // about 300 dpi, no more than 8000 pixels on the long side
+                var scale = Math.Min(3f, 8000f / Math.Max(1, Math.Max(bounds.Width, bounds.Height)));
+                var png = Reports.PictureToPng(picture, bounds, scale);
+                var svg = Reports.PictureToSvg(picture, bounds);
+                var owner = TopLevel.GetTopLevel(view)?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
+                // a unit of the drawing a pixel of the screen (96 dpi) on the page, no wider than a landscape A4 sheet takes
+                var mmPerUnit = Math.Min(25.4 / 96, 270 / Math.Max(1, bounds.Width));
+                var copied = ClipboardImage.Copy(owner, svg, png, mmPerUnit);
+                session.SetHint(copied ? "The section is copied" : "The section could not be put on the clipboard");
+            }
+        }
+        // Zoom all of the view's own menu as the button: the frame of the section, not everything of the plan; Copy all
+        // next to it (on Windows, whose clipboard takes the drawing)
+        view.ViewMenu = () => OperatingSystem.IsWindows()
+            ? new[] { MenuEntry.Item("Zoom all", Fit), MenuEntry.Item("Copy all", CopyAll) }
+            : new[] { MenuEntry.Item("Zoom all", Fit) };
+        // the top and the bottom of the frame: kept on the section line in the project, one undo step a change; a line
+        // only picked keeps them in the window
+        var loadingFrame = false;
+        void LoadFrame()
+        {
+            loadingFrame = true;
+            try
+            {
+                var frameOwner = vm.Project is { } frameProject ? SectionMarking.LineAt(frameProject, line.A, line.B) : null;
+                var up = frameOwner != null ? frameOwner.SectionFrameTopShift ?? 0 : _sectionTop;
+                var down = frameOwner != null ? frameOwner.SectionFrameBottomShift ?? 0 : _sectionBottom;
+                if (above.Value != (decimal)up) above.Value = (decimal)up;
+                if (below.Value != (decimal)down) below.Value = (decimal)down;
+            }
+            finally { loadingFrame = false; }
+        }
+        void FrameChanged()
+        {
+            if (loadingFrame) return;
+            var up = (double)(above.Value ?? 0);
+            var down = (double)(below.Value ?? 0);
+            if (vm.Project is { } changedProject && SectionMarking.LineAt(changedProject, line.A, line.B) is { } changedOwner)
+            {
+                if (changedOwner.SectionFrameTopShift != up || changedOwner.SectionFrameBottomShift != down)
+                {
+                    var id = changedOwner.Id;
+                    vm.Doc!.Execute("Section frame", framed =>
+                    {
+                        if (framed.Entities.FirstOrDefault(x => x.Id == id) is PolylineEntity framedLine) { framedLine.SectionFrameTopShift = up; framedLine.SectionFrameBottomShift = down; }
+                    });
+                }
+            }
+            else { _sectionTop = up; _sectionBottom = down; }
+            view.Redraw();
+        }
+        // the top and the bottom line of the frame dragged with the mouse: shown in the boxes while dragged, one step at the end
+        session.FrameShifts = () => ((double)(above.Value ?? 0), (double)(below.Value ?? 0));
+        session.PreviewFrameShifts = (up, down) =>
+        {
+            loadingFrame = true;
+            try { above.Value = Math.Clamp((decimal)up, above.Minimum, above.Maximum); below.Value = Math.Clamp((decimal)down, below.Minimum, below.Maximum); }
+            finally { loadingFrame = false; }
+            view.Redraw();
+        };
+        session.CommitFrameShifts = FrameChanged;
+        // the left and the right line of the frame dragged with the mouse: an end of the section line moves along it. Shown
+        // as the line of the window while dragged (the camera stays), one step at the end on a section line of the project
+        session.PreviewLine = (from, to) =>
+        {
+            dragFrom ??= line;
+            line = (from, to);
+            view.Redraw();
+        };
+        session.CommitLine = () =>
+        {
+            if (dragFrom is not { } was) return;
+            dragFrom = null;
+            if (!was.A.Equals(line.A) || !was.B.Equals(line.B))
+                if (vm.Project is { } lengthProject && SectionMarking.LineAt(lengthProject, was.A, was.B) is { } lengthOwner)
+                {
+                    var id = lengthOwner.Id;
+                    var (na, nb) = line;
+                    // the marks keep their points S along the line from its start: a start moved along the line by so much
+                    // moves them back by as much, so they stay where they are drawn
+                    double dx = was.B.X - was.A.X, dy = was.B.Y - was.A.Y;
+                    var length = Math.Sqrt(dx * dx + dy * dy);
+                    var moved = length < 1e-12 ? 0 : ((na.X - was.A.X) * dx + (na.Y - was.A.Y) * dy) / length;
+                    vm.Doc!.Execute("Section line length", lengthened =>
+                    {
+                        if (lengthened.Entities.FirstOrDefault(x => x.Id == id) is PolylineEntity l && l.Points.Count >= 2) { l.Points[0] = na; l.Points[1] = nb; }
+                        if (moved != 0)
+                            foreach (var m in lengthened.SectionMarks.Where(m => m.SectionLineId == id))
+                                foreach (var pt in m.Points) pt.S -= moved;
+                    });
+                    lineEntity = id;
+                }
+            ShowNumber();
+            view.Redraw();
+        };
         void Aim(Vec3 from, Vec3 to)
         {
             line = (from, to);
+            lineEntity = vm.Project is { } aimed && SectionMarking.LineAt(aimed, from, to) is { } aimedLine ? aimedLine.Id : Guid.Empty;
             session.SelectedMarks.Clear();
             var mid = Vec3.Lerp(from, to, 0.5);
             var holesZ = vm.Project!.Holes.Any() ? vm.Project.Holes.Average(h => h.Collar.Z - h.Length / 2) : mid.Z;
@@ -787,6 +921,7 @@ public static partial class AnalysisWindows
             view.Camera.Yaw = GeoMath.Bearing(from, to) - 90;
             view.Camera.Target = mid.WithZ(holesZ);
             ShowNumber();
+            LoadFrame();
         }
         void Step(int by)
         {
@@ -804,6 +939,8 @@ public static partial class AnalysisWindows
         next.Name = "sectionNext";
         Aim(a, b);
         width.ValueChanged += (_, _) => { _sectionHalfWidth = (double?)width.Value; view.Redraw(); };
+        above.ValueChanged += (_, _) => FrameChanged();
+        below.ValueChanged += (_, _) => FrameChanged();
         var fit = new Button { Content = Loc.T("Zoom all") };
         fit.Click += (_, _) => Fit();
         var print = FormKit.Tool("print", Loc.T("Print"), () =>
@@ -829,7 +966,14 @@ public static partial class AnalysisWindows
         width.Height = 24; width.MinHeight = 24;
         fit.Height = 24; fit.MinHeight = 24; fit.Padding = new Thickness(10, 0); fit.VerticalContentAlignment = VerticalAlignment.Center;
         var section = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Children = { halfRow, fit } };
-        var ribbon = new SectionRibbon(vm, session, picking, new (string, Control)[] { ("Section", section), ("Show", shown) }, Ui.Row(6, Ui.Row(2, previous, number, next), print));
+        // the top and the bottom of the frame, one under the other
+        var frameBox = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), VerticalAlignment = VerticalAlignment.Center };
+        void PutFrame(Control c, int row, int col) { Grid.SetRow(c, row); Grid.SetColumn(c, col); c.Margin = new Thickness(0, row == 0 ? 0 : 2, col == 0 ? 8 : 0, 0); frameBox.Children.Add(c); }
+        PutFrame(new TextBlock { Text = Loc.T("Frame top (m)"), VerticalAlignment = VerticalAlignment.Center }, 0, 0);
+        PutFrame(above, 0, 1);
+        PutFrame(new TextBlock { Text = Loc.T("Frame bottom (m)"), VerticalAlignment = VerticalAlignment.Center }, 1, 0);
+        PutFrame(below, 1, 1);
+        var ribbon = new SectionRibbon(vm, session, picking, new (string, Control)[] { ("Section", section), ("Frame", frameBox), ("Show", shown) }, Ui.Row(6, Ui.Row(2, previous, number, next), print));
         view.ToolSource = () => ribbon.Active;
         view.PointerMoved += (_, e) => { var p = e.GetPosition(view); ribbon.ShowWhere(p.X, p.Y); };
 
@@ -878,6 +1022,8 @@ public static partial class AnalysisWindows
         w.AddHandler(Avalonia.Input.InputElement.KeyDownEvent, (_, e) =>
         {
             if (e.Key == Avalonia.Input.Key.F8) { ribbon.ToggleOrtho(); e.Handled = true; return; }
+            // Home zooms to the section, as Zoom all; a box being typed in keeps it
+            if (e.Key == Avalonia.Input.Key.Home && e.KeyModifiers == Avalonia.Input.KeyModifiers.None && w.FocusManager?.GetFocusedElement() is not TextBox) { Fit(); e.Handled = true; return; }
             // Ctrl+Z, Ctrl+Y (Ctrl+Shift+Z) undo and redo the project, as in the main window; a box being typed in keeps them
             var ctrl = e.KeyModifiers.HasFlag(Avalonia.Input.KeyModifiers.Control);
             if (ctrl && e.Key is Avalonia.Input.Key.Z or Avalonia.Input.Key.Y && w.FocusManager?.GetFocusedElement() is not TextBox)
@@ -899,7 +1045,18 @@ public static partial class AnalysisWindows
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         _sectionAim = (from, to) => { Aim(from, to); Fit(); };
         SectionRibbonShown = ribbon;
-        void Refreshed() { ShowNumber(); ribbon.Refresh(); }
+        void Refreshed()
+        {
+            // the section line of the window changed in the project (an undo of its length, an edit in the plan): the window
+            // follows its ends, the camera where it is
+            if (dragFrom == null && lineEntity != Guid.Empty && vm.Project?.Entities.FirstOrDefault(x => x.Id == lineEntity) is PolylineEntity followed
+                && followed.Points.Count >= 2 && (!followed.Points[0].Equals(line.A) || !followed.Points[1].Equals(line.B)))
+            {
+                line = (followed.Points[0], followed.Points[1]);
+                view.Redraw();
+            }
+            ShowNumber(); LoadFrame(); ribbon.Refresh();
+        }
         vm.ModelRefreshed += Refreshed;
         w.Closed += (_, _) => { _sectionAim = null; SectionRibbonShown = null; vm.ModelRefreshed -= Refreshed; };
     }

@@ -1969,7 +1969,6 @@ ui:g/cm³	г/см³
 ui:The column will be applied to	Конструкция применится к
 {0} selected hole	{0} выбранной скважине
 {0} selected holes	{0} выбранным скважинам
-If a hole is longer or shorter, the main explosive deck adapts and the stemming stays {0} m.	Если скважина длиннее или короче, основная колонка ВВ подстроится, забойка останется {0} м.
 ui:— not selected —	— не выбрано —
 ui:Apply	Применить
 Apply to {0} hole	Применить к {0} скважине
@@ -4211,3 +4210,27 @@ Deck {0} goes below the toe: its bottom is at {1:0.##} m, the hole is {2:0.##} m
 Deck {0} overlaps deck {1}	Интервал {0} перекрывает интервал {1}
 Explosive deck {0} has no primer	В интервале ВВ {0} нет боевика
 Deck {0}: {1} is not water resistant	Интервал {0}: {1} — неводоустойчивое ВВ
+ui:adapts to the hole length	подстраивается под длину скважины
+ui:Adapts to the hole length	Подстраивается под длину скважины
+ui:Adapts to the hole length: click to keep its length	Подстраивается под длину скважины: щёлкните, чтобы длина интервала не менялась
+ui:Keeps its length: click to let it adapt to the hole length	Сохраняет длину: щёлкните, чтобы интервал подстраивался под длину скважины
+ui:When the hole length changes, this deck lengthens or shortens (not below 0.1 m); the decks below go with the toe.	При изменении длины скважины этот интервал удлиняется или укорачивается (не короче 0,1 м); интервалы ниже идут вместе с забоем.
+ui:The deck keeps its length. Mark it to let it take the change of the hole length.	Интервал сохраняет длину. Отметьте его, чтобы он забирал изменение длины скважины.
+ui:No deck adapts to the hole length: a longer hole is left with an empty part at the bottom	Ни один интервал не подстраивается под длину скважины: при удлинении внизу останется незаряженный промежуток
+ui:No deck adapts: on holes of another length the column stays as it is.	Ни один интервал не подстраивается: на скважинах другой длины колонка не изменится.
+When the hole length changes, it is taken by: {0}	При изменении длины скважины подстраивается: {0}
+deck {0} ({1})	интервал {0} ({1})
+If a hole is longer or shorter, the difference is taken by {0}	Если скважина длиннее или короче, разницу берёт {0}
+If a hole is longer or shorter, the difference is shared by {0}	Если скважина длиннее или короче, разницу делят {0}
+, the stemming stays {0} m.	, забойка останется {0} м.
+Fits	Подстраивается под длину
+Stemming fits	Забойка подстраивается под длину
+Frame top (m)	Верх рамки (м)
+Frame bottom (m)	Низ рамки (м)
+Section frame	Рамка разреза
+Added to the height of the top of the frame, m; drag the top line of the frame with the mouse	Прибавляется к высоте верха рамки, м; верхнюю линию рамки можно тянуть мышью
+Added to the height of the bottom of the frame, m; drag the bottom line of the frame with the mouse	Прибавляется к высоте низа рамки, м; нижнюю линию рамки можно тянуть мышью
+Copy all	Копировать всё
+The section is copied	Разрез скопирован
+The section could not be put on the clipboard	Не удалось поместить разрез в буфер обмена
+Section line length	Длина линии разреза
