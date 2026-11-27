@@ -178,6 +178,8 @@ public static class TieUpPlanner
         private readonly TieUpOptions _o;
         private readonly Hole[] _h;
         private readonly double[] _u, _dIp, _inhole;
+        /// <summary>The surface block of each hole's combination detonator: the signal leaves the hole that much later; 0 without one.</summary>
+        private readonly double[] _block;
         private readonly List<List<int>> _rows;
         private readonly Dictionary<int, int> _rowOf = new();
         private readonly double _s, _b, _t0;
@@ -194,6 +196,7 @@ public static class TieUpPlanner
                 var primers = Charging.Primers(h).Where(x => !Charging.IsElectronic(project, x.Primer)).ToList();
                 return primers.Count == 0 ? 0 : primers.Min(x => Charging.PrimerDelay(project, x.Primer) + Charging.PropagationDelay(project, x.Primer));
             }).ToArray();
+            _block = _h.Select(h => Timing.HoleSurfaceDelay(project, h) ?? 0).ToArray();
             _t0 = options.Start.StartTimeMs + options.Start.LeadInDelayMs;
 
             var index = new Dictionary<Guid, int>();
@@ -436,15 +439,15 @@ public static class TieUpPlanner
                     foreach (var c in choices)
                     {
                         // apart from the neighbours first, then nearest the time of the distance, the shorter tie, the shorter delay
-                        var fire = surface[j] + c.DelayMs + _inhole[i];
+                        var fire = surface[j] + _block[j] + c.DelayMs + _inhole[i];
                         var clashes = around.Count(q => Math.Abs(surface[q] + _inhole[q] - fire) < window);
-                        var e = 3 * window * clashes + Math.Abs(surface[j] + c.DelayMs - target) + 0.05 * Dist(i, j) + 0.001 * c.DelayMs;
+                        var e = 3 * window * clashes + Math.Abs(surface[j] + _block[j] + c.DelayMs - target) + 0.05 * Dist(i, j) + 0.001 * c.DelayMs;
                         if (e < be) { be = e; bp = j; bc = c; }
                     }
                 parent[i] = bp;
                 role[i] = TieRole.Fan;
                 product[i] = bc;
-                surface[i] = surface[bp] + bc!.DelayMs;
+                surface[i] = surface[bp] + _block[bp] + bc!.DelayMs;
                 tied.Add(i);
             }
         }
@@ -535,7 +538,7 @@ public static class TieUpPlanner
             foreach (var t in plan.Ties)
             {
                 if (!adj.TryGetValue(t.From, out var list)) adj[t.From] = list = new();
-                list.Add((t.To, t.Product?.DelayMs ?? 0));
+                list.Add((t.To, (index.TryGetValue(t.From, out var fi) ? _block[fi] : 0) + (t.Product?.DelayMs ?? 0)));
             }
             var arrival = new Dictionary<Guid, double> { [o.Start.Id] = _t0 };
             if (o.Start.HoleId is Guid on && index.ContainsKey(on)) arrival[on] = _t0;

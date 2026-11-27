@@ -19,7 +19,13 @@ public enum ProductKind
     ElectricDetonator,
     /// <summary>Harness wire connecting electric detonators (no delay of its own).</summary>
     HarnessWire,
-    Other
+    Other,
+    /// <summary>
+    /// Combination detonator: one unit with an in-hole delay
+    /// (<see cref="Product.InHoleDelayMs"/>) and a surface delay block (<see cref="Product.SurfaceDelayMs"/>) on the tie
+    /// to the next hole. Last in the list: the kinds are stored by name, but added at the end all the same.
+    /// </summary>
+    CombinationDetonator
 }
 
 /// <summary>Consumable used in the design. The catalogue is user-maintained and stored with the project (available resources).</summary>
@@ -66,9 +72,19 @@ public sealed class Product
     public double DelayMs { get; set; }
     /// <summary>
     /// Downhole (shock tube) detonator: the time the signal takes down the tube, ms per metre of depth of the primer
-    /// (SHOTPlus PropDel); 0 leaves it out.
+    /// 0 leaves it out.
     /// </summary>
     public double PropagationMsPerM { get; set; }
+    /// <summary>
+    /// Combination detonator: the delay of its in-hole part, ms; the charge fires this long after the signal gets to the
+    /// hole (plus the run down the tube, <see cref="PropagationMsPerM"/>). Other kinds keep their delay in <see cref="DelayMs"/>.
+    /// </summary>
+    public double InHoleDelayMs { get; set; }
+    /// <summary>
+    /// Combination detonator: the delay of its surface block, ms; a tie made with it passes the signal on from the hole it
+    /// starts at to the next one this long after the signal got there. Not used by other kinds.
+    /// </summary>
+    public double SurfaceDelayMs { get; set; }
     /// <summary>Mass of one unit for boosters and cartridges, kg.</summary>
     public double UnitMass { get; set; }
     /// <summary>Cartridge length for packaged products, m.</summary>
@@ -85,9 +101,19 @@ public sealed class Product
 
     public bool IsExplosive => Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive;
     public bool IsColumnProduct => Kind is ProductKind.BulkExplosive or ProductKind.PackagedExplosive or ProductKind.Stemming or ProductKind.GasBag;
-    public bool IsDetonator => Kind is ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.ElectricDetonator;
-    /// <summary>Goes on a tie: a surface connector (non-electric), detonating cord, a relay on cord or harness wire.</summary>
-    public bool IsTieProduct => Kind is ProductKind.SurfaceConnector or ProductKind.DetonatingCord or ProductKind.CordRelay or ProductKind.HarnessWire;
+    public bool IsDetonator => Kind is ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.ElectricDetonator or ProductKind.CombinationDetonator;
+    /// <summary>
+    /// Goes on a tie: a surface connector (non-electric), detonating cord, a relay on cord, harness wire, or a combination
+    /// detonator (its surface block: it is in the hole and on the tie to the next one at once).
+    /// </summary>
+    public bool IsTieProduct => Kind is ProductKind.SurfaceConnector or ProductKind.DetonatingCord or ProductKind.CordRelay or ProductKind.HarnessWire or ProductKind.CombinationDetonator;
+
+    /// <summary>The delay of the product in the hole, as a primer's detonator: a combination detonator's in-hole part, else <see cref="DelayMs"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double InHoleDelay => Kind == ProductKind.CombinationDetonator ? InHoleDelayMs : DelayMs;
+    /// <summary>The nominal delay of the product on a tie: a combination detonator's surface block, else <see cref="DelayMs"/>.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double SurfaceDelay => Kind == ProductKind.CombinationDetonator ? SurfaceDelayMs : DelayMs;
 
     public override string ToString() => Name;
 
@@ -133,6 +159,8 @@ public sealed class Product
         new() { Id = "2eaae6f2-75f8-45b1-ae7b-10d76024d14b", Name = "Cord relay 25 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 25, Cost = 3, Color = 0xFFE53935 },
         new() { Id = "9bc120bb-4f12-4f79-9421-a3878a714183", Name = "Cord relay 42 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 42, Cost = 3, Color = 0xFF8D6E63 },
         new() { Id = "f7407010-0e86-4dae-8a4f-2b03856e388a", Name = "Bus line", Family = "Bus line", Kind = ProductKind.HarnessWire, Cost = 0.2, Color = 0xFF78909C },
+        new() { Id = "c3a9e6f1-6b2d-4f8a-9d41-2e7b5c0a8f13", Name = "Combination det 500/25 ms", Family = "Combination detonator", Kind = ProductKind.CombinationDetonator, InHoleDelayMs = 500, SurfaceDelayMs = 25, Cost = 6, Color = 0xFF7E57C2 },
+        new() { Id = "4e8d2b7a-91c5-4a3e-b6f0-8d1c9e2a5b47", Name = "Combination det 500/42 ms", Family = "Combination detonator", Kind = ProductKind.CombinationDetonator, InHoleDelayMs = 500, SurfaceDelayMs = 42, Cost = 6, Color = 0xFF5E35B1 },
     };
 }
 

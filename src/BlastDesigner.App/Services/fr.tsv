@@ -4021,3 +4021,13 @@ ui:The surface the collars sat on was deleted: they stay where they are	La surfa
 ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), on the collar polygon on the vertices of the outline, or on a surface picked on the plan	Où sont les têtes : sur la surface des têtes du projet (au niveau de la maille sans elle), sur le polygone des têtes aux sommets du contour, ou sur une surface désignée sur le plan
 {0} “{1}”	{0} « {1} »
 No surface lies above or below the holes.	Aucune surface ne passe au-dessus ou au-dessous des trous.
+Combination detonator	Détonateur combiné
+ui:Combination detonator	Détonateur combiné
+ui:Surface delay	Retard de surface
+ui:In-hole delay and surface delay on the tie	Retard fond de trou et retard de surface sur la liaison
+ui:One unit in the hole and on the tie: as the detonator of a primer its in-hole delay is added to the firing time of the hole; on a tie its surface delay passes the signal on to the next hole. Quantities count it in pieces.	Une seule unité dans le trou et sur la liaison : comme détonateur d'une amorce, son retard fond de trou s'ajoute au temps de tir du trou ; sur une liaison, son retard de surface transmet le signal au trou suivant. Les quantités le comptent à la pièce.
+ui:Row name	Nom
+ui:Row spacing	Pas
+ui:The burden and the spacing the row was laid with	Banquette et pas avec lesquels la rangée a été posée
+Row {0} ({1})	Rangée {0} ({1})
+Depth manual	Profondeur manuelle

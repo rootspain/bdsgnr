@@ -1728,7 +1728,9 @@ Step("pattern tool: direction, offset, prefix and start number on its panel, no 
     if (BlastDesigner.App.Services.Dialogs.LastShown != dialog && BlastDesigner.App.Services.Dialogs.LastShown?.IsVisible == true) throw new Exception("a dialog opened after the outline: " + BlastDesigner.App.Services.Dialogs.LastShown.Title);
     var added = vm.Project.Holes.Skip(before).ToList();
     if (added.Count == 0) throw new Exception("no holes from the pattern tool");
-    if (!added.Any(h => h.Label == "S700") || added.Any(h => !h.Label.StartsWith("S"))) throw new Exception("labels not from the panel: " + string.Join(",", added.Take(5).Select(h => h.Label)));
+    // the prefix, the letter of the row, the first number in each row: SA700, SA701… SB700…
+    if (!added.Any(h => System.Text.RegularExpressions.Regex.IsMatch(h.Label, "^S[A-Z]+700$")) || added.Any(h => !System.Text.RegularExpressions.Regex.IsMatch(h.Label, @"^S[A-Z]+\d+$")))
+        throw new Exception("labels not from the panel: " + string.Join(",", added.Take(5).Select(h => h.Label)));
     if (vm.PatternStartNumber != null) throw new Exception("the start number should return to the next free one");
     // the pattern is finished: its panel goes and the Select tool takes over
     if (vm.ActiveTool is not SelectTool) throw new Exception("after the pattern the tool is " + vm.ActiveTool?.Name);
@@ -6176,12 +6178,32 @@ Step("tie tool: holes with an electronic detonator take route numbers in the ord
 Step("a row selected: its name before the holes in the properties panel, as the Attach holes to row list has it", () =>
 {
     var row = vm.Project!.Rows.First(r => r.HoleIds.Count > 1);
+    // rows are named by letters: A, B, C…
+    if (vm.Project.Rows.Take(3).Select(r => r.Name).Any(n => n.StartsWith("Row "))) throw new Exception($"rows should be named by letters: {string.Join(", ", vm.Project.Rows.Take(3).Select(r => r.Name))}");
     try
     {
         window.ShowInspectorTab(0);
         vm.Doc!.Select(row.HoleIds); Pump();
         var name = window.GetLogicalDescendants().OfType<TextBlock>().FirstOrDefault(t => t.Name == "rowName") ?? throw new Exception("no row name for a row selected");
         if (name.Text != BlastDesigner.App.ViewModels.MainViewModel.RowChoiceName(row)) throw new Exception($"the row name should be {BlastDesigner.App.ViewModels.MainViewModel.RowChoiceName(row)}: {name.Text}");
+        // its card: the name typed in, the burden and the spacing it was laid with
+        var card = window.GetLogicalDescendants().OfType<Border>().FirstOrDefault(b => b.Name == "rowCard" && b.IsEffectivelyVisible) ?? throw new Exception("no card of the row selected");
+        var field = card.GetLogicalDescendants().OfType<TextBox>().Single(t => t.Name == "rowNameField");
+        if (field.Text != row.Name) throw new Exception($"the name field of the row says '{field.Text}', not '{row.Name}'");
+        foreach (var value in new[] { "rowBurden", "rowSpacing" })
+            if (card.GetLogicalDescendants().OfType<TextBlock>().SingleOrDefault(t => t.Name == value) is not { Text.Length: > 0 }) throw new Exception($"the card of the row has no {value}");
+        Shot("82_row_card");
+        var was = row.Name;
+        field.Focus();
+        field.Text = "Z9";
+        field.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter });
+        Pump();
+        if (vm.Project!.Rows.First(r => r.Id == row.Id).Name != "Z9") throw new Exception("the name typed in did not go to the row");
+        var renamed = row.HoleIds.Select(vm.Project.FindEntity).OfType<Hole>().Select(h => h.Label).ToList();
+        if (!renamed.All(l => System.Text.RegularExpressions.Regex.IsMatch(l, @"Z9\d+$"))) throw new Exception("the holes of the row named anew should be numbered by its name: " + string.Join(",", renamed.Take(4)));
+        vm.Undo(); Pump();
+        if (vm.Project!.Rows.First(r => r.Id == row.Id).Name != was) throw new Exception("undo did not give the row its name back");
+        vm.Doc!.Select(row.HoleIds); Pump();
         // part of the row: no name
         vm.Doc.Select(row.HoleIds.Take(1)); Pump();
         if (window.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Name == "rowName")) throw new Exception("a row name for one hole of a row");

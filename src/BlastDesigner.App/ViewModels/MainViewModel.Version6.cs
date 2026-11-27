@@ -174,8 +174,12 @@ public sealed partial class MainViewModel
         Change("Curved layout", p =>
         {
             var holes = CadOps.CurvedLayout(pts, prm.Rows, prm.Burden, prm.Spacing, prm.Staggered, prm.RowsToTheLeft, hp, out var rows);
-            foreach (var h in holes) { h.Label = (start++).ToString(); p.Add(h, HoleLayer); }
-            foreach (var r in rows) { r.Name = $"Row {p.Rows.Count + 1}"; p.Rows.Add(r); }
+            for (int k = 0; k < rows.Count; k++) rows[k].Name = HoleRow.Letter(p.Rows.Count + k);
+            // numbered by their rows: A1, A2… B1…; a hole in none on from the next free number
+            HoleDesign.LabelRows(rows, holes);
+            var inRows = rows.SelectMany(x => x.HoleIds).ToHashSet();
+            foreach (var h in holes) { if (!inRows.Contains(h.Id)) h.Label = (start++).ToString(); p.Add(h, HoleLayer); }
+            p.Rows.AddRange(rows);
         });
     }
 

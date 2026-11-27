@@ -89,7 +89,7 @@ public static class CadOps
         {
             var off = OffsetPolyline(baseline, (behindIsLeft ? 1 : -1) * r * burden);
             var length = GeoMath.Length(off);
-            var row = new HoleRow { Name = $"Row {r + 1}", Burden = burden, Spacing = spacing };
+            var row = new HoleRow { Name = HoleRow.Letter(r), Burden = burden, Spacing = spacing };
             var start = staggered && r % 2 == 1 ? spacing / 2 : 0;
             for (double s = start; s <= length + 1e-6; s += spacing)
             {

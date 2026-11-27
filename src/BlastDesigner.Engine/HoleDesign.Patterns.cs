@@ -297,7 +297,9 @@ public static partial class HoleDesign
     }
 
     /// <summary>Fills a polygon with a rectangular or staggered pattern and gives the grid it was laid out on.</summary>
-    public static List<Hole> FillPolygon(IReadOnlyList<Vec3> polygon, PatternParameters pp, HoleParameters hp, out List<HoleRow> rows, out HolePattern pattern)
+    /// <param name="firstRow">The place of the first row of the pattern in the rows of the project: the rows are named by
+    /// their letters from it (<see cref="HoleRow.Letter"/>), the holes by their row (<see cref="RowLabel"/>).</param>
+    public static List<Hole> FillPolygon(IReadOnlyList<Vec3> polygon, PatternParameters pp, HoleParameters hp, out List<HoleRow> rows, out HolePattern pattern, int firstRow = 0)
     {
         rows = new List<HoleRow>();
         var holes = new List<Hole>();
@@ -307,18 +309,20 @@ public static partial class HoleDesign
             return holes;
         }
         pattern = CreatePattern(polygon, pp, hp);
+        // each row numbered on its own from the first number, after the prefix and the letter of the row
         int number = pp.StartNumber;
         HoleRow? row = null;
         foreach (var n in PatternNodes(pattern))
         {
             if (row == null || pattern.RowIds.GetValueOrDefault(n.J) != row.Id)
             {
-                row = new HoleRow { Name = $"Row {rows.Count + 1}", Burden = pp.Burden, Spacing = pp.Spacing };
+                row = new HoleRow { Name = HoleRow.Letter(firstRow + rows.Count), Burden = pp.Burden, Spacing = pp.Spacing };
                 rows.Add(row);
                 pattern.RowIds[n.J] = row.Id;
+                number = pp.StartNumber;
             }
             var h = CreateHole(n.Point, hp);
-            h.Label = pp.LabelPrefix + number++;
+            h.Label = RowLabel(pp.LabelPrefix, row.Name, number++);
             h.RowId = row.Id;
             h.PatternId = pattern.Id;
             h.GridI = n.I;
@@ -557,18 +561,95 @@ public static partial class HoleDesign
         return report;
     }
 
-    /// <summary>The holes of a pattern numbered in row order, or only the new ones with the next free numbers when the numbers are kept.</summary>
+    /// <summary>The label of a hole of a row: the prefix of its pattern, the name of the row and its number in the row (B12-A3).</summary>
+    public static string RowLabel(string prefix, string row, int number) => prefix + row + number;
+
+    /// <summary>The number a label ends with, 0 when it ends with none.</summary>
+    internal static int TailNumber(string label)
+    {
+        var i = label.Length;
+        while (i > 0 && char.IsDigit(label[i - 1])) i--;
+        return i < label.Length && int.TryParse(label[i..], out var k) ? k : 0;
+    }
+
+    /// <summary>
+    /// The holes of a pattern numbered in row order: a hole of a row after the prefix and the letter of its row, each row from
+    /// the first number (<see cref="RowLabel"/>); a hole in no row (an extra one) the prefix and its place among them all.
+    /// With the numbers kept only the new ones are numbered: in a row on from the last number of the row, in none on from
+    /// the last number of the project.
+    /// </summary>
     internal static void Number(BlastProject p, HolePattern pat, List<Hole> ordered, HashSet<Guid> added)
     {
+        var rows = p.Rows.ToDictionary(r => r.Id);
+        HoleRow? RowOf(Hole h) => h.RowId is Guid id && rows.TryGetValue(id, out var r) ? r : null;
+        var next = new Dictionary<Guid, int>();
         if (!pat.KeepLabels)
         {
             int n = pat.StartNumber;
-            foreach (var h in ordered) h.Label = pat.LabelPrefix + n++;
+            foreach (var h in ordered)
+            {
+                if (RowOf(h) is { } row)
+                {
+                    var k = next.GetValueOrDefault(row.Id, pat.StartNumber);
+                    h.Label = RowLabel(pat.LabelPrefix, row.Name, k);
+                    next[row.Id] = k + 1;
+                }
+                else h.Label = pat.LabelPrefix + n;
+                n++;
+            }
         }
         else
         {
-            var next = p.Holes.Where(h => !added.Contains(h.Id)).Select(h => int.TryParse(new string(h.Label.Where(char.IsDigit).ToArray()), out var k) ? k : 0).DefaultIfEmpty(0).Max() + 1;
-            foreach (var h in ordered.Where(h => added.Contains(h.Id))) h.Label = pat.LabelPrefix + next++;
+            var loose = p.Holes.Where(h => !added.Contains(h.Id)).Select(h => int.TryParse(new string(h.Label.Where(char.IsDigit).ToArray()), out var k) ? k : 0).DefaultIfEmpty(0).Max() + 1;
+            foreach (var h in ordered.Where(h => added.Contains(h.Id)))
+            {
+                if (RowOf(h) is { } row)
+                {
+                    if (!next.TryGetValue(row.Id, out var k))
+                        k = row.HoleIds.Where(id => !added.Contains(id)).Select(p.FindEntity).OfType<Hole>().Select(x => TailNumber(x.Label)).DefaultIfEmpty(pat.StartNumber - 1).Max() + 1;
+                    h.Label = RowLabel(pat.LabelPrefix, row.Name, k);
+                    next[row.Id] = k + 1;
+                }
+                else h.Label = pat.LabelPrefix + loose++;
+            }
+        }
+    }
+
+    /// <summary>The holes of rows numbered by their row: the prefix, the letter of the row and the number in it from <paramref name="start"/>.</summary>
+    public static void LabelRows(IEnumerable<HoleRow> rows, IEnumerable<Hole> holes, string prefix = "", int start = 1)
+    {
+        var byId = holes.ToDictionary(h => h.Id);
+        foreach (var row in rows)
+        {
+            var k = start;
+            foreach (var id in row.HoleIds)
+                if (byId.TryGetValue(id, out var h)) h.Label = RowLabel(prefix, row.Name, k++);
+        }
+    }
+
+    /// <summary>
+    /// A row named anew, its holes numbered by it. Holes numbered after the old name take the new one in its place, their
+    /// numbers and prefixes kept (A3 becomes D3, B12-A3 B12-D3). A row whose holes are not all so numbered (a file of before,
+    /// numbers given by hand) is numbered anew: the prefix of the pattern of each hole, the new name and the place in the
+    /// row from the first number of the pattern (1 without one).
+    /// </summary>
+    public static void RenameRow(BlastProject p, Guid rowId, string name)
+    {
+        if (p.Rows.FirstOrDefault(r => r.Id == rowId) is not { } row) return;
+        var old = row.Name;
+        row.Name = name;
+        var holes = row.HoleIds.Select(p.FindEntity).OfType<Hole>().ToList();
+        var pattern = old.Length > 0 ? new System.Text.RegularExpressions.Regex("^(.*)" + System.Text.RegularExpressions.Regex.Escape(old) + "(\\d+)$") : null;
+        var matches = holes.Select(h => pattern?.Match(h.Label)).ToList();
+        if (holes.Count > 0 && matches.All(m => m is { Success: true }))
+        {
+            for (int i = 0; i < holes.Count; i++) holes[i].Label = matches[i]!.Groups[1].Value + name + matches[i]!.Groups[2].Value;
+            return;
+        }
+        for (int i = 0; i < holes.Count; i++)
+        {
+            var of = p.FindPattern(holes[i].PatternId);
+            holes[i].Label = RowLabel(of?.LabelPrefix ?? "", name, (of?.StartNumber ?? 1) + i);
         }
     }
 
@@ -604,7 +685,7 @@ public static partial class HoleDesign
         }
         var rows = made.OrderByDescending(m => m.Front).Select(m => m.Row).ToList();
         p.Rows.InsertRange(at, rows);
-        for (int k = 0; k < rows.Count; k++) rows[k].Name = $"Row {at + k + 1}";
+        for (int k = 0; k < rows.Count; k++) rows[k].Name = HoleRow.Letter(at + k);
         pat.RowIds = map;
         return rows;
     }

@@ -95,7 +95,7 @@ public static partial class HoleDesign
 
     /// <summary>Fills a polygon with a rectangular or staggered pattern.</summary>
     public static List<Hole> FillPolygon(IReadOnlyList<Vec3> polygon, PatternParameters pp, HoleParameters hp, out List<HoleRow> rows) =>
-        FillPolygon(polygon, pp, hp, out rows, out _);
+        FillPolygon(polygon, pp, hp, out rows, out _, 0);
 
     /// <summary>Places holes along a polyline at a fixed spacing (Row tool / "Add along selected polyline").</summary>
     public static List<Hole> AlongPolyline(IReadOnlyList<Vec3> line, double spacing, HoleParameters hp, bool includeEnd, out HoleRow row)
@@ -152,7 +152,7 @@ public static partial class HoleDesign
                 interp.Add(Vec3.Lerp(pa, pb, t));
             }
             holes.AddRange(AlongPolyline(interp, spacing, hp, false, out var row));
-            row.Name = $"Row {r + 1}";
+            row.Name = HoleRow.Letter(r);
             rows.Add(row);
         }
         return holes;
@@ -170,7 +170,7 @@ public static partial class HoleDesign
         void Flush()
         {
             if (current.Count == 0) return;
-            var row = new HoleRow { Name = $"Row {rows.Count + 1}" };
+            var row = new HoleRow { Name = HoleRow.Letter(rows.Count) };
             row.HoleIds.AddRange(current.OrderBy(x => x.U).Select(x => x.Hole.Id));
             rows.Add(row);
             current.Clear();

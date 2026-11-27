@@ -214,7 +214,7 @@ public class PatternSegmentTests
         }
         // the rows are split by segment, as many as before, named Row 1, Row 2… in order
         Assert.Equal(rowCount, p.Rows.Count);
-        Assert.Equal(Enumerable.Range(1, p.Rows.Count).Select(k => $"Row {k}"), p.Rows.Select(r => r.Name));
+        Assert.Equal(Enumerable.Range(0, p.Rows.Count).Select(HoleRow.Letter), p.Rows.Select(r => r.Name));
         Assert.Null(root.OutlineEntityId);
     }
 
@@ -238,12 +238,13 @@ public class PatternSegmentTests
         seg[1].Overrides.Spacing = 3;
         PatternTree.Relayout(p, root);
         var labels = p.Rows.SelectMany(r => r.HoleIds).Select(id => H(p, id).Label).ToList();
-        Assert.Equal(Enumerable.Range(10, labels.Count).Select(k => "P" + k), labels);
-        var front = HoleDesign.PatternHoles(p, seg[0]).Select(h => int.Parse(h.Label[1..])).ToList();
-        var back = HoleDesign.PatternHoles(p, seg[1]).Select(h => int.Parse(h.Label[1..])).ToList();
-        Assert.True(front.Max() < back.Min());
+        // by the rows: the prefix of the parent, the letter of the row, from its first number in each row (PA10, PA11… PB10…)
+        Assert.Equal(p.Rows.SelectMany(r => r.HoleIds.Select((id, i) => "P" + r.Name + (10 + i))), labels);
+        // the rows of the front segment before those of the back one
+        int Place(Hole h) => p.Rows.FindIndex(r => r.Id == h.RowId);
+        Assert.True(HoleDesign.PatternHoles(p, seg[0]).Max(Place) < HoleDesign.PatternHoles(p, seg[1]).Min(Place));
         Assert.Equal(p.Holes.Count(), labels.Count);
-        Assert.Equal(Enumerable.Range(1, p.Rows.Count).Select(k => $"Row {k}"), p.Rows.Select(r => r.Name));
+        Assert.Equal(Enumerable.Range(0, p.Rows.Count).Select(HoleRow.Letter), p.Rows.Select(r => r.Name));
     }
 
     [Fact]
@@ -764,7 +765,7 @@ public class PatternSegmentTests
         Assert.All(PatternTree.LineSegments(p, root).SelectMany(s => HoleDesign.PatternHoles(p, s)), h => Assert.False(GeoMath.PointInPolygon(Island, h.Collar.X, h.Collar.Y)));
         // numbered after the segments between the lines
         var labels = p.Rows.SelectMany(r => r.HoleIds).Select(id => H(p, id).Label).ToList();
-        Assert.Equal(Enumerable.Range(1, labels.Count).Select(k => k.ToString()), labels);
+        Assert.Equal(p.Rows.SelectMany(r => r.HoleIds.Select((id, i) => r.Name + (i + 1))), labels);
         Assert.Equal(inside.Count, HoleDesign.PatternHoles(p, island).Count());
 
         // taken away again: the holes go to the segments around, back to one pattern when nothing else is cut

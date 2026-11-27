@@ -26,7 +26,7 @@ public class ProductCatalogueTests
             Assert.Equal(ProductCatalogue.KindId(k), Kind(c, k).Id);
         Assert.True(Type(c, "User defined").UserDelay);
         // the kinds of the shock tube as the initiation catalogue lists them
-        Assert.Equal(new[] { ProductKind.SurfaceConnector, ProductKind.DownholeDetonator, ProductKind.Other }.Select(ProductCatalogue.KindId), Type(c, "Shock tube").KindIds);
+        Assert.Equal(new[] { ProductKind.SurfaceConnector, ProductKind.DownholeDetonator, ProductKind.CombinationDetonator, ProductKind.Other }.Select(ProductCatalogue.KindId), Type(c, "Shock tube").KindIds);
         Assert.All(c.Groups.SelectMany(g => g.KindIds).Concat(c.Types.SelectMany(t => t.KindIds)).Concat(c.Families.Select(f => f.KindId)), id => Assert.Contains(c.Kinds, k => k.Id == id));
     }
 

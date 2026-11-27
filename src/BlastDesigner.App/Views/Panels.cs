@@ -519,7 +519,7 @@ public sealed partial class PropertiesPanel : DockPanel
             // the letter of the route, under the layer: to be seen, not folded away among the other fields
             if (RouteLineRow(doc, sel.OfType<Hole>().ToList()) is { } route) ((StackPanel)_content.Content).Children.Insert(4, route);
             // a row selected (all its holes, no other): its name before the holes, as the Attach holes to row list has it
-            if (RowName(doc.Project, sel) is { } row) ((StackPanel)_content.Content).Children.Insert(0, row);
+            if (RowCard(doc, sel) is { } row) ((StackPanel)_content.Content).Children.Insert(0, row);
             return;
         }
         var panel = new StackPanel { Children = { LayerRow(doc, sel) } };
@@ -889,18 +889,47 @@ public sealed partial class PropertiesPanel : DockPanel
     }
 
     /// <summary>
-    /// The name of the row whose holes are selected, all of them and no other, as the list of Attach holes to row shows it:
-    /// "name (holes)"; null for any other selection.
+    /// The card of the row whose holes are selected, all of them and no other: its name as the list of Attach holes to row
+    /// shows it ("name (holes)"), then its fields: the name (typed in, one undo step), the burden and the spacing it was laid
+    /// with. Null for any other selection.
     /// </summary>
-    private static Control? RowName(BlastProject p, List<Entity> sel)
+    private Control? RowCard(Document doc, List<Entity> sel)
     {
         var ids = sel.Select(e => e.Id).ToHashSet();
-        var row = p.Rows.FirstOrDefault(r => r.HoleIds.Count == ids.Count && r.HoleIds.All(ids.Contains));
+        var row = doc.Project.Rows.FirstOrDefault(r => r.HoleIds.Count == ids.Count && r.HoleIds.All(ids.Contains));
         if (row == null) return null;
-        return new TextBlock
+        var title = new TextBlock
         {
             Text = BlastDesigner.App.ViewModels.MainViewModel.RowChoiceName(row), FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Look.Blue,
             TextTrimming = TextTrimming.CharacterEllipsis, Name = "rowName"
+        };
+        var name = new TextBox { Text = row.Name, Name = "rowNameField", IsReadOnly = doc.IsReadOnly, Height = 28, MinHeight = 28, VerticalContentAlignment = VerticalAlignment.Center };
+        var id = row.Id;
+        var was = row.Name;
+        void Commit()
+        {
+            var v = (name.Text ?? "").Trim();
+            if (doc.IsReadOnly || v.Length == 0 || v == was) { name.Text = was; return; }
+            was = v;
+            // the holes numbered after the row take its new name: A3 becomes D3
+            _vm.Change(Loc.F("Edit {0}", Loc.Ui("Row name")), p => HoleDesign.RenameRow(p, id, v));
+        }
+        name.LostFocus += (_, _) => Commit();
+        name.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Enter) { Commit(); e.Handled = true; } };
+        string Length(double v) => v > 0 ? $"{Qty.Text(BlastDesigner.Domain.Quantity.Length, v, "0.###")} {Qty.Sym(BlastDesigner.Domain.Quantity.Length)}" : "—";
+        TextBlock Value(string text, string id) => new() { Text = text, Name = id, VerticalAlignment = VerticalAlignment.Center, Foreground = Look.Text };
+        TextBlock Label(string text) => new() { Text = Loc.Ui(text), VerticalAlignment = VerticalAlignment.Center, Foreground = Look.Muted, Margin = new Thickness(0, 0, 12, 0) };
+        var fields = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), RowDefinitions = new RowDefinitions("Auto,Auto,Auto"), RowSpacing = 6 };
+        void Put(Control c, int r, int col) { Grid.SetRow(c, r); Grid.SetColumn(c, col); fields.Children.Add(c); }
+        Put(Label("Row name"), 0, 0); Put(name, 0, 1);
+        Put(Label("Burden"), 1, 0); Put(Value(Length(row.Burden), "rowBurden"), 1, 1);
+        Put(Label("Row spacing"), 2, 0); Put(Value(Length(row.Spacing), "rowSpacing"), 2, 1);
+        ToolTip.SetTip(fields, Loc.Ui("The burden and the spacing the row was laid with"));
+        return new Border
+        {
+            Name = "rowCard",
+            Background = Look.Panel, BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(10), Child = new StackPanel { Spacing = 8, Children = { title, fields } }
         };
     }
 

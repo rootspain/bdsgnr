@@ -407,6 +407,8 @@ public static class TiePaletteWindow
     {
         ProductKind.DetonatingCord => Qty.WithUnit(BlastDesigner.Domain.Quantity.Velocity, p.Vod, "0"),
         ProductKind.HarnessWire or ProductKind.ElectronicDetonator => p.Name,
+        // in the hole / on the tie
+        ProductKind.CombinationDetonator => Loc.F("{0} ms", p.InHoleDelayMs.ToString("0.#") + "/" + p.SurfaceDelayMs.ToString("0.#")),
         _ => Loc.F("{0} ms", p.DelayMs.ToString("0.#"))
     };
 
@@ -483,7 +485,7 @@ public static class TiePaletteWindow
                 // the type starts with the first variant of the chosen family
                 var fams = Families(vm, item);
                 var chosen = FamilyOf(vm, item, fams);
-                Use(vm, fams.FirstOrDefault(g => g.Key == chosen)?.OrderBy(p => p.DelayMs).First(), null, item.Id);
+                Use(vm, fams.FirstOrDefault(g => g.Key == chosen)?.OrderBy(p => p.SurfaceDelay).First(), null, item.Id);
             }, item.Id == type, Loc.T(item.Name));
             chip.Tag = "type:" + item.Id;
             typeChips.Children.Add(chip);
@@ -548,7 +550,7 @@ public static class TiePaletteWindow
             };
             row.Classes.Add("flat");
             ToolTip.SetTip(row, note.Length > 0 ? $"{key.Name}\n{note}\n{Loc.F("{0} var.", g.Count())}" : $"{key.Name}\n{Loc.F("{0} var.", g.Count())}");
-            row.Click += (_, _) => { if (key != FamilyOf(vm, typeInfo, families)) Use(vm, g.OrderBy(p => p.DelayMs).First(), null, type); };
+            row.Click += (_, _) => { if (key != FamilyOf(vm, typeInfo, families)) Use(vm, g.OrderBy(p => p.SurfaceDelay).First(), null, type); };
             famList.Children.Add(row);
         }
         _panel.Children.Add(Step("Family", new Border { BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7), ClipToBounds = true, Child = famList }));
@@ -556,7 +558,7 @@ public static class TiePaletteWindow
         // ---- Variant
         var variants = Wrap();
         variants.Name = "tieVariants";
-        foreach (var p in families.First(g => g.Key == family).OrderBy(p => p.DelayMs))
+        foreach (var p in families.First(g => g.Key == family).OrderBy(p => p.SurfaceDelay))
         {
             var prod = p;
             var on = vm.ActiveTieDelayMs == null && vm.ActiveConnector?.Id == p.Id;

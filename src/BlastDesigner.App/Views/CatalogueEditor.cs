@@ -239,6 +239,7 @@ public sealed class CatalogueEditor : Grid
         ProductKind.CordRelay => "Delay on the tie, on cord",
         ProductKind.ElectricDetonator => "In-hole delay, tie without a delay",
         ProductKind.HarnessWire => "Tie without a delay",
+        ProductKind.CombinationDetonator => "In-hole delay and surface delay on the tie",
         _ => "No rules of its own"
     });
 
@@ -257,6 +258,7 @@ public sealed class CatalogueEditor : Grid
         ProductKind.CordRelay => "Used for ties: the delay of the product is the delay of the tie, as with a surface connector.",
         ProductKind.ElectricDetonator => "Offered as the detonator of a primer: its delay is added to the firing time of the hole. On a tie it adds no delay.",
         ProductKind.HarnessWire => "Used for ties that only carry the signal: a tie with it adds no delay.",
+        ProductKind.CombinationDetonator => "One unit in the hole and on the tie: as the detonator of a primer its in-hole delay is added to the firing time of the hole; on a tie its surface delay passes the signal on to the next hole. Quantities count it in pieces.",
         _ => "No calculation of its own: it is not explosive or stemming, quantities count it in pieces, and on a tie its delay is used."
     });
 

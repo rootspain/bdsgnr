@@ -42,14 +42,16 @@ public partial class MainViewModel
         if (Project == null) return holes;
         var hp = NewHoleParameters();
         int number = NextPatternNumber;
+        var rowsAt = Project.Rows.Count;
         foreach (var (id, edge) in plan)
         {
             if (Project.FindEntity(id) is not PolylineEntity { Closed: true, Points.Count: >= 3 } poly) continue;
             try
             {
-                var made = HoleDesign.FillPolygon(poly.Points, PolygonPatternSetup(edge, number), hp, out _, out _);
+                // the rows of each pattern named on from those before it, as making them names them
+                var made = HoleDesign.FillPolygon(poly.Points, PolygonPatternSetup(edge, number), hp, out var rows, out _, rowsAt);
                 holes.AddRange(made);
-                number += made.Count;
+                rowsAt += rows.Count;
             }
             catch (InvalidOperationException) { /* a grid too dense for its outline shows nothing */ }
         }
@@ -76,7 +78,7 @@ public partial class MainViewModel
                 foreach (var (id, edge) in plan)
                 {
                     if (p.FindEntity(id) is not PolylineEntity { Closed: true, Points.Count: >= 3 } poly) continue;
-                    var holes = HoleDesign.FillPolygon(poly.Points, PolygonPatternSetup(edge, number), hp, out var rows, out var pattern);
+                    var holes = HoleDesign.FillPolygon(poly.Points, PolygonPatternSetup(edge, number), hp, out var rows, out var pattern, p.Rows.Count);
                     if (holes.Count == 0) continue;
                     foreach (var h in holes)
                     {
@@ -87,14 +89,13 @@ public partial class MainViewModel
                         else unlevelled++;
                     }
                     int r0 = p.Rows.Count;
-                    foreach (var r in rows) r.Name = $"Row {++r0}";
+                    foreach (var r in rows) r.Name = HoleRow.Letter(r0++);
                     p.Rows.AddRange(rows);
                     pattern.Name = Loc.F("Pattern {0}", p.Patterns.Count(x => x.ParentId == null) + 1);
                     pattern.OutlineEntityId = id;
                     pattern.ToLevel = toLevel;
                     pattern.ToSurface = toSurface;
                     p.Patterns.Add(pattern);
-                    number += holes.Count;
                     count += holes.Count;
                     patterns++;
                     made.AddRange(holes.Select(h => h.Id));

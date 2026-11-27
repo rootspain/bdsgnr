@@ -1362,7 +1362,7 @@ public sealed class HoleLoadingEditor : DockPanel
             var electronic = det?.Kind == ProductKind.ElectronicDetonator;
             var delay = electronic
                 ? new TextBox { Text = pr.OffsetMs != 0 ? N(pr.OffsetMs, "0.##") : "", Watermark = "0", Height = 30, MinHeight = 30, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong }
-                : new TextBox { Text = pr.DelayMs is double ms ? N(ms, "0.##") : "", Watermark = det != null ? N(det.DelayMs, "0") : "", Height = 30, MinHeight = 30, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong };
+                : new TextBox { Text = pr.DelayMs is double ms ? N(ms, "0.##") : "", Watermark = det != null ? N(det.InHoleDelay, "0") : "", Height = 30, MinHeight = 30, FontFamily = Look.Mono, Background = Look.Field, BorderBrush = Look.LineStrong };
             void CommitDelay(bool keepFocus)
             {
                 var v = Parse(delay.Text);

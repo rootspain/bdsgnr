@@ -72,7 +72,7 @@ public static class TieFit
             var products = project.Products
                 .Where(p => kinds.Contains(p.KindId) && GoesOnTie(p) && (!p.Deleted || now.Contains(p.Id) || used?.Contains(p.Id) == true))
                 .OrderBy(p => kinds.IndexOf(p.KindId)).ThenBy(p => p.FamilyName, StringComparer.CurrentCultureIgnoreCase)
-                .ThenBy(p => p.DelayMs).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase);
+                .ThenBy(p => p.SurfaceDelay).ThenBy(p => p.Name, StringComparer.CurrentCultureIgnoreCase);
             foreach (var p in products)
             {
                 if (!seen.Add(p.Id)) continue;

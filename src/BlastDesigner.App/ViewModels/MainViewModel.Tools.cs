@@ -290,8 +290,10 @@ public sealed partial class MainViewModel
         Change("Add row", p =>
         {
             var holes = HoleDesign.AlongPolyline(line, spacing, hp, true, out var row);
-            row.Name = $"Row {p.Rows.Count + 1}";
-            foreach (var h in holes) { h.Label = (start++).ToString(); p.Add(h, HoleLayer); }
+            row.Name = HoleRow.Letter(p.Rows.Count);
+            // numbered by the row: A1, A2…
+            HoleDesign.LabelRows(new[] { row }, holes);
+            foreach (var h in holes) p.Add(h, HoleLayer);
             p.Rows.Add(row);
         });
     }
@@ -319,7 +321,8 @@ public sealed partial class MainViewModel
     /// <summary>First hole number of the next pattern; null: the next free number.</summary>
     public int? PatternStartNumber { get => _patternStartNumber; set { _patternStartNumber = value; PatternSetupChanged?.Invoke(); } }
     private int? _patternStartNumber;
-    public int NextPatternNumber => PatternStartNumber ?? (int.TryParse(NextHoleLabel(), out var n) ? n : 1);
+    /// <summary>The first number of each row of the next pattern: typed in the panel, else 1 (the rows are told apart by their letters).</summary>
+    public int NextPatternNumber => PatternStartNumber ?? 1;
     /// <summary>To level of the holes of the next pattern (<see cref="Hole.ToLevel"/>); null: none.</summary>
     public double? PatternToLevel { get => _patternToLevel; set { _patternToLevel = value; PatternSetupChanged?.Invoke(); } }
     private double? _patternToLevel;
@@ -362,7 +365,7 @@ public sealed partial class MainViewModel
         var toLevel = ask ? null : PatternToLevel;
         Change("Pattern", p =>
         {
-            var holes = HoleDesign.FillPolygon(polygon, pp, hp, out var rows, out var pattern);
+            var holes = HoleDesign.FillPolygon(polygon, pp, hp, out var rows, out var pattern, p.Rows.Count);
             foreach (var h in holes) p.Add(h, HoleLayer);
             if (toSurface || toLevel != null)
                 foreach (var h in holes)
@@ -372,7 +375,7 @@ public sealed partial class MainViewModel
                     else unlevelled++;
                 }
             int r0 = p.Rows.Count;
-            foreach (var r in rows) r.Name = $"Row {++r0}";
+            foreach (var r in rows) r.Name = HoleRow.Letter(r0++);
             p.Rows.AddRange(rows);
             p.Design.Burden = pp.Burden;
             p.Design.Spacing = pp.Spacing;
@@ -525,7 +528,11 @@ public sealed partial class MainViewModel
         Change("Drill holes between lines", p =>
         {
             var holes = HoleDesign.BetweenLines(lines[0].Points, lines[1].Points, s, (int)r, hp, out var newRows);
-            foreach (var h in holes) { h.Label = (start++).ToString(); p.Add(h, HoleLayer); }
+            // the rows named on from those of the project, their holes by them: E1, E2… F1…
+            for (int k = 0; k < newRows.Count; k++) newRows[k].Name = HoleRow.Letter(p.Rows.Count + k);
+            HoleDesign.LabelRows(newRows, holes);
+            var inRows = newRows.SelectMany(x => x.HoleIds).ToHashSet();
+            foreach (var h in holes) { if (!inRows.Contains(h.Id)) h.Label = (start++).ToString(); p.Add(h, HoleLayer); }
             p.Rows.AddRange(newRows);
         });
     }
@@ -712,7 +719,7 @@ public sealed partial class MainViewModel
             p.Rows.RemoveAll(r => r.HoleIds.Count == 0);
             var ordered = GeneralOps.ChainPoints(HolesById(p, ids.ToHashSet()).Select(h => h.Collar).ToList());
             var map = HolesById(p, ids.ToHashSet()).ToDictionary(h => h.Collar);
-            var row = new HoleRow { Name = $"Row {p.Rows.Count + 1}", HoleIds = ordered.Select(c => map[c].Id).ToList() };
+            var row = new HoleRow { Name = HoleRow.Letter(p.Rows.Count), HoleIds = ordered.Select(c => map[c].Id).ToList() };
             foreach (var h in HolesById(p, ids.ToHashSet())) h.RowId = row.Id;
             p.Rows.Add(row);
         });
@@ -1264,8 +1271,15 @@ public sealed partial class MainViewModel
         SetStatus(Loc.F("{0} holes timed", n));
     }
 
-    /// <summary>A row as the list of Attach holes to row names it, and the properties panel over its holes: "name (holes)".</summary>
-    public static string RowChoiceName(HoleRow r) => $"{r.Name} ({r.HoleIds.Count})";
+    /// <summary>
+    /// A row as the list of Attach holes to row names it, and the properties panel over its holes: "Row name (holes)", in
+    /// the language of the program; the name "Row 8" of a file of before is shown by its number (Row 8 (3), not Row Row 8).
+    /// </summary>
+    public static string RowChoiceName(HoleRow r)
+    {
+        var old = System.Text.RegularExpressions.Regex.Match(r.Name, @"^Row (\d+)$");
+        return Loc.F("Row {0} ({1})", old.Success ? old.Groups[1].Value : r.Name, r.HoleIds.Count);
+    }
 
     public async Task Deprogram(bool onlyManual)
     {

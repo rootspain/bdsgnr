@@ -4021,3 +4021,13 @@ ui:The surface the collars sat on was deleted: they stay where they are	Саға
 ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), on the collar polygon on the vertices of the outline, or on a surface picked on the plan	Сағалар қайда: жобаның сағалар бетінде (ол болмаса — тор деңгейінде), контур төбелеріндегі сағалар полигонында немесе жоспарда көрсетілген бетте
 {0} “{1}”	{0} «{1}»
 No surface lies above or below the holes.	Ұңғымалардың үстінде де, астында да бірде-бір бет жоқ.
+Combination detonator	Құрама дүмпіткіш
+ui:Combination detonator	Құрама дүмпіткіш
+ui:Surface delay	Беттік кідіріс
+ui:In-hole delay and surface delay on the tie	Ұңғымадағы кідіріс және байланыстағы беттік кідіріс
+ui:One unit in the hole and on the tie: as the detonator of a primer its in-hole delay is added to the firing time of the hole; on a tie its surface delay passes the signal on to the next hole. Quantities count it in pieces.	Ұңғымада да, байланыста да тұратын бір бұйым: оқтамның дүмпіткіші ретінде оның ұңғымадағы кідірісі ұңғыманың жару уақытына қосылады; байланыста оның беттік кідірісі сигналды келесі ұңғымаға жеткізеді. Саны дана бойынша есептеледі.
+ui:Row name	Аты
+ui:Row spacing	Қадам
+ui:The burden and the spacing the row was laid with	Қатар салынған ЕҚКС пен қадам
+Row {0} ({1})	{0} қатары ({1})
+Depth manual	Тереңдік қолмен

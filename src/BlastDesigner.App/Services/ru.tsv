@@ -4288,3 +4288,13 @@ ui:The surface the collars sat on was deleted: they stay where they are	Пове
 ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), on the collar polygon on the vertices of the outline, or on a surface picked on the plan	Где устья: на поверхности устьев проекта (без неё — на уровне сетки), на полигоне устьев по вершинам контура или на поверхности, указанной на плане
 {0} “{1}”	{0} «{1}»
 No surface lies above or below the holes.	Ни одна поверхность не проходит над или под скважинами.
+Combination detonator	Комбинированный детонатор
+ui:Combination detonator	Комбинированный детонатор
+ui:Surface delay	Поверхностное замедление
+ui:In-hole delay and surface delay on the tie	Задержка в скважине и поверхностная задержка на связи
+ui:One unit in the hole and on the tie: as the detonator of a primer its in-hole delay is added to the firing time of the hole; on a tie its surface delay passes the signal on to the next hole. Quantities count it in pieces.	Одно изделие в скважине и на связи: как детонатор боевика его внутрискважинное замедление прибавляется ко времени взрыва скважины; на связи его поверхностное замедление передаёт сигнал к следующей скважине. В количествах считается в штуках.
+ui:Row name	Имя
+ui:Row spacing	Шаг
+ui:The burden and the spacing the row was laid with	ЛНС и шаг, с которыми построен ряд
+Row {0} ({1})	Ряд {0} ({1})
+Depth manual	Глубина вручную

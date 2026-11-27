@@ -322,6 +322,8 @@ public sealed class ProductsEditor : DockPanel
         ProductKind.Booster => Qty.WithUnit(BlastDesigner.Domain.Quantity.SmallMass, p.UnitMass),
         ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => N(p.DelayMs, "0") + " " + L("ms"),
         ProductKind.DetonatingCord => Qty.WithUnit(BlastDesigner.Domain.Quantity.Velocity, p.Vod, "0"),
+        // in the hole / on the tie
+        ProductKind.CombinationDetonator => N(p.InHoleDelayMs, "0") + "/" + N(p.SurfaceDelayMs, "0") + " " + L("ms"),
         _ => ""
     };
 
@@ -638,6 +640,13 @@ public sealed class ProductsEditor : DockPanel
             ProductKind.Stemming => new() { Fields(Density(), new Border()) },
             ProductKind.Booster => new() { Fields(UnitMass("Mass", BlastDesigner.Domain.Quantity.SmallMass), Density(), Energy(), Vod()) },
             ProductKind.DownholeDetonator => new() { Fields(Delay(), Labeled("Signal down the tube", Propagation(p))) },
+            // one unit, two delays: the in-hole part fires the charge, the surface block passes the signal on along the tie
+            ProductKind.CombinationDetonator => new()
+            {
+                Fields(Labeled("In-hole delay", Number("inHoleDelay", p.InHoleDelayMs, v => p.InHoleDelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true)),
+                    Labeled("Surface delay", Number("surfaceDelay", p.SurfaceDelayMs, v => p.SurfaceDelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true))),
+                Fields(Labeled("Signal down the tube", Propagation(p)), new Border())
+            },
             ProductKind.SurfaceConnector => new() { Fields(Delay(), Labeled("Lead length", Number("leadLength", BlastDesigner.Domain.Quantity.Length, p.LeadLengthM, v => p.LeadLengthM = Math.Max(0, v)))) },
             ProductKind.CordRelay or ProductKind.ElectricDetonator => new() { Fields(Delay(), new Border()) },
             ProductKind.HarnessWire => new(),
@@ -738,6 +747,7 @@ public sealed class ProductsEditor : DockPanel
             case ProductKind.CordRelay: p.DelayMs = 25; p.Color = 0xFFFFB300; break;
             case ProductKind.ElectricDetonator: p.DelayMs = 25; p.Color = 0xFF5C6BC0; break;
             case ProductKind.HarnessWire: p.Color = 0xFF78909C; break;
+            case ProductKind.CombinationDetonator: p.InHoleDelayMs = 500; p.SurfaceDelayMs = 25; p.Color = 0xFF7E57C2; break;
         }
         var last = Products.FindLastIndex(x => x.KindId == record.Id);
         Products.Insert(last < 0 ? Products.Count : last + 1, p);
@@ -897,7 +907,7 @@ public sealed class ProductsEditor : DockPanel
 
     private static bool Same(Product a, Product b) =>
         a.Name == b.Name && a.Manufacturer == b.Manufacturer && a.Family == b.Family && a.FamilyId == b.FamilyId && a.KindId == b.KindId && a.Deleted == b.Deleted && a.Density == b.Density && a.RelativeWeightStrength == b.RelativeWeightStrength
-        && a.Energy == b.Energy && a.Vod == b.Vod && a.DelayMs == b.DelayMs && a.LeadLengthM == b.LeadLengthM && a.UnitMass == b.UnitMass && a.UnitLength == b.UnitLength
+        && a.Energy == b.Energy && a.Vod == b.Vod && a.DelayMs == b.DelayMs && a.InHoleDelayMs == b.InHoleDelayMs && a.SurfaceDelayMs == b.SurfaceDelayMs && a.LeadLengthM == b.LeadLengthM && a.UnitMass == b.UnitMass && a.UnitLength == b.UnitLength
         && a.WaterResistant == b.WaterResistant && a.Cost == b.Cost && a.Color == b.Color;
 
     private void UpdateStatus()

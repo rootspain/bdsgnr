@@ -9,7 +9,9 @@ public static class Timing
     /// <summary>
     /// Delay of a tie: its own when set (user defined), else by its product: a connector or cord relay its nominal delay,
     /// detonating cord the time the cord takes from end to end (length over its VOD), electric wiring, harness wire and
-    /// electronic connections none (the delay is in the hole or programmed). The ends are looked up when not given.
+    /// electronic connections none (the delay is in the hole or programmed), a combination detonator the delay of its
+    /// surface block (<see cref="Product.SurfaceDelayMs"/>: the signal goes on from the hole the tie starts at to the next
+    /// one that long after it got there, while the hole fires by the in-hole part). The ends are looked up when not given.
     /// </summary>
     public static double TieDelay(BlastProject project, TieEntity tie, Vec3? from = null, Vec3? to = null)
     {
@@ -23,9 +25,42 @@ public static class Timing
                 return a is Vec3 pa && b is Vec3 pb ? Vec3.Distance(pa, pb) / p.Vod * 1000 : 0;
             case ProductKind.ElectricDetonator or ProductKind.HarnessWire or ProductKind.ElectronicDetonator:
                 return 0;
+            case ProductKind.CombinationDetonator:
+                return p.SurfaceDelayMs;
             default:
                 return p.DelayMs;
         }
+    }
+
+    /// <summary>
+    /// The surface block of the hole: the least surface delay of the combination detonators of its primers, ms (several in
+    /// one hole: the first block to go off sends the signal on, as the earliest arrival wins); null for a hole without one
+    /// and for anything that is not a hole.
+    /// </summary>
+    public static double? HoleSurfaceDelay(BlastProject project, Guid node) =>
+        project.FindEntity(node) is Hole h ? HoleSurfaceDelay(project, h) : null;
+
+    public static double? HoleSurfaceDelay(BlastProject project, Hole h)
+    {
+        double? least = null;
+        foreach (var (p, _) in Charging.Primers(h))
+            if (project.FindProduct(p.DetonatorId) is { Kind: ProductKind.CombinationDetonator } d && (least == null || d.SurfaceDelayMs < least))
+                least = d.SurfaceDelayMs;
+        return least;
+    }
+
+    /// <summary>
+    /// How long the signal takes from the hole (or point) a tie leaves to its other end: the surface block of the
+    /// combination detonator in the hole it leaves (<see cref="HoleSurfaceDelay(BlastProject, Hole)"/>), then the tie
+    /// (<see cref="TieDelay"/>). The block is counted once: a tie whose product is a combination detonator leaving such a
+    /// hole is its lead and adds nothing more, unless it has a delay of its own; out of any other hole or point it gives
+    /// its surface delay as the tie.
+    /// </summary>
+    public static double SignalDelay(BlastProject project, TieEntity tie, double? fromBlock, Vec3? a = null, Vec3? b = null)
+    {
+        if (fromBlock is not double block) return TieDelay(project, tie, a, b);
+        var lead = tie.DelayMs == 0 && project.FindProduct(tie.ProductId) is { Kind: ProductKind.CombinationDetonator };
+        return block + (lead ? 0 : TieDelay(project, tie, a, b));
     }
 
     /// <summary>
@@ -52,11 +87,13 @@ public static class Timing
             if (positions.TryGetValue(t.ToId, out var e)) t.ToPos = e;
         }
 
+        // the signal leaves a hole with a combination detonator after its surface block, then goes along the tie
+        var blocks = holes.Values.Select(h => (h.Id, Block: HoleSurfaceDelay(project, h))).Where(x => x.Block.HasValue).ToDictionary(x => x.Id, x => x.Block);
         var adj = new Dictionary<Guid, List<(Guid To, double Delay)>>();
         foreach (var t in ties)
         {
             if (!adj.TryGetValue(t.FromId, out var list)) adj[t.FromId] = list = new();
-            list.Add((t.ToId, TieDelay(project, t, t.FromPos, t.ToPos)));
+            list.Add((t.ToId, SignalDelay(project, t, blocks.GetValueOrDefault(t.FromId), t.FromPos, t.ToPos)));
         }
 
         var arrival = new Dictionary<Guid, double>();
@@ -204,11 +241,12 @@ public static class Timing
             if (!adj.TryGetValue(a, out var list)) adj[a] = list = new();
             list.Add((b, d));
         }
+        var blocks = project.Holes.Select(h => (h.Id, Block: HoleSurfaceDelay(project, h))).Where(x => x.Block.HasValue).ToDictionary(x => x.Id, x => x.Block);
         foreach (var t in ties)
         {
-            var d = TieDelay(project, t);
-            Edge(t.FromId, t.ToId, d);
-            Edge(t.ToId, t.FromId, d);
+            // either way the signal leaves an end after the surface block of the hole there
+            Edge(t.FromId, t.ToId, SignalDelay(project, t, blocks.GetValueOrDefault(t.FromId)));
+            Edge(t.ToId, t.FromId, SignalDelay(project, t, blocks.GetValueOrDefault(t.ToId)));
         }
         var pq = new PriorityQueue<Guid, (double Time, int Ties)>();
         void Seed(Guid id, (double Time, int Ties) at)

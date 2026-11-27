@@ -408,7 +408,8 @@ public static partial class PatternTree
         p.Rows.RemoveAll(r => byId.ContainsKey(r.Id));
         if (at < 0 || at > p.Rows.Count) at = p.Rows.Count;
         p.Rows.InsertRange(at, rows);
-        for (int k = 0; k < rows.Count; k++) rows[k].Name = $"Row {at + k + 1}";
+        // named by their place; the holes numbered after a row's name take its new one (M3 becomes A3)
+        for (int k = 0; k < rows.Count; k++) HoleDesign.RenameRow(p, rows[k].Id, HoleRow.Letter(at + k));
     }
 
     /// <summary>The place of a leaf in the tree: the orders of its segments from the top down.</summary>

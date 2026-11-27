@@ -35,23 +35,27 @@ public static class Charging
     public static IEnumerable<(Primer Primer, Deck Deck)> Primers(Hole hole) =>
         hole.Decks.SelectMany(d => d.Primers.Select(p => (p, d)));
 
-    /// <summary>Delay of a primer's detonator, ms.</summary>
     /// <summary>Whether a primer of the hole carries an electronic detonator.</summary>
     public static bool HasElectronicDetonator(BlastProject project, Hole hole) =>
         Primers(hole).Any(x => project.FindProduct(x.Primer.DetonatorId)?.Kind == ProductKind.ElectronicDetonator);
 
+    /// <summary>
+    /// Delay of a primer's detonator in the hole, ms: its own when set, else the detonator's (of a combination detonator
+    /// its in-hole part, <see cref="Product.InHoleDelay"/>).
+    /// </summary>
     public static double PrimerDelay(BlastProject project, Primer p) =>
-        p.DelayMs ?? project.FindProduct(p.DetonatorId)?.DelayMs ?? 0;
+        p.DelayMs ?? project.FindProduct(p.DetonatorId)?.InHoleDelay ?? 0;
 
     /// <summary>Whether a primer carries an electronic detonator.</summary>
     public static bool IsElectronic(BlastProject project, Primer p) => project.FindProduct(p.DetonatorId)?.Kind == ProductKind.ElectronicDetonator;
 
     /// <summary>
     /// The run of the signal down the tube of a downhole detonator to its primer: the depth of the primer times the
-    /// detonator's <see cref="Product.PropagationMsPerM"/>, ms; nothing for other detonators.
+    /// detonator's <see cref="Product.PropagationMsPerM"/>, ms (of a combination detonator too: its in-hole part is shock
+    /// tube); nothing for other detonators.
     /// </summary>
     public static double PropagationDelay(BlastProject project, Primer p) =>
-        project.FindProduct(p.DetonatorId) is { Kind: ProductKind.DownholeDetonator } d ? Math.Max(0, p.Depth) * d.PropagationMsPerM : 0;
+        project.FindProduct(p.DetonatorId) is { Kind: ProductKind.DownholeDetonator or ProductKind.CombinationDetonator } d ? Math.Max(0, p.Depth) * d.PropagationMsPerM : 0;
 
     /// <summary>
     /// Charges of a hole: runs of explosive decks with no inert deck or gap between them, from the collar down, each with its

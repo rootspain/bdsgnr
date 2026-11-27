@@ -185,7 +185,9 @@ public sealed class ProductCatalogue
     /// </summary>
     public static void Attach(BlastProject project, ProductCatalogue user, IReadOnlyList<Product> userProducts)
     {
+        var noCombination = !project.Catalogue.Kinds.Any(k => k.Id == CombinationDetonator) && !user.Kinds.Any(k => k.Id == CombinationDetonator);
         project.Catalogue = Layered(BuiltIn(), user, project.Catalogue);
+        if (noCombination) AddCombinationDetonator(project.Catalogue);
         DropRetired(project);
         RenameDaveyTronic(project);
         RenameBusLineAndEsi(project);
@@ -247,6 +249,21 @@ public sealed class ProductCatalogue
             if (p.Id == BusLineProduct && p.Name == harness) p.Name = bus;
             if (p.Kind == ProductKind.HarnessWire && p.Family == harness) p.Family = bus;
         }
+    }
+
+    private const string ShockTubeType = "cff81fcf-0398-4a18-a4d9-b6214389f566", DetonatorsGroup = "1223d610-578d-4ee8-b2f4-9872ee3bb696";
+
+    /// <summary>
+    /// The kind of the combination detonator came after 0.3.14: the tables of a project or of the user's file saved before
+    /// it keep their own records of the shock tube type and the detonators group, which do not list it, so it is added
+    /// to them once, when the kind is new to the project (a project saved since has the kind and keeps what the user did).
+    /// </summary>
+    private static void AddCombinationDetonator(ProductCatalogue tables)
+    {
+        if (tables.Types.FirstOrDefault(t => t.Id == ShockTubeType) is { } type && !type.KindIds.Contains(CombinationDetonator))
+            type.KindIds.Insert(Math.Min(type.KindIds.Count, Math.Max(0, type.KindIds.IndexOf(DownholeDetonator) + 1)), CombinationDetonator);
+        if (tables.Groups.FirstOrDefault(g => g.Id == DetonatorsGroup) is { } group && !group.KindIds.Contains(CombinationDetonator))
+            group.KindIds.Add(CombinationDetonator);
     }
 
     /// <summary>Ids of the products the built-in catalogue had once, and of their family.</summary>
@@ -343,7 +360,8 @@ public sealed class ProductCatalogue
     // the ids of the built-in records are fixed: the same record is the same in every project and on every computer
     private const string BulkExplosive = "1bc46bc2-40ee-43dc-bf6e-f5ef1354a853", PackagedExplosive = "841ac6aa-bff6-47d1-8b8b-1475895a6999", Stemming = "26e82681-2fcc-4370-820a-25275fc8413f", GasBag = "091a505e-5a7a-4441-ac44-866e1a42ce2d", Booster = "0e8147e0-4d81-4923-b539-78fc9ec6a651",
         DownholeDetonator = "ff819924-7054-48c0-a5ef-09f37bc17029", SurfaceConnector = "c977fa76-9dfc-4c1d-aa28-7e50f675719d", ElectronicDetonator = "eef16ba5-7b42-4f78-846a-879d905c1579", DetonatingCord = "f87efe79-b240-4abe-8f86-31360733632e",
-        CordRelay = "9ad419c4-d5a0-4ab7-90f1-2b237feaf047", ElectricDetonator = "22457879-fb13-4d37-88a8-c14b60edd42a", HarnessWire = "17a4186b-12d3-4433-a4df-489cf06e38e4", Other = "aba36964-4ea3-424b-ab4a-8772e52929ec";
+        CordRelay = "9ad419c4-d5a0-4ab7-90f1-2b237feaf047", ElectricDetonator = "22457879-fb13-4d37-88a8-c14b60edd42a", HarnessWire = "17a4186b-12d3-4433-a4df-489cf06e38e4", Other = "aba36964-4ea3-424b-ab4a-8772e52929ec",
+        CombinationDetonator = "6d0f3b8e-5a27-4c19-8e4b-b2f17c93d0a6";
 
     /// <summary>The built-in id of a kind of the program.</summary>
     public static string KindId(ProductKind behaviour) => behaviour switch
@@ -360,6 +378,7 @@ public sealed class ProductCatalogue
         ProductKind.CordRelay => CordRelay,
         ProductKind.ElectricDetonator => ElectricDetonator,
         ProductKind.HarnessWire => HarnessWire,
+        ProductKind.CombinationDetonator => CombinationDetonator,
         _ => Other
     };
 
@@ -406,8 +425,10 @@ public sealed class ProductCatalogue
         Kind("Electric detonator", ProductKind.ElectricDetonator);
         Kind("Bus line", ProductKind.HarnessWire);
         Kind("Other", ProductKind.Other);
+        // after Other: the order of the kinds before it stays as projects saved it
+        Kind("Combination detonator", ProductKind.CombinationDetonator);
 
-        Type("cff81fcf-0398-4a18-a4d9-b6214389f566", "Shock tube", SurfaceConnector, DownholeDetonator, Other);
+        Type(ShockTubeType, "Shock tube", SurfaceConnector, DownholeDetonator, CombinationDetonator, Other);
         Type("3d8f503e-e82f-414c-993b-f022fd8159a2", "Cord delay", CordRelay);
         Type("e323b18e-f698-45f6-b9d3-f6807e006efc", "Detonating cord system", DetonatingCord);
         Type("f85e4a61-ee14-434e-aa5d-4c8f4cf26f5e", "Electric", ElectricDetonator);
@@ -419,7 +440,7 @@ public sealed class ProductCatalogue
         Group("90bcf534-0c16-49f7-9b65-03b2813a81e5", "Stemming", Stemming);
         Group("e207fbdf-d4fa-4479-a889-632bdad0be3f", "Gas bags", GasBag);
         Group("74861deb-eacc-413b-bf3e-356fd0319786", "Boosters", Booster);
-        Group("1223d610-578d-4ee8-b2f4-9872ee3bb696", "Detonators", DownholeDetonator, ElectronicDetonator, ElectricDetonator);
+        Group(DetonatorsGroup, "Detonators", DownholeDetonator, ElectronicDetonator, ElectricDetonator, CombinationDetonator);
         Group("f27bcbde-6c2e-44f9-9d1f-33a012735b3f", "Surface connectors", SurfaceConnector);
         Group("cbbb681a-0578-4f1c-932d-d4e3dc25cb37", "Detonating cord", DetonatingCord, CordRelay);
         Group(BusLineGroup, "Bus line", HarnessWire);
@@ -432,6 +453,7 @@ public sealed class ProductCatalogue
         Family("a70df506-c21a-4e74-8f5a-22bd5f22a86f", "Detonating cord", DetonatingCord);
         Family("f5d36999-3c77-4a86-be52-14c75c75dd7b", "Cord relay", CordRelay);
         Family(BusLineFamily, "Bus line", HarnessWire);
+        Family("b81e4c2a-7d36-4f95-a0e8-3c6f9d12b7e4", "Combination detonator", CombinationDetonator);
         return c;
     }
 }

@@ -250,10 +250,21 @@ public sealed class TypeDefinition
 public sealed class HoleRow
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public string Name { get; set; } = "Row 1";
+    /// <summary>The name of the row: a letter, A for the first, then B, C… (<see cref="Letter"/>); files of before have "Row 1"….</summary>
+    public string Name { get; set; } = "A";
     public List<Guid> HoleIds { get; set; } = new();
     public double Burden { get; set; }
     public double Spacing { get; set; }
+
+    /// <summary>
+    /// The name of a row by its place from 0: A, B… Z, then AA, AB… as the columns of a spreadsheet go.
+    /// </summary>
+    public static string Letter(int index)
+    {
+        var name = "";
+        for (var n = Math.Max(index, 0) + 1; n > 0; n = (n - 1) / 26) name = (char)('A' + (n - 1) % 26) + name;
+        return name;
+    }
 }
 
 /// <summary>

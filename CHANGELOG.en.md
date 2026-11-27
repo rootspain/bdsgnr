@@ -67,6 +67,14 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   surface is picked on the plan, and the new and laid out holes of the pattern go onto it; "On the grid" and "Collar
   polygon" unbind them. The "Collars onto surface" button switches the list itself for a pattern or segment all of whose
   holes are selected; with only some selected it leaves the list and says so. Older versions open such files as "On the grid".
+- **The card of a row, rows by letters:** with all the holes of one row selected (a click on the line of the row, say)
+  the Properties tab shows the card of the row on top: Name (one of your own can be typed in, one undo step), Burden and
+  Spacing the row was laid with. New rows are named by letters A, B, C…, after Z AA, AB; the names "Row 1"… of the files
+  opened stay, so the initiation rules by row name keep working. The holes of a row are numbered by it: the prefix of the
+  pattern, the letter of the row and the number in the row from the first number (A1, A2… B1…, with the prefix "B12-"
+  B12-A1); so number the Row tool, Between lines and the curved layout too. A row named anew gives its holes the new name
+  (A3 → D3; numbers of before, without the name of the row, are given anew: "57, 58" → D1, D2), a pattern laid out again numbers them after the new places of the rows. The card and the Attach holes to
+  row list read "Row A (13)", an old "Row 8" "Row 8 (3)". The hole field Depth manual is translated.
 
 ### Changed
 - **A copy of a hole of a pattern stays in the pattern:** a hole copied and pasted (Ctrl+C/Ctrl+V, Move/copy) stays in

@@ -80,8 +80,10 @@ public class PatternTests
         for (int k = 0; k < old.Count; k++)
         {
             Assert.Equal(0, Vec3.Distance(old[k].Collar, holes[k].Collar), 9);
-            Assert.Equal(old[k].Label, holes[k].Label);
         }
+        // numbered by the rows: the prefix, the letter of the row, the place in it from the first number (AA5, AA6… AB5…)
+        var byId = holes.ToDictionary(h => h.Id);
+        Assert.Equal(rows.SelectMany(r => r.HoleIds.Select((id, i) => pp.LabelPrefix + r.Name + (pp.StartNumber + i))), rows.SelectMany(r => r.HoleIds).Select(id => byId[id].Label));
         Assert.Equal(old.Select(o => o.Row).Distinct().Count(), rows.Count);
         // the grid rows are the rows of before, counted from the face row (j = 0)
         Assert.Equal(old.Select(o => o.Row), holes.Select(h => h.GridJ!.Value));
@@ -154,7 +156,7 @@ public class PatternTests
         Assert.All(p.Rows, r => Assert.All(r.HoleIds, id => Assert.Contains(id, ids)));
         Assert.Equal(p.Holes.Count(), p.Rows.Sum(r => r.HoleIds.Count));
         // numbered again by the rows
-        Assert.Equal(Enumerable.Range(1, ids.Count).Select(n => n.ToString()), p.Rows.SelectMany(r => r.HoleIds).Select(id => H(p, id).Label));
+        Assert.Equal(p.Rows.SelectMany(r => r.HoleIds.Select((id, i) => r.Name + (i + 1))), p.Rows.SelectMany(r => r.HoleIds).Select(id => H(p, id).Label));
     }
 
     [Fact]
@@ -239,10 +241,10 @@ public class PatternTests
         Assert.Equal(0, p.Header.BlastOrientation);
         var first = p.Rows[0].HoleIds.Select(id => H(p, id)).ToList();
         Assert.All(first, h => Assert.Equal(lastJ, h.GridJ));
-        Assert.Equal("1", first[0].Label);
+        Assert.Equal("A1", first[0].Label);
         // the face row is the one furthest along the blast (north at 0°)
         Assert.True(first.Average(h => h.Collar.Y) > p.Rows[^1].HoleIds.Select(id => H(p, id)).Average(h => h.Collar.Y));
-        Assert.Equal("Row 1", p.Rows[0].Name);
+        Assert.Equal("A", p.Rows[0].Name);
 
         var (q, qat, _) = Make(Rectangle, type: PatternType.Rectangular, rotateOrientation: true);
         HoleDesign.RotatePattern(q, qat, 180);
