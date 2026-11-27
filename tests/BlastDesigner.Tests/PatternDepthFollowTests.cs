@@ -76,7 +76,9 @@ public class PatternDepthFollowTests
         copy.Translate(new Vec3(60, 0, 0));
         doc.Execute("Paste", pr => pr.Entities.Add(copy));
         var pasted = (Hole)doc.Project.FindEntity(copy.Id)!;
-        Assert.Null(pasted.PatternId);
+        // an extra hole of the pattern of the one copied, on no node
+        Assert.Equal(pat.Id, pasted.PatternId);
+        Assert.True(HoleDesign.IsExtraHole(pasted));
         AssertDownTo(pasted, Grade(pasted.Collar.X));
         AssertDownTo((Hole)doc.Project.FindEntity(source.Id)!, Grade(source.Collar.X));
     }

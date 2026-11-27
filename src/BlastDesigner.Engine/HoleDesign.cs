@@ -254,21 +254,13 @@ public static partial class HoleDesign
         return moved;
     }
 
-    /// <summary>Drapes collars onto a surface keeping the toe elevation (so lengths change).</summary>
-    public static void DrapeCollars(IEnumerable<Hole> holes, SurfaceEntity surface, bool keepToe)
-    {
-        foreach (var h in holes)
-        {
-            if (surface.ElevationAt(h.Collar.X, h.Collar.Y) is not double z) continue;
-            if (keepToe)
-            {
-                var toe = h.DesignToe;
-                h.Collar = h.Collar.WithZ(z);
-                h.SetToe(toe);
-            }
-            else h.Collar = h.Collar.WithZ(z);
-        }
-    }
+    /// <summary>
+    /// Drapes collars onto a surface, keeping the toe positions (so lengths change) or moving each hole up or down whole;
+    /// the holes put on it are bound to it (<see cref="Hole.CollarSurfaceId"/>), those off it stay as they were. Gives how
+    /// many went onto it. <see cref="CollarSurfaces.Drape"/> also switches the Collars list of their patterns.
+    /// </summary>
+    public static int DrapeCollars(IEnumerable<Hole> holes, SurfaceEntity surface, bool keepToe) =>
+        holes.Count(h => CollarSurfaces.SeatOne(h, surface, keepToe));
 
     /// <summary>Holes whose collars fall inside a polygon.</summary>
     public static IEnumerable<Hole> InsidePolygon(IEnumerable<Hole> holes, IReadOnlyList<Vec3> poly) =>

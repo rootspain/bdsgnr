@@ -207,6 +207,13 @@ public static partial class PatternTree
         var gone = new List<Guid>();
         foreach (var h in HoleDesign.PatternHoles(p, from).ToList())
         {
+            // an extra hole (on no node) goes over to the other pattern as it is, still on no node
+            if (HoleDesign.IsExtraHole(h) && !IsSeamHole(p, h))
+            {
+                Defaults.Of(into.HoleDefaults).ApplyChanged(h, Defaults.Of(from.HoleDefaults));
+                h.PatternId = into.Id;
+                continue;
+            }
             if (NodeAt(into, NodeLocation(from, h)) is var (i, j))
             {
                 // what the two patterns make their holes with differently, the hole takes from the one it goes to
@@ -385,7 +392,9 @@ public static partial class PatternTree
         }
         MoveRows(p, rows.Select(r => r.Id).ToList(), rowsAt);
         var ordered = rows.SelectMany(r => r.HoleIds).Select(p.FindEntity).OfType<Hole>().ToList();
-        // the holes the seam rule put in gaps are in no row: they take the numbers after the others
+        // the extra holes (copies, on no node) and the holes the seam rule put in gaps are in no row: they take the numbers
+        // after the others
+        ordered.AddRange(TreeHoles(p, root).Where(h => HoleDesign.IsExtraHole(h) && !IsSeamHole(p, h)));
         ordered.AddRange(root.SeamAdded.Select(p.FindEntity).OfType<Hole>());
         HoleDesign.Number(p, root, ordered, added ?? new HashSet<Guid>());
     }
@@ -827,6 +836,8 @@ public static partial class PatternTree
         foreach (var h in HoleDesign.PatternHoles(p, seg).Where(h => h.Angle >= 0.1))
             if (o.Bearing == PatternBearingMode.Rotate) h.Bearing = GeoMath.NormalizeBearing(h.Bearing + delta);
             else if (o.Bearing == PatternBearingMode.BlastOrientation) h.Bearing = p.Header.BlastOrientation;
+        // its extra holes turn with it about its centre (their bearings turned above)
+        HoleDesign.TurnExtraHoles(p, new[] { seg }, seg.Center, delta, o, bearings: false);
         o.BearingDelta = 0;
         return Relayout(p, root, o);
     }
@@ -844,6 +855,7 @@ public static partial class PatternTree
             if (s.Overrides.Azimuth is double az) s.Overrides.Azimuth = GeoMath.NormalizeBearing(az + delta);
         if (root.RotateOrientation) p.Header.BlastOrientation = GeoMath.NormalizeBearing(p.Header.BlastOrientation + delta);
         o.BearingDelta = delta;
+        HoleDesign.TurnExtraHoles(p, Leaves(p, root), root.Center, delta, o, bearings: true);
         return Relayout(p, root, o);
     }
 }

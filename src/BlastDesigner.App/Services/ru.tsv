@@ -4269,3 +4269,22 @@ Vertex {0} of {1}	Вершина {0} из {1}
 Vertices: {0}	Вершины: {0}
 Vertex {0} of {1}, Z {2:0.00} m	Вершина {0} из {1}, Z {2:0.00} м
 Close line	Замкнуть линию
+# Collar surface of holes
+{0} collars on the surface “{1}”	{0} устьев на поверхности «{1}»
+{0} holes off the surface left as they were	{0} скважин вне поверхности — оставлены как есть
+Pattern “{0}”: {1} of {2} holes selected, its Collars list not switched	Сетка «{0}»: выбрано {1} из {2} скважин, список «Устья» не переключён
+Collars onto surface	Устья на поверхность
+Unbind collars from surface	Отвязать устья от поверхности
+Click the surface the collars sit on; Esc gives up.	Щёлкните поверхность, на которой стоят устья; Esc — отмена.
+ui:different	разные
+ui:Collar surface	Поверхность устьев
+ui:On the surface	На поверхности
+ui:The surface the collars sit on: moved, copied or pasted, a hole goes onto it again straight down, its angle, bearing and length as they were; an elevation of the collar typed in takes it off	Поверхность, на которой стоят устья: перемещённая, скопированная или вставленная скважина снова садится на неё по вертикали, угол, азимут и длина не меняются; отметка устья, введённая вручную, снимает привязку
+ui:Pick on the plan: click the surface the collars of the selected holes go onto (the lengths stay)	Указать на плане: щёлкните поверхность, на которую сядут устья выбранных скважин (длины сохраняются)
+ui:Pick on the plan	Указать на плане
+ui:Unbind	Сбросить
+ui:Unbind: the collars stay where they are and no longer follow a surface	Сбросить: устья остаются на месте и больше не следуют за поверхностью
+ui:The surface the collars sat on was deleted: they stay where they are	Поверхность, на которой стояли устья, удалена: устья остаются на месте
+ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), on the collar polygon on the vertices of the outline, or on a surface picked on the plan	Где устья: на поверхности устьев проекта (без неё — на уровне сетки), на полигоне устьев по вершинам контура или на поверхности, указанной на плане
+{0} “{1}”	{0} «{1}»
+No surface lies above or below the holes.	Ни одна поверхность не проходит над или под скважинами.

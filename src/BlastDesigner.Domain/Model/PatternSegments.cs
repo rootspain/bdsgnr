@@ -76,6 +76,12 @@ public sealed class DepthSpec
     public DepthMode Mode { get; set; }
     /// <summary>Where the collars are: on the surface of the project or on the collar polygon.</summary>
     public CollarSource Collars { get; set; }
+    /// <summary>
+    /// With collars on the surface of the project (<see cref="CollarSource.ProjectSurface"/>): the surface the collars sit
+    /// on, the holes laid out on it carry it (<see cref="Hole.CollarSurfaceId"/>); null: the bench surface of the project.
+    /// Kept apart from <see cref="Collars"/> so that files with it still open in versions without it.
+    /// </summary>
+    public Guid? CollarSurfaceId { get; set; }
     public DepthPair Front { get; set; } = new(10, 10);
     public DepthPair Back { get; set; } = new(10, 10);
     /// <summary>The level the holes go down to in <see cref="DepthMode.RectToLevel"/>.</summary>
@@ -91,6 +97,8 @@ public sealed class DepthSpec
     public bool IsOwnMode => UsesRectangle || Mode is DepthMode.Range or DepthMode.Polygon;
     /// <summary>Whether the collar or the depth polygon is used.</summary>
     public bool UsesPolygons => Collars == CollarSource.Polygon || Mode == DepthMode.Polygon;
+    /// <summary>The collars sit on a surface of their own (<see cref="CollarSurfaceId"/>), the On the surface item of the list.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public bool OnOwnSurface => Collars == CollarSource.ProjectSurface && CollarSurfaceId != null;
 
     /// <summary>
     /// The value at relative position <paramref name="s"/> (0…1 along a row, left to right) and <paramref name="t"/> (0…1 from
@@ -109,12 +117,12 @@ public sealed class DepthSpec
     public DepthSpec Clone() => new()
     {
         Mode = Mode, Collars = Collars, Front = new DepthPair(Front.From, Front.To), Back = new DepthPair(Back.From, Back.To), Level = Level, Round = Round,
-        IncludesSubdrill = IncludesSubdrill
+        IncludesSubdrill = IncludesSubdrill, CollarSurfaceId = CollarSurfaceId
     };
 
     public bool SameAs(DepthSpec o) =>
         Mode == o.Mode && Collars == o.Collars && Front.From == o.Front.From && Front.To == o.Front.To && Back.From == o.Back.From && Back.To == o.Back.To
-        && Level == o.Level && Round == o.Round && IncludesSubdrill == o.IncludesSubdrill;
+        && Level == o.Level && Round == o.Round && IncludesSubdrill == o.IncludesSubdrill && CollarSurfaceId == o.CollarSurfaceId;
 }
 
 /// <summary>

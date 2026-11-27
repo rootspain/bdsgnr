@@ -119,6 +119,14 @@ public sealed partial class MainViewModel
             // a new depth of a segment is taken by all its holes, those edited by hand too
             foreach (var leaf in leaves.Where(l => !depths[l.Id].SameAs(l.HoleDefaults.Depth)))
                 foreach (var h in HoleDesign.PatternHoles(p, leaf)) h.DepthManual = false;
+            // collars put on a surface of their own (or taken off it): the holes of the leaf are bound to it (or to none)
+            static bool Rect(DepthSpec d) => d.Mode == DepthMode.RectToLevel;
+            foreach (var leaf in leaves)
+            {
+                DepthSpec was = depths[leaf.Id], now = leaf.HoleDefaults.Depth;
+                if (was.OnOwnSurface != now.OnOwnSurface || (now.OnOwnSurface && was.CollarSurfaceId != now.CollarSurfaceId) || (now.OnOwnSurface && Rect(was) != Rect(now)))
+                    CollarSurfaces.FollowDepth(p, leaf);
+            }
             foreach (var leaf in leaves)
                 if (before[leaf.Id] != (PatternTree.EffectiveDepthMode(leaf), leaf.ToLevel, leaf.HoleDefaults.BenchHeight, leaf.HoleDefaults.Depth.Collars)
                     && (always || before[leaf.Id].Item1 != PatternTree.EffectiveDepthMode(leaf) || before[leaf.Id].Item2 != leaf.ToLevel || before[leaf.Id].Item4 != leaf.HoleDefaults.Depth.Collars))

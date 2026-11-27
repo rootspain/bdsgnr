@@ -346,17 +346,24 @@ public class PatternTests
     }
 
     [Fact]
-    public void ACopyOfAPatternHole_IsAHoleOfItsOwn_AndDetachedHolesLeaveTheirNodeEmpty()
+    public void ACopyOfAPatternHole_IsAnExtraHoleOfIt_AndDetachedHolesLeaveTheirNodeEmpty()
     {
         var (p, pat, holes) = Make(Circle());
         var doc = new Document(p);
         var copyId = Guid.Empty;
         doc.Execute("Paste", pr => { var c = (Hole)pr.FindEntity(holes[0].Id)!.CloneWithNewId(); c.Translate(new Vec3(1, 1, 0)); pr.Entities.Add(c); copyId = c.Id; });
-        Assert.Null(H(doc.Project, copyId).PatternId);
+        var copy = H(doc.Project, copyId);
+        Assert.Equal(pat.Id, copy.PatternId);
+        Assert.Null(copy.GridI);
+        Assert.Null(copy.GridJ);
+        Assert.Null(copy.GridOffset);
         doc.Execute("Detach", pr => HoleDesign.DetachFromPattern(pr, new[] { (Hole)pr.FindEntity(holes[1].Id)! }));
         Assert.Null(H(doc.Project, holes[1].Id).PatternId);
         doc.Execute("Rebuild", pr => HoleDesign.RebuildPattern(pr, pr.Patterns[0]));
         Assert.Equal(1, doc.Project.Holes.Count(h => Vec3.Distance2D(h.Collar, holes[1].Collar) < 1e-6));
+        // the extra hole stays where it was put; its node keeps its hole
+        Assert.Equal(holes[0].Collar.X + 1, H(doc.Project, copyId).Collar.X, 9);
+        Assert.Equal(pat.Id, H(doc.Project, holes[0].Id).PatternId);
         doc.Execute("Dissolve", pr => HoleDesign.DissolvePattern(pr, pr.Patterns[0]));
         Assert.Empty(doc.Project.Patterns);
         Assert.All(doc.Project.Holes, h => Assert.Null(h.PatternId));

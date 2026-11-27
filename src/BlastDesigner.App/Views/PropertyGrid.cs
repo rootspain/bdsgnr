@@ -55,6 +55,8 @@ public sealed class PropertyGrid : Grid
     public HashSet<string> Chips { get; } = new();
     /// <summary>A control of the caller's in the cell after a property; it moves to each new form of the grid.</summary>
     public Dictionary<string, Control> Beside { get; } = new();
+    /// <summary>Properties whose <see cref="Beside"/> control takes a whole row of its own under them.</summary>
+    public HashSet<string> WideBeside { get; } = new();
     /// <summary>The two columns of the fields of a section, with the gap between them.</summary>
     public string FieldColumns { get; set; } = "*,8,*";
     /// <summary>Unit shown in the field of a property, by property name.</summary>
@@ -219,7 +221,7 @@ public sealed class PropertyGrid : Grid
             var names = Sections[i].Names;
             var listed = names.SelectMany(n => cells.Where(c => c.Name == n));
             if (i == Sections.Count - 1) listed = listed.Concat(cells.Where(c => !Sections.Any(s => s.Names.Contains(c.Name))));
-            var fields = listed.SelectMany(c => Beside.TryGetValue(c.Name, out var extra) ? new[] { (c.Cell, c.Wide), (extra, false) } : new[] { (c.Cell, c.Wide) }).ToList();
+            var fields = listed.SelectMany(c => Beside.TryGetValue(c.Name, out var extra) ? new[] { (c.Cell, c.Wide), (extra, WideBeside.Contains(c.Name)) } : new[] { (c.Cell, c.Wide) }).ToList();
             if (fields.Count > 0) body.Children.Add(Section(Sections[i].Title, fields));
         }
         SetColumnSpan(body, 2);

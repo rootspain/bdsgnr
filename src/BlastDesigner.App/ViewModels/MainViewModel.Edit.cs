@@ -49,6 +49,7 @@ public sealed partial class MainViewModel
         var ids = new List<Guid>();
         // new ids up front, so a pasted initiation point goes on the pasted copy of its hole; one without it is not pasted
         var newIds = entities.ToDictionary(e => e.Id, _ => Guid.NewGuid());
+        
         entities.RemoveAll(e => e is InitiationPoint { HoleId: Guid hid } && !newIds.ContainsKey(hid));
         Change("Paste", p =>
         {
@@ -61,10 +62,24 @@ public sealed partial class MainViewModel
                     ps.SourceIds = ps.SourceIds.All(newIds.ContainsKey) ? ps.SourceIds.Select(id => newIds[id]).ToList() : new();
                 e.Translate(offset);
                 if (p.FindLayer(e.LayerId) == null) e.LayerId = p.DefaultLayer.Id;
-                if (e is Hole h) { h.Label = NextHoleLabel(); h.RowId = null; }
+                if (e is Hole h)
+                {
+                    h.Label = NextHoleLabel();
+                    h.RowId = null;
+                    // a copy of a hole of a pattern stays in its pattern (segment), on no node; pasted into a project
+                    // without that pattern, it is a hole of its own
+                    if (h.PatternId != null && p.FindPattern(h.PatternId) == null) h.DetachFromPattern();
+                }
                 p.Entities.Add(e);
                 ids.Add(e.Id);
             }
+            // a hole pasted with the surface its collar sits on is bound to the pasted surface; to one of this project,
+            // to it; to none otherwise (pasted from another project). Then it goes onto it at its new place.
+            var pasted = entities.OfType<Hole>().ToList();
+            foreach (var h in pasted)
+                if (h.CollarSurfaceId is Guid sid)
+                    h.CollarSurfaceId = newIds.TryGetValue(sid, out var to) ? to : CollarSurfaces.Find(p, sid) != null ? sid : null;
+            CollarSurfaces.SeatAll(p, pasted);
         });
         // Part of the paste step: undoing the paste also brings back the earlier selection.
         Doc.Select(ids, record: false);

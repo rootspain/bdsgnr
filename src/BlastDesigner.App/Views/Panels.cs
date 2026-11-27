@@ -238,6 +238,48 @@ public sealed partial class PropertiesPanel : DockPanel
         new("Measurements", nameof(Hole.ActualLength), nameof(Hole.WaterDepth), nameof(Hole.Temperature), nameof(Hole.Exceptions)),
         new("Other")
     };
+    /// <summary>
+    /// The surface the collars of the selected holes sit on (<see cref="Hole.CollarSurfaceId"/>): its name, none, ⚠ gone, or
+    /// different ones; the eyedropper picks one on the plan, ✕ takes the holes off theirs.
+    /// </summary>
+    private Control CollarSurfaceRow(Document doc, List<Hole> holes)
+    {
+        var ids = holes.Select(h => h.Id).ToList();
+        var bound = holes.Select(h => h.CollarSurfaceId).Distinct().ToList();
+        string text;
+        var muted = false;
+        if (bound.Count > 1) { text = Loc.Ui("different"); muted = true; }
+        else if (bound[0] is not Guid sid) { text = Loc.Ui("none"); muted = true; }
+        else if (doc.Project.FindEntity(sid) is SurfaceEntity s) text = string.IsNullOrWhiteSpace(s.Name) ? Loc.T(s.KindName) : s.Name;
+        else text = "⚠ " + Loc.Ui("deleted");
+        var name = new TextBlock
+        {
+            Text = text, Name = "holeCollarSurface", VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = muted ? Look.Muted : Look.Text
+        };
+        ToolTip.SetTip(name, Loc.Ui("The surface the collars sit on: moved, copied or pasted, a hole goes onto it again straight down, its angle, bearing and length as they were; an elevation of the collar typed in takes it off"));
+        var pick = Ui.Flat(Look.Icon("eyedropper", 14, Look.TextSoft), Loc.Ui("Pick on the plan: click the surface the collars of the selected holes go onto (the lengths stay)"), () => _vm.PickCollarSurface(ids), 28, 28);
+        pick.Name = "holeCollarSurfacePick";
+        pick.IsEnabled = !doc.IsReadOnly;
+        Avalonia.Automation.AutomationProperties.SetName(pick, Loc.Ui("Pick on the plan"));
+        var clear = Ui.Flat(Look.Icon("close", 13, Look.TextSoft), Loc.Ui("Unbind: the collars stay where they are and no longer follow a surface"), () => _vm.UnbindCollarSurface(ids), 28, 28);
+        clear.Name = "holeCollarSurfaceClear";
+        clear.IsEnabled = !doc.IsReadOnly && holes.Any(h => h.CollarSurfaceId != null);
+        Avalonia.Automation.AutomationProperties.SetName(clear, Loc.Ui("Unbind"));
+        pick[DockPanel.DockProperty] = Dock.Right;
+        clear[DockPanel.DockProperty] = Dock.Right;
+        var field = new Border
+        {
+            BorderBrush = Look.Line, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(4), Padding = new Thickness(8, 0, 2, 0), MinHeight = 30,
+            Child = new DockPanel { Children = { clear, pick, name } }
+        };
+        return new StackPanel
+        {
+            Spacing = 4,
+            Children = { new TextBlock { Text = Loc.Ui("Collar surface"), FontSize = 12, Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap }, field }
+        };
+    }
+
     /// <summary>The groups folded, kept from one selection to the next.</summary>
     private readonly HashSet<string> _collapsed = new() { "Measurements", "Other" };
 
@@ -384,6 +426,10 @@ public sealed partial class PropertiesPanel : DockPanel
                 Avalonia.Automation.AutomationProperties.SetName(toSurface, Loc.Ui("To the surface"));
                 grid.After[nameof(Hole.ToLevel)] = toSurface;
             }
+            // the surface the collars sit on: a row of its own under the collar
+            grid.Exclude.Add(nameof(Hole.CollarSurfaceId));
+            grid.Beside[nameof(Hole.Collar)] = CollarSurfaceRow(doc, sel.OfType<Hole>().ToList());
+            grid.WideBeside.Add(nameof(Hole.Collar));
         }
         // the weight and the type of a line as AutoCAD has them, chosen from its lists
         if (sel.All(e => e is ILineStyled)) LineStyleFields.Apply(grid, doc.Project);

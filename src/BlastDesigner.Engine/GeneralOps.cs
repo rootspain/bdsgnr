@@ -80,7 +80,10 @@ public static class GeneralOps
         };
     }
 
-    /// <summary>Copies entities with an offset, returning the copies (Move/copy entities).</summary>
+    /// <summary>
+    /// Copies entities with an offset, returning the copies (Move/copy entities). A hole copied with the surface its collar
+    /// sits on is bound to the copy of the surface; the caller seats the copies (<see cref="CollarSurfaces.SeatAll"/>).
+    /// </summary>
     public static List<Entity> Copy(IEnumerable<Entity> entities, Vec3 offset, int copies)
     {
         var result = new List<Entity>();
@@ -102,11 +105,14 @@ public static class GeneralOps
             foreach (var (from, c) in pairs)
                 if (from is SurfaceEntity { SourceIds.Count: > 0 } s && c is SurfaceEntity sc && s.SourceIds.All(copied.ContainsKey))
                     sc.SourceIds = s.SourceIds.Select(id => copied[id]).ToList();
+            // a hole copied with the surface its collar sits on sits on the copy of it
+            foreach (var (_, c) in pairs)
+                if (c is Hole { CollarSurfaceId: Guid sid } ch && copied.TryGetValue(sid, out var to)) ch.CollarSurfaceId = to;
         }
         return result;
     }
 
-    /// <summary>Moves points, polylines and texts vertically onto a surface.</summary>
+    /// <summary>Moves points, polylines, texts and the collars of holes (bound to it, <see cref="Hole.CollarSurfaceId"/>) vertically onto a surface.</summary>
     public static int MoveOntoSurface(IEnumerable<Entity> entities, SurfaceEntity surface)
     {
         int n = 0;
@@ -114,7 +120,8 @@ public static class GeneralOps
         {
             if (e is Hole h)
             {
-                if (surface.ElevationAt(h.Collar.X, h.Collar.Y) is double z) { h.Collar = h.Collar.WithZ(z); n++; }
+                // the hole goes up or down whole and stays on the surface from then on
+                if (CollarSurfaces.SeatOne(h, surface, keepToe: false)) n++;
                 continue;
             }
             if (e is SurfaceEntity) continue;

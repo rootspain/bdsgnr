@@ -4002,3 +4002,22 @@ Vertex {0} of {1}	Sommet {0} sur {1}
 Vertices: {0}	Sommets : {0}
 Vertex {0} of {1}, Z {2:0.00} m	Sommet {0} sur {1}, Z {2:0.00} m
 Close line	Fermer la ligne
+# Collar surface of holes
+{0} collars on the surface “{1}”	{0} têtes sur la surface « {1} »
+{0} holes off the surface left as they were	{0} trous hors de la surface laissés tels quels
+Pattern “{0}”: {1} of {2} holes selected, its Collars list not switched	Maille « {0} » : {1} trous sur {2} sélectionnés, la liste « Têtes » n'est pas changée
+Collars onto surface	Têtes sur la surface
+Unbind collars from surface	Détacher les têtes de la surface
+Click the surface the collars sit on; Esc gives up.	Cliquez sur la surface où reposent les têtes ; Échap pour annuler.
+ui:different	différentes
+ui:Collar surface	Surface des têtes
+ui:On the surface	Sur la surface
+ui:The surface the collars sit on: moved, copied or pasted, a hole goes onto it again straight down, its angle, bearing and length as they were; an elevation of the collar typed in takes it off	Surface où reposent les têtes : un trou déplacé, copié ou collé y est reposé à la verticale, angle, azimut et longueur inchangés ; une altitude de tête saisie à la main le détache
+ui:Pick on the plan: click the surface the collars of the selected holes go onto (the lengths stay)	Désigner sur le plan : cliquez sur la surface où poser les têtes des trous sélectionnés (longueurs conservées)
+ui:Pick on the plan	Désigner sur le plan
+ui:Unbind	Détacher
+ui:Unbind: the collars stay where they are and no longer follow a surface	Détacher : les têtes restent en place et ne suivent plus de surface
+ui:The surface the collars sat on was deleted: they stay where they are	La surface des têtes a été supprimée : elles restent en place
+ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), on the collar polygon on the vertices of the outline, or on a surface picked on the plan	Où sont les têtes : sur la surface des têtes du projet (au niveau de la maille sans elle), sur le polygone des têtes aux sommets du contour, ou sur une surface désignée sur le plan
+{0} “{1}”	{0} « {1} »
+No surface lies above or below the holes.	Aucune surface ne passe au-dessus ou au-dessous des trous.

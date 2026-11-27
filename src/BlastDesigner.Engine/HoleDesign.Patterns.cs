@@ -386,6 +386,7 @@ public static partial class HoleDesign
         pat.FaceEdge = null;
         if (pat.RotateOrientation) p.Header.BlastOrientation = GeoMath.NormalizeBearing(p.Header.BlastOrientation + delta);
         o.BearingDelta = delta;
+        TurnExtraHoles(p, new[] { pat }, pat.Center, delta, o, bearings: true);
         return RebuildPattern(p, pat, o);
     }
 
@@ -434,6 +435,13 @@ public static partial class HoleDesign
         var rect = depth.UsesRectangle ? DepthRectangle.Of(pat) : null;
         // the collar and depth polygons, on the vertices of the outline of the pattern (or segment)
         var (collarPoly, depthPoly) = depth.UsesPolygons ? PatternSurfaces.Surfaces(p, pat, o.CollarSurface) : (null, null);
+        // the surface the collars sit on (the On the surface item of the list); null when it is gone: the collars stay
+        var ownSurface = depth.OnOwnSurface;
+        var collarSurface = ownSurface ? CollarSurfaces.Find(p, depth.CollarSurfaceId) : null;
+        // a hole bound to a surface goes onto it at its node; one bound to a surface gone or not under it, or taken off the
+        // pattern's by an elevation typed in, keeps its collar elevation
+        double? OwnCollar(Hole h, Vec3 at) => CollarSurfaces.Find(p, h.CollarSurfaceId)?.ElevationAt(at.X, at.Y);
+        bool KeepsZ(Hole h) => h.CollarSurfaceId != null || ownSurface;
         Vec3 OnCollarPolygon(Vec3 at) => collarPoly != null && depth.Collars == CollarSource.Polygon ? at.WithZ(PatternSurfaces.At(collarPoly, at.X, at.Y)) : at;
         double? RectDepth(int i, int j) => rect is { } r && r.Relative(pat, i, j) is var (s, t) ? depth.At(s, t) : null;
         void Level(Hole h, bool isNew, double? rd)
@@ -478,9 +486,12 @@ public static partial class HoleDesign
         {
             // a depth edited by hand stays as it is, its collar elevation with it
             var rd = h.DepthManual ? null : RectDepth(node.I, node.J);
-            var collar = depth.Collars == CollarSource.Polygon && collarPoly != null ? (h.DepthManual ? target.WithZ(h.Collar.Z) : OnCollarPolygon(target))
+            // the rectangle to a level sets the collars itself; otherwise a hole bound to a surface goes onto it
+            var collar = depth.Mode != DepthMode.RectToLevel && OwnCollar(h, target) is double hz ? target.WithZ(hz)
+                : depth.Collars == CollarSource.Polygon && collarPoly != null ? (h.DepthManual ? target.WithZ(h.Collar.Z) : OnCollarPolygon(target))
                 : depth.Mode == DepthMode.RectToLevel && rd is double dz ? target.WithZ(depth.Level + dz)
                 : depth.Mode == DepthMode.RectToLevel && h.DepthManual ? target.WithZ(h.Collar.Z)
+                : KeepsZ(h) ? target
                 : o.CollarSurface?.ElevationAt(target.X, target.Y) is double cz ? target.WithZ(cz) : target;
             // a node where the hole already is (within a nanometre) leaves it as it is, to the last bit
             if (Vec3.Distance2D(collar, h.Collar) <= 1e-9) collar = new Vec3(h.Collar.X, h.Collar.Y, collar.Z);
@@ -491,6 +502,9 @@ public static partial class HoleDesign
             if (BearingOf(h, h.Bearing + o.BearingDelta) is double b) h.Bearing = b;
             Level(h, false, rd);
         }
+        // the extra holes (copies, on no node) stay where they are and take the depth of the pattern there
+        foreach (var h in PatternHoles(p, pat).Where(h => IsExtraHole(h) && !h.DepthManual && !PatternTree.IsSeamHole(p, h)).ToList())
+            Level(h, false, null);
 
         var gone = plan.Deletes.Select(h => h.Id).ToHashSet();
         if (gone.Count > 0)
@@ -520,6 +534,12 @@ public static partial class HoleDesign
             var rd = RectDepth(n.I, n.J);
             if (depth.Collars == CollarSource.Polygon && collarPoly != null) h.Collar = OnCollarPolygon(h.Collar);
             else if (depth.Mode == DepthMode.RectToLevel && rd is double dz) h.Collar = h.Collar.WithZ(depth.Level + dz);
+            else if (collarSurface != null)
+            {
+                // a new hole of a pattern with its collars on a surface goes onto it and is bound to it
+                CollarSurfaces.Seat(h, collarSurface);
+                h.CollarSurfaceId = collarSurface.Id;
+            }
             Level(h, true, rd);
             p.Add(h, layer);
             added.Add(h.Id);
@@ -529,6 +549,8 @@ public static partial class HoleDesign
 
         var rows = RebuildRows(p, pat);
         var ordered = rows.SelectMany(r => r.HoleIds).Select(p.FindEntity).OfType<Hole>().ToList();
+        // the extra holes (copies, on no node) are in no row: they take the numbers after the others
+        ordered.AddRange(PatternHoles(p, pat).Where(IsExtraHole));
         // the holes of a segment are numbered through its whole tree (PatternTree.Renumber)
         if (pat.ParentId == null) Number(p, pat, ordered, added);
         pat.Revision++;
@@ -587,6 +609,41 @@ public static partial class HoleDesign
         return rows;
     }
 
+    /// <summary>
+    /// Whether a hole is an extra hole of its pattern: one of the pattern (a copy of one of its holes pasted or copied, kept
+    /// in the pattern or segment of the one copied) on no node. A layout leaves it where it is, neither moved nor deleted;
+    /// it goes along when the pattern is moved or turned as a whole, takes the values the pattern gives its holes and the
+    /// depth of the pattern at its place; deleted, it leaves no node empty. The holes the seam rule puts in gaps are on no
+    /// node either (<see cref="PatternTree.IsSeamHole"/>), but the next layout makes them again.
+    /// </summary>
+    public static bool IsExtraHole(Hole h) => h.PatternId != null && (h.GridI == null || h.GridJ == null);
+
+    /// <summary>
+    /// The extra holes of the leaves of a pattern (<see cref="IsExtraHole"/>) turned with its grid about a pivot, by
+    /// <paramref name="delta"/> degrees clockwise; with <paramref name="bearings"/> the inclined ones take the bearing the
+    /// layout gives the holes on the nodes (<see cref="PatternRebuildOptions.Bearing"/>). They then take the depth of the
+    /// pattern at their new place.
+    /// </summary>
+    internal static void TurnExtraHoles(BlastProject p, IEnumerable<HolePattern> leaves, Vec3 pivot, double delta, PatternRebuildOptions o, bool bearings)
+    {
+        if (Math.Abs(delta) < 1e-12) return;
+        var f = GeneralOps.MakeTransform(new Vec3(0, 0, 0), delta, pivot, 1);
+        var turned = new List<(Hole Hole, HolePattern Pattern)>();
+        foreach (var leaf in leaves)
+            foreach (var h in PatternHoles(p, leaf).Where(h => IsExtraHole(h) && !PatternTree.IsSeamHole(p, h)).ToList())
+            {
+                var to = f(h.Collar);
+                h.Translate(new Vec3(to.X - h.Collar.X, to.Y - h.Collar.Y, 0));
+                if (bearings && h.Angle >= 0.1)
+                {
+                    if (o.Bearing == PatternBearingMode.Rotate) h.Bearing = GeoMath.NormalizeBearing(h.Bearing + delta);
+                    else if (o.Bearing == PatternBearingMode.BlastOrientation) h.Bearing = p.Header.BlastOrientation;
+                }
+                if (!h.DepthManual) turned.Add((h, leaf));
+            }
+        Relevel(p, turned);
+    }
+
     /// <summary>Takes holes off their pattern grid; their nodes get no hole when the grid is laid out again.</summary>
     public static int DetachFromPattern(BlastProject p, IEnumerable<Hole> holes)
     {
@@ -618,7 +675,8 @@ public static partial class HoleDesign
     /// <summary>
     /// Follows a change of a document (<see cref="Domain.Document.Followers"/>) for the patterns it did not lay out itself:
     /// a pattern hole deleted by hand leaves its node empty from then on; one moved by hand keeps its offset from the node;
-    /// all the holes of a pattern moved or turned together take the grid with them; a copy of a pattern hole is a hole of its own.
+    /// all the holes of a pattern moved or turned together take the grid with them; a copy of a pattern hole is an extra hole of
+    /// the pattern (or segment) of the one copied, on no node (<see cref="IsExtraHole"/>).
     /// A pattern cut into segments goes along only when all the holes of all its segments moved together (its segments and
     /// cut lines with it); the holes of one segment moved together keep their offsets, as the segment stays in its part.
     /// The length or level of a hole with a depth from/to edited by hand is kept from then on (<see cref="Hole.DepthManual"/>).
@@ -681,9 +739,11 @@ public static partial class HoleDesign
                 }
                 foreach (var h in now.Values.Where(h => h.PatternId == pat.Id && !was.ContainsKey(h.Id) && !PatternTree.IsSeamHole(project, h)))
                 {
-                    // a copy: the depth of the pattern where it is put, unless the one copied had a depth of its own
+                    // a copy: an extra hole of the pattern (segment) of the one copied, on no node (IsExtraHole), wherever
+                    // it is put; the depth of the pattern where it is, unless the one copied had a depth of its own
                     if (!h.DepthManual) relevel.Add((h, pat));
-                    h.DetachFromPattern();
+                    h.GridI = h.GridJ = null;
+                    h.GridOffset = null;
                 }
                 // a length or a level of a hole with a depth from/to edited by hand: kept when the pattern is laid out again
                 foreach (var id in was.Keys)
@@ -731,6 +791,8 @@ public static partial class HoleDesign
         {
             var depth = pat.HoleDefaults.Depth;
             var mode = PatternTree.EffectiveDepthMode(pat);
+            // a hole bound to a surface is on it at its new place before its depth is taken there
+            if (CollarSurfaces.Find(project, h.CollarSurfaceId) is { } own) CollarSurfaces.Seat(h, own);
             if (depth.UsesPolygons)
             {
                 if (!polygons.TryGetValue(pat.Id, out var poly)) polygons[pat.Id] = poly = PatternSurfaces.Surfaces(project, pat, bench);

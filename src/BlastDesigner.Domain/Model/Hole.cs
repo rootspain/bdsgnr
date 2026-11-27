@@ -35,6 +35,12 @@ public sealed class Hole : Entity
 {
     public string Label { get; set; } = string.Empty;
     public Vec3 Collar { get; set; }
+    /// <summary>
+    /// The surface the collar sits on: when the hole is moved, copied or pasted, the collar goes down (or up) onto it again,
+    /// straight down, the angle, bearing and length as they were (<c>CollarSurfaces</c> in the engine). An elevation of the
+    /// collar typed in by hand takes the hole off it (null). Null: the collar stays where it is put.
+    /// </summary>
+    public Guid? CollarSurfaceId { get; set; }
     /// <summary>Angle from vertical, degrees (0 = vertical).</summary>
     public double Angle { get; set; }
     /// <summary>Bearing of the hole's lean, degrees clockwise from north.</summary>
@@ -90,9 +96,15 @@ public sealed class Hole : Entity
     /// </summary>
     public string? RouteLine { get; set; }
     public Guid? RowId { get; set; }
-    /// <summary>The pattern grid the hole was laid out on (<see cref="HolePattern"/>); null for a hole of its own.</summary>
+    /// <summary>
+    /// The pattern grid (or segment of one) the hole is of (<see cref="HolePattern"/>); null for a hole of its own. A copy of
+    /// a hole of a pattern, pasted or copied, is of the same pattern or segment, on no node (an extra hole).
+    /// </summary>
     public Guid? PatternId { get; set; }
-    /// <summary>Node of the hole in its pattern grid: along the row and row number.</summary>
+    /// <summary>
+    /// Node of the hole in its pattern grid: along the row and row number. Null in a hole of a pattern on no node: an extra
+    /// hole (a copy), which a layout leaves where it is, or one the seam rule of segments put in a gap.
+    /// </summary>
     public int? GridI { get; set; }
     public int? GridJ { get; set; }
     /// <summary>Where the hole was moved by hand off its node, in the grid's axes: X along the row, Y against the blast.</summary>

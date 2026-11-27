@@ -258,17 +258,33 @@ public sealed partial class PropertiesPanel
             done(_vm.SetPatternDepth(id, next));
         }
         var sources = new[] { CollarSource.ProjectSurface, CollarSource.Polygon };
+        // the third item: the collars on a surface of their own, picked on the plan (⚠ when it was deleted)
+        var surface = spec.OnOwnSurface ? CollarSurfaces.Find(doc.Project, spec.CollarSurfaceId) : null;
+        var surfaceItem = !spec.OnOwnSurface ? Loc.Ui("On the surface")
+            : surface == null ? "⚠ " + Loc.Ui("On the surface")
+            : $"{Loc.Ui("On the surface")}: {(string.IsNullOrWhiteSpace(surface.Name) ? Loc.T(surface.KindName) : surface.Name)}";
+        var shown = spec.OnOwnSurface ? 2 : Array.IndexOf(sources, spec.Collars);
         var collars = new ComboBox
         {
-            ItemsSource = new[] { "On the grid", "Collar polygon" }.Select(Loc.Ui).ToList(), SelectedIndex = Array.IndexOf(sources, spec.Collars), Width = 190, Height = 26,
+            ItemsSource = new[] { Loc.Ui("On the grid"), Loc.Ui("Collar polygon"), surfaceItem }.ToList(), SelectedIndex = shown, Width = 190, Height = 26,
             MinHeight = 26, FontSize = 12, Name = "patternCollars", IsEnabled = !doc.IsReadOnly, FontStyle = inherited ? FontStyle.Italic : FontStyle.Normal
         };
-        ToolTip.SetTip(collars, Loc.Ui("Where the collars are: on the collar surface of the project (at the level of the grid without one), or on the collar polygon on the vertices of the outline"));
+        ToolTip.SetTip(collars, spec.OnOwnSurface && surface == null
+            ? Loc.Ui("The surface the collars sat on was deleted: they stay where they are")
+            : Loc.Ui("Where the collars are: on the collar surface of the project (at the level of the grid without one), on the collar polygon on the vertices of the outline, or on a surface picked on the plan"));
         collars.SelectionChanged += (_, _) =>
         {
-            if (collars.SelectedIndex < 0 || sources[collars.SelectedIndex] == spec.Collars) return;
+            if (collars.SelectedIndex < 0 || collars.SelectedIndex == shown) return;
+            if (collars.SelectedIndex == 2)
+            {
+                // the surface is picked on the plan; Esc puts the list back as it was
+                var holes = PatternTree.TreeHoles(doc.Project, target).Select(h => h.Id).ToList();
+                _vm.PickCollarSurface(holes, s => Set(x => { x.Collars = CollarSource.ProjectSurface; x.CollarSurfaceId = s.Id; }), () => Avalonia.Threading.Dispatcher.UIThread.Post(Refresh));
+                return;
+            }
             var c = sources[collars.SelectedIndex];
-            Set(x => x.Collars = c);
+            // on the grid or on the polygon: the holes no longer follow a surface of their own
+            Set(x => { x.Collars = c; x.CollarSurfaceId = null; });
         };
         yield return row("Collars", seg != null ? Inherit(collars, inherited, () => done(_vm.SetPatternDepth(id, null)), "patternCollars") : collars);
 

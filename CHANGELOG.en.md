@@ -56,8 +56,24 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   while dragging, one undo step). The context menu
   item "Add vertex" of a line puts a vertex where it was right-clicked (a line not selected is selected). Dragging a grip with Shift raises or lowers that
   vertex alone, the rest of the line stays (the whole line used to move).
+- **Collar surface of a hole:** a hole remembers the surface its collar sits on. The "Collars onto surface" button
+  binds the holes it seated to it (those off the surface stay as they were; the status bar says how many). Moved,
+  copied or pasted, a bound hole goes onto the surface again straight down, its angle, bearing and length as they were
+  (a hole drilled to a level takes its length from the level); a change of its angle or bearing leaves the collar. An
+  elevation of the collar typed in unbinds it; a deleted surface leaves the collars where they are. The Properties tab
+  has a "Collar surface" row: the name of the surface, the "Pick on the plan" eyedropper (a click on a surface in plan,
+  its name and edge shown on hover, Esc gives up) and the ✕ "Unbind" button.
+- **"On the surface" in the Collars list of a pattern:** a third item beside "On the grid" and "Collar polygon": the
+  surface is picked on the plan, and the new and laid out holes of the pattern go onto it; "On the grid" and "Collar
+  polygon" unbind them. The "Collars onto surface" button switches the list itself for a pattern or segment all of whose
+  holes are selected; with only some selected it leaves the list and says so. Older versions open such files as "On the grid".
 
 ### Changed
+- **A copy of a hole of a pattern stays in the pattern:** a hole copied and pasted (Ctrl+C/Ctrl+V, Move/copy) stays in
+  the pattern and the segment of the one copied (it used to be a hole of its own), as an extra hole on no node: laying
+  the pattern out again leaves it where it is, it turns with the pattern, takes the depth of the pattern at its place and
+  the number after the holes of the rows; deleted, it leaves no node empty. Detach from pattern and Dissolve pattern free
+  it as any other. Pasted into a project without that pattern, it is a hole of its own.
 - **The tool panel over the plan** sits lower, by the bottom edge of the plan, and is see-through (its ground at 72 %):
   the plan shows under it, the text and buttons stay sharp. So for the panels of every tool.
 - **The initiation point is a tag, not a star:** a tag pointing at the collar from the side away from the neighbouring
@@ -70,7 +86,10 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **The column when the hole length changes:** a moved collar, a toe level, a dipped depth and a length typed in fit the
   column of hand-loaded holes too: the stemming keeps its length, the decks below the one that adapts go with the toe.
 - **Collars onto surface** opens the list of surfaces on the first surface of the Bench kind, not on the first in the
-  list (a survey surface, say).
+  list (a survey surface, say). The lists to choose a surface from give its kind first, then its name in quotes —
+  Bench “Benches”, Face “Faces” — so surfaces named alike are not mixed up. Collars onto surface and Lengths to
+  grade offer only the surfaces over or under the collar of at least one of the holes they are for (the selected ones,
+  all with none selected).
 
 ### Fixed
 - **Dragging a vertex of a line** leaves no trace of where it was: the line is drawn with the vertex in its new place at

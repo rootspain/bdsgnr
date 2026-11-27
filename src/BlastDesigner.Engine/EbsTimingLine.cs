@@ -20,6 +20,8 @@ internal static class EngineModule
         Document.Followers.Add(HoleDesign.FollowPatterns);
         // a pattern made from a polygon is laid out on it again when the polygon is edited
         Document.Followers.Add(PatternOutlines.Follow);
+        // a hole moved, copied or pasted goes onto the surface its collar sits on, before its length follows its level
+        Document.Followers.Add(CollarSurfaces.Follow);
         Document.Followers.Add(HoleLevel.Follow);
         Document.Followers.Add(Charging.FollowLength);
         Document.Followers.Add(EbsTimingLine.Follow);

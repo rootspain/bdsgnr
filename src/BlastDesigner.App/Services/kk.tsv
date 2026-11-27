@@ -4002,3 +4002,22 @@ Vertex {0} of {1}	{1} төбенің {0}-сі
 Vertices: {0}	Төбелер: {0}
 Vertex {0} of {1}, Z {2:0.00} m	{1} төбенің {0}-сі, Z {2:0.00} м
 Close line	Сызықты тұйықтау
+# Collar surface of holes
+{0} collars on the surface “{1}”	{0} саға «{1}» бетінде
+{0} holes off the surface left as they were	беттен тыс {0} ұңғыма сол күйінде қалдырылды
+Pattern “{0}”: {1} of {2} holes selected, its Collars list not switched	«{0}» торы: {2} ұңғыманың {1} таңдалды, «Сағалар» тізімі ауыстырылмады
+Collars onto surface	Сағалар бетке
+Unbind collars from surface	Сағаларды беттен ажырату
+Click the surface the collars sit on; Esc gives up.	Сағалар тұратын бетті шертіңіз; Esc — бас тарту.
+ui:different	әртүрлі
+ui:Collar surface	Сағалар беті
+ui:On the surface	Бетте
+ui:The surface the collars sit on: moved, copied or pasted, a hole goes onto it again straight down, its angle, bearing and length as they were; an elevation of the collar typed in takes it off	Сағалар тұратын бет: жылжытылған, көшірілген немесе қойылған ұңғыма оған қайта тігінен отырады, бұрышы, азимуты мен ұзындығы өзгермейді; қолмен енгізілген саға белгісі байланысты алып тастайды
+ui:Pick on the plan: click the surface the collars of the selected holes go onto (the lengths stay)	Жоспарда көрсету: таңдалған ұңғымалардың сағалары отыратын бетті шертіңіз (ұзындықтар сақталады)
+ui:Pick on the plan	Жоспарда көрсету
+ui:Unbind	Ажырату
+ui:Unbind: the collars stay where they are and no longer follow a surface	Ажырату: сағалар орнында қалады және енді бетке ермейді
+ui:The surface the collars sat on was deleted: they stay where they are	Сағалар тұрған бет жойылды: сағалар орнында қалады
+ui:Where the collars are: on the collar surface of the project (at the level of the grid without one), on the collar polygon on the vertices of the outline, or on a surface picked on the plan	Сағалар қайда: жобаның сағалар бетінде (ол болмаса — тор деңгейінде), контур төбелеріндегі сағалар полигонында немесе жоспарда көрсетілген бетте
+{0} “{1}”	{0} «{1}»
+No surface lies above or below the holes.	Ұңғымалардың үстінде де, астында да бірде-бір бет жоқ.

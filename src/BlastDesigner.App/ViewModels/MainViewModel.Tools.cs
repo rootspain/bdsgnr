@@ -604,17 +604,68 @@ public sealed partial class MainViewModel
     public async Task DrapeCollarsOnSurface()
     {
         // the collars go onto the bench: the list opens on the first bench surface
-        var s = await PickSurface("Move collars onto surface", SurfaceKind.Bench);
+        var s = await PickSurface("Move collars onto surface", SurfaceKind.Bench, SelectedOrAllHoles());
         if (s == null) return;
         var keepToe = await Dialogs.Confirm(Loc.T("Keep the toe positions (lengths change)?"));
         var ids = SelectedOrAllHoles().Select(h => h.Id).ToHashSet();
         var sid = s.Id;
-        Change("Move collars onto surface", p => HoleDesign.DrapeCollars(HolesById(p, ids), (SurfaceEntity)p.FindEntity(sid)!, keepToe));
+        CollarDrapeReport? report = null;
+        // the holes on the surface are bound to it; the patterns all of whose holes went onto it take it in their Collars list
+        if (!Change("Move collars onto surface", p => report = CollarSurfaces.Drape(p, HolesById(p, ids), (SurfaceEntity)p.FindEntity(sid)!, keepToe)) || report == null) return;
+        SetStatus(CollarDrapeStatus(report, s.Name));
+    }
+
+    /// <summary>What the Collars onto surface button did, for the status bar: holes seated, holes off the surface, patterns whose list stayed.</summary>
+    private static string CollarDrapeStatus(CollarDrapeReport r, string surface)
+    {
+        var parts = new List<string> { Loc.F("{0} collars on the surface “{1}”", r.Seated, surface) };
+        if (r.Outside > 0) parts.Add(Loc.F("{0} holes off the surface left as they were", r.Outside));
+        foreach (var (name, k, n) in r.Partial) parts.Add(Loc.F("Pattern “{0}”: {1} of {2} holes selected, its Collars list not switched", name, k, n));
+        return string.Join("; ", parts);
+    }
+
+    /// <summary>
+    /// Picks a surface on the plan for the collars of holes (the eyedropper of the hole properties, the On the surface item
+    /// of a pattern's Collars list): a temporary tool takes only surfaces, shows the name of the one under the pointer and,
+    /// clicked on one, puts the collars of the holes onto it and binds them to it in one undo step (the lengths stay, the
+    /// toes are not asked about), or calls <paramref name="onPicked"/> instead when given. A click beside a surface waits
+    /// for the next; Esc gives up (<paramref name="onCancelled"/>). Either way the tool used before comes back; the
+    /// selection stays.
+    /// </summary>
+    public void PickCollarSurface(IReadOnlyCollection<Guid> holeIds, Action<SurfaceEntity>? onPicked = null, Action? onCancelled = null)
+    {
+        if (Doc == null || Doc.IsReadOnly) return;
+        if (!Project!.Entities.OfType<SurfaceEntity>().Any()) { _ = Dialogs.Info(Loc.T("The project has no surfaces.")); onCancelled?.Invoke(); return; }
+        var ids = holeIds.ToHashSet();
+        var previous = ActiveTool;
+        void Back()
+        {
+            if (previous is null or Tools.SelectTool or PickCollarSurfaceTool) SelectTool();
+            else SetTool(previous);
+        }
+        SetTool(new PickCollarSurfaceTool(this, s =>
+        {
+            Back();
+            if (onPicked != null) { onPicked(s); return; }
+            var sid = s.Id;
+            var seated = 0;
+            if (!Change("Collars onto surface", p => seated = HoleDesign.DrapeCollars(HolesById(p, ids), (SurfaceEntity)p.FindEntity(sid)!, keepToe: false))) return;
+            var outside = ids.Count - seated;
+            SetStatus(outside > 0 ? Loc.F("{0} collars on the surface “{1}”", seated, s.Name) + "; " + Loc.F("{0} holes off the surface left as they were", outside)
+                : Loc.F("{0} collars on the surface “{1}”", seated, s.Name));
+        }, () => { onCancelled?.Invoke(); }, Back));
+    }
+
+    /// <summary>The selected holes taken off the surface their collars sat on (the ✕ of the hole properties); the collars stay where they are.</summary>
+    public void UnbindCollarSurface(IReadOnlyCollection<Guid> holeIds)
+    {
+        var ids = holeIds.ToHashSet();
+        Change("Unbind collars from surface", p => { foreach (var h in HolesById(p, ids)) h.CollarSurfaceId = null; });
     }
 
     public async Task LengthsToGrade()
     {
-        var s = await PickSurface("Set lengths to grade surface");
+        var s = await PickSurface("Set lengths to grade surface", under: SelectedOrAllHoles());
         if (s == null) return;
         var ids = SelectedOrAllHoles().Select(h => h.Id).ToHashSet();
         var sid = s.Id;
@@ -627,17 +678,24 @@ public sealed partial class MainViewModel
 
     /// <summary>
     /// The surface to work with: the selected one, the only one, or one chosen from the list, which opens on the first of
-    /// <paramref name="prefer"/> kind when there is one.
+    /// <paramref name="prefer"/> kind when there is one. With <paramref name="under"/> only the surfaces the vertical through
+    /// the collar of one of those holes meets are offered: the others would do nothing to them.
     /// </summary>
-    public async Task<SurfaceEntity?> PickSurface(string title, SurfaceKind? prefer = null)
+    public async Task<SurfaceEntity?> PickSurface(string title, SurfaceKind? prefer = null, IReadOnlyCollection<Hole>? under = null)
     {
         var sel = Doc?.SelectedEntities.OfType<SurfaceEntity>().FirstOrDefault();
         if (sel != null) return sel;
         var all = Project?.Entities.OfType<SurfaceEntity>().ToList() ?? new();
         if (all.Count == 0) { await Dialogs.Info(Loc.T("The project has no surfaces.")); return null; }
+        if (under is { Count: > 0 })
+        {
+            all = all.Where(s => under.Any(h => s.ElevationAt(h.Collar.X, h.Collar.Y) != null)).ToList();
+            if (all.Count == 0) { await Dialogs.Info(Loc.T("No surface lies above or below the holes.")); return null; }
+        }
         if (all.Count == 1) return all[0];
         var first = prefer is { } kind ? all.FindIndex(s => s.Kind == kind) : -1;
-        var idx = await Dialogs.Choose(title, Loc.T("Surface"), all.Select(s => s.Name).ToList(), Math.Max(first, 0));
+        // each by its kind first, then its name in quotes: surfaces named alike are told apart by what they are
+        var idx = await Dialogs.Choose(title, Loc.T("Surface"), all.Select(s => Loc.F("{0} “{1}”", Loc.Enum(s.Kind), s.Name)).ToList(), Math.Max(first, 0));
         return idx is int i ? all[i] : null;
     }
 
@@ -1335,11 +1393,14 @@ public sealed partial class MainViewModel
             var sel = p.Entities.Where(e => ids.Contains(e.Id)).ToList();
             if (t.Copies > 0)
             {
-                foreach (var c in GeneralOps.Copy(sel, offset, t.Copies))
+                var copies = GeneralOps.Copy(sel, offset, t.Copies);
+                foreach (var c in copies)
                 {
                     if (c is Hole h) { h.Label += "'"; h.RowId = null; }
                     p.Entities.Add(c);
                 }
+                // a copy of a hole on a surface goes onto it (or onto the copy of it) at its place
+                CollarSurfaces.SeatAll(p, copies.OfType<Hole>());
             }
             else timed = ReprogramTimingLines(p, ids, () => { foreach (var e in sel) e.Translate(offset); });
         });

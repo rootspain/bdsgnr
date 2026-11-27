@@ -2441,23 +2441,33 @@ Step("a click on a grip selects its vertex and shows its coordinates", () =>
     for (int i = 0; i < 10 && vm.Project!.Entities.Any(e => e.Id == id); i++) vm.Undo();
     Pump();
 });
-Step("Collars onto surface opens its list on the bench surface", () =>
+Step("Collars onto surface opens its list on the bench surface, of the surfaces over or under the selected holes", () =>
 {
-    SurfaceEntity survey = null!, bench = null!;
+    SurfaceEntity survey = null!, bench = null!, aside = null!;
+    Hole hole = null!;
     vm.Change("Surfaces", p =>
     {
         survey = p.Add(new SurfaceEntity { Name = "Smoke survey", Kind = SurfaceKind.Topography, Vertices = { new(0, 0, 0), new(10, 0, 0), new(0, 10, 0) }, Triangles = { 0, 1, 2 } });
         bench = p.Add(new SurfaceEntity { Name = "Smoke bench", Kind = SurfaceKind.Bench, Vertices = { new(0, 0, 5), new(10, 0, 5), new(0, 10, 5) }, Triangles = { 0, 1, 2 } });
+        // away from the hole: not in the list
+        aside = p.Add(new SurfaceEntity { Name = "Smoke aside", Kind = SurfaceKind.Bench, Vertices = { new(500, 500, 5), new(510, 500, 5), new(500, 510, 5) }, Triangles = { 0, 1, 2 } });
+        hole = p.Add(new Hole { Label = "over-the-bench", Collar = new Vec3(2, 2, 8) });
     });
     try
     {
-        vm.Doc!.ClearSelection();
+        vm.Doc!.Select(new[] { hole.Id });
         var task = vm.DrapeCollarsOnSurface(); Pump();
         var w = BlastDesigner.App.Services.Dialogs.LastShown ?? throw new Exception("no list of surfaces opened");
         var combo = w.GetLogicalDescendants().OfType<ComboBox>().Single();
         var names = combo.ItemsSource!.Cast<object>().Select(o => o.ToString()).ToList();
-        if (combo.SelectedItem?.ToString() != "Smoke bench" || names.IndexOf("Smoke survey") > names.IndexOf("Smoke bench"))
+        // each by its kind, then its name in quotes
+        var benchItem = BlastDesigner.App.Services.Loc.F("{0} “{1}”", BlastDesigner.App.Services.Loc.Enum(SurfaceKind.Bench), "Smoke bench");
+        var surveyItem = BlastDesigner.App.Services.Loc.F("{0} “{1}”", BlastDesigner.App.Services.Loc.Enum(SurfaceKind.Topography), "Smoke survey");
+        if (!names.Contains(surveyItem)) throw new Exception($"the list should give the kind of a surface, then its name in quotes ({string.Join(" | ", names)})");
+        if (names.Any(n => n!.Contains("Smoke aside"))) throw new Exception("a surface neither over nor under the selected hole should not be in the list");
+        if (combo.SelectedItem?.ToString() != benchItem || names.IndexOf(surveyItem) > names.IndexOf(benchItem))
             throw new Exception($"the list should open on the bench surface, not on '{combo.SelectedItem}'");
+        combo.IsDropDownOpen = true; Pump(); Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump(); w.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "73d_collars_surface.png")); combo.IsDropDownOpen = false;
         var cancel = w.GetLogicalDescendants().OfType<Button>().First(b => b.IsCancel);
         cancel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         Pump();
@@ -2465,7 +2475,8 @@ Step("Collars onto surface opens its list on the bench surface", () =>
     }
     finally
     {
-        var ids = new[] { survey.Id, bench.Id };
+        vm.Doc!.ClearSelection();
+        var ids = new[] { survey.Id, bench.Id, aside.Id, hole.Id };
         for (int i = 0; i < 5 && vm.Project!.Entities.Any(e => ids.Contains(e.Id)); i++) vm.Undo();
         Pump();
     }
