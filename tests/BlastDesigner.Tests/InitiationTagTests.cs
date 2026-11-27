@@ -46,6 +46,10 @@ public class InitiationTagTests
         var shortTag = PlanRenderer.InitiationTag(cam, p, ip);
         ip.StartTimeMs = 12.5;
         Assert.Equal("12.5", PlanRenderer.InitiationTagText(ip));
+        // with the delay of the lead-in
+        ip.LeadInDelayMs = 25;
+        Assert.Equal("37.5", PlanRenderer.InitiationTagText(ip));
+        ip.LeadInDelayMs = 0;
         ip.StartTimeMs = 123456;
         var longTag = PlanRenderer.InitiationTag(cam, p, ip);
         // no hole near: the tag goes right, the body longer for the long time

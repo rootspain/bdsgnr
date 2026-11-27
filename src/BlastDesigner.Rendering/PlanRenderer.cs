@@ -1412,8 +1412,11 @@ public static class PlanRenderer
     /// <summary>Font size of the start time written on the tag of an initiation point, px.</summary>
     public const float InitiationTagTextSize = 9.5f;
 
-    /// <summary>The start time of an initiation point as its tag writes it: ms, without the unit (0, 17, 12.5).</summary>
-    public static string InitiationTagText(InitiationPoint ip) => ip.StartTimeMs.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>
+    /// The time an initiation point gives its hole as its tag writes it: the start time and the delay of the lead-in, ms,
+    /// without the unit (0, 17, 12.5).
+    /// </summary>
+    public static string InitiationTagText(InitiationPoint ip) => (ip.StartTimeMs + ip.LeadInDelayMs).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>How wide the time of an initiation point is written on its tag, px.</summary>
     private static float InitiationTagTextWidth(InitiationPoint ip)

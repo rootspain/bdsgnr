@@ -6,7 +6,7 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
-## 0.3.15 — 2026-11-27
+## 0.3.15 — 2026-11-28
 
 ### New
 - **Which deck adapts to the hole length:** in the Hole loading window every deck has a ↕ mark: a column in the table (a
@@ -95,7 +95,7 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
   holes; the hole itself is not highlighted and is picked by its collar. The tag
   covers neither the neighbours nor the ties: neighbours on the right put the tag on the left, below it on top and so on;
   neighbours on both sides of a row put it across the row, to the side with no hole; holes on all sides, to the south;
-  no hole near, on the right. On it the start time, ms (the tag grows
+  no hole near, on the right. On it the start time with the delay of the lead-in, ms (the tag grows
   longer or wider for a long one); a colour chosen in the properties of the point (Colour) now goes to the tag; else the colour as
   before. The same in section, 3D and print; the Initiation point button shows
   the tag.
