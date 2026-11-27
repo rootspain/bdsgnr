@@ -41,7 +41,7 @@ public sealed class CalcProfile
     };
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
-    public static CalcProfile FromJson(string json) => JsonSerializer.Deserialize<CalcProfile>(json, Json) ?? throw new InvalidDataException("Пустой профиль");
+    public static CalcProfile FromJson(string json) => JsonSerializer.Deserialize<CalcProfile>(json, Json) ?? throw new InvalidDataException(CalcText.M("Пустой профиль"));
     public void Save(string path) => File.WriteAllText(path, ToJson(), Encoding.UTF8);
     public static CalcProfile Load(string path) => FromJson(File.ReadAllText(path, Encoding.UTF8));
 
@@ -60,8 +60,8 @@ public sealed class CalcProfile
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { Name };
         for (var p = this; p.Base is { Length: > 0 } b;)
         {
-            if (!seen.Add(b)) throw new InvalidDataException($"Цикл наследования профилей: {string.Join(" → ", chain.Select(c => c.Name))} → {b}");
-            p = resolveBase(b) ?? throw new InvalidDataException($"Не найден базовый профиль «{b}»");
+            if (!seen.Add(b)) throw new InvalidDataException(CalcText.M("Цикл наследования профилей: {0}", string.Join(" → ", chain.Select(c => c.Name)) + " → " + b));
+            p = resolveBase(b) ?? throw new InvalidDataException(CalcText.M("Не найден базовый профиль «{0}»", b));
             chain.Add(p);
         }
         chain.Reverse();
@@ -89,7 +89,7 @@ public sealed class CalcProfile
 
     /// <summary>Профиль-наследник для правки встроенного: пустой, с базой <paramref name="baseProfile"/>.</summary>
     public static CalcProfile DeriveFrom(CalcProfile baseProfile, string name) =>
-        new() { Name = name, Base = baseProfile.Name, Version = "1", Description = $"На основе «{baseProfile.Name}»" };
+        new() { Name = name, Base = baseProfile.Name, Version = "1", Description = CalcText.M("На основе «{0}»", baseProfile.Name) };
 }
 
 /// <summary>Профили, найденные по имени: встроенные и загруженные из папки настроек.</summary>

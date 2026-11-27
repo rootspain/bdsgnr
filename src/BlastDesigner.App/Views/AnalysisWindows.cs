@@ -564,7 +564,7 @@ public static partial class AnalysisWindows
             var issues = new List<string>();
             if (h.Exceptions != HoleException.None) issues.Add(Loc.Enum(h.Exceptions));
             if (h.Decks.Count == 0) issues.Add(Loc.T("Not loaded"));
-            issues.AddRange(Charging.Validate(p, h).Select(Loc.T));
+            issues.AddRange(Charging.Issues(p, h).Select(i => Loc.F(i.Format, i.Args)));
             if (!h.FiringTimeMs.HasValue) issues.Add(Loc.T("Not initiated"));
             if (h.ActualLength is double a && Math.Abs(a - h.Length) > 0.5) issues.Add(Loc.F("Dipped {0:0.0} vs design {1:0.0}", a, h.Length));
             if (issues.Count == 0) continue;

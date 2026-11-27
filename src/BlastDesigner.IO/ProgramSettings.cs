@@ -24,6 +24,8 @@ public sealed class ProgramSettings
     public int BackupCopies { get; set; } = 3;
     public int MaxRecentFiles { get; set; } = 10;
     public string Language { get; set; } = "ru";
+    /// <summary>Formulas and calculation names in English (code names) instead of the interface language.</summary>
+    public bool FormulasInEnglish { get; set; }
     /// <summary>Interface theme: <see cref="DarkTheme"/> or <see cref="LightTheme"/>.</summary>
     public string Theme { get; set; } = DarkTheme;
     public const string DarkTheme = "Dark";

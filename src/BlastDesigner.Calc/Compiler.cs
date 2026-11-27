@@ -53,7 +53,7 @@ internal sealed class Compiler
     public static CompiledExpression Compile(CalcModel model, string context, string text, CalcType? expected = null)
     {
         var c = new Compiler(model);
-        var ctx = model.Registry.Context(context) ?? throw new CalcSyntaxException($"Нет контекста «{context}»", 0);
+        var ctx = model.Registry.Context(context) ?? throw new CalcSyntaxException(CalcText.M("Нет контекста «{0}»", context), 0);
         c._root = ctx;
         var ast = Parser.Parse(text);
         var b = c.Bind(ast, new Frame(ctx, c._self, false, Array.Empty<PropertyDef>()));
@@ -61,12 +61,12 @@ internal sealed class Compiler
         {
             if (want == CalcType.Number && b.Type == CalcType.Bool) b = b with { Expr = E.Condition(b.Expr, E.Constant(1.0), E.Constant(0.0)), Type = CalcType.Number, Unit = Unit.One };
             else if (want == CalcType.String && b.Type == CalcType.Enum) b = c.EnumToString(b);
-            else throw new CalcSyntaxException($"Формула даёт {TypeName(b.Type)}, ожидается {TypeName(want)}", ast.Position, ast.Length);
+            else throw new CalcSyntaxException(CalcText.M("Формула даёт {0}, ожидается {1}", TypeName(b.Type), TypeName(want)), ast.Position, ast.Length);
         }
         var body = b.Type switch
         {
             CalcType.Enum => c.EnumToString(b).Expr,
-            CalcType.Ref or CalcType.List => throw new CalcSyntaxException("Формула должна давать число, логическое значение или строку", ast.Position, ast.Length),
+            CalcType.Ref or CalcType.List => throw new CalcSyntaxException(CalcText.M("Формула должна давать число, логическое значение или строку"), ast.Position, ast.Length),
             _ => b.Expr
         };
         var type = b.Type == CalcType.Enum ? CalcType.String : b.Type;
@@ -88,8 +88,8 @@ internal sealed class Compiler
 
     private static string TypeName(CalcType t) => t switch
     {
-        CalcType.Number => "число", CalcType.Bool => "логическое значение", CalcType.String => "строку", CalcType.Enum => "вид",
-        CalcType.Ref => "ссылку на объект", _ => "список"
+        CalcType.Number => CalcText.M("число"), CalcType.Bool => CalcText.M("логическое значение"), CalcType.String => CalcText.M("строку"),
+        CalcType.Enum => CalcText.M("вид"), CalcType.Ref => CalcText.M("ссылку на объект"), _ => CalcText.M("список")
     };
 
     private E Scope => E.Property(_session, nameof(CalcSession.Scope));
@@ -104,8 +104,8 @@ internal sealed class Compiler
         UnaryAst u => BindUnary(u, f),
         BinaryAst b => BindBinary(b, f),
         CallAst c => BindCall(c, f),
-        WhereAst w => throw Error("«where» допускается только в первом аргументе агрегата (sum, count…)", w),
-        _ => throw Error("Неизвестная конструкция", ast)
+        WhereAst w => throw Error(CalcText.M("«where» допускается только в первом аргументе агрегата (sum, count…)"), w),
+        _ => throw Error(CalcText.M("Неизвестная конструкция"), ast)
     };
 
     private static CalcSyntaxException Error(string message, Ast at) => new(message, at.Position, at.Length);
@@ -133,8 +133,8 @@ internal sealed class Compiler
             var name = n.Path[i];
             if (result != null)
             {
-                if (result.Type == CalcType.List) throw Error($"«{n.Path[i - 1]}» — список; используйте sum, count, first…", n);
-                if (result.Type != CalcType.Ref) throw Error($"«{n.Path[i - 1]}» — не объект, у него нет свойства «{name}»", n);
+                if (result.Type == CalcType.List) throw Error(CalcText.M("«{0}» — список; используйте sum, count, first…", n.Path[i - 1]), n);
+                if (result.Type != CalcType.Ref) throw Error(CalcText.M("«{0}» — не объект, у него нет свойства «{1}»", n.Path[i - 1], name), n);
                 ctx = _model.Registry.Context(result.Target!)!;
                 obj = result.Expr;
                 mayBeNull = true;
@@ -155,14 +155,14 @@ internal sealed class Compiler
     /// </summary>
     private string NotFound(ContextDef ctx, string name)
     {
-        var where = ctx.NameRu.Length > 0 ? ctx.NameRu.ToLowerInvariant() : ctx.Name;
-        var msg = $"Нет свойства [{name}] у объекта «{where}»";
+        var where = ctx.Caption(CalcText.MessageLanguage) is var cap && cap != ctx.Name ? cap.ToLowerInvariant() : ctx.Name;
+        var msg = CalcText.M("Нет свойства [{0}] у объекта «{1}»", name, where);
         foreach (var rel in _model.PropertiesOf(ctx.Name).Where(r => r.Type == CalcType.Ref && r.Target != null && r.Name != "blast").Append(_model.Registry.Property(ctx.Name + ".blast")).OfType<PropertyDef>())
             if (_model.Resolve(rel.Target!, name) is { } there)
-                return msg + $". Оно есть у связи [{_model.AliasOf(rel)}]: напишите [{_model.AliasOf(rel)}].[{_model.AliasOf(there)}]";
+                return msg + CalcText.M(". Оно есть у связи [{0}]: напишите [{0}].[{1}]", _model.AliasOf(rel), _model.AliasOf(there));
         var props = _model.PropertiesOf(ctx.Name).ToList();
         var close = Aliases.Closest(name, props.Select(p => _model.AliasOf(p)).Concat(props.Select(p => p.Name)));
-        return close.Count > 0 ? msg + $". Возможно, вы имели в виду {string.Join(" или ", close.Select(c => "[" + c + "]"))}" : msg;
+        return close.Count > 0 ? msg + CalcText.M(". Возможно, вы имели в виду {0}", CalcText.Or(close.Select(c => "[" + c + "]"))) : msg;
     }
 
     /// <summary>Чтение свойства объекта с учётом пустой ссылки; записывает зависимость.</summary>
@@ -220,12 +220,12 @@ internal sealed class Compiler
 
     private void RequireNumber(Bound b, Ast at)
     {
-        if (b.Type != CalcType.Number) throw Error($"Ожидается число, а здесь {TypeName(b.Type)}", at);
+        if (b.Type != CalcType.Number) throw Error(CalcText.M("Ожидается число, а здесь {0}", TypeName(b.Type)), at);
     }
 
     private void RequireBool(Bound b, Ast at)
     {
-        if (b.Type != CalcType.Bool) throw Error($"Ожидается условие (логическое значение), а здесь {TypeName(b.Type)}", at);
+        if (b.Type != CalcType.Bool) throw Error(CalcText.M("Ожидается условие (логическое значение), а здесь {0}", TypeName(b.Type)), at);
     }
 
     private Bound BindBinary(BinaryAst b, Frame f)
@@ -268,12 +268,12 @@ internal sealed class Compiler
                 if (left.Unit.IsDimensionless || left.Unit.IsUnknown) unit = left.Unit;
                 else if (right.Const is { } n && Math.Abs(n - Math.Round(n)) < 1e-12) unit = left.Unit.Pow(Math.Round(n));
                 else unit = Unit.Unknown;
-                if (!right.Unit.IsDimensionless && !right.Unit.IsUnknown) throw Error($"Показатель степени должен быть безразмерным, а он в {right.Unit}", b.Right);
+                if (!right.Unit.IsDimensionless && !right.Unit.IsUnknown) throw Error(CalcText.M("Показатель степени должен быть безразмерным, а он в {0}", right.Unit), b.Right);
                 E e = right.Const == 2 ? Square(left.Expr) : E.Call(typeof(Math).GetMethod(nameof(Math.Pow))!, left.Expr, right.Expr);
                 return new Bound(e, CalcType.Number, unit, Const: left.Const is { } bc && right.Const is { } ec ? Math.Pow(bc, ec) : null);
             }
         }
-        throw Error($"Неизвестная операция «{b.Op}»", b);
+        throw Error(CalcText.M("Неизвестная операция «{0}»", b.Op), b);
     }
 
     /// <summary>x^2 как Math.Pow(x, 2): Pow(x, 2) в .NET точно равен x·x, вызов оставлен для единообразия.</summary>
@@ -307,9 +307,9 @@ internal sealed class Compiler
         if (l.Unit.IsUnknown) return r.Unit;
         if (r.Unit.IsUnknown) return l.Unit;
         if (!l.Unit.SameDimension(r.Unit))
-            throw new CalcSyntaxException($"Несовместимые единицы: {Aliases.RussianUnit(l.Unit.Symbol)} и {Aliases.RussianUnit(r.Unit.Symbol)} — их нельзя складывать и сравнивать", at.Position, at.Length);
+            throw new CalcSyntaxException(CalcText.M("Несовместимые единицы: {0} и {1} — их нельзя складывать и сравнивать", Aliases.Unit(l.Unit.Symbol, CalcText.MessageLanguage), Aliases.Unit(r.Unit.Symbol, CalcText.MessageLanguage)), at.Position, at.Length);
         if (Math.Abs(l.Unit.Scale - r.Unit.Scale) > 1e-12 * Math.Abs(l.Unit.Scale))
-            throw new CalcSyntaxException($"Разные единицы {l.Unit} и {r.Unit}: приведите явно, например to({l.Unit.Symbol}, …)", at.Position, at.Length);
+            throw new CalcSyntaxException(CalcText.M("Разные единицы {0} и {1}: приведите явно, например to({2}, …)", l.Unit, r.Unit, l.Unit.Symbol), at.Position, at.Length);
         return l.Unit;
     }
 
@@ -331,7 +331,7 @@ internal sealed class Compiler
             Additive(l, r, b);
             return new Bound(Op(l.Expr, r.Expr), CalcType.Bool, Unit.One);
         }
-        if (!equality) throw Error($"Сравнение «{b.Op}» — только для чисел", b);
+        if (!equality) throw Error(CalcText.M("Сравнение «{0}» — только для чисел", b.Op), b);
         if (l.Type == CalcType.Enum) l = EnumToString(l);
         if (r.Type == CalcType.Enum) r = EnumToString(r);
         if (l.Type == CalcType.String && r.Type == CalcType.String)
@@ -346,14 +346,14 @@ internal sealed class Compiler
             var eq = E.ReferenceEqual(l.Expr, r.Expr);
             return new Bound(b.Op == "=" ? eq : E.Not(eq), CalcType.Bool, Unit.One);
         }
-        throw Error($"Нельзя сравнить {TypeName(l.Type)} и {TypeName(r.Type)}", b);
+        throw Error(CalcText.M("Нельзя сравнить {0} и {1}", TypeName(l.Type), TypeName(r.Type)), b);
     }
 
     private Bound EnumCompare(BinaryAst b, Bound e, string literal, Ast at)
     {
-        if (b.Op is not ("=" or "<>")) throw Error("Вид сравнивается только на равенство", b);
+        if (b.Op is not ("=" or "<>")) throw Error(CalcText.M("Вид сравнивается только на равенство"), b);
         if (!Enum.TryParse(e.EnumType!, literal, true, out var value) || !Enum.IsDefined(e.EnumType!, value!))
-            throw Error($"Нет значения «{literal}»; возможны: {string.Join(", ", Enum.GetNames(e.EnumType!))}", at);
+            throw Error(CalcText.M("Нет значения «{0}»; возможны: {1}", literal, string.Join(", ", Enum.GetNames(e.EnumType!))), at);
         var c = E.Constant(Convert.ToInt32(value));
         return new Bound(b.Op == "=" ? E.Equal(e.Expr, c) : E.NotEqual(e.Expr, c), CalcType.Bool, Unit.One);
     }
@@ -388,7 +388,7 @@ internal sealed class Compiler
             }
             case "case":
             {
-                if (args.Count < 3 || args.Count % 2 == 0) throw Error("case(условие1, значение1, …, иначе): нечётное число аргументов, не меньше трёх", c);
+                if (args.Count < 3 || args.Count % 2 == 0) throw Error(CalcText.M("case(условие1, значение1, …, иначе): нечётное число аргументов, не меньше трёх"), c);
                 var result = Bind(args[^1], f);
                 for (int i = args.Count - 3; i >= 0; i -= 2)
                 {
@@ -401,7 +401,7 @@ internal sealed class Compiler
             }
             case "coalesce":
             {
-                if (args.Count < 2) throw Error("coalesce(a, b, …): не меньше двух аргументов", c);
+                if (args.Count < 2) throw Error(CalcText.M("coalesce(a, b, …): не меньше двух аргументов"), c);
                 var result = Bind(args[^1], f);
                 for (int i = args.Count - 2; i >= 0; i--)
                 {
@@ -432,7 +432,7 @@ internal sealed class Compiler
             case "min":
             case "max":
             {
-                if (args.Count < 2) throw Error($"{name}(a, b, …) или {name}(список, выражение)", c);
+                if (args.Count < 2) throw Error(CalcText.M("{0}(a, b, …) или {0}(список, выражение)", name), c);
                 var acc = Bind(args[0], f);
                 RequireNumber(acc, args[0]);
                 for (int i = 1; i < args.Count; i++)
@@ -460,7 +460,7 @@ internal sealed class Compiler
             }
             case "round":
             {
-                if (args.Count is < 1 or > 2) throw Error("round(x) или round(x, знаков)", c);
+                if (args.Count is < 1 or > 2) throw Error(CalcText.M("round(x) или round(x, знаков)"), c);
                 var x = Number(args[0], f);
                 E digits = args.Count == 2 ? E.Convert(Number(args[1], f).Expr, typeof(int)) : E.Constant(0);
                 return x with { Expr = E.Call(typeof(Math).GetMethod(nameof(Math.Round), new[] { typeof(double), typeof(int), typeof(MidpointRounding) })!, x.Expr, digits, E.Constant(MidpointRounding.AwayFromZero)), Const = null };
@@ -488,14 +488,14 @@ internal sealed class Compiler
             var arr = E.NewArrayInit(typeof(double), args.Select(a => Number(a, f).Expr));
             return new Bound(E.Invoke(E.Constant(fn.Invoke), arr), CalcType.Number, Unit.TryParse(fn.Unit, out var u) ? u : Unit.Unknown);
         }
-        var known = Aliases.Functions.Keys.Concat(Aliases.Functions.Values).Concat(_model.Registry.Builtins.Keys).Concat(_model.Registry.Functions.Keys);
+        var known = Aliases.AllFunctionNames.Concat(_model.Registry.Builtins.Keys).Concat(_model.Registry.Functions.Keys);
         var close = Aliases.Closest(c.Name, known);
-        throw Error($"Неизвестная функция «{c.Name}»" + (close.Count > 0 ? $". Возможно, вы имели в виду {string.Join(" или ", close)}" : ""), c);
+        throw Error(CalcText.M("Неизвестная функция «{0}»", c.Name) + (close.Count > 0 ? CalcText.M(". Возможно, вы имели в виду {0}", CalcText.Or(close)) : ""), c);
     }
 
     private static void Arity(CallAst c, int n)
     {
-        if (c.Args.Count != n) throw Error($"{c.Name}: нужно аргументов — {n}, а дано {c.Args.Count}", c);
+        if (c.Args.Count != n) throw Error(CalcText.M("{0}: нужно аргументов — {1}, а дано {2}", c.Name, n, c.Args.Count), c);
     }
 
     private Bound Number(Ast a, Frame f)
@@ -509,7 +509,7 @@ internal sealed class Compiler
     {
         Arity(c, 1);
         var x = Number(c.Args[0], f);
-        if (!keepUnit && !x.Unit.IsDimensionless && !x.Unit.IsUnknown) throw Error($"{c.Name}: аргумент должен быть безразмерным, а он в {x.Unit}", c.Args[0]);
+        if (!keepUnit && !x.Unit.IsDimensionless && !x.Unit.IsUnknown) throw Error(CalcText.M("{0}: аргумент должен быть безразмерным, а он в {1}", c.Name, x.Unit), c.Args[0]);
         var m = typeof(Math).GetMethod(method, new[] { typeof(double) })!;
         return new Bound(E.Call(m, x.Expr), CalcType.Number, keepUnit ? x.Unit : Unit.One, Const: x.Const is { } v ? (double?)m.Invoke(null, new object[] { v }) : null);
     }
@@ -519,7 +519,7 @@ internal sealed class Compiler
     {
         Arity(c, 1);
         var x = Number(c.Args[0], f);
-        if (!x.Unit.IsDimensionless && !x.Unit.IsUnknown) throw Error($"{c.Name}: аргумент — угол в градусах, а он в {x.Unit}", c.Args[0]);
+        if (!x.Unit.IsDimensionless && !x.Unit.IsUnknown) throw Error(CalcText.M("{0}: аргумент — угол в градусах, а он в {1}", c.Name, x.Unit), c.Args[0]);
         var m = typeof(Math).GetMethod(method, new[] { typeof(double) })!;
         return new Bound(E.Call(m, E.Multiply(x.Expr, E.Constant(GeoMath.Deg))), CalcType.Number, Unit.One);
     }
@@ -531,8 +531,8 @@ internal sealed class Compiler
         if (b.Type == CalcType.Enum && a.Type == CalcType.String) b = EnumToString(b);
         if (a.Type == CalcType.Ref && b.IsNull) return (a, b with { Expr = E.Constant(null, a.Expr.Type) }, Unit.One);
         if (b.Type == CalcType.Ref && a.IsNull) return (a with { Expr = E.Constant(null, b.Expr.Type) }, b, Unit.One);
-        if (a.Type != b.Type) throw Error($"Ветви дают разные типы: {TypeName(a.Type)} и {TypeName(b.Type)}", at);
-        if (a.Type == CalcType.Ref && a.Target != b.Target) throw Error($"Ветви ведут к разным объектам: {a.Target} и {b.Target}", at);
+        if (a.Type != b.Type) throw Error(CalcText.M("Ветви дают разные типы: {0} и {1}", TypeName(a.Type), TypeName(b.Type)), at);
+        if (a.Type == CalcType.Ref && a.Target != b.Target) throw Error(CalcText.M("Ветви ведут к разным объектам: {0} и {1}", a.Target, b.Target), at);
         if (a.Expr.Type != b.Expr.Type) b = b with { Expr = E.Convert(b.Expr, a.Expr.Type) };
         return (a, b, Unit.One);
     }
@@ -540,11 +540,11 @@ internal sealed class Compiler
     private Bound BindTo(CallAst c, Frame f)
     {
         Arity(c, 2);
-        var unitText = UnitText(c.Args[0]) ?? throw Error("to(единица, выражение): единица — имя или строка, например to(m, diameter), to(kg/m3, density)", c.Args[0]);
-        if (!Unit.TryParse(unitText, out var target) || target.IsUnknown) throw Error($"Неизвестная единица «{unitText}»", c.Args[0]);
+        var unitText = UnitText(c.Args[0]) ?? throw Error(CalcText.M("to(единица, выражение): единица — имя или строка, например to(m, diameter), to(kg/m3, density)"), c.Args[0]);
+        if (!Unit.TryParse(unitText, out var target) || target.IsUnknown) throw Error(CalcText.M("Неизвестная единица «{0}»", unitText), c.Args[0]);
         var x = Number(c.Args[1], f);
-        if (x.Unit.IsUnknown) throw Error("to(): у выражения неизвестная единица, переводить не из чего", c.Args[1]);
-        if (!x.Unit.SameDimension(target)) throw Error($"Нельзя перевести {x.Unit} в {target}: разная размерность", c);
+        if (x.Unit.IsUnknown) throw Error(CalcText.M("to(): у выражения неизвестная единица, переводить не из чего"), c.Args[1]);
+        if (!x.Unit.SameDimension(target)) throw Error(CalcText.M("Нельзя перевести {0} в {1}: разная размерность", x.Unit, target), c);
         var factor = x.Unit.FactorTo(target);
         E e = x.Expr;
         if (Math.Abs(factor - 1) > 1e-15)
@@ -568,17 +568,17 @@ internal sealed class Compiler
 
     private Bound BindParam(CallAst c, Frame f, bool lookup)
     {
-        if (lookup ? c.Args.Count != 2 : c.Args.Count != 1) throw Error(lookup ? "lookup(таблица, x)" : "param(имя), например param(site.vib.K)", c);
+        if (lookup ? c.Args.Count != 2 : c.Args.Count != 1) throw Error(lookup ? CalcText.M("lookup(таблица, x)") : CalcText.M("param(имя), например param(site.vib.K)"), c);
         var id = c.Args[0] switch
         {
             NameAst n => n.Text,
             StringAst s => s.Value,
-            _ => throw Error("Имя параметра — через точку или в кавычках", c.Args[0])
+            _ => throw Error(CalcText.M("Имя параметра — через точку или в кавычках"), c.Args[0])
         };
-        var p = _model.ParameterByName(id) ?? throw Error($"Нет параметра «{id}»" +
-            (Aliases.Closest(id, _model.Parameters.Select(x => x.Def.Id).Concat(_model.Parameters.Select(x => x.Def.NameRu))) is { Count: > 0 } close ? $". Возможно, вы имели в виду {string.Join(" или ", close.Select(x => "[" + x + "]"))}" : ""), c.Args[0]);
-        if (lookup && p.Def.Table is not { Count: > 0 }) throw Error($"У параметра «{id}» нет таблицы", c.Args[0]);
-        if (!lookup && p.Def.Table is { Count: > 0 }) throw Error($"«{id}» — таблица, используйте lookup({id}, x)", c.Args[0]);
+        var p = _model.ParameterByName(id) ?? throw Error(CalcText.M("Нет параметра «{0}»", id) +
+            (Aliases.Closest(id, _model.Parameters.Select(x => x.Def.Id).Concat(_model.Parameters.SelectMany(x => Aliases.Languages.Select(l => x.Def.NameIn(l)).Where(n => n.Length > 0)))) is { Count: > 0 } close ? CalcText.M(". Возможно, вы имели в виду {0}", CalcText.Or(close.Select(x => "[" + x + "]"))) : ""), c.Args[0]);
+        if (lookup && p.Def.Table is not { Count: > 0 }) throw Error(CalcText.M("У параметра «{0}» нет таблицы", id), c.Args[0]);
+        if (!lookup && p.Def.Table is { Count: > 0 }) throw Error(CalcText.M("«{0}» — таблица, используйте lookup({0}, x)", id), c.Args[0]);
         _deps.Add(new Dependency("param:" + p.Def.Id, BlastPath()));
         var unit = Unit.TryParse(p.Def.Unit, out var u) ? u : Unit.Unknown;
         if (lookup)
@@ -596,14 +596,14 @@ internal sealed class Compiler
     private Bound BindBuiltin(BuiltinDef b, CallAst c, Frame f)
     {
         if (b.Contexts.Length > 0 && !b.Contexts.Contains(f.Context.Name))
-            throw Error($"{b.Name}() доступна в контекстах: {string.Join(", ", b.Contexts)}", c);
+            throw Error(CalcText.M("{0}() доступна в контекстах: {1}", b.Name, string.Join(", ", b.Contexts)), c);
         Arity(c, b.ArgCount);
         var args = c.Args.Select(a => a switch
         {
             NameAst n when n.Path.Count == 1 => (object)n.Path[0],
             StringAst s => s.Value,
             NumberAst n => n.Value,
-            _ => throw Error($"{b.Name}(): аргументы — константы (имя, строка или число)", a)
+            _ => throw Error(CalcText.M("{0}(): аргументы — константы (имя, строка или число)", b.Name), a)
         }).ToArray();
         var index = _model.BuiltinIndex(b.Name);
         _deps.Add(new Dependency("builtin:" + b.Name, BlastPath()));
@@ -630,12 +630,12 @@ internal sealed class Compiler
 
     private Bound BindAggregate(string name, CallAst c, Frame f)
     {
-        if (c.Args.Count == 0) throw Error($"{name}(список [where условие], выражение)", c);
+        if (c.Args.Count == 0) throw Error(CalcText.M("{0}(список [where условие], выражение)", name), c);
         Ast sourceAst = c.Args[0];
         Ast? filterAst = null;
         if (sourceAst is WhereAst w) { sourceAst = w.Source; filterAst = w.Filter; }
         var source = Bind(sourceAst, f);
-        if (source.Type != CalcType.List) throw Error($"{name}: первый аргумент — список (decks, holes…), а здесь {TypeName(source.Type)}", sourceAst);
+        if (source.Type != CalcType.List) throw Error(CalcText.M("{0}: первый аргумент — список (decks, holes…), а здесь {1}", name, TypeName(source.Type)), sourceAst);
         var target = _model.Registry.Context(source.Target!)!;
         var item = E.Parameter(typeof(object), "it");
         var frame = new Frame(target, item, false, source.Path ?? f.Path);
@@ -649,10 +649,10 @@ internal sealed class Compiler
         var filterExpr = filter ?? (E)E.Constant(null, typeof(Func<object, bool>));
         if (name == "count")
         {
-            if (c.Args.Count != 1) throw Error("count(список [where условие])", c);
+            if (c.Args.Count != 1) throw Error(CalcText.M("count(список [where условие])"), c);
             return new Bound(E.Call(typeof(Agg).GetMethod(nameof(Agg.Count))!, source.Expr, filterExpr), CalcType.Number, Unit.One);
         }
-        if (c.Args.Count != 2) throw Error($"{name}(список [where условие], выражение)", c);
+        if (c.Args.Count != 2) throw Error(CalcText.M("{0}(список [where условие], выражение)", name), c);
         var sel = Bind(c.Args[1], frame);
         if (name == "first")
         {
@@ -664,7 +664,7 @@ internal sealed class Compiler
                 var lambda = E.Lambda(typeof(Func<,>).MakeGenericType(typeof(object), sel.Expr.Type), sel.Expr, item);
                 return new Bound(E.Call(m, source.Expr, filterExpr, lambda), sel.Type, Unit.One, sel.Target);
             }
-            throw Error("first: выражение — число, строка или объект", c.Args[1]);
+            throw Error(CalcText.M("first: выражение — число, строка или объект"), c.Args[1]);
         }
         RequireNumber(sel, c.Args[1]);
         var selector = E.Lambda<Func<object, double>>(sel.Expr, item);

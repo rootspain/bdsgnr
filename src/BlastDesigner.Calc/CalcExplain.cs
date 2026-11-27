@@ -53,15 +53,15 @@ public static class CalcExplain
                 case CallAst c2 when Aliases.Function(c2.Name).ToLowerInvariant() is "param" or "lookup":
                 case CallAst c3 when model.Registry.Builtins.ContainsKey(Aliases.Function(c3.Name)):
                 {
-                    var text = FormulaText.Render(model, ctx, a, true, (_, _) => null);
+                    var text = FormulaText.Render(model, ctx, a, CalcText.Language, (_, _) => null);
                     return "{" + text + " = " + Evaluate(s, ctx, a, entity, null) + "}";
                 }
             }
             return null;
         }
-        var ru = FormulaText.ToRussian(model, ctx, formula.Def.Expression);
-        var substituted = FormulaText.Render(model, ctx, ast, true, Substitute);
-        var condition = formula.Def.Condition is { Length: > 0 } c ? FormulaText.ToRussian(model, ctx, c) : null;
+        var ru = FormulaText.ToLanguage(model, ctx, formula.Def.Expression, CalcText.Language);
+        var substituted = FormulaText.Render(model, ctx, ast, CalcText.Language, Substitute);
+        var condition = formula.Def.Condition is { Length: > 0 } c ? FormulaText.ToLanguage(model, ctx, c, CalcText.Language) : null;
         steps.Add(new ExplainStep(depth, id, Caption(node.Property), ru, substituted, Format(model, value, node.Property.Unit), condition));
         if (depth + 1 > maxDepth) return;
         foreach (var (child, target) in children.Distinct()) Walk(s, child, target, depth + 1, maxDepth, steps, seen);
@@ -103,7 +103,7 @@ public static class CalcExplain
     {
         try
         {
-            var text = FormulaText.Render(s.Model, ctx, a, false, (_, _) => null);
+            var text = FormulaText.Render(s.Model, ctx, a, "en", (_, _) => null);
             var compiled = s.Model.CompileExpression(ctx, text);
             var v = s.Evaluate(compiled, entity);
             return Format(s.Model, v, unit ?? (compiled.Unit.IsUnknown ? "?" : compiled.Unit.Symbol));
@@ -111,15 +111,15 @@ public static class CalcExplain
         catch (CalcSyntaxException e) { return "#" + e.Message; }
     }
 
-    private static string Caption(PropertyDef p) => p.NameRu.Length > 0 ? p.NameRu : p.Name;
+    private static string Caption(PropertyDef p) => p.Caption(CalcText.Language);
 
     private static string Format(CalcModel model, CalcValue v, string unit)
     {
         if (v.IsError) return "#" + v.Error;
-        if (v.Object is bool b) return b ? "истина" : "ложь";
+        if (v.Object is bool b) return Aliases.WordName(b ? "true" : "false", CalcText.Language);
         if (v.Object is string str) return "'" + str + "'";
         var number = double.IsPositiveInfinity(v.Number) ? "∞" : v.Number.ToString(Math.Abs(v.Number) >= 100 ? "0.#" : "0.###", CultureInfo.CurrentCulture);
-        var u = Aliases.RussianUnit(unit);
+        var u = Aliases.Unit(unit);
         return u is "?" or "1" or "" ? number : number + " " + u;
     }
 }

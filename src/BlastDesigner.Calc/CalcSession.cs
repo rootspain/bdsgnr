@@ -99,7 +99,7 @@ public sealed class CalcSession
                     CalcType.String => new CalcValue(double.NaN, ((Func<CalcScope, object, string?>)g)(Scope, entity), null),
                     _ => new CalcValue(double.NaN, g.DynamicInvoke(Scope, entity), null)
                 };
-            return CalcValue.Fail($"Нет свойства {propertyId}");
+            return CalcValue.Fail(CalcText.M("Нет свойства {0}", propertyId));
         }
         return Value(node, entity);
     }
@@ -199,7 +199,7 @@ public sealed class CalcSession
     public double Builtin(int index, object entity, object[] args)
     {
         var def = Model.Registry.Builtins[Model.BuiltinNames[index]];
-        if (_preparedState[index] == Computing) throw new CalcEvaluationException($"Цикл через {def.Name}()");
+        if (_preparedState[index] == Computing) throw new CalcEvaluationException(CalcText.M("Цикл через {0}()", def.Name));
         if (_preparedState[index] == None)
         {
             if (def.Prepare != null)
@@ -248,7 +248,7 @@ public sealed class CalcSession
         if (s.State == Computing)
         {
             s.State = Failed;
-            s.Error = "Цикл при вычислении " + node.Id;
+            s.Error = CalcText.M("Цикл при вычислении {0}", node.Id);
             return ref s;
         }
         s.State = Computing;
@@ -283,7 +283,7 @@ public sealed class CalcSession
             catch (Exception e)
             {
                 if (f.Def.OnError is { } fallback) return (fallback, null, null);
-                return (double.NaN, null, "условие: " + Message(e));
+                return (double.NaN, null, CalcText.M("условие: {0}", Message(e)));
             }
             Evaluations++;
             try
@@ -297,7 +297,7 @@ public sealed class CalcSession
                 if (double.IsNaN(v))
                 {
                     if (f.Def.OnError is { } fb) return (fb, null, null);
-                    return (v, null, "нет значения (пустая ссылка или 0/0)");
+                    return (v, null, CalcText.M("нет значения (пустая ссылка или 0/0)"));
                 }
                 return (v, null, null);
             }
@@ -307,7 +307,7 @@ public sealed class CalcSession
                 return (double.NaN, null, Message(e));
             }
         }
-        return (double.NaN, null, "ни одно условие формулы не выполнено");
+        return (double.NaN, null, CalcText.M("ни одно условие формулы не выполнено"));
     }
 
     private static string Message(Exception e) => e is System.Reflection.TargetInvocationException { InnerException: { } inner } ? Message(inner) : e.Message;

@@ -69,6 +69,8 @@ public sealed class CalcEditorForm : DockPanel
     {
         _vm = vm;
         _project = vm.Project!;
+        // the window opens in the language of the formulas of the program: English code names when the settings ask for them
+        _codeNames = vm.Settings.FormulasInEnglish;
         _published = CalcService.ModelFor(_project);
         _publishedSession = CalcService.Session(_project, _published);
         Draft = _project.Calc?.ProfileJson is { Length: > 0 } json && TryLoad(json) is { } own ? own
@@ -87,7 +89,7 @@ public sealed class CalcEditorForm : DockPanel
         };
         _timer.Tick += (_, _) => { _timer.Stop(); Recompile(); };
 
-        var codeNames = new CheckBox { Content = Loc.T("Show code names"), IsChecked = _codeNames, Name = "codeNames", VerticalAlignment = VerticalAlignment.Center };
+        var codeNames = new CheckBox { Content = Loc.T("English / code names"), IsChecked = _codeNames, Name = "codeNames", VerticalAlignment = VerticalAlignment.Center };
         codeNames.IsCheckedChanged += (_, _) => CodeNames = codeNames.IsChecked == true;
         var fullMode = new CheckBox { Content = Loc.T("Full mode"), IsChecked = _full, Name = "fullMode", VerticalAlignment = VerticalAlignment.Center };
         fullMode.IsCheckedChanged += (_, _) => FullMode = fullMode.IsChecked == true;
@@ -216,10 +218,10 @@ public sealed class CalcEditorForm : DockPanel
         var items = new List<TreeViewItem>();
         foreach (var ctx in DraftModel.Contexts)
         {
-            var computed = DraftModel.PropertiesOf(ctx.Name).Where(p => p.Kind == PropertyKind.Computed && Match(p.Id, p.NameRu)).OrderBy(p => Display(p.Name, p.NameRu)).ToList();
-            var inputs = ctx.Properties.Values.Where(p => !p.IsRelation && Match(p.Id, p.NameRu)).OrderBy(p => Display(p.Name, p.NameRu)).ToList();
+            var computed = DraftModel.PropertiesOf(ctx.Name).Where(p => p.Kind == PropertyKind.Computed && Match(p.Id, N(p))).OrderBy(p => Display(p.Name, N(p))).ToList();
+            var inputs = ctx.Properties.Values.Where(p => !p.IsRelation && Match(p.Id, N(p))).OrderBy(p => Display(p.Name, N(p))).ToList();
             if (computed.Count == 0 && inputs.Count == 0) continue;
-            var node = new TreeViewItem { Header = Caption(_codeNames ? ctx.Name : ctx.NameRu.Length > 0 ? ctx.NameRu : ctx.Name, Look.Text, true), IsExpanded = filter.Length > 0 || ctx.Name is "hole" or "blast" };
+            var node = new TreeViewItem { Header = Caption(_codeNames ? ctx.Name : ctx.Caption(NameLang), Look.Text, true), IsExpanded = filter.Length > 0 || ctx.Name is "hole" or "blast" };
             var list = new List<TreeViewItem>();
             foreach (var p in computed) list.Add(PropertyItem(p, CalcService.BuiltIn.Properties.Any(b => b.Id == p.Id) ? "ƒ" : "+"));
             if (inputs.Count > 0)
@@ -231,26 +233,26 @@ public sealed class CalcEditorForm : DockPanel
             node.ItemsSource = list;
             items.Add(node);
         }
-        var parameters = DraftModel.Parameters.Where(p => Match(p.Def.Id, p.Def.NameRu)).ToList();
+        var parameters = DraftModel.Parameters.Where(p => Match(p.Def.Id, N(p.Def))).ToList();
         if (parameters.Count > 0)
             items.Add(new TreeViewItem
             {
                 Header = Caption(Loc.T("Parameters"), Look.Text, true), IsExpanded = filter.Length > 0,
-                ItemsSource = parameters.Select(p => Item("param:" + p.Def.Id, "#", p.Def.Id, p.Def.NameRu)).ToList()
+                ItemsSource = parameters.Select(p => Item("param:" + p.Def.Id, "#", p.Def.Id, N(p.Def))).ToList()
             });
-        var builtins = DraftModel.BuiltinNames.Select(n => CalcService.Registry.Builtins[n]).Where(b => Match(b.Name, b.NameRu)).ToList();
+        var builtins = DraftModel.BuiltinNames.Select(n => CalcService.Registry.Builtins[n]).Where(b => Match(b.Name, N(b))).ToList();
         if (_full && builtins.Count > 0)
             items.Add(new TreeViewItem
             {
                 Header = Caption(Loc.T("Built-in algorithms"), Look.Text, true), IsExpanded = filter.Length > 0,
-                ItemsSource = builtins.Select(b => Item("builtin:" + b.Name, "⚙", b.Name + "()", b.NameRu)).ToList()
+                ItemsSource = builtins.Select(b => Item("builtin:" + b.Name, "⚙", b.Name + "()", N(b))).ToList()
             });
         if (_full) items.Add(new TreeViewItem { Header = Caption(Loc.F("Rule sets: {0}", Flat().Rules.Count), Look.Muted), Tag = "rules" });
         _tree.ItemsSource = items;
         BuildTreeMarks();
     }
 
-    private TreeViewItem PropertyItem(PropertyDef p, string sign) => Item(p.Id, sign, p.Name, p.NameRu);
+    private TreeViewItem PropertyItem(PropertyDef p, string sign) => Item(p.Id, sign, p.Name, N(p));
 
     private TreeViewItem Item(string id, string sign, string name, string ru)
     {
@@ -279,16 +281,16 @@ public sealed class CalcEditorForm : DockPanel
     private string NameOf(string id)
     {
         if (_codeNames) return id;
-        if (id.StartsWith("param:", StringComparison.Ordinal)) return DraftModel.ParameterOf(id[6..]) is { } p && p.Def.NameRu.Length > 0 ? p.Def.NameRu : id[6..];
-        if (id.StartsWith("builtin:", StringComparison.Ordinal)) return CalcService.Registry.Builtins.TryGetValue(id[8..], out var b) && b.NameRu.Length > 0 ? b.NameRu : id[8..];
-        return DraftModel.FindProperty(id) is { NameRu.Length: > 0 } d ? d.NameRu : id;
+        if (id.StartsWith("param:", StringComparison.Ordinal)) return DraftModel.ParameterOf(id[6..]) is { } p && N(p.Def).Length > 0 ? N(p.Def) : id[6..];
+        if (id.StartsWith("builtin:", StringComparison.Ordinal)) return CalcService.Registry.Builtins.TryGetValue(id[8..], out var b) && N(b).Length > 0 ? N(b) : id[8..];
+        return DraftModel.FindProperty(id) is { } d && N(d).Length > 0 ? N(d) : id;
     }
 
     /// <summary>Зависимость: по-русски путём связей («Интервалы → Масса»), кодом — как в графе.</summary>
     private string DependencyText(Dependency d)
     {
         if (_codeNames) return d.Path.Count > 0 ? $"{d.Source}  ← {d.PathText}" : d.Source;
-        return string.Join(" → ", d.Path.Where(r => r.Name != "blast").Select(r => r.NameRu.Length > 0 ? r.NameRu : r.Name).Append(NameOf(d.Source)));
+        return string.Join(" → ", d.Path.Where(r => r.Name != "blast").Select(r => N(r).Length > 0 ? N(r) : r.Name).Append(NameOf(d.Source)));
     }
 
     private static TextBlock Caption(string text, IBrush brush, bool strong = false) =>
@@ -358,16 +360,16 @@ public sealed class CalcEditorForm : DockPanel
             change(d);
             MarkDirty();
         }
-        _center.Children.Add(PageTitle(p.Id, p.NameRu));
-        var shownUnit = _codeNames ? def.Unit : Aliases.RussianUnit(def.Unit);
+        _center.Children.Add(PageTitle(p.Id, N(p)));
+        var shownUnit = _codeNames ? def.Unit : Aliases.Unit(def.Unit, Lang);
         var cells = new List<Control>
         {
-            FormKit.Labeled(Loc.T("Name"), Bound(def.NameRu, v => { if (v != def.NameRu) Own(d => d.NameRu = v); })),
+            FormKit.Labeled(Loc.T("Name"), Bound(def.NameIn(NameLang), v => { if (v != def.NameIn(NameLang)) Own(d => d.SetName(NameLang, v)); })),
             FormKit.Labeled(Loc.T("Unit"), Bound(shownUnit, v => { if (v != shownUnit) Own(d => d.Unit = v); }))
         };
         if (_full)
         {
-            cells.Add(FormKit.Labeled(Loc.T("Group"), Bound(def.Group, v => { if (v != def.Group) Own(d => d.Group = v); })));
+            cells.Add(FormKit.Labeled(Loc.T("Group"), Bound(CalcText.Group(def.Group, NameLang), v => { if (v != CalcText.Group(def.Group, NameLang)) Own(d => d.Group = v); })));
             cells.Add(FormKit.Labeled(Loc.T("Format"), Bound(def.Format, v => { if (v != def.Format) Own(d => d.Format = v); })));
         }
         _center.Children.Add(FormKit.Section(Loc.T("Property"), FormKit.Fields(2, cells.ToArray())));
@@ -479,8 +481,8 @@ public sealed class CalcEditorForm : DockPanel
                 var c = DraftModel.CompileExpression(p.Context, text.Text ?? "", p.Type);
                 var want = Calc.Unit.TryParse(p.Unit, out var u) ? u : Calc.Unit.Unknown;
                 var unitOk = p.Type != CalcType.Number || want.SameDimension(c.Unit);
-                status.Text = unitOk ? Loc.F("OK · {0} · depends on {1}", c.Unit.IsUnknown ? "?" : Aliases.RussianUnit(c.Unit.Symbol), c.Dependencies.Count)
-                    : Loc.F("The formula gives {0}, the property is in {1}", Aliases.RussianUnit(c.Unit.Symbol), Aliases.RussianUnit(want.Symbol));
+                status.Text = unitOk ? Loc.F("OK · {0} · depends on {1}", c.Unit.IsUnknown ? "?" : Aliases.Unit(c.Unit.Symbol, Lang), c.Dependencies.Count)
+                    : Loc.F("The formula gives {0}, the property is in {1}", Aliases.Unit(c.Unit.Symbol, Lang), Aliases.Unit(want.Symbol, Lang));
                 status.Foreground = unitOk ? Ok : Warn;
             }
             catch (CalcSyntaxException e)
@@ -533,7 +535,7 @@ public sealed class CalcEditorForm : DockPanel
     }
 
     /// <summary>Формула для поля: по-русски или кодовыми именами (переключатель «Показать кодовые имена»).</summary>
-    private string Shown(string context, string code) => _codeNames ? code : FormulaText.ToRussian(DraftModel, context, code);
+    private string Shown(string context, string code) => Lang == "en" ? code : FormulaText.ToLanguage(DraftModel, context, code, Lang);
 
     private static readonly IBrush PropertyInk = new SolidColorBrush(Color.FromUInt32(0xFF7DB7FF));
     private static readonly IBrush PropertyBack = new SolidColorBrush(Color.FromUInt32(0x264C9BFF));
@@ -605,14 +607,14 @@ public sealed class CalcEditorForm : DockPanel
         var names = new List<(string Label, string Insert)>();
         foreach (var prop in DraftModel.PropertiesOf(ctx))
         {
-            var alias = _codeNames ? prop.Name : DraftModel.AliasOf(prop);
+            var alias = _codeNames ? prop.Name : DraftModel.AliasOf(prop, Lang);
             if (alias.StartsWith(word, StringComparison.OrdinalIgnoreCase) || prop.Name.StartsWith(word, StringComparison.OrdinalIgnoreCase))
                 names.Add((alias, _codeNames ? prop.Name : "[" + alias + "]"));
         }
         if (!bracket && start == caret - word.Length && !before.EndsWith('.'))
-            foreach (var fn in Aliases.Functions)
+            foreach (var fn in Aliases.Functions.Keys)
             {
-                var name = _codeNames ? fn.Key : fn.Value;
+                var name = Aliases.FunctionName(fn, Lang);
                 if (name.StartsWith(word, StringComparison.OrdinalIgnoreCase)) names.Add((name + "(…)", name + "("));
             }
         foreach (var (label, insert) in names.Where(n => !string.Equals(n.Insert.Trim('[', ']', '('), word, StringComparison.OrdinalIgnoreCase)).DistinctBy(n => n.Insert).OrderBy(n => n.Label.Length).Take(10))
@@ -632,7 +634,7 @@ public sealed class CalcEditorForm : DockPanel
     public void InsertProperty(string propertyId)
     {
         if (_activeFormula == null || _activeContext == null || DraftModel.FindProperty(propertyId) is not { } prop) return;
-        string Name(PropertyDef d) => _codeNames ? d.Name : "[" + DraftModel.AliasOf(d) + "]";
+        string Name(PropertyDef d) => _codeNames ? d.Name : "[" + DraftModel.AliasOf(d, Lang) + "]";
         string? text = prop.Context == _activeContext ? Name(prop) : null;
         if (text == null)
             foreach (var rel in DraftModel.PropertiesOf(_activeContext).Where(r => r.Type == CalcType.Ref && r.Target == prop.Context))
@@ -644,7 +646,7 @@ public sealed class CalcEditorForm : DockPanel
         {
             var list = DraftModel.PropertiesOf(_activeContext).FirstOrDefault(r => r.Type == CalcType.List && r.Target == prop.Context);
             if (list == null) return;
-            var sum = _codeNames ? "sum" : "сумма";
+            var sum = Aliases.FunctionName("sum", Lang);
             text = $"{sum}({Name(list)}, {Name(prop)})";
         }
         var box = _activeFormula;
@@ -658,7 +660,18 @@ public sealed class CalcEditorForm : DockPanel
     private string? _activeContext;
     private static bool _codeNames;
 
-    /// <summary>Показ формул кодовыми именами (для тех, кто привык к ним), по умолчанию — по-русски.</summary>
+    /// <summary>Язык названий окна: язык интерфейса (ru, kk, fr), иначе английский.</summary>
+    private static string NameLang => Loc.Language is "ru" or "kk" or "fr" ? Loc.Language : "en";
+
+    /// <summary>Язык записи формул окна: кодовые имена (английский) или язык интерфейса.</summary>
+    private static string Lang => _codeNames ? "en" : NameLang;
+
+    /// <summary>Название на языке интерфейса (по цепочке kk → ru → en); пусто — нет.</summary>
+    private static string N(PropertyDef p) => CalcText.Caption(NameLang, p.NameRu, p.NameEn, p.NameKk, p.NameFr);
+    private static string N(ParameterDef p) => CalcText.Caption(NameLang, p.NameRu, p.NameEn, p.NameKk, p.NameFr);
+    private static string N(BuiltinDef b) => CalcText.Caption(NameLang, b.NameRu, "", b.NameKk, b.NameFr);
+
+    /// <summary>Показ формул кодовыми (английскими) именами, по умолчанию — на языке интерфейса.</summary>
     public bool CodeNames
     {
         get => _codeNames;
@@ -832,10 +845,10 @@ public sealed class CalcEditorForm : DockPanel
 
     private void ShowInput(PropertyDef p)
     {
-        _center.Children.Add(PageTitle(p.Id, p.NameRu));
+        _center.Children.Add(PageTitle(p.Id, N(p)));
         _center.Children.Add(new TextBlock { Text = Loc.T("A field of the model: it is entered, not calculated. Formulas read it by name."), Foreground = Look.Muted, TextWrapping = TextWrapping.Wrap });
         _center.Children.Add(FormKit.Section(Loc.T("Property"), FormKit.Fields(2,
-            Info(Loc.T("Name"), p.NameRu.Length > 0 ? p.NameRu : p.NameEn), Info(Loc.T("Unit"), _codeNames ? p.Unit : Aliases.RussianUnit(p.Unit)))));
+            Info(Loc.T("Name"), p.Caption(NameLang)), Info(Loc.T("Unit"), _codeNames ? p.Unit : Aliases.Unit(p.Unit, Lang)))));
         if (_codeNames) _center.Children.Add(Info(Loc.T("Model field"), string.Join(", ", p.Fields)));
     }
 
@@ -843,7 +856,7 @@ public sealed class CalcEditorForm : DockPanel
     {
         var b = CalcService.Registry.Builtins[name];
         _center.Children.Add(new TextBlock { Text = b.Name + "()", FontFamily = Look.Mono, FontSize = 16, Foreground = Look.Text });
-        _center.Children.Add(new TextBlock { Text = b.NameRu + (b.Description.Length > 0 ? ". " + b.Description : ""), Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap });
+        _center.Children.Add(new TextBlock { Text = N(b) + (b.Description.Length > 0 ? ". " + b.Description : ""), Foreground = Look.TextSoft, TextWrapping = TextWrapping.Wrap });
         _center.Children.Add(FormKit.Section(Loc.T("Built-in algorithm"), FormKit.Fields(2,
             Info(Loc.T("Scope"), b.Scope == BuiltinScope.Blast ? Loc.T("once for the blast") : Loc.T("per entity")),
             Info(Loc.T("Available in"), b.Contexts.Length > 0 ? string.Join(", ", b.Contexts) : Loc.T("everywhere")),
@@ -862,7 +875,7 @@ public sealed class CalcEditorForm : DockPanel
             if (d == null) Draft.Parameters.Add(d = p.Clone());
             return d;
         }
-        _center.Children.Add(PageTitle(id, p.NameRu));
+        _center.Children.Add(PageTitle(id, N(p)));
         var value = FormKit.Text(p.Value.ToString(CultureInfo.CurrentCulture));
         value.TextChanged += (_, _) => { if (double.TryParse(value.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var v) && v != p.Value) { Own().Value = v; MarkDirty(); } };
         var blastValue = _project.Calc?.Parameters?.GetValueOrDefault(id);
@@ -886,7 +899,7 @@ public sealed class CalcEditorForm : DockPanel
         _center.Children.Add(FormKit.Section(Loc.T("Values by level"), FormKit.Fields(2,
             FormKit.Labeled(Loc.T("Profile"), value),
             FormKit.Labeled(Loc.T("This blast"), blast),
-            Info(Loc.T("Unit"), _codeNames ? p.Unit : Aliases.RussianUnit(p.Unit)),
+            Info(Loc.T("Unit"), _codeNames ? p.Unit : Aliases.Unit(p.Unit, Lang)),
             Info(Loc.T("Now used"), effective?.ToString("0.###", CultureInfo.CurrentCulture) ?? "—"))));
         _center.Children.Add(new TextBlock { Text = Loc.T("Looked up from the bottom: hole → hole type → blast → mine → profile."), FontSize = 11.5, Foreground = Look.Faint, TextWrapping = TextWrapping.Wrap });
         _center.Children.Add(FormKit.Section(Loc.T("Table"), table, Ui.Row(8,
@@ -1131,7 +1144,7 @@ public sealed class CalcEditorForm : DockPanel
         {
             if (!Differs(n.Id, e, draft)) return;
             var before = _published.NodeOf(n.Id) != null ? _publishedSession.Value(n.Id, e) : CalcValue.Fail(Loc.T("new"));
-            rows.Add((name, n.Property.NameRu.Length > 0 ? n.Property.NameRu : n.Property.Name, n.Property.Format, before, draft.Value(n, e)));
+            rows.Add((name, n.Property.Caption(NameLang), n.Property.Format, before, draft.Value(n, e)));
         }
         foreach (var n in DraftModel.Nodes.Where(n => n.Context.Name == "blast").OrderBy(n => n.Order)) Row(n, _project, Loc.T("Blast"));
         var holeNodes = DraftModel.Nodes.Where(n => n.Context.Name == "hole").OrderBy(n => n.Order).ToList();
@@ -1332,7 +1345,7 @@ public sealed class CalcEditorForm : DockPanel
             details.Children.Add(new TextBlock { Text = Loc.T("Unit") + ": " + t.Unit + " · " + Loc.T("Source") + ": " + t.Source, Foreground = Look.Muted, FontSize = 12, TextWrapping = TextWrapping.Wrap });
             foreach (var s in t.Slots)
             {
-                var shown = FormulaText.ToRussian(DraftModel, p.Context, s.Default);
+                var shown = FormulaText.ToLanguage(DraftModel, p.Context, s.Default, Lang);
                 var box = new ComboBox { ItemsSource = properties.Prepend(shown).Distinct().ToList(), SelectedIndex = 0, MinWidth = 320 };
                 slots[s.Key] = box;
                 details.Children.Add(FormKit.Labeled(s.Name, box));
@@ -1340,7 +1353,7 @@ public sealed class CalcEditorForm : DockPanel
             if (t.Parameters.Count > 0)
                 details.Children.Add(FormKit.Labeled(Loc.T("Coefficients"), new TextBlock
                 {
-                    Text = string.Join("\n", t.Parameters.Select(x => $"{x.NameRu} = {x.Value.ToString(CultureInfo.CurrentCulture)} ({x.Description})")),
+                    Text = string.Join("\n", t.Parameters.Select(x => $"{x.Caption(NameLang)} = {x.Value.ToString(CultureInfo.CurrentCulture)} ({x.Description})")),
                     Foreground = Look.TextSoft, FontSize = 12, TextWrapping = TextWrapping.Wrap
                 }));
         }
@@ -1394,7 +1407,7 @@ public sealed class CalcEditorForm : DockPanel
     private async Task AddProperty()
     {
         var contexts = DraftModel.Contexts.Select(c => c.Name).ToList();
-        var ctx = await Dialogs.Choose(Loc.T("My property"), Loc.T("Context"), DraftModel.Contexts.Select(c => _codeNames || c.NameRu.Length == 0 ? c.Name : c.NameRu).ToList(), Math.Max(0, contexts.IndexOf("hole")));
+        var ctx = await Dialogs.Choose(Loc.T("My property"), Loc.T("Context"), DraftModel.Contexts.Select(c => _codeNames ? c.Name : c.Caption(NameLang)).ToList(), Math.Max(0, contexts.IndexOf("hole")));
         if (ctx is not { } ci) return;
         var name = (await Dialogs.Prompt(Loc.T("My property"), Loc.T("Property name"), ""))?.Trim();
         if (string.IsNullOrWhiteSpace(name) || name.Contains('[') || name.Contains(']')) return;
@@ -1403,7 +1416,9 @@ public sealed class CalcEditorForm : DockPanel
         var number = 1;
         while (DraftModel.FindProperty(contexts[ci], "user" + number) != null) number++;
         var id = contexts[ci] + ".user" + number;
-        Draft.Properties.Add(new PropertyDef { Id = id, NameRu = name, Unit = "?", Kind = PropertyKind.Computed, Group = "Мои" });
+        var mine = new PropertyDef { Id = id, Unit = "?", Kind = PropertyKind.Computed, Group = "Мои" };
+        mine.SetName(NameLang, name);
+        Draft.Properties.Add(mine);
         Draft.Formulas.Add(new FormulaDef { Property = id, Expression = "0" });
         Recompile();
         BuildTree();

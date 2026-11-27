@@ -131,6 +131,18 @@ public sealed class SettingsForm : DockPanel
     public void ScrollTo(double y) => _scroll.Offset = new Vector(0, y);
 
     private static string L(string english) => Loc.Ui(english);
+
+    /// <summary>Opens a folder in the file manager of the system.</summary>
+    private static void OpenFolder(string folder)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows()) Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+            else if (OperatingSystem.IsMacOS()) Process.Start("open", $"\"{folder}\"");
+            else Process.Start("xdg-open", $"\"{folder}\"");
+        }
+        catch (Exception) { /* no file manager: the path is shown in the settings */ }
+    }
     private static string N(double v, string format = "0.##") => v.ToString(format, CultureInfo.CurrentCulture);
     private static double? Parse(string? s) =>
         double.TryParse((s ?? "").Trim().Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : null;
@@ -341,6 +353,15 @@ public sealed class SettingsForm : DockPanel
         var lang = new ComboBox { ItemsSource = langs.Select(l => l.Name).ToList(), SelectedIndex = langs.FindIndex(l => l.Code == Edited.Language), Width = 180, Height = 32, Name = "language" };
         lang.SelectionChanged += (_, _) => { if (lang.SelectedIndex >= 0) Edited.Language = langs[lang.SelectedIndex].Code; };
         yield return Row("Interface language", lang, "Applies after a restart");
+
+        var corrections = Ui.Flat(Ui.Row(6, Look.Icon("open", 15, Look.Muted), new TextBlock { Text = L("Open translation corrections folder"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center }),
+            L("Correct a line of the translation in <language>.user.tsv and send the file to the developers"), () => OpenFolder(Loc.PrepareCorrections(Edited.Language)), null, 30);
+        corrections.Name = "translationCorrections";
+        corrections.HorizontalAlignment = HorizontalAlignment.Left;
+        yield return Row("Translation corrections", corrections, "Your corrections replace the built-in lines after a restart");
+
+        yield return Row("Formulas in English", Toggle(Edited.FormulasInEnglish, v => Edited.FormulasInEnglish = v, "formulasInEnglish"),
+            "Formulas and names of the calculations with English code names instead of the interface language");
 
         var themes = new WrapPanel();
         foreach (var (key, label) in new[] { (ProgramSettings.DarkTheme, "Dark"), (ProgramSettings.LightTheme, "Light") })
@@ -644,7 +665,7 @@ public sealed class SettingsForm : DockPanel
         var open = Ui.Flat(Ui.Row(6, Look.Icon("open", 15, Look.Muted), new TextBlock { Text = L("Open"), FontSize = 12, VerticalAlignment = VerticalAlignment.Center }), L("Open the folder"), () =>
         {
             Directory.CreateDirectory(folder);
-            if (OperatingSystem.IsWindows()) Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+            OpenFolder(folder);
         }, null, 30);
         var path = new TextBlock { Text = folder, FontFamily = Look.Mono, FontSize = 11.5, Foreground = Look.Muted, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 330 };
         ToolTip.SetTip(path, folder);

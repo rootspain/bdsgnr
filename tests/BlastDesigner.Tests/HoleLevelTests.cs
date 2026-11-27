@@ -117,7 +117,7 @@ public class HoleLevelTests
     }
 
     [Fact]
-    public void TheLastIntervalGoesDownToTheToeWhateverChangesTheLength()
+    public void TheStemmingStaysAndTheMainChargeTakesTheChangeWhateverChangesTheLength()
     {
         var p = BlastProject.CreateNew();
         var stem = p.Products.First(x => x.Kind == ProductKind.Stemming).Id;
@@ -129,20 +129,29 @@ public class HoleLevelTests
         var doc = new Document(p);
         Hole H() => (Hole)doc.Project.FindEntity(h.Id)!;
 
-        // longer by hand: the last interval to the toe, its primer 0.1 m above it still
+        // longer by hand: the stemming stays, the main charge takes the 4 m, the interval under it goes down with the toe
         doc.Execute("Length", pr => ((Hole)pr.FindEntity(h.Id)!).Length = 15);
-        Assert.Equal(new[] { 3.0, 10, 15 }, H().Decks.Select(d => d.Bottom));
+        Assert.Equal(new[] { 3.0, 14, 15 }, H().Decks.Select(d => d.Bottom));
         Assert.Equal(14.9, H().Decks[2].Primers[0].Depth, 9);
-        Assert.Equal(6.4, H().Decks[1].Primers[0].Depth, 9);
+        Assert.Equal(10.4, H().Decks[1].Primers[0].Depth, 9);
+        Assert.True(H().ManualLoading);
         // by a level, and by a move of the collar
         doc.Execute("To level", pr => ((Hole)pr.FindEntity(h.Id)!).ToLevel = 86);
-        Assert.Equal(14, H().Decks[^1].Bottom, 9);
+        Assert.Equal(new[] { 3.0, 13, 14 }, H().Decks.Select(d => d.Bottom));
         doc.Execute("Move", pr => pr.FindEntity(h.Id)!.Translate(new Vec3(0, 0, 1)));
-        Assert.Equal(15, H().Decks[^1].Bottom, 9);
-        // shorter than the intervals: those below the toe go, the one it cuts ends there
+        Assert.Equal(new[] { 3.0, 14, 15 }, H().Decks.Select(d => d.Bottom));
+        // much shorter: the main charge gives the 7 m, the stemming still 3 m
         doc.Execute("To level", pr => ((Hole)pr.FindEntity(h.Id)!).ToLevel = 93);
-        Assert.Equal(new[] { 3.0, 8 }, H().Decks.Select(d => d.Bottom));
-        Assert.Equal(6.4, H().Decks[1].Primers[0].Depth, 9);
+        Assert.Equal(new[] { 3.0, 7, 8 }, H().Decks.Select(d => d.Bottom));
+        Assert.Equal(3.4, H().Decks[1].Primers[0].Depth, 9);
+        Assert.Equal(7.9, H().Decks[2].Primers[0].Depth, 9);
+        Assert.Empty(Charging.Issues(doc.Project, H()));
+        // shorter than the stemming and the least charge: the toe cuts the column, nothing below it
+        doc.Execute("To level", pr => ((Hole)pr.FindEntity(h.Id)!).ToLevel = 98.5);
+        Assert.True(H().Decks.All(d => d.Bottom <= H().EffectiveLength + 1e-9));
+        Assert.Single(H().Decks);
+        Assert.Equal(2.5, H().Decks[0].Bottom, 9);
+        doc.Undo();
         // undo brings the column back with the length
         doc.Undo();
         Assert.Equal(3, H().Decks.Count);

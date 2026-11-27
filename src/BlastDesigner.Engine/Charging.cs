@@ -302,46 +302,42 @@ public static class Charging
         var stretch = result.Where(d => project.FindProduct(d.ProductId)?.IsExplosive == true).OrderByDescending(d => d.Length).FirstOrDefault()
                       ?? result[^1];
         var stretchBottom = stretch.Bottom;
+        // as far as the deck can give: shorter than 0.1 m it does not get, the decks below move only as far as its bottom
+        var shift = Math.Max(stretch.Top + 0.1, stretchBottom + delta) - stretchBottom;
         foreach (var d in result)
         {
             if (d == stretch)
             {
-                d.Bottom = Math.Max(d.Top + 0.1, d.Bottom + delta);
-                foreach (var p in d.Primers) p.Depth = Math.Clamp(p.Depth + delta, d.Top, d.Bottom);
+                d.Bottom = stretchBottom + shift;
+                foreach (var p in d.Primers) p.Depth = Math.Clamp(p.Depth + shift, d.Top, d.Bottom);
             }
             else if (d.Top >= stretchBottom - 1e-9)
             {
-                d.Top += delta;
-                d.Bottom += delta;
-                foreach (var p in d.Primers) p.Depth += delta;
+                d.Top += shift;
+                d.Bottom += shift;
+                foreach (var p in d.Primers) p.Depth += shift;
             }
         }
         return result.Where(d => d.Bottom > d.Top + 1e-6 && d.Top < toLength).Select(d => { d.Bottom = Math.Min(d.Bottom, toLength); return d; }).ToList();
     }
 
     /// <summary>
-    /// The column of a hole whose length changed: the last interval goes down to the toe, its primers keep their distance
-    /// from its bottom (within it); intervals the toe no longer reaches go, the one it cuts ends at the toe, its primers
-    /// staying where they are within it.
+    /// The column of a hole whose length changed from <paramref name="wasLength"/>: a hole loaded by its rules is loaded by
+    /// them again; one loaded by hand keeps its top stemming, its longest explosive deck takes the difference and the decks
+    /// below it go along with the toe (<see cref="AdaptColumn"/>); decks the toe no longer reaches go.
     /// </summary>
-    public static void ColumnToToe(Hole h)
+    public static void ColumnToLength(BlastProject project, Hole h, double wasLength)
     {
-        if (h.Decks.Count == 0) return;
-        var toe = h.EffectiveLength;
-        h.Decks.Sort((a, b) => a.Top.CompareTo(b.Top));
-        var cut = h.Decks.RemoveAll(d => d.Top >= toe - 1e-6) > 0;
-        if (h.Decks.Count == 0) return;
-        var last = h.Decks[^1];
-        var delta = toe - last.Bottom;
-        if (Math.Abs(delta) < 1e-9) return;
-        last.Bottom = toe;
-        // a primer of an interval the toe cuts stays where it is if it can
-        foreach (var p in last.Primers) p.Depth = Math.Clamp(p.Depth + (cut ? 0 : delta), last.Top, last.Bottom);
+        if (h.Decks.Count == 0 || Math.Abs(wasLength - h.EffectiveLength) < 1e-9) return;
+        if (!h.ManualLoading && ApplyRules(project, new[] { h }) > 0) return;
+        var manual = h.ManualLoading;
+        h.Decks = AdaptColumn(project, h.Decks, wasLength, h.EffectiveLength);
+        h.ManualLoading = manual;
     }
 
     /// <summary>
     /// Follows a change of a document (<see cref="Document.Followers"/>): every hole whose length changed in it, by hand,
-    /// with its level or by a move, has its last interval taken down to the toe (<see cref="ColumnToToe"/>).
+    /// with its level or by a move, has its column fitted to the new length (<see cref="ColumnToLength"/>).
     /// </summary>
     public static Action? FollowLength(BlastProject project)
     {
@@ -349,7 +345,7 @@ public static class Charging
         return () =>
         {
             foreach (var h in project.Holes)
-                if (before.TryGetValue(h.Id, out var was) && Math.Abs(was - h.EffectiveLength) > 1e-9) ColumnToToe(h);
+                if (before.TryGetValue(h.Id, out var was)) ColumnToLength(project, h, was);
         };
     }
 
@@ -399,23 +395,39 @@ public static class Charging
         return kinds;
     }
 
-    /// <summary>Validates a charge column; returns human-readable problems.</summary>
-    public static List<string> Validate(BlastProject project, Hole h)
+    /// <summary>Validates a charge column; returns human-readable problems in English (<see cref="Issues"/> filled).</summary>
+    public static List<string> Validate(BlastProject project, Hole h) =>
+        Issues(project, h).Select(i => string.Format(System.Globalization.CultureInfo.InvariantCulture, i.Format, i.Args)).ToList();
+
+    /// <summary>
+    /// The problems of a charge column as English formats and their values, to be translated before they are filled. Depths
+    /// are rounded to the centimetre and followed by " m", so the program can show them in its units.
+    /// </summary>
+    public static List<ColumnIssue> Issues(BlastProject project, Hole h)
     {
-        var issues = new List<string>();
+        var issues = new List<ColumnIssue>();
+        var len = h.EffectiveLength;
         var sorted = h.Decks.OrderBy(d => d.Top).ToList();
         for (int i = 0; i < sorted.Count; i++)
         {
             var d = sorted[i];
-            if (d.Bottom > h.EffectiveLength + 1e-6) issues.Add($"Deck {i + 1} extends below the toe");
-            if (i > 0 && d.Top < sorted[i - 1].Bottom - 1e-6) issues.Add($"Deck {i + 1} overlaps deck {i}");
+            if (d.Bottom > len + 1e-6)
+                issues.Add(new("Deck {0} goes below the toe: its bottom is at {1:0.##} m, the hole is {2:0.##} m deep", i + 1, d.Bottom, len));
+            if (i > 0 && d.Top < sorted[i - 1].Bottom - 1e-6) issues.Add(new("Deck {0} overlaps deck {1}", i + 1, i));
             var p = project.FindProduct(d.ProductId);
-            if (p?.IsExplosive == true && d.Primers.Count == 0) issues.Add($"Explosive deck {i + 1} has no primer");
-            if (p?.IsExplosive == true && !p.WaterResistant && h.WaterDepth > 0 && d.Bottom > h.EffectiveLength - h.WaterDepth)
-                issues.Add($"Deck {i + 1}: {p.Name} is not water resistant");
+            if (p?.IsExplosive == true && d.Primers.Count == 0) issues.Add(new("Explosive deck {0} has no primer", i + 1));
+            if (p?.IsExplosive == true && !p.WaterResistant && h.WaterDepth > 0 && d.Bottom > len - h.WaterDepth)
+                issues.Add(new("Deck {0}: {1} is not water resistant", i + 1, p.Name));
         }
         return issues;
     }
+}
+
+/// <summary>A problem of a charge column (<see cref="Charging.Issues"/>): an English format and the values that fill it.</summary>
+public sealed record ColumnIssue(string Format, params object[] Args)
+{
+    /// <summary>Whether it is a deck of explosive without a primer, a problem the hole loading window shows on its own.</summary>
+    public bool IsNoPrimer => Format.StartsWith("Explosive deck", StringComparison.Ordinal);
 }
 
 /// <summary>A kind of loading warning of a hole (<see cref="Charging.LoadingWarnings"/>).</summary>

@@ -1330,8 +1330,8 @@ public sealed class HoleLoadingEditor : DockPanel
         object[] args = { N(stemLen), diameters, N(minStem, "0.0#") };
         Check(stemOk, string.Format(Loc.T(stemFormat), args),
             CheckText(Qty.InText(string.Format(parts[0], args).TrimEnd())), MinStemmingBox(), CheckText(Qty.InText(parts.Length > 1 ? string.Format(parts[1], args).TrimStart() : "")));
-        foreach (var issue in Charging.Validate(_p, hole).Where(s => !s.Contains("no primer", StringComparison.Ordinal)))
-            Check(false, issue);
+        foreach (var issue in Charging.Issues(_p, hole).Where(i => !i.IsNoPrimer))
+            Check(false, Loc.F(issue.Format, issue.Args));
     }
 
     /// <summary>Minimum stemming in hole diameters, edited in its check; a program setting, not part of the hole.</summary>

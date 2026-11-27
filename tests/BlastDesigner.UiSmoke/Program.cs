@@ -3259,6 +3259,25 @@ Step("loading dialog: Enter commits a field and keeps the window", () =>
     dlg.KeyPress(Avalonia.Input.Key.Enter, Avalonia.Input.RawInputModifiers.Control, Avalonia.Input.PhysicalKey.Enter, null); Pump();
     if (dlg.IsVisible || !result.IsCompleted || result.Result is not { } decks || Math.Abs(decks[0].Bottom - 6) > 1e-6) throw new Exception("Ctrl+Enter did not apply and close");
 });
+Step("loading dialog: a deck below the toe is told in the language of the program, with its bottom and the depth", () =>
+{
+    var hole = vm.Project!.Holes.First(h => h.Decks.Count > 1);
+    var was = hole.Decks.Select(d => d.Clone()).ToList();
+    try
+    {
+        // set straight on the hole, past the length changes follow: a column as an old file or an import may bring it
+        hole.Decks[^1].Bottom = hole.EffectiveLength + 1.5;
+        _ = HoleLoadingWindow.Show(vm, hole); Pump();
+        var dlg = BlastDesigner.App.Services.Dialogs.LastShown!;
+        var editor = dlg.GetLogicalDescendants().OfType<HoleLoadingEditor>().First();
+        var issue = BlastDesigner.Engine.Charging.Issues(vm.Project, hole).First(i => i.Format.Contains("below the toe"));
+        var text = BlastDesigner.App.Services.Loc.F(issue.Format, issue.Args);
+        if (!editor.Checks.Any(c => !c.Ok && c.Text == text)) throw new Exception("no check of the deck below the toe: " + string.Join(" | ", editor.Checks.Select(c => c.Text)));
+        if (BlastDesigner.App.Services.Loc.Language == "ru" && !text.StartsWith("Интервал " + hole.Decks.Count + " уходит ниже забоя")) throw new Exception("not translated: " + text);
+        dlg.Close(); Pump();
+    }
+    finally { hole.Decks = was; }
+});
 Step("loading dialog: primer cards are always open", () =>
 {
     var hole = vm.Project!.Holes.First(h => h.Decks.Count > 1);

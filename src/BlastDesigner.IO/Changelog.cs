@@ -18,11 +18,11 @@ public static partial class Changelog
     /// <summary>Version of the running program (the assembly version set in Directory.Build.props).</summary>
     public static Version Current => Normalize(typeof(Changelog).Assembly.GetName().Version ?? new Version(0, 0, 0));
 
-    /// <summary>The notes in the interface language (Russian for "ru", English otherwise), newest first.</summary>
+    /// <summary>The notes in the interface language (Russian for "ru" and "kk", which falls back to Russian; English otherwise), newest first.</summary>
     public static List<Release> Load(string language)
     {
         var asm = typeof(Changelog).Assembly;
-        using var s = asm.GetManifestResourceStream(language == "ru" ? RussianResource : EnglishResource) ?? asm.GetManifestResourceStream(EnglishResource);
+        using var s = asm.GetManifestResourceStream(language is "ru" or "kk" ? RussianResource : EnglishResource) ?? asm.GetManifestResourceStream(EnglishResource);
         if (s == null) return new();
         using var r = new StreamReader(s);
         return Parse(r.ReadToEnd());

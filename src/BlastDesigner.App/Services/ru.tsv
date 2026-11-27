@@ -4194,3 +4194,20 @@ left out: {0}	пропущено: {0}
 export them in AutoCAD as 3D faces or a mesh	экспортируйте их в AutoCAD как 3D-грани или сеть
 ui:Show the plan and fact buttons of this stage	Показать кнопки «План» и «Факт» этой стадии
 ui:Fold the group to its name (F8 and Shift+F8 still switch it)	Свернуть группу до названия (F8 и Shift+F8 по-прежнему переключают её)
+ui:Open translation corrections folder	Открыть папку правок перевода
+ui:Correct a line of the translation in <language>.user.tsv and send the file to the developers	Исправьте строку перевода в <язык>.user.tsv и отправьте файл разработчикам
+ui:Translation corrections	Правки перевода
+ui:Your corrections replace the built-in lines after a restart	Ваши правки заменяют встроенные строки после перезапуска
+ui:Formulas in English	Формулы по-английски
+ui:Formulas and names of the calculations with English code names instead of the interface language	Формулы и названия расчётов английскими кодовыми именами вместо языка интерфейса
+English / code names	Английские / кодовые имена
+name:Drilling design	Проект бурения
+name:Block boundary	Контур блока
+name:Collar survey	Съёмка устьев
+name:Depth measurements	Замеры глубин
+name:Loading design	Проект заряжания
+name:Loading actual	Факт заряжания
+Deck {0} goes below the toe: its bottom is at {1:0.##} m, the hole is {2:0.##} m deep	Интервал {0} уходит ниже забоя: его низ на {1:0.##} м, глубина скважины {2:0.##} м
+Deck {0} overlaps deck {1}	Интервал {0} перекрывает интервал {1}
+Explosive deck {0} has no primer	В интервале ВВ {0} нет боевика
+Deck {0}: {1} is not water resistant	Интервал {0}: {1} — неводоустойчивое ВВ

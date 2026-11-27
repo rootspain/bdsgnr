@@ -3,6 +3,10 @@
     <ProjectReference Include="..\BlastDesigner.Domain\BlastDesigner.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="calc-names.tsv" />
+    <EmbeddedResource Include="calc-messages.tsv" />
+  </ItemGroup>
+  <ItemGroup>
     <InternalsVisibleTo Include="BlastDesigner.Tests" />
   </ItemGroup>
 </Project>

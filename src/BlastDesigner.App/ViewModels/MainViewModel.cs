@@ -117,7 +117,8 @@ public sealed partial class MainViewModel : ObservableObject
         }
         Doc = doc;
         // one calculation session lives with the document: labels, the table and the panels read its cached values
-        CalcService.RussianNames = Loc.Language == "ru";
+        CalcService.FormulaLanguage = FormulaLanguage(Settings);
+        CalcService.MessageLanguage = Loc.Language;
         CalcService.Attach(doc);
         HiddenEntities.Clear();
         Highlight.Ids.Clear();
@@ -159,7 +160,8 @@ public sealed partial class MainViewModel : ObservableObject
     public void Continue(MainViewModel before)
     {
         Doc = before.Doc;
-        CalcService.RussianNames = Loc.Language == "ru";
+        CalcService.FormulaLanguage = FormulaLanguage(Settings);
+        CalcService.MessageLanguage = Loc.Language;
         HiddenEntities.UnionWith(before.HiddenEntities);
         ActiveConnector = before.ActiveConnector;
         if (Doc != null)

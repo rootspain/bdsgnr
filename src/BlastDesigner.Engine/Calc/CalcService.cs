@@ -241,15 +241,34 @@ public static class CalcService
         return SessionFor(project, context, entity).Value(propertyId, entity);
     }
 
-    /// <summary>Названия свойств по-русски (окна, подписи плана, отчёты); иначе по-английски. Задаёт приложение по языку.</summary>
-    public static bool RussianNames { get; set; } = true;
+    /// <summary>
+    /// Язык формул и названий свойств (окна, подписи плана, отчёты, редактор расчётов): "en" (английские названия и
+    /// кодовая запись формул), "ru", "kk", "fr". Задаёт приложение по языку интерфейса и настройке «Формулы по-английски».
+    /// </summary>
+    public static string FormulaLanguage
+    {
+        get => CalcText.Language;
+        set => CalcText.Language = value is "ru" or "kk" or "fr" ? value : "en";
+    }
+
+    /// <summary>
+    /// Язык сообщений расчётов (ошибки формул, диагностика, ошибки вычисления): язык интерфейса, en/ru/kk/fr.
+    /// Не зависит от <see cref="FormulaLanguage"/> (формулы можно писать по-английски, а сообщения читать на своём языке).
+    /// </summary>
+    public static string MessageLanguage
+    {
+        get => CalcText.MessageLanguage;
+        set => CalcText.MessageLanguage = value is "ru" or "kk" or "fr" ? value : "en";
+    }
 
     /// <summary>Название свойства для столбца, подписи или отчёта; без названия — имя свойства.</summary>
     public static string Caption(BlastProject project, string propertyId)
     {
         var d = ModelFor(project).FindProperty(propertyId);
         if (d == null) return propertyId;
-        var name = RussianNames ? (d.NameRu.Length > 0 ? d.NameRu : d.NameEn) : (d.NameEn.Length > 0 ? d.NameEn : d.NameRu);
+        var name = CalcText.Caption(FormulaLanguage, d.NameRu, d.NameEn, d.NameKk, d.NameFr);
+        // английского названия нет — русское лучше кодового имени (как было)
+        if (name.Length == 0) name = d.NameRu;
         return name.Length > 0 ? name : d.Name;
     }
 
@@ -417,11 +436,11 @@ public static class CalcService
                 var kindName = args[0].ToString()!;
                 if (!cache.TryGetValue(kindName, out var line))
                 {
-                    if (!Enum.TryParse<LineKind>(kindName, true, out var kind)) throw new CalcEvaluationException($"Нет вида линии «{kindName}»");
+                    if (!Enum.TryParse<LineKind>(kindName, true, out var kind)) throw new CalcEvaluationException(CalcText.M("Нет вида линии «{0}»", kindName));
                     cache[kindName] = line = s.Project.Entities.OfType<PolylineEntity>().FirstOrDefault(l => l.Kind == kind);
                 }
                 if (line == null) return double.NaN;
-                var p = o switch { Hole h => h.Collar, PointEntity pt => pt.Position, _ => throw new CalcEvaluationException("distToLine: нет точки") };
+                var p = o switch { Hole h => h.Collar, PointEntity pt => pt.Position, _ => throw new CalcEvaluationException(CalcText.M("distToLine: нет точки")) };
                 return GeoMath.DistanceToPolyline2D(line.Points, p, line.Closed);
             }
         });

@@ -1,0 +1,86 @@
+# Messages of the formula language (parser, compiler, model, evaluation, profiles) in the interface languages:
+# Russian format (the key, as written in code) <TAB> English <TAB> Kazakh <TAB> French. {0}, {1}… are the values.
+Неверное число «{0}»	Invalid number "{0}"	Қате сан «{0}»	Nombre invalide « {0} »
+Строка не закрыта кавычкой	The string is not closed with a quote	Жол тырнақшамен жабылмаған	La chaîne n'est pas fermée par un guillemet
+Нет закрывающей скобки «]» у имени	The name has no closing bracket "]"	Атаудың жабатын «]» жақшасы жоқ	Le nom n'a pas de crochet fermant « ] »
+Пустое имя в скобках []	Empty name in brackets []	[] жақшасындағы бос атау	Nom vide entre crochets []
+Неожиданный символ «{0}»	Unexpected character "{0}"	Күтпеген таңба «{0}»	Caractère inattendu « {0} »
+Пустая формула	Empty formula	Бос формула	Formule vide
+Лишнее «{0}»	Extra "{0}"	Артық «{0}»	« {0} » en trop
+После точки ожидается имя свойства	A property name is expected after the dot	Нүктеден кейін қасиет атауы күтіледі	Un nom de propriété est attendu après le point
+Формула оборвалась	The formula ends too early	Формула үзіліп қалды	La formule s'arrête trop tôt
+Неожиданное «{0}»	Unexpected "{0}"	Күтпеген «{0}»	« {0} » inattendu
+Ожидается «{0}»	"{0}" expected	«{0}» күтіледі	« {0} » attendu
+Неизвестная единица «{0}»	Unknown unit "{0}"	Белгісіз бірлік «{0}»	Unité inconnue « {0} »
+Нет контекста «{0}»	No context "{0}"	«{0}» контексті жоқ	Pas de contexte « {0} »
+Формула даёт {0}, ожидается {1}	The formula gives {0}, {1} is expected	Формула {0} береді, {1} күтіледі	La formule donne {0}, {1} est attendu
+Формула должна давать число, логическое значение или строку	The formula must give a number, a logical value or a string	Формула сан, логикалық мән немесе жол беруі керек	La formule doit donner un nombre, une valeur logique ou une chaîne
+число	a number	сан	un nombre
+логическое значение	a logical value	логикалық мән	une valeur logique
+строку	a string	жол	une chaîne
+вид	a kind	түр	un genre
+ссылку на объект	a reference to an object	нысанға сілтеме	une référence à un objet
+список	a list	тізім	une liste
+«where» допускается только в первом аргументе агрегата (sum, count…)	"where" is allowed only in the first argument of an aggregate (sum, count…)	«where» тек агрегаттың бірінші аргументінде рұқсат етіледі (sum, count…)	« where » n'est admis que dans le premier argument d'un agrégat (sum, count…)
+Неизвестная конструкция	Unknown construct	Белгісіз құрылым	Construction inconnue
+«{0}» — список; используйте sum, count, first…	"{0}" is a list; use sum, count, first…	«{0}» — тізім; sum, count, first… пайдаланыңыз	« {0} » est une liste ; utilisez sum, count, first…
+«{0}» — не объект, у него нет свойства «{1}»	"{0}" is not an object, it has no property "{1}"	«{0}» — нысан емес, оның «{1}» қасиеті жоқ	« {0} » n'est pas un objet, il n'a pas de propriété « {1} »
+Нет свойства [{0}] у объекта «{1}»	The object "{1}" has no property [{0}]	«{1}» нысанында [{0}] қасиеті жоқ	L'objet « {1} » n'a pas de propriété [{0}]
+. Оно есть у связи [{0}]: напишите [{0}].[{1}]	. The relation [{0}] has it: write [{0}].[{1}]	. Ол [{0}] байланысында бар: [{0}].[{1}] деп жазыңыз	. La relation [{0}] l'a : écrivez [{0}].[{1}]
+. Возможно, вы имели в виду {0}	. Did you mean {0}	. Мүмкін, {0} деп айтқыңыз келді	. Vouliez-vous dire {0}
+ или 	 or 	 немесе 	 ou
+Ожидается число, а здесь {0}	A number is expected, but here is {0}	Сан күтіледі, ал мұнда {0}	Un nombre est attendu, mais il y a ici {0}
+Ожидается условие (логическое значение), а здесь {0}	A condition (logical value) is expected, but here is {0}	Шарт (логикалық мән) күтіледі, ал мұнда {0}	Une condition (valeur logique) est attendue, mais il y a ici {0}
+Показатель степени должен быть безразмерным, а он в {0}	The exponent must be dimensionless, but it is in {0}	Дәреже көрсеткіші өлшемсіз болуы керек, ал ол {0}	L'exposant doit être sans dimension, or il est en {0}
+Неизвестная операция «{0}»	Unknown operation "{0}"	Белгісіз амал «{0}»	Opération inconnue « {0} »
+Несовместимые единицы: {0} и {1} — их нельзя складывать и сравнивать	Incompatible units: {0} and {1} cannot be added or compared	Үйлеспейтін бірліктер: {0} және {1} — оларды қосуға және салыстыруға болмайды	Unités incompatibles : {0} et {1} ne peuvent être ni additionnées ni comparées
+Разные единицы {0} и {1}: приведите явно, например to({2}, …)	Different units {0} and {1}: convert explicitly, e.g. to({2}, …)	Әртүрлі бірліктер {0} және {1}: анық келтіріңіз, мысалы to({2}, …)	Unités différentes {0} et {1} : convertissez explicitement, par exemple to({2}, …)
+Сравнение «{0}» — только для чисел	The comparison "{0}" is for numbers only	«{0}» салыстыруы тек сандар үшін	La comparaison « {0} » est réservée aux nombres
+Нельзя сравнить {0} и {1}	Cannot compare {0} and {1}	{0} мен {1} салыстыруға болмайды	Impossible de comparer {0} et {1}
+Вид сравнивается только на равенство	A kind is compared for equality only	Түр тек теңдікке салыстырылады	Un genre ne se compare que pour l'égalité
+Нет значения «{0}»; возможны: {1}	No value "{0}"; possible: {1}	«{0}» мәні жоқ; мүмкіндері: {1}	Pas de valeur « {0} » ; possibles : {1}
+case(условие1, значение1, …, иначе): нечётное число аргументов, не меньше трёх	case(condition1, value1, …, otherwise): an odd number of arguments, at least three	case(шарт1, мән1, …, әйтпесе): аргументтердің тақ саны, кемінде үшеу	case(condition1, valeur1, …, sinon) : un nombre impair d'arguments, au moins trois
+coalesce(a, b, …): не меньше двух аргументов	coalesce(a, b, …): at least two arguments	coalesce(a, b, …): кемінде екі аргумент	coalesce(a, b, …) : au moins deux arguments
+{0}(a, b, …) или {0}(список, выражение)	{0}(a, b, …) or {0}(list, expression)	{0}(a, b, …) немесе {0}(тізім, өрнек)	{0}(a, b, …) ou {0}(liste, expression)
+round(x) или round(x, знаков)	round(x) or round(x, digits)	round(x) немесе round(x, таңбалар)	round(x) ou round(x, décimales)
+Неизвестная функция «{0}»	Unknown function "{0}"	Белгісіз функция «{0}»	Fonction inconnue « {0} »
+{0}: нужно аргументов — {1}, а дано {2}	{0}: {1} arguments needed, {2} given	{0}: {1} аргумент қажет, ал {2} берілген	{0} : {1} arguments nécessaires, {2} donnés
+{0}: аргумент должен быть безразмерным, а он в {1}	{0}: the argument must be dimensionless, but it is in {1}	{0}: аргумент өлшемсіз болуы керек, ал ол {1}	{0} : l'argument doit être sans dimension, or il est en {1}
+{0}: аргумент — угол в градусах, а он в {1}	{0}: the argument is an angle in degrees, but it is in {1}	{0}: аргумент — градустағы бұрыш, ал ол {1}	{0} : l'argument est un angle en degrés, or il est en {1}
+Ветви дают разные типы: {0} и {1}	The branches give different types: {0} and {1}	Тармақтар әртүрлі типтер береді: {0} және {1}	Les branches donnent des types différents : {0} et {1}
+Ветви ведут к разным объектам: {0} и {1}	The branches lead to different objects: {0} and {1}	Тармақтар әртүрлі нысандарға апарады: {0} және {1}	Les branches mènent à des objets différents : {0} et {1}
+to(единица, выражение): единица — имя или строка, например to(m, diameter), to(kg/m3, density)	to(unit, expression): the unit is a name or a string, e.g. to(m, diameter), to(kg/m3, density)	to(бірлік, өрнек): бірлік — атау немесе жол, мысалы to(m, diameter), to(kg/m3, density)	to(unité, expression) : l'unité est un nom ou une chaîne, par exemple to(m, diameter), to(kg/m3, density)
+to(): у выражения неизвестная единица, переводить не из чего	to(): the expression has an unknown unit, nothing to convert from	to(): өрнектің бірлігі белгісіз, ауыстыратын ештеңе жоқ	to() : l'expression a une unité inconnue, rien à convertir
+Нельзя перевести {0} в {1}: разная размерность	Cannot convert {0} to {1}: different dimensions	{0} бірлігін {1} бірлігіне ауыстыруға болмайды: өлшемдері әртүрлі	Impossible de convertir {0} en {1} : dimensions différentes
+lookup(таблица, x)	lookup(table, x)	lookup(кесте, x)	lookup(table, x)
+param(имя), например param(site.vib.K)	param(name), e.g. param(site.vib.K)	param(атау), мысалы param(site.vib.K)	param(nom), par exemple param(site.vib.K)
+Имя параметра — через точку или в кавычках	The parameter name is written with dots or in quotes	Параметр атауы — нүкте арқылы немесе тырнақшада	Le nom du paramètre s'écrit avec des points ou entre guillemets
+Нет параметра «{0}»	No parameter "{0}"	«{0}» параметрі жоқ	Pas de paramètre « {0} »
+У параметра «{0}» нет таблицы	The parameter "{0}" has no table	«{0}» параметрінде кесте жоқ	Le paramètre « {0} » n'a pas de table
+«{0}» — таблица, используйте lookup({0}, x)	"{0}" is a table, use lookup({0}, x)	«{0}» — кесте, lookup({0}, x) пайдаланыңыз	« {0} » est une table, utilisez lookup({0}, x)
+{0}() доступна в контекстах: {1}	{0}() is available in the contexts: {1}	{0}() мына контекстерде қолжетімді: {1}	{0}() est disponible dans les contextes : {1}
+{0}(): аргументы — константы (имя, строка или число)	{0}(): the arguments are constants (a name, a string or a number)	{0}(): аргументтер — тұрақтылар (атау, жол немесе сан)	{0}() : les arguments sont des constantes (un nom, une chaîne ou un nombre)
+{0}(список [where условие], выражение)	{0}(list [where condition], expression)	{0}(тізім [where шарт], өрнек)	{0}(liste [where condition], expression)
+{0}: первый аргумент — список (decks, holes…), а здесь {1}	{0}: the first argument is a list (decks, holes…), but here is {1}	{0}: бірінші аргумент — тізім (decks, holes…), ал мұнда {1}	{0} : le premier argument est une liste (decks, holes…), mais il y a ici {1}
+count(список [where условие])	count(list [where condition])	count(тізім [where шарт])	count(liste [where condition])
+first: выражение — число, строка или объект	first: the expression is a number, a string or an object	first: өрнек — сан, жол немесе нысан	first : l'expression est un nombre, une chaîne ou un objet
+Это поле модели, его нельзя вычислять формулой	This is a field of the model, it cannot be calculated by a formula	Бұл модель өрісі, оны формуламен есептеуге болмайды	C'est un champ du modèle, il ne peut pas être calculé par une formule
+Вычисляемое свойство — число, логическое или строка	A calculated property is a number, a logical value or a string	Есептелетін қасиет — сан, логикалық мән немесе жол	Une propriété calculée est un nombre, une valeur logique ou une chaîne
+Нет такого контекста	No such context	Мұндай контекст жоқ	Pas de tel contexte
+Неизвестный вход {0}	Unknown input {0}	Белгісіз кіріс {0}	Entrée inconnue {0}
+Нет формулы	No formula	Формула жоқ	Pas de formule
+Формула даёт {0} ({1}), а свойство в {2} ({3})	The formula gives {0} ({1}), the property is in {2} ({3})	Формула {0} ({1}) береді, ал қасиет {2} ({3})	La formule donne {0} ({1}), la propriété est en {2} ({3})
+Цикл: {0}	Cycle: {0}	Цикл: {0}	Cycle : {0}
+Цикл зависимостей: {0}	Dependency cycle: {0}	Тәуелділік циклі: {0}	Cycle de dépendances : {0}
+Нет свойства {0}	No property {0}	{0} қасиеті жоқ	Pas de propriété {0}
+Цикл через {0}()	Cycle through {0}()	{0}() арқылы цикл	Cycle via {0}()
+Цикл при вычислении {0}	Cycle while calculating {0}	{0} есептеу кезіндегі цикл	Cycle lors du calcul de {0}
+условие: {0}	condition: {0}	шарт: {0}	condition : {0}
+нет значения (пустая ссылка или 0/0)	no value (empty reference or 0/0)	мән жоқ (бос сілтеме немесе 0/0)	pas de valeur (référence vide ou 0/0)
+ни одно условие формулы не выполнено	no condition of the formula holds	формуланың бірде-бір шарты орындалмады	aucune condition de la formule n'est remplie
+Пустой профиль	Empty profile	Бос профиль	Profil vide
+Цикл наследования профилей: {0}	Cycle of profile inheritance: {0}	Профильдер мұрагерлігінің циклі: {0}	Cycle d'héritage de profils : {0}
+Не найден базовый профиль «{0}»	Base profile "{0}" not found	«{0}» базалық профилі табылмады	Profil de base « {0} » introuvable
+На основе «{0}»	Based on "{0}"	«{0}» негізінде	Basé sur « {0} »
+Нет вида линии «{0}»	No line kind "{0}"	«{0}» сызық түрі жоқ	Pas de type de ligne « {0} »
+distToLine: нет точки	distToLine: no point	distToLine: нүкте жоқ	distToLine : pas de point

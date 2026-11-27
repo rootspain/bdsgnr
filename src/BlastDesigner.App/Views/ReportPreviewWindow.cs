@@ -932,7 +932,7 @@ public sealed class ReportPreviewForm : DockPanel, IDisposable
         var choice = new ComboBox
         {
             Name = "calcField", MinWidth = 320, PlaceholderText = Loc.Ui("Insert a calculated field…"),
-            ItemsSource = totals.Select(d => (d.Group.Length > 0 ? d.Group + ": " : "") + CalcService.Caption(project, d.Id)).ToList()
+            ItemsSource = totals.Select(d => (d.Group.Length > 0 ? BlastDesigner.Calc.CalcText.Group(d.Group, CalcService.FormulaLanguage) + ": " : "") + CalcService.Caption(project, d.Id)).ToList()
         };
         choice.SelectionChanged += (_, _) =>
         {

@@ -80,18 +80,18 @@ public sealed class CalcModel
 
         foreach (var p in profile.Properties)
         {
-            if (registry.Context(p.Context) == null) { diags.Add(new(p.Id, $"Нет контекста «{p.Context}»")); continue; }
-            if (registry.Property(p.Id) is { Kind: PropertyKind.Input }) { diags.Add(new(p.Id, "Это поле модели, его нельзя вычислять формулой")); continue; }
+            if (registry.Context(p.Context) == null) { diags.Add(new(p.Id, CalcText.M("Нет контекста «{0}»", p.Context))); continue; }
+            if (registry.Property(p.Id) is { Kind: PropertyKind.Input }) { diags.Add(new(p.Id, CalcText.M("Это поле модели, его нельзя вычислять формулой"))); continue; }
             var def = p.Clone();
             def.Kind = PropertyKind.Computed;
-            if (def.Type is not (CalcType.Number or CalcType.Bool or CalcType.String)) { diags.Add(new(p.Id, "Вычисляемое свойство — число, логическое или строка")); def.Type = CalcType.Number; }
+            if (def.Type is not (CalcType.Number or CalcType.Bool or CalcType.String)) { diags.Add(new(p.Id, CalcText.M("Вычисляемое свойство — число, логическое или строка"))); def.Type = CalcType.Number; }
             _computed[def.Id] = def;
         }
         foreach (var f in profile.Formulas)
         {
             if (_computed.ContainsKey(f.Property) || f.Property.IndexOf('.') <= 0) continue;
-            if (registry.Context(f.Property[..f.Property.IndexOf('.')]) == null) { diags.Add(new(f.Property, "Нет такого контекста")); continue; }
-            if (registry.Property(f.Property) is { Kind: PropertyKind.Input }) { diags.Add(new(f.Property, "Это поле модели, его нельзя вычислять формулой")); continue; }
+            if (registry.Context(f.Property[..f.Property.IndexOf('.')]) == null) { diags.Add(new(f.Property, CalcText.M("Нет такого контекста"))); continue; }
+            if (registry.Property(f.Property) is { Kind: PropertyKind.Input }) { diags.Add(new(f.Property, CalcText.M("Это поле модели, его нельзя вычислять формулой"))); continue; }
             _computed[f.Property] = new PropertyDef { Id = f.Property, Kind = PropertyKind.Computed, Type = CalcType.Number, Unit = "?" };
         }
 
@@ -129,7 +129,7 @@ public sealed class CalcModel
             {
                 if (input.StartsWith("param:", StringComparison.Ordinal)) { deps.Add(new Dependency(input, Array.Empty<PropertyDef>())); continue; }
                 var ctx = input[..Math.Max(0, input.IndexOf('.'))];
-                if (FindProperty(ctx, input[(input.IndexOf('.') + 1)..]) == null) { diags.Add(new("builtin:" + name, $"Неизвестный вход {input}", IsWarning: true)); continue; }
+                if (FindProperty(ctx, input[(input.IndexOf('.') + 1)..]) == null) { diags.Add(new("builtin:" + name, CalcText.M("Неизвестный вход {0}", input), IsWarning: true)); continue; }
                 if (ctx == "blast") deps.Add(new Dependency(input, Array.Empty<PropertyDef>()));
                 else if (registry.Context("blast")!.Properties.Values.FirstOrDefault(r => r.Type == CalcType.List && r.Target == ctx) is { } rel)
                     deps.Add(new Dependency(input, new[] { rel }));
@@ -162,8 +162,8 @@ public sealed class CalcModel
         }
         foreach (var n in nodes.Where(n => n.Formulas.Count == 0))
         {
-            n.Error = "Нет формулы";
-            diags.Add(new(n.Id, "Нет формулы", IsWarning: true));
+            n.Error = CalcText.M("Нет формулы");
+            diags.Add(new(n.Id, CalcText.M("Нет формулы"), IsWarning: true));
         }
 
         Order = Sort(diags);
@@ -193,10 +193,10 @@ public sealed class CalcModel
     private static void CheckUnit(CalcNode node, CompiledExpression value, List<CalcDiagnostic> diags)
     {
         if (node.Property.Type != CalcType.Number) return;
-        if (!Unit.TryParse(node.Property.Unit, out var want)) { diags.Add(new(node.Id, $"Неизвестная единица «{node.Property.Unit}»", IsWarning: true)); return; }
+        if (!Unit.TryParse(node.Property.Unit, out var want)) { diags.Add(new(node.Id, CalcText.M("Неизвестная единица «{0}»", node.Property.Unit), IsWarning: true)); return; }
         if (!want.SameDimension(value.Unit))
         {
-            var msg = $"Формула даёт {value.Unit.DimensionText} ({value.Unit}), а свойство в {want} ({want.DimensionText})";
+            var msg = CalcText.M("Формула даёт {0} ({1}), а свойство в {2} ({3})", value.Unit.DimensionText, value.Unit, want, want.DimensionText);
             diags.Add(new(node.Id, msg));
             node.Error ??= msg;
         }
@@ -246,10 +246,10 @@ public sealed class CalcModel
             var text = string.Join(" → ", chain.Select(NameOf));
             foreach (var i in rest.Where(i => i < Nodes.Count))
             {
-                Nodes[i].Error = "Цикл: " + text;
+                Nodes[i].Error = CalcText.M("Цикл: {0}", text);
                 order.Add(Nodes[i]);
             }
-            diags.Add(new(NameOf(chain[0]), "Цикл зависимостей: " + text));
+            diags.Add(new(NameOf(chain[0]), CalcText.M("Цикл зависимостей: {0}", text)));
         }
         return order;
     }
@@ -296,13 +296,16 @@ public sealed class CalcModel
         foreach (var p in _computed.Values) if (p.Context == context) yield return p;
     }
 
-    // ---- русские имена ----------------------------------------------------
+    // ---- названия на языках формул (ru, kk, fr) ------------------------------
 
     private readonly Dictionary<string, Dictionary<string, PropertyDef>> _aliases = new(StringComparer.Ordinal);
 
     private static string Key(string alias) => alias.Trim().ToLowerInvariant().Replace('ё', 'е');
 
-    /// <summary>Свойства контекста по русскому названию; названия, которые носят два свойства, не годятся в имя.</summary>
+    /// <summary>
+    /// Свойства контекста по названию на любом языке формул; название, которое носят два разных свойства (на одном или
+    /// на разных языках), не годится в имя — так запись не зависит от языка, на котором её читают.
+    /// </summary>
     private Dictionary<string, PropertyDef> AliasMap(string context)
     {
         lock (_aliases)
@@ -311,36 +314,63 @@ public sealed class CalcModel
             map = new Dictionary<string, PropertyDef>(StringComparer.Ordinal);
             var taken = new HashSet<string>(StringComparer.Ordinal);
             foreach (var p in PropertiesOf(context).GroupBy(p => p.Id).Select(g => g.Last()))
-            {
-                if (p.NameRu.Length == 0) continue;
-                var k = Key(p.NameRu);
-                if (!taken.Add(k)) { map.Remove(k); continue; }
-                map[k] = p;
-            }
+                foreach (var k in Aliases.Languages.Select(l => p.NameIn(l)).Where(n => n.Length > 0).Select(Key).Distinct())
+                {
+                    if (!taken.Add(k)) { map.Remove(k); continue; }
+                    map[k] = p;
+                }
             _aliases[context] = map;
             return map;
         }
     }
 
-    /// <summary>Свойство по русскому названию (<c>Масса ВВ</c>); null — нет такого или название не однозначно.</summary>
+    /// <summary>Свойство по названию на любом языке (<c>Масса ВВ</c>, <c>ЖЗ массасы</c>); null — нет такого или название не однозначно.</summary>
     public PropertyDef? FindAlias(string context, string alias) => AliasMap(context).GetValueOrDefault(Key(alias));
 
-    /// <summary>Свойство по кодовому имени или русскому названию.</summary>
+    /// <summary>Свойство по кодовому имени или названию.</summary>
     public PropertyDef? Resolve(string context, string name) => FindProperty(context, name) ?? FindAlias(context, name);
 
-    /// <summary>Русское имя свойства для формулы: его название, если оно однозначно в контексте, иначе кодовое имя.</summary>
-    public string AliasOf(PropertyDef p) => p.NameRu.Length > 0 && FindAlias(p.Context, p.NameRu) == p ? p.NameRu : p.Name;
+    /// <summary>Имя свойства для формулы на текущем языке формул (<see cref="CalcText.Language"/>).</summary>
+    public string AliasOf(PropertyDef p) => AliasOf(p, CalcText.Language);
 
-    /// <summary>Параметр по id или русскому названию.</summary>
+    /// <summary>
+    /// Имя свойства для формулы на языке: его название по цепочке языка (kk → ru), если оно однозначно, иначе кодовое
+    /// имя; en — кодовое имя.
+    /// </summary>
+    public string AliasOf(PropertyDef p, string language)
+    {
+        foreach (var l in CalcText.Chain(language))
+        {
+            if (l == "en") break;
+            var n = p.NameIn(l);
+            if (n.Length > 0 && FindAlias(p.Context, n) == p) return n;
+        }
+        return p.Name;
+    }
+
+    /// <summary>Параметр по id или названию на любом языке формул.</summary>
     public CompiledParameter? ParameterByName(string name)
     {
         if (ParameterOf(name) is { } p) return p;
-        var named = Parameters.Where(x => Key(x.Def.NameRu) == Key(name)).Take(2).ToList();
+        var key = Key(name);
+        var named = Parameters.Where(x => Aliases.Languages.Any(l => x.Def.NameIn(l) is { Length: > 0 } n && Key(n) == key)).Take(2).ToList();
         return named.Count == 1 ? named[0] : null;
     }
 
-    /// <summary>Русское имя параметра для формулы: название, если однозначно, иначе id.</summary>
-    public string AliasOf(ParameterDef p) => p.NameRu.Length > 0 && ParameterByName(p.NameRu)?.Def == p ? p.NameRu : p.Id;
+    /// <summary>Имя параметра для формулы на текущем языке формул.</summary>
+    public string AliasOf(ParameterDef p) => AliasOf(p, CalcText.Language);
+
+    /// <summary>Имя параметра для формулы на языке: название по цепочке, если однозначно, иначе id.</summary>
+    public string AliasOf(ParameterDef p, string language)
+    {
+        foreach (var l in CalcText.Chain(language))
+        {
+            if (l == "en") break;
+            var n = p.NameIn(l);
+            if (n.Length > 0 && ParameterByName(n)?.Def == p) return n;
+        }
+        return p.Id;
+    }
 
     /// <summary>Компилирует выражение по свойствам этой модели (предпросмотр, контрольные примеры, проверка при наборе).</summary>
     public CompiledExpression CompileExpression(string context, string text, CalcType? expected = null) => Compiler.Compile(this, context, text, expected);

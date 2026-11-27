@@ -20,6 +20,10 @@ public sealed class PropertyDef
     [JsonIgnore] public string Name => Id[(Id.IndexOf('.') + 1)..];
     public string NameRu { get; set; } = "";
     public string NameEn { get; set; } = "";
+    /// <summary>Название по-казахски; null — не задано (берётся по цепочке, <see cref="CalcText"/>).</summary>
+    public string? NameKk { get; set; }
+    /// <summary>Название по-французски; null — не задано.</summary>
+    public string? NameFr { get; set; }
     public CalcType Type { get; set; } = CalcType.Number;
     /// <summary>Единица (<see cref="Calc.Unit.Parse"/>): "kg", "m3", "?" — без проверки.</summary>
     public string Unit { get; set; } = "?";
@@ -88,6 +92,8 @@ public sealed class ParameterDef
     public string Id { get; set; } = "";
     public string NameRu { get; set; } = "";
     public string NameEn { get; set; } = "";
+    public string? NameKk { get; set; }
+    public string? NameFr { get; set; }
     public string Unit { get; set; } = "?";
     public double Value { get; set; }
     /// <summary>Таблица для <c>lookup(id, x)</c>; при ней <see cref="Value"/> не используется.</summary>
@@ -131,6 +137,8 @@ public sealed class BuiltinDef
     /// <summary>Имя функции в формулах.</summary>
     public string Name { get; init; } = "";
     public string NameRu { get; init; } = "";
+    public string? NameKk { get; init; }
+    public string? NameFr { get; init; }
     public string Description { get; init; } = "";
     /// <summary>Контексты, где функция доступна; пусто — везде.</summary>
     public string[] Contexts { get; init; } = Array.Empty<string>();

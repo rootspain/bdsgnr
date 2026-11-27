@@ -4,35 +4,42 @@ using System.Text;
 namespace BlastDesigner.Calc;
 
 /// <summary>
-/// Запись формулы для человека и для хранения: <see cref="ToRussian"/> показывает свойства русскими названиями в скобках
-/// и функции по-русски (<c>сумма([Интервалы] где [Продукт].[ВВ], [Масса])</c>), <see cref="ToCode"/> возвращает
-/// кодовую запись, которая хранится в профиле (<c>sum(decks where product.isExplosive, mass)</c>). Обе записи разбирает
-/// один парсер; перевод идёт по дереву разбора с учётом контекста (агрегат переводит выражение в контекст элемента).
+/// Запись формулы для человека и для хранения: <see cref="ToLanguage"/> показывает свойства названиями в скобках
+/// и функции на языке формул (ru: <c>сумма([Интервалы] где [Продукт].[ВВ], [Масса])</c>, kk, fr), <see cref="ToCode"/>
+/// возвращает кодовую запись, которая хранится в профиле (<c>sum(decks where product.isExplosive, mass)</c>). Все записи
+/// разбирает один парсер; перевод идёт по дереву разбора с учётом контекста (агрегат переводит выражение в контекст элемента).
 /// </summary>
 public static class FormulaText
 {
-    public static string ToRussian(CalcModel model, string context, string text) => Render(model, context, text, true);
-    public static string ToCode(CalcModel model, string context, string text) => Render(model, context, text, false);
+    /// <summary>Запись на языке формул: ru, kk, fr; en — кодовая.</summary>
+    public static string ToLanguage(CalcModel model, string context, string text, string language) => Render(model, context, text, language);
+    public static string ToRussian(CalcModel model, string context, string text) => Render(model, context, text, "ru");
+    public static string ToCode(CalcModel model, string context, string text) => Render(model, context, text, "en");
 
     /// <summary>Перевод; текст с синтаксической ошибкой возвращается как есть.</summary>
-    public static string Render(CalcModel model, string context, string text, bool russian)
+    public static string Render(CalcModel model, string context, string text, bool russian) => Render(model, context, text, russian ? "ru" : "en");
+
+    /// <summary>Перевод на язык (en — кодовая запись); текст с синтаксической ошибкой возвращается как есть.</summary>
+    public static string Render(CalcModel model, string context, string text, string language)
     {
         if (string.IsNullOrWhiteSpace(text)) return text;
         Ast ast;
         try { ast = Parser.Parse(text); }
         catch (CalcSyntaxException) { return text; }
-        return new Writer(model, russian).Write(ast, context, 0);
+        return new Writer(model, language).Write(ast, context, 0);
     }
 
     /// <summary>
     /// Запись дерева разбора с подстановкой: <paramref name="substitute"/> может заменить узел своим текстом (значением);
     /// null — узел пишется как обычно. Для «Объяснить значение».
     /// </summary>
-    internal static string Render(CalcModel model, string context, Ast ast, bool russian, Func<Ast, string, string?> substitute) =>
-        new Writer(model, russian, substitute).Write(ast, context, 0);
+    internal static string Render(CalcModel model, string context, Ast ast, string language, Func<Ast, string, string?> substitute) =>
+        new Writer(model, language, substitute).Write(ast, context, 0);
 
-    private sealed class Writer(CalcModel model, bool russian, Func<Ast, string, string?>? substitute = null)
+    private sealed class Writer(CalcModel model, string language, Func<Ast, string, string?>? substitute = null)
     {
+        private readonly bool named = language != "en";
+
         private static int Precedence(Ast a) => a switch
         {
             BinaryAst { Op: "or" } => 1,
@@ -64,7 +71,7 @@ public static class FormulaText
             return Precedence(a) < parent ? "(" + text + ")" : text;
         }
 
-        private string Word(string code) => russian ? Aliases.RussianWord(code) : code;
+        private string Word(string code) => Aliases.WordName(code, language);
 
         private string Binary(BinaryAst b, string ctx)
         {
@@ -79,14 +86,14 @@ public static class FormulaText
         private string Call(CallAst c, string ctx)
         {
             var code = Aliases.Function(c.Name);
-            var name = russian ? Aliases.RussianFunction(code) : code;
+            var name = Aliases.FunctionName(code, language);
             var lower = code.ToLowerInvariant();
             var args = new List<string>();
             if (lower is "param" or "lookup" && c.Args.Count > 0 && c.Args[0] is NameAst or StringAst)
             {
                 var id = c.Args[0] is NameAst n ? n.Text : ((StringAst)c.Args[0]).Value;
                 var p = model.ParameterByName(id);
-                args.Add(p == null ? Bracket(id) : russian ? Bracket(model.AliasOf(p.Def)) : p.Def.Id);
+                args.Add(p == null ? Bracket(id) : named ? Bracket(model.AliasOf(p.Def, language)) : p.Def.Id);
                 args.AddRange(c.Args.Skip(1).Select(a => Write(a, ctx, 0)));
             }
             else if (lower == "to" && c.Args.Count == 2)
@@ -119,8 +126,8 @@ public static class FormulaText
                 NumberAst n => n.Value.ToString(CultureInfo.InvariantCulture),
                 _ => ""
             };
-            if (!russian) return string.Concat(System.Text.RegularExpressions.Regex.Split(text, "([/*])").Select(t => Aliases.UnitAtoms.FirstOrDefault(x => x.Ru == t.TrimEnd('²', '³', '2', '3')) is { En: { } en } ? en + Suffix(t) : t)).Replace("²", "2").Replace("³", "3");
-            return Aliases.RussianUnit(text).Replace("²", "2").Replace("³", "3");
+            if (!Aliases.CyrillicUnits(language)) return string.Concat(System.Text.RegularExpressions.Regex.Split(text, "([/*])").Select(t => Aliases.UnitAtoms.FirstOrDefault(x => x.Ru == t.TrimEnd('²', '³', '2', '3')) is { En: { } en } ? en + Suffix(t) : t)).Replace("²", "2").Replace("³", "3");
+            return Aliases.Unit(text, language).Replace("²", "2").Replace("³", "3");
         }
 
         private static string Suffix(string t) => new(t.Reverse().TakeWhile(ch => char.IsDigit(ch) || ch is '²' or '³').Reverse().ToArray());
@@ -140,12 +147,12 @@ public static class FormulaText
                 var p = cur == null ? null : model.Resolve(cur, seg);
                 if (p == null)
                 {
-                    parts.Add(russian ? Bracket(seg) : seg);
+                    parts.Add(named ? Bracket(seg) : seg);
                     cur = null;
                     target = null;
                     continue;
                 }
-                parts.Add(russian ? Bracket(model.AliasOf(p)) : p.Name);
+                parts.Add(named ? Bracket(model.AliasOf(p, language)) : p.Name);
                 target = p.Target;
                 cur = p.Type == CalcType.Ref ? p.Target : null;
             }

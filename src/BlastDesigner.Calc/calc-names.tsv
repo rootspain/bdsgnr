@@ -1,0 +1,147 @@
+# Names of calculation contexts, model fields, relations, built-in algorithms, groups and library formulas defined in code
+# (Russian NameRu) in the other languages: Russian <TAB> English <TAB> Kazakh <TAB> French. Lines starting with # are comments.
+Взрыв	Blast	Жарылыс	Tir
+Рудник	Site	Кеніш	Site
+Скважина	Hole	Ұңғыма	Trou
+Интервал	Deck	Аралық	Charge
+Боевик	Primer	Оталдырғыш-патрон	Amorce
+Продукт	Product	Өнім	Produit
+Ряд	Row	Қатар	Rangée
+Тип скважины	Hole type	Ұңғыма түрі	Type de trou
+Материал	Material	Материал	Matériau
+Связь	Tie	Байланыс	Liaison
+Линия замедления	Timing line	Кідіріс сызығы	Ligne de retard
+Точка наблюдения	Monitoring point	Бақылау нүктесі	Point de mesure
+Поверхность	Surface	Бет	Surface
+Длина	Length	Ұзындық	Longueur
+Диаметр	Diameter	Диаметр	Diamètre
+Перебур	Subdrill	Асыра бұрғылау	Surforation
+Угол от вертикали	Angle from vertical	Тіктен бұрыш	Angle par rapport à la verticale
+Азимут	Bearing	Азимут	Azimut
+Фактическая длина	Actual length	Нақты ұзындық	Longueur réelle
+Длина (факт или проект)	Length (actual or design)	Ұзындық (нақты не жоба)	Longueur (réelle ou prévue)
+Столб воды	Water depth	Су бағаны	Hauteur d'eau
+Температура	Temperature	Температура	Température
+Коэффициент заряжания	Loading factor	Оқтау коэффициенті	Coefficient de chargement
+Радиус	Radius	Радиус	Rayon
+Время ЭСИ	Electronic time	Электронды уақыт	Temps électronique
+Время срабатывания	Firing time	Жару уақыты	Instant de tir
+Время на поверхности	Surface time	Беттегі уақыт	Temps en surface
+Замедление в скважине	In-hole delay	Ұңғымадағы кідіріс	Retard fond de trou
+X устья	Collar X	Саға X	X tête
+Y устья	Collar Y	Саға Y	Y tête
+Z устья	Collar Z	Саға Z	Z tête
+X забоя	Toe X	Түп X	X fond
+Y забоя	Toe Y	Түп Y	Y fond
+Z забоя	Toe Z	Түп Z	Z fond
+Номер типа скважины	Hole type number	Ұңғыма түрінің нөмірі	Numéro du type de trou
+Номер материала	Material number	Материал нөмірі	Numéro du matériau
+Фиктивная	Dummy	Жалған	Fictif
+Кровля	Top	Жоғарғы шегі	Haut
+Подошва	Bottom	Төменгі шегі	Bas
+Длина интервала	Deck length	Аралық ұзындығы	Longueur de la charge
+Глубина	Depth	Тереңдік	Profondeur
+Замедление	Delay	Кідіріс	Retard
+Плотность	Density	Тығыздық	Densité
+Относительная сила	Relative weight strength	Салыстырмалы күш	Puissance relative
+Энергия	Energy	Энергия	Énergie
+Скорость детонации	Velocity of detonation	Детонация жылдамдығы	Vitesse de détonation
+Масса единицы	Unit mass	Бірлік массасы	Masse unitaire
+Длина патрона	Cartridge length	Патрон ұзындығы	Longueur de cartouche
+Цена	Cost	Баға	Prix
+Вид	Kind	Түрі	Genre
+ВВ	Explosive	ЖЗ	Explosif
+Название	Name	Атауы	Nom
+Л.С.П. ряда	Row burden	Қатар ЕҚКС	Banquette de la rangée
+Расстояние в ряду	Row spacing	Қатардағы қашықтық	Espacement dans la rangée
+Плотность породы	Rock density	Таужыныс тығыздығы	Densité de la roche
+Л.С.П.	Burden	ЕҚКС	Banquette
+Расстояние	Spacing	Қашықтық	Espacement
+Высота уступа	Bench height	Кемер биіктігі	Hauteur du gradin
+Угол	Angle	Бұрыш	Angle
+Забойка	Stemming	Тығындама	Bourrage
+Бурение за метр	Drilling per metre	Бір метр бұрғылау	Foration par mètre
+Заряжание за скважину	Loading per hole	Бір ұңғыманы оқтау	Chargement par trou
+Работа за взрыв	Labour per blast	Бір жарылыс жұмысы	Main-d'œuvre par tir
+Прочие постоянные	Other fixed costs	Басқа тұрақты шығындар	Autres frais fixes
+X	X	X	X
+Y	Y	Y	Y
+Z	Z	Z	Z
+Скважины	Holes	Ұңғымалар	Trous
+Интервалы	Decks	Аралықтар	Charges
+Боевики	Primers	Оталдырғыш-патрондар	Amorces
+Ряды	Rows	Қатарлар	Rangées
+Связи	Ties	Байланыстар	Liaisons
+Точки наблюдения	Monitoring points	Бақылау нүктелері	Points de mesure
+Линии замедления	Timing lines	Кідіріс сызықтары	Lignes de retard
+Поверхности	Surfaces	Беттер	Surfaces
+Продукты	Products	Өнімдер	Produits
+Типы скважин	Hole types	Ұңғыма түрлері	Types de trou
+Материалы	Materials	Материалдар	Matériaux
+Входящие связи	Ties in	Кіріс байланыстар	Liaisons entrantes
+Исходящие связи	Ties out	Шығыс байланыстар	Liaisons sortantes
+Интервал выше	Deck above	Жоғарғы аралық	Charge au-dessus
+Интервал ниже	Deck below	Төменгі аралық	Charge au-dessous
+Промежуточный детонатор	Booster	Аралық дүмпіткіш	Booster
+Детонатор	Detonator	Дүмпіткіш	Détonateur
+Откуда	From	Қайдан	De
+Куда	To	Қайда	Vers
+Соединитель	Connector	Жалғағыш	Connecteur
+Площадь ячейки Вороного	Voronoi cell area	Вороной ұяшығының ауданы	Aire de la cellule de Voronoï
+Средняя Л.С.П. по рядам	Mean burden between rows	Қатарлар бойынша орташа ЕҚКС	Banquette moyenne entre rangées
+Среднее расстояние в рядах	Mean spacing in rows	Қатарлардағы орташа қашықтық	Espacement moyen dans les rangées
+Длина донного заряда	Bottom charge length	Түп зарядының ұзындығы	Longueur de la charge de pied
+Максимальный взрываемый заряд	Maximum instantaneous charge	Бір мезгілде жарылатын ең үлкен заряд	Charge unitaire maximale
+Время срабатывания (Timing.Solve)	Firing time (Timing.Solve)	Жару уақыты (Timing.Solve)	Instant de tir (Timing.Solve)
+Расстояние до линии	Distance to line	Сызыққа дейінгі қашықтық	Distance à la ligne
+Расстояние до ближайшего заряда	Distance to nearest charge	Ең жақын зарядқа дейінгі қашықтық	Distance à la charge la plus proche
+Прогноз скорости колебаний по окнам	PPV prediction by windows	Терезелер бойынша діріл жылдамдығының болжамы	Prévision de vitesse particulaire par fenêtres
+Заряжание	Loading	Оқтау	Chargement
+Итоги	Totals	Қорытынды	Totaux
+Объёмы	Volumes	Көлемдер	Volumes
+Опасная зона	Exclusion zone	Қауіпті аймақ	Périmètre de sécurité
+Прогнозы	Predictions	Болжамдар	Prévisions
+Разлёт	Flyrock	Шашырау	Projections
+Сейсмика	Vibration	Діріл	Vibrations
+Сетка	Pattern	Ұңғымалар торы	Maille
+Стоимость	Cost	Құны	Coût
+Фрагментация	Fragmentation	Фрагментация	Fragmentation
+Мои	Mine	Менікі	Les miens
+Лангефорс: сила ВВ s	Langefors: explosive strength s	Лангефорс: ЖЗ күші s	Langefors : puissance de l'explosif s
+Лангефорс: константа породы c	Langefors: rock constant c	Лангефорс: таужыныс тұрақтысы c	Langefors : constante de roche c
+Лангефорс: степень зажима f	Langefors: fixation factor f	Лангефорс: қысылу дәрежесі f	Langefors : facteur d'encastrement f
+Лангефорс: отношение S/B	Langefors: S/B ratio	Лангефорс: S/B қатынасы	Langefors : rapport S/B
+Сейсмика ∛Q: K	Vibration ∛Q: K	Діріл ∛Q: K	Vibrations ∛Q : K
+Сейсмика ∛Q: B	Vibration ∛Q: B	Діріл ∛Q: B	Vibrations ∛Q : B
+Swebrec: наибольший кусок, см	Swebrec: largest fragment, cm	Swebrec: ең үлкен кесек, см	Swebrec : plus gros bloc, cm
+Swebrec: размер сита, см	Swebrec: screen size, cm	Swebrec: елек өлшемі, см	Swebrec : maille du tamis, cm
+Масса колонки ВВ	Explosive column mass	ЖЗ бағаншасының массасы	Masse de la colonne d'explosif
+Удельный расход скважины	Hole powder factor	Ұңғыманың ЖЗ меншікті шығыны	Charge spécifique du trou
+Удельный расход взрыва	Blast powder factor	Жарылыстың ЖЗ меншікті шығыны	Charge spécifique du tir
+Л.С.П. по Лангефорсу	Langefors burden	Лангефорс бойынша ЕҚКС	Banquette selon Langefors
+Сейсмика: приведённое расстояние по √Q	Vibration: scaled distance by √Q	Діріл: √Q бойынша келтірілген қашықтық	Vibrations : distance réduite en √Q
+Сейсмика: приведённое расстояние по ∛Q	Vibration: scaled distance by ∛Q	Діріл: ∛Q бойынша келтірілген қашықтық	Vibrations : distance réduite en ∛Q
+Кузнецов–Рамлер: средний кусок X50	Kuz-Ram: mean fragment size X50	Кузнецов–Рамлер: орташа кесек X50	Kuz-Ram : taille moyenne X50
+Swebrec: доля прохода через сито	Swebrec: passing fraction	Swebrec: електен өту үлесі	Swebrec : passant au tamis
+Разлёт с откоса (Richards & Moore)	Face burst (Richards & Moore)	Қиябеттен шашырау (Richards & Moore)	Projections du front (Richards & Moore)
+Разлёт из устья (Richards & Moore)	Cratering (Richards & Moore)	Сағадан шашырау (Richards & Moore)	Projections par la tête (Richards & Moore)
+Опасная зона по разлёту	Exclusion zone by flyrock	Шашырау бойынша қауіпті аймақ	Périmètre de sécurité selon les projections
+Радиус по сейсмике	Radius by vibration	Діріл бойынша радиус	Rayon selon les vibrations
+Диаметр скважины	Hole diameter	Ұңғыма диаметрі	Diamètre du trou
+Диаметр скважины, мм	Hole diameter, mm	Ұңғыма диаметрі, мм	Diamètre du trou, mm
+Забойка над зарядом, м	Stemming above the charge, m	Заряд үстіндегі тығындама, м	Bourrage au-dessus de la charge, m
+Заряд на замедление, кг	Charge per delay, kg	Бір кідіріске заряд, кг	Charge par retard, kg
+Заряд скважины, кг	Hole charge, kg	Ұңғыма заряды, кг	Charge du trou, kg
+Л.С.П., м	Burden, m	ЕҚКС, м	Banquette, m
+Масса ВВ	Explosive mass	ЖЗ массасы	Masse d'explosif
+Масса на метр, кг/м	Charge per metre, kg/m	Бір метрге масса, кг/м	Charge linéique, kg/m
+Наибольший разлёт, м	Maximum throw, m	Ең үлкен шашырау, м	Projection maximale, m
+Объём породы	Rock volume	Таужыныс көлемі	Volume de roche
+Относительная сила ВВ, %	Relative weight strength, %	ЖЗ салыстырмалы күші, %	Puissance relative de l'explosif, %
+Плотность ВВ	Explosive density	ЖЗ тығыздығы	Densité de l'explosif
+Плотность заряжания, кг/дм³	Loading density, kg/dm³	Оқтау тығыздығы, кг/дм³	Densité de chargement, kg/dm³
+Показатель однородности n	Uniformity index n	Біркелкілік көрсеткіші n	Indice d'uniformité n
+Расстояние до заряда, м	Distance to the charge, m	Зарядқа дейінгі қашықтық, м	Distance à la charge, m
+Средний кусок X50, см	Mean fragment size X50, cm	Орташа кесек X50, см	Taille moyenne X50, cm
+Удельный расход, кг/м³	Powder factor, kg/m³	Меншікті шығын, кг/м³	Charge spécifique, kg/m³
+Фактор породы A	Rock factor A	Таужыныс факторы A	Facteur de roche A

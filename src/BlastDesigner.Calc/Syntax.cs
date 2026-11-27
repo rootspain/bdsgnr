@@ -51,7 +51,7 @@ public static class Lexer
                 }
                 var s = text[start..i];
                 if (!double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
-                    throw new CalcSyntaxException($"Неверное число «{s}»", start, s.Length);
+                    throw new CalcSyntaxException(CalcText.M("Неверное число «{0}»", s), start, s.Length);
                 list.Add(new Token(TokenKind.Number, s, start, v));
                 continue;
             }
@@ -61,7 +61,7 @@ public static class Lexer
                 i++;
                 while (true)
                 {
-                    if (i >= text.Length) throw new CalcSyntaxException("Строка не закрыта кавычкой", start, i - start);
+                    if (i >= text.Length) throw new CalcSyntaxException(CalcText.M("Строка не закрыта кавычкой"), start, i - start);
                     if (text[i] == c)
                     {
                         if (i + 1 < text.Length && text[i + 1] == c) { sb.Append(c); i += 2; continue; }
@@ -77,9 +77,9 @@ public static class Lexer
             {
                 // русское имя в скобках: [Масса ВВ], [Продукт]
                 var close = text.IndexOf(']', i + 1);
-                if (close < 0) throw new CalcSyntaxException("Нет закрывающей скобки «]» у имени", start, text.Length - start);
+                if (close < 0) throw new CalcSyntaxException(CalcText.M("Нет закрывающей скобки «]» у имени"), start, text.Length - start);
                 var name = text[(i + 1)..close].Trim();
-                if (name.Length == 0) throw new CalcSyntaxException("Пустое имя в скобках []", start, 2);
+                if (name.Length == 0) throw new CalcSyntaxException(CalcText.M("Пустое имя в скобках []"), start, 2);
                 list.Add(new Token(TokenKind.Identifier, name, start, 0, true));
                 i = close + 1;
                 continue;
@@ -98,7 +98,7 @@ public static class Lexer
                 case '.': list.Add(new Token(TokenKind.Dot, ".", i++)); continue;
             }
             var op = Ops.FirstOrDefault(o => string.CompareOrdinal(text, i, o, 0, o.Length) == 0);
-            if (op == null) throw new CalcSyntaxException($"Неожиданный символ «{c}»", i);
+            if (op == null) throw new CalcSyntaxException(CalcText.M("Неожиданный символ «{0}»", c), i);
             list.Add(new Token(TokenKind.Operator, op, i));
             i += op.Length;
         }
@@ -135,10 +135,10 @@ public sealed class Parser
 
     public static Ast Parse(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) throw new CalcSyntaxException("Пустая формула", 0);
+        if (string.IsNullOrWhiteSpace(text)) throw new CalcSyntaxException(CalcText.M("Пустая формула"), 0);
         var p = new Parser(text);
         var e = p.Or();
-        if (p.Peek.Kind != TokenKind.End) throw new CalcSyntaxException($"Лишнее «{p.Peek.Text}»", p.Peek.Position, p.Peek.Length);
+        if (p.Peek.Kind != TokenKind.End) throw new CalcSyntaxException(CalcText.M("Лишнее «{0}»", p.Peek.Text), p.Peek.Position, p.Peek.Length);
         return e;
     }
 
@@ -259,15 +259,15 @@ public sealed class Parser
                 {
                     Next();
                     var id = Next();
-                    if (id.Kind != TokenKind.Identifier) throw new CalcSyntaxException("После точки ожидается имя свойства", id.Position, id.Length);
+                    if (id.Kind != TokenKind.Identifier) throw new CalcSyntaxException(CalcText.M("После точки ожидается имя свойства"), id.Position, id.Length);
                     path.Add(id.Text);
                     quoted |= id.Quoted;
                     end = id.Position + id.Length;
                 }
                 return new NameAst(path, t.Position, end - t.Position, quoted);
             }
-            case TokenKind.End: throw new CalcSyntaxException("Формула оборвалась", t.Position);
-            default: throw new CalcSyntaxException($"Неожиданное «{t.Text}»", t.Position, t.Length);
+            case TokenKind.End: throw new CalcSyntaxException(CalcText.M("Формула оборвалась"), t.Position);
+            default: throw new CalcSyntaxException(CalcText.M("Неожиданное «{0}»", t.Text), t.Position, t.Length);
         }
     }
 
@@ -291,7 +291,7 @@ public sealed class Parser
 
     private Token Expect(TokenKind k, string text)
     {
-        if (Peek.Kind != k) throw new CalcSyntaxException($"Ожидается «{text}»", Peek.Position, Peek.Length);
+        if (Peek.Kind != k) throw new CalcSyntaxException(CalcText.M("Ожидается «{0}»", text), Peek.Position, Peek.Length);
         return Next();
     }
 }

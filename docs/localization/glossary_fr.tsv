@@ -1,0 +1,56 @@
+# EN-ключ	RU (из ru.tsv или ориентир)	FR	Источник / статус
+Blast	Взрыв	Tir (tir de mines)	Arrêté du 22/09/1994 (carrières), art. 22 «tirs de mines»
+Blast design	Проект взрыва	Plan de tir	Arrêté du 22/09/1994, art. 11.4 «l'exploitant définit un plan de tir»
+Hole	Скважина	Trou (trou de mine)	BRGM, Lexique minier t.13 («trous de mine»); Arrêté 07/10/1969 («mines profondes» — регламентный архаизм)
+Burden	ЛНС	Banquette (B)	UMONS/GBEE 2013 (Tshibangu) «B, banquette»; мемуар Univ. Béjaïa 2016. Внимание: у BRGM «banquette» = горизонтальная площадка
+Spacing	Расстояние	Espacement (S)	Univ. Béjaïa 2016 «la distance qui sépare deux trous voisins»; UMONS 2013
+Pattern	Сетка	Maille (maille de foration)	ENPC «Maille 1m×1m»; Univ. Béjaïa 2016
+Row	Ряд	Rangée	Univ. Béjaïa 2016 «première rangée de trous»
+Bench	Уступ	Gradin	BRGM, Lexique t.13 «Gradin»
+Bench height	Высота уступа	Hauteur du gradin	BRGM / Univ. Béjaïa
+Subdrill	Перебур	Surforation	Univ. Béjaïa 2016 «excès de forage»; синоним sous-forage
+Stemming	Забойка	Bourrage	Arrêté 07/10/1969, art. 8 «bourrage final»; OQLF GDT «bourrage»
+Collar	Устье	Tête du trou	проверить у носителя
+Toe	Подошва	Pied du gradin	Univ. Béjaïa 2016
+Crest	Бровка	Crête du gradin	проверить у носителя
+Face	Откос	Front (front d'abattage)	Arrêté 07/10/1969, art. 2; BRGM «front de taille»
+Free face	Свободная поверхность	Face libre	Univ. Béjaïa 2016
+Drilling	Бурение	Foration	ENPC; Univ. Béjaïa
+Drill rig	Буровой станок	Foreuse	BRGM, Lexique t.13
+Inclination	Наклон	Inclinaison	Univ. Béjaïa 2016
+Bearing / Azimuth	Азимут	Azimut	общеупотр.
+Explosive	ВВ	Explosif	общеупотр.
+Emulsion	Эмульсия	Émulsion	ENPC
+ANFO	Игданит / АС-ДТ	ANFO (nitrate-fioul)	BRGM «AFNO»; ENPC «nitrate fioul»
+Packaged	Патронированное	Encartouché	Arrêté 07/10/1969, art. 7 «explosifs encartouchés»
+Bulk	Насыпное	En vrac	проверить
+Detonator	Детонатор	Détonateur	ENPC (électrique / non électrique / électronique)
+Electronic detonator	Электронный детонатор	Détonateur électronique	ENPC
+Shock tube	НСИ	Tube à choc (non électrique, NONEL)	ENPC «Détonateurs non électriques NONEL»
+Detonating cord	ДШ	Cordeau détonant	ENPC «transmettant l'onde de choc»; Univ. Béjaïa
+Delay	Замедление	Retard / micro-retard	ENPC; Univ. Béjaïa
+Initiation	Инициирование	Amorçage	Univ. Béjaïa «amorçage ponctuel / latéral»
+Booster / Primer	Боевик	Amorce (booster)	проверить
+Deck	Заряд (колонка)	Charge (charge étagée)	проверить; charge de colonne / charge de pied — Univ. Béjaïa
+Powder factor	Удельный расход	Charge spécifique (consommation spécifique), kg/m³	UMONS 2013 «Charge spécifique (ou facteur de poudre)»; Univ. Béjaïa
+MIC	МВЗ	Charge unitaire maximale (charge instantanée)	ENPC «Charge unitaire maxi», «Charge instantanée»
+PPV	Скорость колебаний	Vitesse particulaire (pondérée), mm/s	Arrêté 22/09/1994, art. 22-2 «vitesses particulaires pondérées… 10 mm/s»
+Airblast	Воздушная волна	Surpression aérienne (pression acoustique de crête, dB)	Circulaire 96-52 du 02/07/1996 «niveau de pression acoustique de crête… 125 dB»
+Flyrock	Разлёт	Projections	Univ. Béjaïa «Le bourrage a pour objectif de diminuer les projections»
+Exclusion zone	Опасная зона	Périmètre de sécurité	проверить
+Fragmentation	Фрагментация	Fragmentation	общеупотр.
+Size distribution	Гранулометрия	Granulométrie	BRGM, Lexique t.13
+Oversize	Негабарит	Blocs hors gabarit	Univ. Béjaïa 2016
+Fines	Мелочь	Fines	общеупотр.
+Mean fragment size	Средний размер куска	Taille moyenne des fragments (X50)	Univ. Béjaïa 2016 (Kuz-Ram)
+Uniformity index	Индекс однородности	Indice d'uniformité (n)	Univ. Béjaïa 2016
+Rock factor	Коэффициент породы	Facteur de roche (A)	Kuz-Ram, проверить
+Velocity of detonation	Скорость детонации	Vitesse de détonation	ENPC «2500 à 7500 m/s»
+Blasted volume	Объём	Volume abattu	Univ. Béjaïa «volume des roches abattues par trou»
+Blaster	Взрывник	Boutefeu / préposé au tir	«Certificat de préposé au tir» (регламент Франции)
+Survey	Съёмка	Levé (topographique)	проверить
+Section	Разрез	Coupe	общеупотр.
+Timing	Время	Séquence de tir	проверить
+Quantities	Ведомость	Métré / récapitulatif	проверить
+Dummy hole	Холостая скважина	Trou non chargé	проверить
+Pre-split	Предварительное щелеобразование	Prédécoupage	проверить (в ENPC «Découpage»)

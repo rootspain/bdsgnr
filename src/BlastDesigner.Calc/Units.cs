@@ -142,7 +142,7 @@ public sealed class Unit : IEquatable<Unit>
                 }
             }
             var en = Aliases.UnitAtoms.FirstOrDefault(a => a.Ru == f).En ?? f;
-            var atom = Atoms.FirstOrDefault(a => a.Item1 == en).Item2 ?? throw new FormatException($"Неизвестная единица «{f}»");
+            var atom = Atoms.FirstOrDefault(a => a.Item1 == en).Item2 ?? throw new FormatException(CalcText.M("Неизвестная единица «{0}»", f));
             var p = new Unit(atom.Symbol, Math.Pow(atom.Scale, exp), atom._dims.Select(d => d * exp).ToArray());
             u = new Unit("1", u.Scale * p.Scale, u._dims.Zip(p._dims, (a, b) => a + b).ToArray());
         }

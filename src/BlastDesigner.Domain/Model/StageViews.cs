@@ -181,18 +181,42 @@ public static class StageViews
         };
     }
 
-    /// <summary>English names of the layers each button of a new blast takes, when it has them.</summary>
+    /// <summary>
+    /// English names of the layers each button of a new blast takes, when it has them; they are shown translated as
+    /// "name:…" (Loc.Name).
+    /// </summary>
     public static readonly IReadOnlyDictionary<(WorkStage, StageMode), string[]> InitialLayers = new Dictionary<(WorkStage, StageMode), string[]>
     {
-        [(WorkStage.Drilling, StageMode.Plan)] = new[] { "Проект бурения", "Контур блока" },
-        [(WorkStage.Drilling, StageMode.Fact)] = new[] { "Съёмка устьев", "Замеры глубин" },
-        [(WorkStage.Loading, StageMode.Plan)] = new[] { "Проект заряжания", "Контур блока" },
-        [(WorkStage.Loading, StageMode.Fact)] = new[] { "Факт заряжания" }
+        [(WorkStage.Drilling, StageMode.Plan)] = new[] { "Drilling design", "Block boundary" },
+        [(WorkStage.Drilling, StageMode.Fact)] = new[] { "Collar survey", "Depth measurements" },
+        [(WorkStage.Loading, StageMode.Plan)] = new[] { "Loading design", "Block boundary" },
+        [(WorkStage.Loading, StageMode.Fact)] = new[] { "Loading actual" }
+    };
+
+    /// <summary>The names these layers had when they were Russian: blasts and templates saved with them still match.</summary>
+    public static readonly IReadOnlyDictionary<string, string> LegacyLayerNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Drilling design"] = "Проект бурения", ["Block boundary"] = "Контур блока", ["Collar survey"] = "Съёмка устьев",
+        ["Depth measurements"] = "Замеры глубин", ["Loading design"] = "Проект заряжания", ["Loading actual"] = "Факт заряжания"
     };
 
     /// <summary>
+    /// Whether a layer is the standard layer of that English name: by its own name, its old Russian name, or the name it
+    /// is shown by (<paramref name="shown"/>, the translation of both).
+    /// </summary>
+    public static bool IsLayer(string layerName, string english, Func<string, string>? shown = null)
+    {
+        var legacy = LegacyLayerNames.GetValueOrDefault(english);
+        if (string.Equals(layerName, english, StringComparison.OrdinalIgnoreCase) || (legacy != null && string.Equals(layerName, legacy, StringComparison.OrdinalIgnoreCase))) return true;
+        if (shown == null) return false;
+        var mine = shown(layerName);
+        return string.Equals(mine, shown(english), StringComparison.OrdinalIgnoreCase) || string.Equals(mine, english, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The first bindings of a new blast: each button its layers by name (only those the blast has; a layer is matched by
-    /// its name or the name it is shown by, <paramref name="shown"/>), its hole states and hole data. All buttons off.
+    /// its name, its old Russian name or the name it is shown by, <paramref name="shown"/>), its hole states and hole data.
+    /// All buttons off.
     /// </summary>
     public static void Initial(BlastProject p, Func<string, string>? shown = null)
     {
@@ -201,7 +225,7 @@ public static class StageViews
         {
             foreach (var name in InitialLayers[(v.Stage, v.Mode)])
                 foreach (var l in p.Layers)
-                    if (string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase) || (shown != null && string.Equals(shown(l.Name), name, StringComparison.OrdinalIgnoreCase)))
+                    if (IsLayer(l.Name, name, shown))
                         v.Layers.Add(l.Id);
             (v.States, v.HoleBasis) = (v.Stage, v.Mode) switch
             {

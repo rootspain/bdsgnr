@@ -5,6 +5,8 @@ public sealed class ContextDef
 {
     public string Name { get; init; } = "";
     public string NameRu { get; init; } = "";
+    public string? NameKk { get; init; }
+    public string? NameFr { get; init; }
     public Type ClrType { get; init; } = typeof(object);
     /// <summary>Все объекты контекста в проекте сеанса.</summary>
     public Func<CalcScope, IEnumerable<object>> All { get; init; } = _ => Array.Empty<object>();

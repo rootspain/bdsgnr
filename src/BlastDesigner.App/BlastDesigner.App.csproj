@@ -41,6 +41,8 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Services/ru.tsv" />
+    <EmbeddedResource Include="Services/kk.tsv" />
+    <EmbeddedResource Include="Services/fr.tsv" />
     <AvaloniaResource Include="Assets/icons/app-icon.ico" />
     <TrimmerRootAssembly Include="BlastDesigner" />
     <TrimmerRootAssembly Include="BlastDesigner.Domain" />

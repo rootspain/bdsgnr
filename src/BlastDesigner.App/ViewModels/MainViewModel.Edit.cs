@@ -423,11 +423,19 @@ public sealed partial class MainViewModel
         if (reopenAt is double y) await next.ViewModel.EditProgramSettings(y);
     }
 
+    /// <summary>
+    /// The language of the formulas and the names of the calculations: that of the interface (ru, kk, fr), or English
+    /// (code names) when the settings ask for it or the interface is English.
+    /// </summary>
+    public static string FormulaLanguage(ProgramSettings s) => s.FormulasInEnglish ? "en" : Loc.Language;
+
     /// <summary>Takes the settings edited in the settings window (Apply and OK) and saves them.</summary>
     public void ApplyProgramSettings(ProgramSettings edited)
     {
         var s = Settings;
         s.Language = edited.Language;
+        s.FormulasInEnglish = edited.FormulasInEnglish;
+        CalcService.FormulaLanguage = FormulaLanguage(s);
         s.Theme = edited.Theme;
         s.AccentColor = edited.AccentColor;
         s.BackgroundColor = edited.BackgroundColor;

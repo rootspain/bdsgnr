@@ -3,20 +3,21 @@ using System.Text.RegularExpressions;
 namespace BlastDesigner.App.Services;
 
 /// <summary>
-/// UI localisation. English text is the key; other languages map it to a translation.
-/// Missing translations fall back to the English text.
+/// UI localisation. English text is the key; other languages map it to a translation (ru.tsv, kk.tsv, fr.tsv, and the
+/// user's corrections over them, <see cref="CorrectionsFolder"/>). Missing translations fall back along the language's
+/// chain: Kazakh to Russian, then to the English text; French and Russian to the English text.
 /// </summary>
 public static partial class Loc
 {
     public static string Language { get; set; } = "ru";
 
-    public static IReadOnlyList<(string Code, string Name)> Languages { get; } = new[] { ("en", "English"), ("ru", "Русский") };
+    public static IReadOnlyList<(string Code, string Name)> Languages { get; } = new[] { ("en", "English"), ("ru", "Русский"), ("kk", "Қазақша"), ("fr", "Français") };
 
     /// <summary>The text in the language of the program; a unit at its end ("Burden, m") in the units of the program (<see cref="Qty.Caption"/>).</summary>
     public static string T(string english) => Qty.Caption(Raw(english));
 
     /// <summary>The text in the language of the program, as it is.</summary>
-    private static string Raw(string english) => Language == "ru" && Ru.TryGetValue(english, out var ru) ? ru : english;
+    private static string Raw(string english) => Lookup(english, Language) ?? english;
 
     /// <summary>Display name of user data that may be a standard name (layers, groups): translated only when listed as "name:…".</summary>
     public static string Name(string name)
