@@ -55,9 +55,16 @@ public class PrimerTimingTests
         Assert.Equal("Davey Tronic", opened.Catalogue.Families.Single(f => f.Id == family).Name);
         Assert.DoesNotContain(opened.Products, x => x.Name == "DeviTronic" || x.Name == "Davey Tronic" && x.Id != DaveyTronicId);
 
+        // the name comes from the reference: a name given in the project only gives way to the built-in one, a name in
+        // the user's file (the reference over the built-in catalogue) stays
         var own = BlastProject.CreateNew();
         own.Products.Single(x => x.Id == DaveyTronicId).Name = "Мой детонатор";
-        Assert.Equal("Мой детонатор", Reopened(own).Products.Single(x => x.Id == DaveyTronicId).Name);
+        var back = Reopened(own);
+        Assert.Equal("Davey Tronic", back.Products.Single(x => x.Id == DaveyTronicId).Name);
+        var mine = back.Products.Single(x => x.Id == DaveyTronicId).Clone();
+        mine.Name = "Мой детонатор";
+        ProductCatalogue.Attach(back, new ProductCatalogue(), new[] { mine });
+        Assert.Equal("Мой детонатор", back.Products.Single(x => x.Id == DaveyTronicId).Name);
     }
 
     private static string Explosive(BlastProject p) => p.Products.First(x => x.IsExplosive).Id;

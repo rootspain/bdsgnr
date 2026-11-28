@@ -17,9 +17,12 @@ public static class HoleNumbering
         return label[..i];
     }
 
-    /// <summary>The label a hole takes: <paramref name="prefix"/> when there is one, else its own, then the number.</summary>
+    /// <summary>
+    /// The label a hole takes: <paramref name="prefix"/>, else (null) its own, then the number. An empty prefix drops the
+    /// hole's own: the label is the number alone.
+    /// </summary>
     public static string LabelFor(string current, string? prefix, int number) =>
-        (string.IsNullOrEmpty(prefix) ? PrefixOf(current) : prefix) + number;
+        (prefix ?? PrefixOf(current)) + number;
 
     /// <summary>
     /// The holes numbered in the order given from <paramref name="start"/>, one each. A label another hole has goes to the

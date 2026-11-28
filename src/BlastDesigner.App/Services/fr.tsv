@@ -1425,7 +1425,7 @@ ui:Move / copy	Déplacer / copier
 ui:Transform	Transformer
 ui:Expand polygon	Agrandir le contour
 ui:Clip lines	Découper lignes
-ui:Offset	Décalage
+ui:Offset	Décaler
 ui:Midpoints	Milieux
 ui:Centre of mass	Centre de masse
 ui:Extend to intersection	Prolonger
@@ -4041,3 +4041,21 @@ ui:The number the next hole clicked takes; a drag goes on from it, one a hole	Le
 ui:Counter	Compteur
 ui:One less (−)	Un de moins (−)
 ui:One more (+)	Un de plus (+)
+ui:Overwrite	Écraser
+ui:With the prefix empty: on, the holes numbered lose their own prefix and keep the number alone; off, each keeps its own	Avec le préfixe vide : activé, les trous numérotés perdent leur préfixe et ne gardent que le numéro ; désactivé, chacun garde le sien
+# Initiation catalogue: what fits the holes in sight, hidden by hand
+Hole {0} has no unused combination detonator {1}: a tie with it starts only at a hole with one. Choose another product in the Initiation catalogue	Le trou {0} n'a pas de détonateur combiné {1} libre : une liaison avec lui part seulement d'un trou qui en a un. Choisissez un autre produit dans le catalogue d'amorçage
+{0}: a tie with the combination detonator {1} starts only at a hole with an unused one	{0} : une liaison avec le détonateur combiné {1} part seulement d'un trou qui en a un libre
+{0} stays in the hole: it does not go on a tie	{0} reste dans le trou : il ne sert pas aux liaisons
+No hole in sight has an unused {0}	Aucun trou visible n'a de {0} libre
+No hole in sight has an electronic detonator	Aucun trou visible n'a de détonateur électronique
+The holes in sight have electronic detonators only	Les trous visibles n'ont que des détonateurs électroniques
+Hidden by you (right click ▸ Show)	Masqué par vous (clic droit ▸ Afficher)
+Hide	Masquer
+Show family	Afficher la famille
+Hide family	Masquer la famille
+Show all hidden by hand ({0})	Afficher tout ce qui est masqué à la main ({0})
+Hide those that do not fit	Masquer ceux qui ne conviennent pas
+Show hidden ({0})	Afficher les masqués ({0})
+Products that fit no hole in sight, and those you hid (right click ▸ Hide)	Produits qui ne conviennent à aucun trou visible, et ceux que vous avez masqués (clic droit ▸ Masquer)
+Nothing of this type fits the holes in sight	Rien de ce type ne convient aux trous visibles

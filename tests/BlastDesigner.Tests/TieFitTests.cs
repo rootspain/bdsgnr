@@ -122,4 +122,67 @@ public class TieFitTests
         Assert.Contains(EbsOpeningPoint.Kind, back.ReportDesign!.HiddenKinds);
         Assert.DoesNotContain(EbsOpeningPoint.OldKind, back.ReportDesign.HiddenKinds);
     }
+
+    private static Product Combo(BlastProject p, double surface) =>
+        p.Products.First(x => x.Kind == ProductKind.CombinationDetonator && x.SurfaceDelayMs == surface);
+
+    [Fact]
+    public void TheCatalogueGoesByTheHolesInSight_ACombinationDetonatorOnlyWhereOneIsUnused()
+    {
+        var (p, esi, tube, downhole) = Blast();
+        var c25 = Combo(p, 25);
+        var c42 = Combo(p, 42);
+        var holes = Enumerable.Range(0, 4).Select(i => Hole(p, i * 5, c25)).ToList();
+
+        var fit = TieFit.Survey(p, holes);
+        Assert.True(fit.Fits(c25));
+        Assert.False(fit.Fits(c42));
+        Assert.Equal(TieFit.NoCombinationInSight, fit.Why(c42));
+        Assert.True(fit.Fits(tube));
+        Assert.False(fit.Fits(esi));
+        Assert.Equal(TieFit.NoElectronicInSight, fit.Why(esi));
+        // a product that stays in the hole never goes on a tie
+        Assert.False(fit.Fits(downhole));
+        Assert.Equal(TieFit.NotOnTie, fit.Why(downhole));
+
+        // a tie made with the combination detonator out of a hole uses that hole's one
+        Assert.Equal(1, TieFit.UnusedCombination(p, holes[0], c25));
+        Assert.Null(TieFit.StartRefusal(p, holes[0].Id, c25));
+        Timing.Connect(p, holes[0].Id, holes[1].Id, c25);
+        Assert.Equal(0, TieFit.UnusedCombination(p, holes[0], c25));
+        Assert.Equal((TieFit.NoCombination, holes[0].Label, c25.Name), TieFit.StartRefusal(p, holes[0].Id, c25));
+        // the next hole still has its own; another product starts anywhere
+        Assert.Null(TieFit.StartRefusal(p, holes[1].Id, c25));
+        Assert.Null(TieFit.StartRefusal(p, holes[0].Id, tube));
+        Assert.Null(TieFit.StartRefusal(p, holes[0].Id, null));
+        // a hole without that detonator, and an initiation point, do not start it
+        Assert.NotNull(TieFit.StartRefusal(p, holes[0].Id, c42));
+        var ip = p.Add(new InitiationPoint { Position = new Vec3(-5, 0, 100) });
+        Assert.Equal(TieFit.CombinationNotFromHole, TieFit.StartRefusal(p, ip.Id, c25)!.Value.Format);
+
+        // in sight only the hole whose detonator is used: the catalogue has no combination detonator to offer
+        Assert.False(TieFit.Survey(p, new[] { holes[0] }).Fits(c25));
+        Assert.True(TieFit.Survey(p, holes).Fits(c25));
+    }
+
+    [Fact]
+    public void TheCatalogue_AHoleNotChargedTakesAnyTie_NoHoleInSightHidesNothing()
+    {
+        var (p, esi, tube, downhole) = Blast();
+        var bare = p.Add(new Hole { Label = "bare", Collar = new Vec3(0, 0, 100), Length = 10 });
+        var onBare = TieFit.Survey(p, new[] { bare });
+        Assert.True(onBare.Fits(esi));
+        Assert.True(onBare.Fits(tube));
+        Assert.False(onBare.Fits(Combo(p, 25)));
+        var none = TieFit.Survey(p, Array.Empty<Hole>());
+        Assert.True(none.Fits(esi));
+        Assert.True(none.Fits(Combo(p, 25)));
+        Assert.False(none.Fits(downhole));
+        // electronic holes only: ESI fits, the others do not
+        var e = Hole(p, 5, esi);
+        var onEsi = TieFit.Survey(p, new[] { e });
+        Assert.True(onEsi.Fits(esi));
+        Assert.False(onEsi.Fits(tube));
+        Assert.Equal(TieFit.OnlyElectronicInSight, onEsi.Why(tube));
+    }
 }

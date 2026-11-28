@@ -577,6 +577,13 @@ public sealed partial class MainViewModel
     /// <summary>The prefix the Renumber tool puts before the number; empty: each hole keeps its own.</summary>
     public string RenumberPrefix { get; set; } = "";
 
+    /// <summary>With the prefix empty: on, the holes numbered lose their own prefix (the number alone); off, they keep it.</summary>
+    public bool RenumberOverwrite { get; set; }
+
+    /// <summary>The prefix the holes numbered take: the one typed in; none typed, "" with Overwrite on, else null (each its own).</summary>
+    public string? RenumberPrefixToApply =>
+        RenumberPrefix.Trim() is { Length: > 0 } typed ? typed : RenumberOverwrite ? "" : null;
+
     public void SetRenumberCounter(int value)
     {
         RenumberCounter = Math.Max(0, value);
@@ -593,7 +600,7 @@ public sealed partial class MainViewModel
     {
         if (ids.Count == 0 || Doc == null || Doc.IsReadOnly) return;
         var start = RenumberCounter;
-        var prefix = RenumberPrefix.Trim();
+        var prefix = RenumberPrefixToApply;
         var swaps = new List<(string Given, string Back)>();
         Change("Renumber holes", p => swaps = HoleNumbering.Apply(p, ids, prefix, start));
         RenumberCounter = start + ids.Count;
@@ -947,11 +954,18 @@ public sealed partial class MainViewModel
         // the product fits the detonators of the holes, and a chain of holes with an electronic detonator: a tie only to
         // its start, never branching, never a ring
         for (int i = 1; i < chain.Count; i++)
+        {
             if ((TieFit.Refusal(Project!, chain[i - 1].Id, chain[i].Id, connector) ?? RouteNumbers.Refusal(Project!, chain[i - 1].Id, chain[i].Id)) is { } why)
             {
                 SetStatus(Loc.F(why.Format, why.Hole));
                 return;
             }
+            if (TieFit.StartRefusal(Project!, chain[i - 1].Id, connector) is { } start)
+            {
+                SetStatus(Loc.F(start.Format, start.Hole, start.Product));
+                return;
+            }
+        }
         Change("Connect multiple holes", p =>
         {
             for (int i = 1; i < chain.Count; i++) Timing.Connect(p, chain[i - 1].Id, chain[i].Id, connector);
@@ -1000,6 +1014,33 @@ public sealed partial class MainViewModel
         if (Project.ActiveProducts.FirstOrDefault(p => p.Kind == ProductKind.ElectronicDetonator) is not { } esi) return;
         ActiveConnector = esi;
         TieSystem = Project.Catalogue.Types.Where(t => !t.Deleted).OrderBy(t => t.Order).FirstOrDefault(t => t.KindIds.Contains(esi.KindId))?.Id;
+    }
+
+    /// <summary>
+    /// The holes the Initiation catalogue goes by (<see cref="TieFit.Survey"/>): those in sight on the plan
+    /// (<see cref="IsShown"/>), with the whole pattern grid (all its segments) or row of each: one hole of it in sight
+    /// brings all of its holes, hidden ones too; a hole of its own only when it is in sight itself. The selection plays
+    /// no part.
+    /// </summary>
+    public List<Hole> TieContextHoles()
+    {
+        if (Project is not { } project) return new();
+        var result = new HashSet<Guid>();
+        var patterns = new HashSet<Guid>();
+        var rows = new HashSet<Guid>();
+        foreach (var h in project.Holes)
+        {
+            if (!IsShown(h)) continue;
+            result.Add(h.Id);
+            if (project.FindPattern(h.PatternId) is { } pat) patterns.Add(PatternTree.Root(project, pat).Id);
+            else if (h.RowId is Guid row) rows.Add(row);
+        }
+        foreach (var id in patterns)
+            if (project.FindPattern(id) is { } root)
+                foreach (var h in PatternTree.TreeHoles(project, root)) result.Add(h.Id);
+        if (rows.Count > 0)
+            foreach (var h in project.Holes.Where(h => h.PatternId == null && h.RowId is Guid r && rows.Contains(r))) result.Add(h.Id);
+        return project.Holes.Where(h => result.Contains(h.Id)).ToList();
     }
 
     /// <summary>The Ties button: the tie tool together with its palette (what the ties are made with).</summary>

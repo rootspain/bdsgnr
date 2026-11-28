@@ -263,6 +263,15 @@ public sealed class ProgramSettings
     /// <summary>Groups of the stage buttons over the plan folded to their name ("Drilling", "Loading"); null: none.</summary>
     public List<string>? FoldedStages { get; set; }
     public Dictionary<string, string> Window { get; set; } = new();
+    /// <summary>
+    /// Products the user hid in the Initiation catalogue (right click ▸ Hide), by id: not offered for new ties until shown
+    /// again; for all the projects.
+    /// </summary>
+    public List<string> HiddenTieProducts { get; set; } = new();
+    /// <summary>Families the user hid in the Initiation catalogue, as "kind id|family name": all their products hidden.</summary>
+    public List<string> HiddenTieFamilies { get; set; } = new();
+    /// <summary>The Initiation catalogue shows what is hidden (products that fit no hole in sight, those the user hid), dimmed and marked.</summary>
+    public bool TieShowHidden { get; set; }
 
     /// <summary>
     /// An environment variable that puts the folder of the settings, catalogue, templates and logs elsewhere: the smoke

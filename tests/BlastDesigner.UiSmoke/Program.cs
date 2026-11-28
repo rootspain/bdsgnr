@@ -989,20 +989,9 @@ Step("properties of ties: the delay is taken by Enter and when the focus leaves,
     Leave(box); Pump();
     if (vm.Doc.UndoNames.Count != mixedSteps + 1) throw new Exception("mixed delays by Enter should be one undo step");
     if (ids.Any(id => ((TieEntity)vm.Project!.FindEntity(id)!).DelayMs != 77)) throw new Exception("the delay was not set on all the ties");
-    // the product of a tie: those of the types of the Initiation catalogue that fit the holes, with the short name of the
-    // type; no explosives, boosters or downhole detonators (what a tie has stays)
-    var tieProducts = window.GetLogicalDescendants().OfType<ComboBox>().First(c => c.Name == "propProductId" && c.IsEffectivelyVisible).ItemsSource!.Cast<string>().ToList();
-    var now = ids.Select(id => ((TieEntity)vm.Project!.FindEntity(id)!).ProductId).ToHashSet();
-    bool Offered(Product pr) => tieProducts.Any(t => t.EndsWith(" · " + pr.Name) || t == pr.Name);
-    var strangers = vm.Project!.Products.Where(pr => (pr.IsExplosive || pr.Kind is ProductKind.Booster or ProductKind.DownholeDetonator or ProductKind.Stemming) && !now.Contains(pr.Id) && Offered(pr)).Select(pr => pr.Name).ToList();
-    if (strangers.Count > 0) throw new Exception("the product list of a tie offers products that do not go on a tie: " + string.Join(", ", strangers));
-    var shockTube = BlastDesigner.App.Services.Loc.Short("Shock tube");
-    var cord = vm.Project.ActiveProducts.FirstOrDefault(pr => pr.Kind == ProductKind.DetonatingCord) ?? throw new Exception("the smoke blast has no detonating cord to offer on a tie");
-    if (!Offered(cord) || !tieProducts.Any(t => t.StartsWith(shockTube + " · "))) throw new Exception("the product list of a tie lacks the cord or the shock tube with its type: " + string.Join(" | ", tieProducts));
-    // the holes of these ties have no electronic detonator: no ESI product
-    var esiName = vm.Project.ActiveProducts.First(pr => pr.Kind == ProductKind.ElectronicDetonator).Name;
-    if (tieProducts.Any(t => t.StartsWith(BlastDesigner.App.Services.Loc.Short("ESI") + " · ")) && !ids.Any(id => vm.Project.FindEntity(((TieEntity)vm.Project.FindEntity(id)!).ToId) is Hole hh && TieFit.Detonators(vm.Project, hh).Electronic))
-        throw new Exception("ESI products offered on ties of holes without electronic detonators: " + esiName);
+    // the product of a tie is chosen in the Initiation catalogue by its button, no list among the fields
+    if (window.GetLogicalDescendants().OfType<ComboBox>().Any(c => c.Name == "propProductId" && c.IsEffectivelyVisible)) throw new Exception("the product of a tie should not be a list among its fields");
+    if (!window.GetLogicalDescendants().OfType<Button>().Any(b => b.Name == "tieProductFromCatalogue" && b.IsEffectivelyVisible)) throw new Exception("no From the initiation catalogue button for the product of a tie");
     while (vm.Doc.UndoNames.Count > steps) vm.Undo();
     Pump();
     if (Time() != was) throw new Exception("undo should bring the time back");
@@ -2492,9 +2481,10 @@ Step("Renumber: a click gives the counter, a drag numbers in order and swaps a n
     vm.Change("Smoke holes", p =>
     {
         var layer = p.GetOrCreateLayer(StandardLayers.Holes);
-        foreach (var (label, x) in new[] { ("A7", 200.0), ("A8", 260.0), ("A9", 320.0), ("B1", 380.0) })
+        // labels no other hole of the blast has (its rows are lettered too)
+        foreach (var (label, x) in new[] { ("QQ7", 200.0), ("QQ8", 260.0), ("QQ9", 320.0), ("QR1", 380.0) })
             made.Add(p.Add(new Hole { Label = label, Collar = cam.ToWorld(x, 300), Length = 10 }, layer));
-        made.Add(p.Add(new Hole { Label = "A3", Collar = cam.ToWorld(600, 520), Length = 10 }, layer));
+        made.Add(p.Add(new Hole { Label = "QQ3", Collar = cam.ToWorld(600, 520), Length = 10 }, layer));
     });
     Hole H(int i) => (Hole)vm.Project!.FindEntity(made[i].Id)!;
     ToolPointer P(double x, double y) => new() { X = x, Y = y, World = cam.ToWorld(x, y), Snapped = cam.ToWorld(x, y), Left = true, ClickCount = 1 };
@@ -2509,27 +2499,27 @@ Step("Renumber: a click gives the counter, a drag numbers in order and swaps a n
         vm.ActiveTool!.PointerPressed(P(201, 301));
         vm.ActiveTool.PointerReleased(P(201, 301));
         Pump();
-        if (H(0).Label != "A1" || vm.RenumberCounter != 2) throw new Exception($"a click should give A1 and move the counter to 2: {H(0).Label}, {vm.RenumberCounter}");
+        if (H(0).Label != "QQ1" || vm.RenumberCounter != 2) throw new Exception($"a click should give QQ1 and move the counter to 2: {H(0).Label}, {vm.RenumberCounter}");
         // a drag over the other three, into the next row: on in order, A3 swapped with the hole that had it
         vm.ActiveTool.PointerPressed(P(250, 300));
         vm.ActiveTool.PointerMoved(P(300, 300));
         vm.ActiveTool.PointerMoved(P(390, 302));
-        if (vm.View.Preview.Labels.Select(l => l.Text).ToList() is var shown && !shown.SequenceEqual(new[] { "A2", "A3", "B4" })) throw new Exception("while dragging the holes should show the numbers they take: " + string.Join(",", shown));
+        if (vm.View.Preview.Labels.Select(l => l.Text).ToList() is var shown && !shown.SequenceEqual(new[] { "QQ2", "QQ3", "QR4" })) throw new Exception("while dragging the holes should show the numbers they take: " + string.Join(",", shown));
         vm.View.Redraw(); Pump(); Shot("83_renumber_drag");
         vm.ActiveTool.PointerReleased(P(390, 302));
         Pump();
         var labels = Enumerable.Range(0, 5).Select(i => H(i).Label).ToList();
-        if (!labels.SequenceEqual(new[] { "A1", "A2", "A3", "B4", "A9" })) throw new Exception("the drag should number on in order and swap A3: " + string.Join(",", labels));
+        if (!labels.SequenceEqual(new[] { "QQ1", "QQ2", "QQ3", "QR4", "QQ9" })) throw new Exception("the drag should number on in order and swap QQ3: " + string.Join(",", labels));
         if (vm.RenumberCounter != 5) throw new Exception($"the counter should go on by the holes of the drag: {vm.RenumberCounter}");
         // undo: the labels and the counter back
         vm.Undo(); Pump();
-        if (vm.RenumberCounter != 2 || H(2).Label != "A9" || H(4).Label != "A3") throw new Exception($"undo should take the labels and the counter back: {vm.RenumberCounter}");
+        if (vm.RenumberCounter != 2 || H(2).Label != "QQ9" || H(4).Label != "QQ3") throw new Exception($"undo should take the labels and the counter back: {vm.RenumberCounter}");
         // Esc drops a drag
         vm.ActiveTool.PointerPressed(P(250, 300));
         vm.ActiveTool.PointerMoved(P(330, 300));
         vm.ActiveTool.KeyDown(Avalonia.Input.Key.Escape, Avalonia.Input.KeyModifiers.None);
         vm.ActiveTool.PointerReleased(P(330, 300));
-        if (H(1).Label != "A8" || vm.RenumberCounter != 2) throw new Exception("Esc should drop the drag");
+        if (H(1).Label != "QQ8" || vm.RenumberCounter != 2) throw new Exception("Esc should drop the drag");
         // a prefix typed in: every hole numbered takes it
         vm.RenumberPrefix = "C";
         vm.ActiveTool.PointerPressed(P(380, 300));
@@ -2540,9 +2530,26 @@ Step("Renumber: a click gives the counter, a drag numbers in order and swaps a n
         vm.ActiveTool.KeyDown(Avalonia.Input.Key.Add, Avalonia.Input.KeyModifiers.None);
         vm.ActiveTool.KeyDown(Avalonia.Input.Key.Subtract, Avalonia.Input.KeyModifiers.None);
         if (vm.RenumberCounter != 4) throw new Exception($"+ + − should step the counter to 4: {vm.RenumberCounter}");
+        // Overwrite: open only with the prefix field empty; on, the hole loses its own prefix
+        vm.RenumberPrefix = ""; vm.RenumberTool(); Pump();
+        Control Named(string name) => window.GetLogicalDescendants().OfType<Control>().First(c => c.Name == name && c.IsEffectivelyVisible);
+        var overwriteBox = (CheckBox)Named("renumberOverwrite");
+        var prefixField = (TextBox)Named("renumberPrefix");
+        if (!overwriteBox.IsEnabled) throw new Exception("Overwrite should be open with the prefix empty");
+        prefixField.Text = "C"; Pump();
+        if (overwriteBox.IsEnabled) throw new Exception("Overwrite should be shut while a prefix is typed");
+        prefixField.Text = ""; Pump();
+        if (!overwriteBox.IsEnabled) throw new Exception("Overwrite should open again when the prefix is cleared");
+        overwriteBox.IsChecked = true; Pump();
+        var number = vm.RenumberCounter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        vm.ActiveTool!.PointerPressed(P(201, 301));
+        vm.ActiveTool.PointerReleased(P(201, 301));
+        Pump();
+        if (H(0).Label != number) throw new Exception($"with Overwrite on the hole should lose its prefix: {H(0).Label}");
     }
     finally
     {
+        vm.RenumberOverwrite = false;
         vm.RenumberPrefix = "";
         vm.SelectTool();
         var ids = made.Select(h => h.Id).ToHashSet();
@@ -6595,11 +6602,16 @@ Step("an initiation point on a hole is picked by its tag, the hole by its collar
     var tiedIds = vm.Project.Ties.SelectMany(t => new[] { t.FromId, t.ToId }).ToHashSet();
     var other = vm.Project.Holes.Where(h => !h.IsDummy && h.Id != hole.Id && !tiedIds.Contains(h.Id)).OrderBy(h => Vec3.Distance(h.Collar, hole.Collar)).First();
     vm.SetTool(new TieTool(vm)); Pump();
+    // one tie from the point: a chain would go through the holes on the way, and the last tie come from one of them
+    var chained = vm.TieChain;
+    vm.TieChain = false;
     var (ox, oy) = vm.View.Camera.ToScreen(other.Collar);
     vm.ActiveTool!.PointerPressed(new ToolPointer { X = x, Y = y, World = hole.Collar, Snapped = hole.Collar, Left = true, ClickCount = 1 });
     vm.ActiveTool.PointerPressed(new ToolPointer { X = ox, Y = oy, World = other.Collar, Snapped = other.Collar, Left = true, ClickCount = 1 }); Pump();
     var fromStar = vm.Project.Ties.FirstOrDefault(t => t.ToId == other.Id);
-    if (fromStar?.FromId != ip.Id) throw new Exception("a tie started on the collar of the point's hole should come from the initiation point, not " + (fromStar == null ? "nothing" : vm.Project.FindEntity(fromStar.FromId)?.KindName));
+    if (fromStar?.FromId != ip.Id) throw new Exception("a tie started on the collar of the point's hole should come from the initiation point, not " + (fromStar == null ? "nothing" : vm.Project.FindEntity(fromStar.FromId)?.KindName)
+        );
+    vm.TieChain = chained;
     vm.ActiveTool?.Cancel(); vm.SelectTool();
     vm.Undo();
     vm.Undo();
@@ -6731,11 +6743,12 @@ Step("initiation catalogue: Type → Family → Variant, user-defined delay, the
     // back to the shock tube connectors for the steps after
     Press(TypeTag("Shock tube"));
     if (vm.ActiveTieDelayMs != null || vm.ActiveConnector?.Kind != ProductKind.SurfaceConnector) throw new Exception("shock tube did not go back to a connector");
-    // a type lists the products of all its kinds: the shock tube connectors and the downhole detonators
-    foreach (var f in vm.Project.Products.Where(p => p.Kind is ProductKind.SurfaceConnector or ProductKind.DownholeDetonator).Select(p => p.FamilyName).Distinct()) Chip("family:" + f);
-    var downhole = vm.Project.Products.First(p => p.Kind == ProductKind.DownholeDetonator);
-    Press("family:" + downhole.FamilyName);
-    if (vm.ActiveConnector?.Kind != ProductKind.DownholeDetonator) throw new Exception("the downhole detonator family was not taken");
+    // a type lists the products of its kinds that go on a tie: the shock tube connectors, not the downhole detonators (they stay in the hole)
+    foreach (var f in vm.Project.Products.Where(p => p.Kind == ProductKind.SurfaceConnector).Select(p => p.FamilyName).Distinct()) Chip("family:" + f);
+    var downholeFamilies = vm.Project.Products.Where(p => p.Kind == ProductKind.DownholeDetonator).Select(p => p.FamilyName).ToHashSet();
+    var surfaceFamilies = vm.Project.Products.Where(p => p.Kind == ProductKind.SurfaceConnector).Select(p => p.FamilyName).ToHashSet();
+    if (win.GetLogicalDescendants().OfType<Button>().Any(b => b.Tag is string tg && tg.StartsWith("family:") && downholeFamilies.Contains(tg[7..]) && !surfaceFamilies.Contains(tg[7..])))
+        throw new Exception("the downhole detonators should not be listed in the initiation catalogue");
     Avalonia.Headless.AvaloniaHeadlessPlatform.ForceRenderTimerTick(); Pump();
     win.CaptureRenderedFrame()?.Save(Path.Combine(outDir, "39e_initiation_catalogue_shock_tube.png"));
     Press("family:" + vm.Project.Products.First(p => p.Kind == ProductKind.SurfaceConnector).FamilyName);
@@ -7168,6 +7181,10 @@ Step("bench elements: recognize a survey, change a class by click, apply with sp
     vm.Undo(); Pump();
     if (vm.Project!.Entities.OfType<PolylineEntity>().Any(l => l.Kind == LineKind.Crest) || vm.Project.Entities.OfType<SurfaceEntity>().Any()
         || vm.Project.Layers.Any(l => l.Name == "Crest lines")) throw new Exception("undo did not take it all back");
+    // the survey goes too: it lies far from the blast (real coordinates), and Zoom all of the steps after would take it in
+    var surveyed = scene.Entities.Select(e => e.Id).ToHashSet();
+    for (int i = 0; i < 5 && vm.Project!.Entities.Any(e => surveyed.Contains(e.Id)); i++) vm.Undo();
+    Pump();
 });
 Step("DXF import window: hidden layers as chips with a note, toggles, Import returns the choice", () =>
 {
@@ -8213,8 +8230,15 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
         for (int i = 0; i < 3; i++) { sectionView.RaiseEvent(new Avalonia.Input.KeyEventArgs { RoutedEvent = Avalonia.Input.InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape }); Pump(); }
         if (!sectionWindow.IsVisible || !ReferenceEquals(ribbon, AnalysisWindows.SectionRibbonShown)) throw new Exception("Esc should never close the section window");
         sectionView.Redraw(); Pump();
-        var levelY = cam.Height / 3;
-        selecting.PointerPressed(At(cam.Width / 2 + 40, levelY)); selecting.PointerReleased(At(cam.Width / 2 + 40, levelY)); Pump();
+        // where the level is drawn: the click that made it may have snapped to a collar or a toe near it
+        var lineA = sectionLines[0].Points[0];
+        var along = (sectionLines[0].Points[1] - lineA).WithZ(0);
+        along = along * (1 / along.Length2D);
+        var levelY = cam.ToScreen((lineA + along * level.Points[0].S).WithZ(level.Points[0].Z)).Y;
+        // on the level where no hole is under it: on the shaft of a hole a click takes the figure of a mark, not its line
+        var levelX = Enumerable.Range(0, 40).Select(k => cam.Width / 2 + 40 + (k % 2 == 0 ? 1 : -1) * (k / 2) * 9.0)
+            .First(x => sectionView.HitTest(x, levelY) is not Hole);
+        selecting.PointerPressed(At(levelX, levelY)); selecting.PointerReleased(At(levelX, levelY)); Pump();
         RibbonPress("sectionTabSectionstyle");
         // the colours of the menu each with its square of colour
         RibbonPress("markColour");
@@ -8234,7 +8258,7 @@ Step("Report preview: pages from the choices, the design of the report, a PDF fi
         selecting.PointerPressed(At(figureBox.Left - 4, figureBox.Top - 4)); selecting.PointerMoved(At(figureBox.Right + 4, figureBox.Bottom + 4)); selecting.PointerReleased(At(figureBox.Right + 4, figureBox.Bottom + 4)); Pump();
         if (!ribbon.Session.SelectedMarks.SetEquals(new[] { level.Id })) throw new Exception("a box round the figure of a level should select the level: " + ribbon.Session.SelectedMarks.Count);
         var levelZ = vm.Project.SectionMarks.First(m => m.Id == level.Id).Points[0].Z;
-        selecting.PointerPressed(At(cam.Width / 2 + 40, levelY)); selecting.PointerMoved(At(cam.Width / 2 + 40, levelY + 30)); selecting.PointerReleased(At(cam.Width / 2 + 40, levelY + 30)); Pump();
+        selecting.PointerPressed(At(levelX, levelY)); selecting.PointerMoved(At(levelX, levelY + 30)); selecting.PointerReleased(At(levelX, levelY + 30)); Pump();
         var movedZ = vm.Project.SectionMarks.First(m => m.Id == level.Id).Points[0].Z;
         if (Math.Abs(levelZ - 30 / cam.Scale - movedZ) > 0.05) throw new Exception($"a drag should move the level 30 px down: {levelZ} {movedZ}");
         selecting.KeyDown(Avalonia.Input.Key.Up, Avalonia.Input.KeyModifiers.None); Pump();

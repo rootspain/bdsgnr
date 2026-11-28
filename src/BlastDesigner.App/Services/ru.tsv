@@ -1679,7 +1679,7 @@ ui:Move / copy	Перенос / копия
 ui:Transform	Трансформация
 ui:Expand polygon	Расширить контур
 ui:Clip lines	Обрезать линии
-ui:Offset	Эквидистанта
+ui:Offset	Сдвинуть
 ui:Midpoints	Середины отрезков
 ui:Centre of mass	Центр масс
 ui:Extend to intersection	Продлить до пересечения
@@ -4308,3 +4308,21 @@ ui:The number the next hole clicked takes; a drag goes on from it, one a hole	Н
 ui:Counter	Счётчик
 ui:One less (−)	На один меньше (−)
 ui:One more (+)	На один больше (+)
+ui:Overwrite	Перезаписывать
+ui:With the prefix empty: on, the holes numbered lose their own prefix and keep the number alone; off, each keeps its own	При пустом префиксе: включено — у нумеруемых скважин префикс сбрасывается, остаётся один номер; выключено — у каждой остаётся свой
+# Initiation catalogue: what fits the holes in sight, hidden by hand
+Hole {0} has no unused combination detonator {1}: a tie with it starts only at a hole with one. Choose another product in the Initiation catalogue	В скважине {0} нет свободного комбинированного детонатора {1}: связь с ним начинается только из скважины, где он есть. Выберите в «Каталоге СИ» другое изделие
+{0}: a tie with the combination detonator {1} starts only at a hole with an unused one	{0}: связь с комбинированным детонатором {1} начинается только из скважины со свободным таким детонатором
+{0} stays in the hole: it does not go on a tie	{0} остаётся в скважине: на связь не идёт
+No hole in sight has an unused {0}	Ни в одной видимой скважине нет свободного {0}
+No hole in sight has an electronic detonator	Ни в одной видимой скважине нет электронного детонатора
+The holes in sight have electronic detonators only	В видимых скважинах только электронные детонаторы
+Hidden by you (right click ▸ Show)	Скрыто вами (ПКМ ▸ Показать)
+Hide	Скрыть
+Show family	Показать семейство
+Hide family	Скрыть семейство
+Show all hidden by hand ({0})	Показать все скрытые вручную ({0})
+Hide those that do not fit	Скрыть неподходящие
+Show hidden ({0})	Показать скрытые ({0})
+Products that fit no hole in sight, and those you hid (right click ▸ Hide)	Изделия, которые не подходят ни к одной видимой скважине, и скрытые вами (ПКМ ▸ Скрыть)
+Nothing of this type fits the holes in sight	Ничего из этого типа не подходит к видимым скважинам

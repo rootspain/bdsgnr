@@ -159,8 +159,8 @@ public sealed class Product
         new() { Id = "2eaae6f2-75f8-45b1-ae7b-10d76024d14b", Name = "Cord relay 25 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 25, Cost = 3, Color = 0xFFE53935 },
         new() { Id = "9bc120bb-4f12-4f79-9421-a3878a714183", Name = "Cord relay 42 ms", Family = "Cord relay", Kind = ProductKind.CordRelay, DelayMs = 42, Cost = 3, Color = 0xFF8D6E63 },
         new() { Id = "f7407010-0e86-4dae-8a4f-2b03856e388a", Name = "Bus line", Family = "Bus line", Kind = ProductKind.HarnessWire, Cost = 0.2, Color = 0xFF78909C },
-        new() { Id = "c3a9e6f1-6b2d-4f8a-9d41-2e7b5c0a8f13", Name = "Combination det 500/25 ms", Family = "Combination detonator", Kind = ProductKind.CombinationDetonator, InHoleDelayMs = 500, SurfaceDelayMs = 25, Cost = 6, Color = 0xFF7E57C2 },
-        new() { Id = "4e8d2b7a-91c5-4a3e-b6f0-8d1c9e2a5b47", Name = "Combination det 500/42 ms", Family = "Combination detonator", Kind = ProductKind.CombinationDetonator, InHoleDelayMs = 500, SurfaceDelayMs = 42, Cost = 6, Color = 0xFF5E35B1 },
+        new() { Id = "c3a9e6f1-6b2d-4f8a-9d41-2e7b5c0a8f13", Name = "Combination det 25/500 ms", Family = "Combination detonator", Kind = ProductKind.CombinationDetonator, InHoleDelayMs = 500, SurfaceDelayMs = 25, Cost = 6, Color = 0xFF7E57C2 },
+        new() { Id = "4e8d2b7a-91c5-4a3e-b6f0-8d1c9e2a5b47", Name = "Combination det 42/500 ms", Family = "Combination detonator", Kind = ProductKind.CombinationDetonator, InHoleDelayMs = 500, SurfaceDelayMs = 42, Cost = 6, Color = 0xFF5E35B1 },
     };
 }
 

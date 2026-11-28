@@ -49,11 +49,14 @@ public class CombinationDetonatorTests
         Assert.True(combo.IsTieProduct);
         Assert.True(TieFit.GoesOnTie(combo));
         Assert.Equal((500, 25), (combo.InHoleDelay, combo.SurfaceDelay));
+        // shown surface first, as SHOTPlus does: 25/500
+        Assert.Equal("Combination det 25/500 ms", combo.Name);
+        Assert.Equal("Combination det 42/500 ms", p.FindProduct(Combo42)!.Name);
         Assert.NotNull(combo.FamilyId);
     }
 
     /// <summary>
-    /// Combination detonators 500/25 in a chain of three holes tied with 17 ms surface connectors: the signal leaves each
+    /// Combination detonators 25/500 in a chain of three holes tied with 17 ms surface connectors: the signal leaves each
     /// hole after its surface block and the connector (25 + 17), each hole fires at the arrival plus the in-hole delay.
     /// </summary>
     [Fact]
@@ -237,5 +240,46 @@ public class CombinationDetonatorTests
         // the user takes it out of the type: a project saved since keeps that
         opened.Catalogue.Types.Single(t => t.Name == "Shock tube").KindIds.Remove(kindId);
         Assert.DoesNotContain(kindId, Reopened(opened).Catalogue.Types.Single(t => t.Name == "Shock tube").KindIds);
+    }
+
+    /// <summary>
+    /// The names come from the reference by the id: a project saved when the built-in examples were called 500/25 opens
+    /// with 25/500; a product the reference does not have keeps its name, and only the name is taken.
+    /// </summary>
+    [Fact]
+    public void NamesComeFromTheReferenceByTheId()
+    {
+        var old = BlastProject.CreateNew();
+        var builtIn = old.FindProduct(Combo25)!;
+        builtIn.Name = "Combination det 500/25 ms";
+        builtIn.Cost = 7.5;
+        var mine = new Product { Name = "HandiDet 17/475 ms", Kind = ProductKind.CombinationDetonator, InHoleDelayMs = 475, SurfaceDelayMs = 17 };
+        old.Products.Add(mine);
+
+        var opened = Reopened(old);
+        var again = opened.FindProduct(Combo25)!;
+        Assert.Equal("Combination det 25/500 ms", again.Name);
+        Assert.Equal(7.5, again.Cost);
+        Assert.Equal("HandiDet 17/475 ms", opened.FindProduct(mine.Id)!.Name);
+        Assert.Single(opened.Products, x => x.Id == Combo25);
+        Assert.DoesNotContain(opened.Products, x => x.Name == "Combination det 500/25 ms");
+        // the name is the project's now: saved, the file has the new one
+        using (var ms = new MemoryStream())
+        {
+            ProjectFile.Write(opened, ms);
+            ms.Position = 0;
+            using var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Read);
+            using var reader = new StreamReader(zip.GetEntry("project.json")!.Open());
+            var json = reader.ReadToEnd();
+            Assert.Contains("\"Combination det 25/500 ms\"", json);
+            Assert.DoesNotContain("Combination det 500/25 ms", json);
+        }
+
+        // the user's file is the reference over the built-in catalogue, a deleted record of it too
+        var users = again.Clone();
+        users.Name = "Моя комбинашка";
+        users.Deleted = true;
+        ProductCatalogue.Attach(opened, new ProductCatalogue(), new[] { users });
+        Assert.Equal("Моя комбинашка", opened.FindProduct(Combo25)!.Name);
     }
 }

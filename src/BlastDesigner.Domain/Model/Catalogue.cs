@@ -199,7 +199,21 @@ public sealed class ProductCatalogue
             if (own == null) project.Products.Add(p.Clone());
             else if (p.Deleted) own.Deleted = true;
         }
+        NamesFromReference(project, userProducts);
         Link(project);
+    }
+
+    /// <summary>
+    /// A product of the project that the reference has by its id takes the reference's name: the reference is the
+    /// built-in catalogue (<see cref="Product.DefaultCatalogue"/>) with the user's file over it (its products, deleted
+    /// ones too). Only the name; a product the reference does not have keeps its own.
+    /// </summary>
+    private static void NamesFromReference(BlastProject project, IReadOnlyList<Product> userProducts)
+    {
+        var names = Product.DefaultCatalogue().ToDictionary(p => p.Id, p => p.Name);
+        foreach (var p in userProducts) names[p.Id] = p.Name;
+        foreach (var p in project.Products)
+            if (names.TryGetValue(p.Id, out var name) && !string.IsNullOrWhiteSpace(name)) p.Name = name;
     }
 
     private const string DaveyTronicProduct = "5f2d6f31-4a02-4514-a200-0a6d6490db5a";

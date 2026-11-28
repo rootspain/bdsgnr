@@ -1425,7 +1425,7 @@ ui:Move / copy	Жылжыту / көшірме
 ui:Transform	Трансформация
 ui:Expand polygon	Контурды кеңейту
 ui:Clip lines	Сызықтарды қию
-ui:Offset	Эквидистанта
+ui:Offset	Жылжыту
 ui:Midpoints	Кесінді орталары
 ui:Centre of mass	Масса орталығы
 ui:Extend to intersection	Қиылысуға дейін ұзарту
@@ -4041,3 +4041,21 @@ ui:The number the next hole clicked takes; a drag goes on from it, one a hole	К
 ui:Counter	Санауыш
 ui:One less (−)	Біреуге кем (−)
 ui:One more (+)	Біреуге көп (+)
+ui:Overwrite	Қайта жазу
+ui:With the prefix empty: on, the holes numbered lose their own prefix and keep the number alone; off, each keeps its own	Префикс бос болғанда: қосулы — нөмірленетін ұңғымалардың префиксі өшіріледі, тек нөмір қалады; өшірулі — әрқайсысы өз префиксін сақтайды
+# Initiation catalogue: what fits the holes in sight, hidden by hand
+Hole {0} has no unused combination detonator {1}: a tie with it starts only at a hole with one. Choose another product in the Initiation catalogue	{0} ұңғымасында бос {1} құрама дүмпіткіші жоқ: онымен байланыс тек ол бар ұңғымадан басталады. «ҚҚ каталогынан» басқа бұйымды таңдаңыз
+{0}: a tie with the combination detonator {1} starts only at a hole with an unused one	{0}: {1} құрама дүмпіткішімен байланыс тек бос осындай дүмпіткіші бар ұңғымадан басталады
+{0} stays in the hole: it does not go on a tie	{0} ұңғымада қалады: байланысқа жұмсалмайды
+No hole in sight has an unused {0}	Көрінетін ұңғымалардың ешқайсысында бос {0} жоқ
+No hole in sight has an electronic detonator	Көрінетін ұңғымалардың ешқайсысында электронды дүмпіткіш жоқ
+The holes in sight have electronic detonators only	Көрінетін ұңғымаларда тек электронды дүмпіткіштер
+Hidden by you (right click ▸ Show)	Сіз жасырдыңыз (оң жақ батырма ▸ Көрсету)
+Hide	Жасыру
+Show family	Отбасын көрсету
+Hide family	Отбасын жасыру
+Show all hidden by hand ({0})	Қолмен жасырылғанның бәрін көрсету ({0})
+Hide those that do not fit	Сәйкес келмейтіндерді жасыру
+Show hidden ({0})	Жасырылғандарды көрсету ({0})
+Products that fit no hole in sight, and those you hid (right click ▸ Hide)	Көрінетін ұңғымалардың ешқайсысына сәйкес келмейтін бұйымдар және сіз жасырғандар (оң жақ батырма ▸ Жасыру)
+Nothing of this type fits the holes in sight	Бұл түрдің ештеңесі көрінетін ұңғымаларға сәйкес келмейді

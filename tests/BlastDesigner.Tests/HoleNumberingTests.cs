@@ -21,10 +21,20 @@ public class HoleNumberingTests
     [Fact]
     public void WithNoPrefixEachHoleKeepsItsOwn_WithOneTheyAllTakeIt()
     {
-        Assert.Equal("B12-A3", HoleNumbering.LabelFor("B12-A7", "", 3));
+        Assert.Equal("B12-A3", HoleNumbering.LabelFor("B12-A7", null, 3));
         Assert.Equal("3", HoleNumbering.LabelFor("57", null, 3));
         Assert.Equal("C3", HoleNumbering.LabelFor("57", "C", 3));
         Assert.Equal("C3", HoleNumbering.LabelFor("B12-A7", "C", 3));
+    }
+
+    [Fact]
+    public void AnEmptyPrefix_Overwrite_DropsTheHolesOwn()
+    {
+        Assert.Equal("3", HoleNumbering.LabelFor("B12-A7", "", 3));
+        var p = BlastProject.CreateNew();
+        var holes = new[] { "A9", "B4" }.Select(l => p.Add(new Hole { Label = l })).ToList();
+        HoleNumbering.Apply(p, holes.Select(h => h.Id).ToList(), "", 1);
+        Assert.Equal(new[] { "1", "2" }, holes.Select(h => h.Label));
     }
 
     [Fact]
@@ -44,7 +54,7 @@ public class HoleNumberingTests
         var p = BlastProject.CreateNew();
         var clicked = p.Add(new Hole { Label = "A7" });
         var holder = p.Add(new Hole { Label = "A3" });
-        var swaps = HoleNumbering.Apply(p, new[] { clicked.Id }, "", 3);
+        var swaps = HoleNumbering.Apply(p, new[] { clicked.Id }, null, 3);
         Assert.Equal(("A3", "A7"), (clicked.Label, holder.Label));
         Assert.Equal(new[] { ("A3", "A7") }, swaps);
     }

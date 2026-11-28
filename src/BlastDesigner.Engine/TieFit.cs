@@ -85,6 +85,92 @@ public static class TieFit
         return offers;
     }
 
+    public const string NoCombination = "Hole {0} has no unused combination detonator {1}: a tie with it starts only at a hole with one. Choose another product in the Initiation catalogue";
+    public const string CombinationNotFromHole = "{0}: a tie with the combination detonator {1} starts only at a hole with an unused one";
+
+    /// <summary>
+    /// How many combination detonators <paramref name="product"/> of the hole no tie starts with yet: its primers with
+    /// that detonator less the ties made with it that leave the hole (one tie a detonator, its surface block).
+    /// </summary>
+    public static int UnusedCombination(BlastProject project, Hole hole, Product product)
+    {
+        if (product.Kind != ProductKind.CombinationDetonator) return 0;
+        var inHole = Charging.Primers(hole).Count(x => x.Primer.DetonatorId == product.Id);
+        if (inHole == 0) return 0;
+        var used = project.Ties.Count(t => t.FromId == hole.Id && t.ProductId == product.Id && t.DelayMs == 0);
+        return Math.Max(0, inHole - used);
+    }
+
+    /// <summary>
+    /// Why a new tie made with <paramref name="product"/> cannot start at <paramref name="from"/>: a combination detonator
+    /// on a tie is the surface part of one in the hole it leaves, so it starts only at a hole with one of them that no
+    /// tie starts with yet (<see cref="UnusedCombination"/>). Any other product, or a delay of its own (null), starts
+    /// anywhere. Null when it may start there.
+    /// </summary>
+    public static (string Format, string Hole, string Product)? StartRefusal(BlastProject project, Guid from, Product? product)
+    {
+        if (product?.Kind != ProductKind.CombinationDetonator) return null;
+        if (project.FindEntity(from) is Hole hole)
+            return UnusedCombination(project, hole, product) > 0 ? null : (NoCombination, hole.Label, product.Name);
+        return (CombinationNotFromHole, project.FindEntity(from) is InitiationPoint ip ? ip.Label : "", product.Name);
+    }
+
+    /// <summary>
+    /// What the holes in sight ask of the products of new ties (<see cref="Survey"/>): whether one of them takes an ESI
+    /// tie, whether one takes another, the combination detonators no tie starts with yet by product. No hole: everything
+    /// fits, so that the catalogue is never empty for want of holes.
+    /// </summary>
+    public sealed class Context
+    {
+        public bool Any { get; init; }
+        public bool Esi { get; init; }
+        public bool Other { get; init; }
+        public IReadOnlyDictionary<string, int> Combination { get; init; } = new Dictionary<string, int>();
+
+        /// <summary>Whether new ties may be made with the product in one of the holes: never a product that stays in the hole (<see cref="GoesOnTie"/>).</summary>
+        public bool Fits(Product p)
+        {
+            if (!GoesOnTie(p)) return false;
+            if (!Any) return true;
+            if (p.Kind == ProductKind.CombinationDetonator) return Combination.TryGetValue(p.Id, out var n) && n > 0;
+            return IsEsi(p) ? Esi : Other;
+        }
+
+        /// <summary>Why the product does not fit (a translation key, with the product's name for {0}); null when it does.</summary>
+        public string? Why(Product p) =>
+            Fits(p) ? null
+            : !GoesOnTie(p) ? NotOnTie
+            : p.Kind == ProductKind.CombinationDetonator ? NoCombinationInSight
+            : IsEsi(p) ? NoElectronicInSight : OnlyElectronicInSight;
+    }
+
+    public const string NotOnTie = "{0} stays in the hole: it does not go on a tie";
+    public const string NoCombinationInSight = "No hole in sight has an unused {0}";
+    public const string NoElectronicInSight = "No hole in sight has an electronic detonator";
+    public const string OnlyElectronicInSight = "The holes in sight have electronic detonators only";
+
+    /// <summary>
+    /// The context of the products of new ties: what the <paramref name="holes"/> (those in sight) ask for. A hole not
+    /// charged yet takes any tie (<see cref="Detonators"/>).
+    /// </summary>
+    public static Context Survey(BlastProject project, IEnumerable<Hole> holes)
+    {
+        bool any = false, esi = false, other = false;
+        var combination = new Dictionary<string, int>();
+        var combos = project.Products.Where(p => p.Kind == ProductKind.CombinationDetonator).ToList();
+        foreach (var h in holes)
+        {
+            any = true;
+            var (electronic, notElectronic) = Detonators(project, h);
+            if (!electronic && !notElectronic) { esi = other = true; continue; }
+            esi |= electronic;
+            other |= notElectronic;
+            foreach (var c in combos)
+                if (UnusedCombination(project, h, c) is var n && n > 0) combination[c.Id] = combination.GetValueOrDefault(c.Id) + n;
+        }
+        return new Context { Any = any, Esi = esi, Other = other, Combination = combination };
+    }
+
     /// <summary>
     /// Why a tie made with <paramref name="product"/> (null: none, or a delay of its own) does not fit the two, as a format
     /// (the translation key) and the hole it names; null when it fits.

@@ -6,6 +6,26 @@ Format (read by the program and shown on the first start of a new version):
 Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the same versions.
 -->
 
+## 0.3.16 — 2026-11-28
+
+### New
+- **The Initiation catalogue shows only what fits the holes in sight:** a product stays when it fits at least one hole
+  shown on the plan (a pattern grid or row with one hole in sight counts whole; a hole of its own when it is in sight;
+  the selection plays no part). ESI when a hole has an electronic detonator, the other systems when one has another, a
+  hole not charged takes any tie; a combination detonator when a hole in sight has an unused one of it (as SHOTPlus 6
+  does); downhole detonators do not go on ties and are not listed. A type with nothing left cannot be chosen, the reason
+  in its tooltip. The "Show hidden (N)" / "Hide those that do not fit" link over the types shows what is hidden, dimmed,
+  with ⚠ and the reason; what ties are made with now is never hidden. The catalogue follows changes of what is shown,
+  of the charging and of the ties by itself.
+- **Hide a product or a family by hand:** right click on a variant or a family in the Initiation catalogue: Hide / Show,
+  Show all hidden by hand (k). Kept in the program settings, for all the projects.
+- **A tie with a combination detonator starts only at a hole with an unused one:** otherwise it is not made, the reason
+  in the status bar.
+
+### Changed
+- **The Offset button is renamed in the Russian interface: «Сдвинуть».**
+- **The Transform coordinates button is gone from the Topography tab:** the command stays in the Tools menu.
+
 ## 0.3.15 — 2026-11-28
 
 ### New
@@ -78,7 +98,8 @@ Sections: New, Changed, Fixed. The Russian text is in CHANGELOG.md, with the sam
 - **Renumber by clicks and drags:** the button starts a tool (in place of the two windows and the former Hole label).
   Its panel has Prefix and Counter [− 1 +] (from 1, the +/− keys). A click on a hole gives it the number of the counter,
   a drag numbers the holes in the order it passes them, into the next row too (A5, A6, B7); the numbers to come show
-  while dragging, Esc drops it. An empty prefix leaves each hole its own (the name of its row), one typed in goes to all.
+  while dragging, Esc drops it. An empty prefix leaves each hole its own (the name of its row), one typed in goes to all;
+  with the prefix empty and Overwrite on, the prefixes are dropped (the number alone).
   A number another hole has is swapped with it ("A3 ↔ A7" on the status bar). One undo step a click or a drag, and
   Ctrl+Z takes the counter back too. In the menu: Start at…, Reset the counter to 1, Renumber the selected holes by
   rows.

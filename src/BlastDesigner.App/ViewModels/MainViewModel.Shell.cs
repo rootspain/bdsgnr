@@ -108,7 +108,7 @@ public sealed partial class MainViewModel
                 M("Clip to polygon", "polygon", "Tools/Surfaces/Clip surface to polygon"), M("Contours", "iso", "Tools/Surfaces/Create contours…"),
                 M("Recognize (AI)", "wand", "Tools/Surfaces/Recognize bench elements…")),
             G("Lines and polygons", M("Convert", "convert", "Tools/Convert"), M("Move / copy", "pan", "Tools/General functions/Move/copy entities…"),
-                M("Transform coordinates", "transform", "Tools/General functions/Transform coordinates…"), M("Expand polygon", "polygon", "Tools/General functions/Expand polygon…"),
+                M("Expand polygon", "polygon", "Tools/General functions/Expand polygon…"),
                 M("Clip lines", "edit", "Tools/General functions/Clip polylines to be inside polygon"), M("Offset", "polyline", "Tools/General functions/Polyline offset…"),
                 M("Midpoints", "point", "Tools/General functions/Create midpoints of selected segments"), M("Centre of mass", "point", "Tools/General functions/Create centre of mass for polygons"),
                 M("Extend to intersection", "polyline", "Tools/General functions/Extend line to intersection"), M("Clearance zone", "exclusion", "Tools/General functions/Mark clearance zone…"))

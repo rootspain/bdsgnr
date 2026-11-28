@@ -130,7 +130,7 @@ public sealed class RenumberTool : Tool
         Preview.Points.Clear();
         if (Vm.Project is not { } project) return;
         var basis = project.View.HoleBasis;
-        var prefix = Vm.RenumberPrefix;
+        var prefix = Vm.RenumberPrefixToApply;
         for (int i = 0; i < _captured.Count; i++)
             if (project.FindEntity(_captured[i]) is Hole h)
             {

@@ -322,8 +322,8 @@ public sealed class ProductsEditor : DockPanel
         ProductKind.Booster => Qty.WithUnit(BlastDesigner.Domain.Quantity.SmallMass, p.UnitMass),
         ProductKind.DownholeDetonator or ProductKind.ElectronicDetonator or ProductKind.SurfaceConnector or ProductKind.CordRelay or ProductKind.ElectricDetonator => N(p.DelayMs, "0") + " " + L("ms"),
         ProductKind.DetonatingCord => Qty.WithUnit(BlastDesigner.Domain.Quantity.Velocity, p.Vod, "0"),
-        // in the hole / on the tie
-        ProductKind.CombinationDetonator => N(p.InHoleDelayMs, "0") + "/" + N(p.SurfaceDelayMs, "0") + " " + L("ms"),
+        // on the tie / in the hole, as SHOTPlus shows it (surface first)
+        ProductKind.CombinationDetonator => N(p.SurfaceDelayMs, "0") + "/" + N(p.InHoleDelayMs, "0") + " " + L("ms"),
         _ => ""
     };
 
@@ -643,8 +643,8 @@ public sealed class ProductsEditor : DockPanel
             // one unit, two delays: the in-hole part fires the charge, the surface block passes the signal on along the tie
             ProductKind.CombinationDetonator => new()
             {
-                Fields(Labeled("In-hole delay", Number("inHoleDelay", p.InHoleDelayMs, v => p.InHoleDelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true)),
-                    Labeled("Surface delay", Number("surfaceDelay", p.SurfaceDelayMs, v => p.SurfaceDelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true))),
+                Fields(Labeled("Surface delay", Number("surfaceDelay", p.SurfaceDelayMs, v => p.SurfaceDelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true)),
+                    Labeled("In-hole delay", Number("inHoleDelay", p.InHoleDelayMs, v => p.InHoleDelayMs = Math.Max(0, v), "ms", "0.#", refreshList: true))),
                 Fields(Labeled("Signal down the tube", Propagation(p)), new Border())
             },
             ProductKind.SurfaceConnector => new() { Fields(Delay(), Labeled("Lead length", Number("leadLength", BlastDesigner.Domain.Quantity.Length, p.LeadLengthM, v => p.LeadLengthM = Math.Max(0, v)))) },

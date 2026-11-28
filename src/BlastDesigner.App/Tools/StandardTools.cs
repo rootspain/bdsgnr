@@ -427,11 +427,19 @@ public sealed class TieTool : Tool
         // the product fits the detonators of the holes (ESI to electronic ones, the others to the rest), and a chain of
         // holes with an electronic detonator: a tie only to its start, never branching, never a ring
         for (int i = 1; i < chain.Count; i++)
+        {
             if ((TieFit.Refusal(Vm.Project!, chain[i - 1], chain[i], connector) ?? RouteNumbers.Refusal(Vm.Project!, chain[i - 1], chain[i])) is { } why)
             {
                 Vm.SetStatus(Loc.F(why.Format, why.Hole));
                 return false;
             }
+            // a combination detonator starts only at a hole with one no tie starts with yet
+            if (TieFit.StartRefusal(Vm.Project!, chain[i - 1], connector) is { } start)
+            {
+                Vm.SetStatus(Loc.F(start.Format, start.Hole, start.Product));
+                return false;
+            }
+        }
         Vm.Change(chain.Count > 2 ? "Add ties" : "Add tie", pr =>
         {
             var reached = Timing.ReachedTies(pr);

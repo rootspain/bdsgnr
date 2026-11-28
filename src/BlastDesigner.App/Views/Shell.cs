@@ -729,7 +729,13 @@ public sealed class ToolPanel : Border
             // the prefix (empty: each hole keeps its own) and the counter with its steps
             var prefix = TextField("Number prefix", _vm.RenumberPrefix, v => _vm.RenumberPrefix = v, "renumberPrefix");
             ToolTip.SetTip(prefix, Loc.Ui("Put before the number of each hole numbered. Empty: each hole keeps its own prefix (the name of its row), even none"));
-            _fields.Children.Add(prefix);
+            // Overwrite: only with the prefix empty, the holes then lose their own prefix; it follows the field as it is typed
+            var overwrite = new CheckBox { Content = Loc.Ui("Overwrite"), IsChecked = _vm.RenumberOverwrite, Name = "renumberOverwrite", VerticalAlignment = VerticalAlignment.Bottom, IsEnabled = string.IsNullOrWhiteSpace(_vm.RenumberPrefix) };
+            ToolTip.SetTip(overwrite, Loc.Ui("With the prefix empty: on, the holes numbered lose their own prefix and keep the number alone; off, each keeps its own"));
+            overwrite.IsCheckedChanged += (_, _) => _vm.RenumberOverwrite = overwrite.IsChecked == true;
+            var prefixBox = ((StackPanel)prefix).Children.OfType<TextBox>().First();
+            prefixBox.TextChanged += (_, _) => overwrite.IsEnabled = string.IsNullOrWhiteSpace(prefixBox.Text);
+            _fields.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { prefix, overwrite } });
             var counter = new TextBox
             {
                 Name = "renumberCounter", Text = _vm.RenumberCounter.ToString(System.Globalization.CultureInfo.CurrentCulture), Width = 56, Height = 26, MinHeight = 26,

@@ -243,11 +243,17 @@ public static class TiePaletteWindow
         }
         _open = Dialogs.ShowWindow(Title, content, Width, 560, at: at);
         _open.Background = Look.Ground;
+        // what fits goes with the plan: a hole shown or hidden, charged, tied; looked at again a moment after it is drawn
+        _recheck = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _recheck.Tick += (_, _) => { _recheck?.Stop(); Recheck(vm); };
+        vm.View.Rendering += OnRendering;
         _open.PositionChanged += (_, e) => vm.Settings.Window[PositionKey] = $"{e.Point.X},{e.Point.Y}";
         _open.Closed += (_, _) =>
         {
             // closed without OK: the ties go back to what they were, no undo step
             if (_pick != null) Revert(vm);
+            vm.View.Rendering -= OnRendering;
+            _recheck?.Stop(); _recheck = null;
             _open = null; _panel = null; vm.Settings.Save();
         };
     }
@@ -357,6 +363,97 @@ public static class TiePaletteWindow
     private static bool OnScreen(PixelPoint p) =>
         Dialogs.Owner?.Screens is not { } screens || screens.All.Count == 0 || screens.ScreenFromPoint(p) != null;
 
+    // ---- what fits the holes in sight, and what the user hid
+
+    /// <summary>What the holes in sight ask of new ties (<see cref="MainViewModel.TieContextHoles"/>), as of the last fill.</summary>
+    private static TieFit.Context? _fit;
+    private static string _fitKey = "";
+    private static Avalonia.Threading.DispatcherTimer? _recheck;
+
+    private static void OnRendering()
+    {
+        if (_recheck is { IsEnabled: false } t) t.Start();
+    }
+
+    /// <summary>The context again: the content is built anew only when what fits changed.</summary>
+    private static void Recheck(MainViewModel vm)
+    {
+        if (_panel == null || vm.Project == null) return;
+        var fit = TieFit.Survey(vm.Project, vm.TieContextHoles());
+        if (KeyOf(fit) != _fitKey) Fill(vm);
+    }
+
+    private static string KeyOf(TieFit.Context c) =>
+        $"{c.Any}{c.Esi}{c.Other}|" + string.Join(",", c.Combination.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Key + ":" + x.Value));
+
+    /// <summary>Key of a family in the settings (<see cref="ProgramSettings.HiddenTieFamilies"/>).</summary>
+    public static string FamilyKey(string kindId, string name) => kindId + "|" + name;
+
+    /// <summary>Whether the user hid the product, or its family (right click ▸ Hide).</summary>
+    public static bool UserHidden(ProgramSettings settings, Product p) =>
+        settings.HiddenTieProducts.Contains(p.Id) || settings.HiddenTieFamilies.Contains(FamilyKey(p.KindId, p.FamilyName));
+
+    /// <summary>Whether the product fits one of the holes in sight (never a product that stays in the hole).</summary>
+    private static bool FitsSight(Product p) => _fit?.Fits(p) ?? TieFit.GoesOnTie(p);
+
+    /// <summary>Shown while what is hidden is hidden: it fits a hole in sight and the user did not hide it.</summary>
+    private static bool Suits(MainViewModel vm, Product p) => FitsSight(p) && !UserHidden(vm.Settings, p);
+
+    private static bool IsCurrent(MainViewModel vm, Product p) => vm.ActiveTieDelayMs == null && vm.ActiveConnector?.Id == p.Id;
+
+    /// <summary>
+    /// Whether the catalogue lists the product: one that goes on a tie and suits, or any of them while the hidden ones are
+    /// shown (<see cref="ProgramSettings.TieShowHidden"/>); what ties are made with now is always listed.
+    /// </summary>
+    private static bool Listed(MainViewModel vm, Product p) =>
+        IsCurrent(vm, p) || TieFit.GoesOnTie(p) && (vm.Settings.TieShowHidden || Suits(vm, p));
+
+    /// <summary>How many products of the types are hidden: going on a tie, they fit no hole in sight or the user hid them.</summary>
+    private static int HiddenCount(MainViewModel vm)
+    {
+        var ids = new HashSet<string>();
+        foreach (var type in Types(vm).Where(t => !t.UserDelay))
+        {
+            var kinds = KindsOf(vm, type);
+            foreach (var p in vm.Project!.ActiveProducts.Where(p => kinds.Contains(p.KindId) && TieFit.GoesOnTie(p) && !Suits(vm, p))) ids.Add(p.Id);
+        }
+        return ids.Count;
+    }
+
+    /// <summary>Why a product listed is not shown otherwise: the user hid it, or it fits no hole in sight; null when it suits.</summary>
+    private static string? HiddenWhy(MainViewModel vm, Product p) =>
+        UserHidden(vm.Settings, p) ? Loc.T("Hidden by you (right click ▸ Show)")
+        : _fit?.Why(p) is { } why ? Loc.F(why, p.Name) : null;
+
+    /// <summary>Right click on a family or a variant: Hide or Show it, and Show all hidden by hand; kept in the settings.</summary>
+    private static void HideMenu(MainViewModel vm, Control target, Product? product, (string KindId, string Name) family)
+    {
+        var menu = new ContextMenu();
+        void Add(string header, string name, Action act)
+        {
+            var item = new MenuItem { Header = header, Name = name };
+            item.Click += (_, _) => Ui.Safe(() => { act(); vm.Settings.Save(); Fill(vm); });
+            menu.Items.Add(item);
+        }
+        var s = vm.Settings;
+        var famKey = FamilyKey(family.KindId, family.Name);
+        var famHidden = s.HiddenTieFamilies.Contains(famKey);
+        if (product != null && !famHidden)
+        {
+            if (s.HiddenTieProducts.Contains(product.Id)) Add(Loc.T("Show"), "tieShowProduct", () => s.HiddenTieProducts.Remove(product.Id));
+            else Add(Loc.T("Hide"), "tieHideProduct", () => s.HiddenTieProducts.Add(product.Id));
+        }
+        if (famHidden) Add(Loc.T("Show family"), "tieShowFamily", () => s.HiddenTieFamilies.Remove(famKey));
+        else if (product == null) Add(Loc.T("Hide family"), "tieHideFamily", () => s.HiddenTieFamilies.Add(famKey));
+        var byHand = s.HiddenTieProducts.Count + s.HiddenTieFamilies.Count;
+        if (byHand > 0)
+        {
+            menu.Items.Add(new Separator());
+            Add(Loc.F("Show all hidden by hand ({0})", byHand), "tieShowAllHidden", () => { s.HiddenTieProducts.Clear(); s.HiddenTieFamilies.Clear(); });
+        }
+        target.ContextMenu = menu;
+    }
+
     /// <summary>The types offered, from the table of the project.</summary>
     private static List<CatalogueType> Types(MainViewModel vm) => vm.Project!.Catalogue.Types.Where(t => !t.Deleted).OrderBy(t => t.Order).ToList();
 
@@ -380,7 +477,7 @@ public static class TiePaletteWindow
     private static List<IGrouping<(string KindId, string Name), Product>> Families(MainViewModel vm, CatalogueType type)
     {
         var kinds = KindsOf(vm, type);
-        return vm.Project!.ActiveProducts.Where(p => kinds.Contains(p.KindId)).GroupBy(p => (p.KindId, Name: p.FamilyName))
+        return vm.Project!.ActiveProducts.Where(p => kinds.Contains(p.KindId) && Listed(vm, p)).GroupBy(p => (p.KindId, Name: p.FamilyName))
             .OrderBy(g => kinds.IndexOf(g.Key.KindId)).ThenBy(g => g.Key.Name).ToList();
     }
 
@@ -407,8 +504,8 @@ public static class TiePaletteWindow
     {
         ProductKind.DetonatingCord => Qty.WithUnit(BlastDesigner.Domain.Quantity.Velocity, p.Vod, "0"),
         ProductKind.HarnessWire or ProductKind.ElectronicDetonator => p.Name,
-        // in the hole / on the tie
-        ProductKind.CombinationDetonator => Loc.F("{0} ms", p.InHoleDelayMs.ToString("0.#") + "/" + p.SurfaceDelayMs.ToString("0.#")),
+        // on the tie / in the hole, as SHOTPlus shows it (surface first)
+        ProductKind.CombinationDetonator => Loc.F("{0} ms", p.SurfaceDelayMs.ToString("0.#") + "/" + p.InHoleDelayMs.ToString("0.#")),
         _ => Loc.F("{0} ms", p.DelayMs.ToString("0.#"))
     };
 
@@ -440,6 +537,8 @@ public static class TiePaletteWindow
         if (_panel == null || vm.Project == null) return;
         _build++;
         _panel.Children.Clear();
+        _fit = TieFit.Survey(vm.Project, vm.TieContextHoles());
+        _fitKey = KeyOf(_fit);
         var types = Types(vm);
         if (TypeOf(vm) is not { } typeInfo)
         {
@@ -451,6 +550,9 @@ public static class TiePaletteWindow
         // ---- current choice
         var current = vm.ActiveTieDelayMs is double ud ? Loc.F("{0} ms", ud.ToString("0.#"))
             : vm.ActiveConnector is { } ac ? $"{ac.FamilyName} · {VariantText(ac)}" : Loc.T("0 ms connection");
+        // what ties are made with now stays in sight though it is hidden: marked, with the reason in the tooltip
+        var currentWhy = vm.ActiveTieDelayMs == null && vm.ActiveConnector is { } cp ? HiddenWhy(vm, cp) : null;
+        if (currentWhy != null && vm.ActiveConnector is { } hp && !UserHidden(vm.Settings, hp)) current = "⚠ " + current;
         var path = vm.ActiveTieDelayMs != null || vm.ActiveConnector == null ? ShortName(typeInfo)
             : $"{ShortName(typeInfo)} › {KindName(vm, vm.ActiveConnector.KindId)}";
         var fullPath = vm.ActiveTieDelayMs != null || vm.ActiveConnector == null ? Loc.T(typeInfo.Name)
@@ -465,13 +567,36 @@ public static class TiePaletteWindow
                 new Border { [DockPanel.DockProperty] = Dock.Left, Width = 6, Height = 30, CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 8, 0),
                     Background = new SolidColorBrush(Color.FromUInt32(vm.ActiveTieDelayMs == null ? vm.ActiveConnector?.Color ?? 0xFF9CA3AF : 0xFF9CA3AF)) },
                 new Border { [DockPanel.DockProperty] = Dock.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0), Child = none },
-                new StackPanel { VerticalAlignment = VerticalAlignment.Center, [ToolTip.TipProperty] = current + "\n" + fullPath, Children =
+                new StackPanel { VerticalAlignment = VerticalAlignment.Center, [ToolTip.TipProperty] = current + "\n" + fullPath + (currentWhy != null ? "\n" + currentWhy : ""), Children =
                 {
                     new TextBlock { Text = current, FontSize = 13, FontWeight = FontWeight.SemiBold, Foreground = Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, Name = "tieCurrent" },
                     new TextBlock { Text = path, FontSize = 10.5, Foreground = Look.Faint, TextTrimming = TextTrimming.CharacterEllipsis, Name = "tiePath" }
                 } }
             }
         }, "tieCurrentCard"));
+
+        // ---- Show hidden (N) / Hide those that do not fit: a link, kept in the settings
+        var hidden = HiddenCount(vm);
+        if (hidden > 0)
+        {
+            var linkText = new TextBlock
+            {
+                Text = vm.Settings.TieShowHidden ? Loc.T("Hide those that do not fit") : Loc.F("Show hidden ({0})", hidden),
+                FontSize = 11, Foreground = Look.Accent
+            };
+            var link = new Button
+            {
+                Content = linkText, Name = "tieShowHidden", Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+                Padding = new Thickness(0), MinHeight = 0, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, -4, 0, -4),
+                Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand)
+            };
+            link.Classes.Add("flat");
+            ToolTip.SetTip(link, Loc.T("Products that fit no hole in sight, and those you hid (right click ▸ Hide)"));
+            link.PointerEntered += (_, _) => linkText.TextDecorations = TextDecorations.Underline;
+            link.PointerExited += (_, _) => linkText.TextDecorations = null;
+            link.Click += (_, _) => Ui.Safe(() => { vm.Settings.TieShowHidden = !vm.Settings.TieShowHidden; vm.Settings.Save(); Fill(vm); });
+            _panel.Children.Add(link);
+        }
 
         // ---- Type
         var typeChips = Wrap();
@@ -488,6 +613,14 @@ public static class TiePaletteWindow
                 Use(vm, fams.FirstOrDefault(g => g.Key == chosen)?.OrderBy(p => p.SurfaceDelay).First(), null, item.Id);
             }, item.Id == type, Loc.T(item.Name));
             chip.Tag = "type:" + item.Id;
+            // nothing of the type listed (none in the resources, or all hidden): not to be chosen, the reason in the tooltip
+            if (!item.UserDelay && item.Id != type && Families(vm, item).Count == 0)
+            {
+                chip.IsEnabled = false;
+                var any = vm.Project.ActiveProducts.Any(p => KindsOf(vm, item).Contains(p.KindId) && TieFit.GoesOnTie(p));
+                ToolTip.SetTip(chip, Loc.T(item.Name) + "\n" + Loc.T(any ? "Nothing of this type fits the holes in sight" : "No products of this type in Available resources"));
+                ToolTip.SetShowOnDisabled(chip, true);
+            }
             typeChips.Children.Add(chip);
         }
         _panel.Children.Add(Step("Type", typeChips));
@@ -523,6 +656,11 @@ public static class TiePaletteWindow
             var first = famIndex++ == 0;
             var key = g.Key;
             var on = key == family;
+            // a family none of whose products suits (all hidden by the user, or fitting no hole in sight): listed only while
+            // the hidden are shown, dimmed and marked
+            var famUser = vm.Settings.HiddenTieFamilies.Contains(FamilyKey(key.KindId, key.Name));
+            var famSuits = g.Any(p => Suits(vm, p));
+            var famMark = famSuits ? "" : famUser || g.All(p => UserHidden(vm.Settings, p)) ? "⊘ " : "⚠ ";
             var note = string.Join(" · ", (mixed ? new[] { KindName(vm, key.KindId) } : Array.Empty<string>()).Concat(g.Select(p => p.Manufacturer).Where(m => m.Length > 0).Distinct()));
             // a row of one framed list: a line between rows, the one chosen with a stripe of the accent on its left;
             // the kind and the maker in its tooltip
@@ -544,12 +682,18 @@ public static class TiePaletteWindow
                     Children =
                     {
                         new TextBlock { [DockPanel.DockProperty] = Dock.Right, Text = g.Count().ToString(), FontSize = 10.5, Foreground = Look.Faint, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) },
-                        new TextBlock { Text = key.Name, FontSize = 12, FontWeight = on ? FontWeight.SemiBold : FontWeight.Medium, Foreground = on ? Look.Accent : Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center }
+                        new TextBlock { Text = famMark + key.Name, FontSize = 12, FontWeight = on ? FontWeight.SemiBold : FontWeight.Medium, Foreground = on ? Look.Accent : Look.Text, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center }
                     }
                 }
             };
             row.Classes.Add("flat");
             ToolTip.SetTip(row, note.Length > 0 ? $"{key.Name}\n{note}\n{Loc.F("{0} var.", g.Count())}" : $"{key.Name}\n{Loc.F("{0} var.", g.Count())}");
+            if (!famSuits)
+            {
+                row.Opacity = 0.6;
+                ToolTip.SetTip(row, key.Name + "\n" + (famUser ? Loc.T("Hidden by you (right click ▸ Show)") : HiddenWhy(vm, g.First())));
+            }
+            HideMenu(vm, row, null, key);
             row.Click += (_, _) => { if (key != FamilyOf(vm, typeInfo, families)) Use(vm, g.OrderBy(p => p.SurfaceDelay).First(), null, type); };
             famList.Children.Add(row);
         }
@@ -568,6 +712,13 @@ public static class TiePaletteWindow
             var text = new TextBlock { Text = VariantText(p), VerticalAlignment = VerticalAlignment.Center, Name = "tieVariantText" };
             if (figures) text.FontFamily = Look.Mono;
             chip.Content = Ui.Row(5, new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(2), Background = new SolidColorBrush(Color.FromUInt32(p.Color)), BorderBrush = Look.LineStrong, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center }, text);
+            if (!Suits(vm, p))
+            {
+                chip.Opacity = 0.6;
+                text.Text = (UserHidden(vm.Settings, p) ? "⊘ " : "⚠ ") + text.Text;
+                ToolTip.SetTip(chip, p.Name + "\n" + HiddenWhy(vm, p));
+            }
+            HideMenu(vm, chip, p, (p.KindId, p.FamilyName));
             chip.Tag = "variant:" + p.Id;
             variants.Children.Add(chip);
         }
